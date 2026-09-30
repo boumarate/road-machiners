@@ -1,470 +1,1806 @@
 {
-  "player": {
-    "vehicleId": "player",
-    "storage": []
+ "player": {
+  "vehicleId": "player",
+  "storage": [],
+  "money": 100
+ },
+ "vehicles": [
+  {
+   "id": "player",
+   "chassisId": "scout",
+   "items": [
+    {
+     "id": "cab",
+     "kind": "part",
+     "x": 1,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pcab",
+      "defId": "cabPickup",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "tr",
+     "kind": "part",
+     "x": 2,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "ptr",
+      "defId": "transmission",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "tk",
+     "kind": "part",
+     "x": 4,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "ptk",
+      "defId": "tank",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w1",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 5,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 1,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w4",
+     "kind": "part",
+     "x": 5,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pw4",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "front",
+     "kind": "part",
+     "x": 3,
+     "y": 0,
+     "rot": 1,
+     "part": {
+      "id": "pfront",
+      "defId": "plates",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "mg",
+     "kind": "part",
+     "x": 4,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pmg",
+      "defId": "mg",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "mg2",
+     "kind": "part",
+     "x": 4,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pmg2",
+      "defId": "mg",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "gr",
+     "kind": "good",
+     "x": 4,
+     "y": 4,
+     "rot": 0,
+     "good": "grain"
+    },
+    {
+     "id": "g5",
+     "kind": "good",
+     "x": 4,
+     "y": 2,
+     "rot": 0,
+     "good": "textiles"
+    },
+    {
+     "id": "g6",
+     "kind": "good",
+     "x": 1,
+     "y": 3,
+     "rot": 0,
+     "good": "scrap"
+    },
+    {
+     "id": "g7",
+     "kind": "good",
+     "x": 1,
+     "y": 4,
+     "rot": 0,
+     "good": "tools"
+    },
+    {
+     "id": "g8",
+     "kind": "good",
+     "x": 5,
+     "y": 3,
+     "rot": 0,
+     "good": "salt"
+    },
+    {
+     "id": "g9",
+     "kind": "good",
+     "x": 5,
+     "y": 4,
+     "rot": 0,
+     "good": "meds"
+    }
+   ],
+   "job": {
+    "kind": "refit",
+    "moves": [
+     {
+      "itemId": "mg",
+      "from": {
+       "x": 4,
+       "y": 1,
+       "rot": 0
+      },
+      "to": {
+       "x": 5,
+       "y": 3,
+       "rot": 0
+      }
+     }
+    ],
+    "pickup": {
+     "from": "stock",
+     "stockId": "s",
+     "partId": "mg",
+     "itemId": "n",
+     "to": {
+      "x": 4,
+      "y": 2,
+      "rot": 0
+     }
+    },
+    "turnsLeft": 2,
+    "total": 3
+   }
   },
-  "vehicles": [
+  {
+   "id": "npc",
+   "chassisId": "scout",
+   "items": [
     {
-      "id": "player",
-      "chassisId": "scout",
-      "items": [
-        {
-          "id": "cab",
-          "kind": "part",
-          "x": 1,
-          "y": 3,
-          "rot": 0,
-          "part": {
-            "id": "pcab",
-            "defId": "cabPickup",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "tr",
-          "kind": "part",
-          "x": 2,
-          "y": 5,
-          "rot": 0,
-          "part": {
-            "id": "ptr",
-            "defId": "transmission",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "tk",
-          "kind": "part",
-          "x": 4,
-          "y": 5,
-          "rot": 0,
-          "part": {
-            "id": "ptk",
-            "defId": "tank",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "w1",
-          "kind": "part",
-          "x": 1,
-          "y": 1,
-          "rot": 0,
-          "part": {
-            "id": "pw1",
-            "defId": "wheel",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "w2",
-          "kind": "part",
-          "x": 5,
-          "y": 1,
-          "rot": 0,
-          "part": {
-            "id": "pw2",
-            "defId": "wheel",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "w3",
-          "kind": "part",
-          "x": 1,
-          "y": 5,
-          "rot": 0,
-          "part": {
-            "id": "pw3",
-            "defId": "wheel",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "w4",
-          "kind": "part",
-          "x": 5,
-          "y": 5,
-          "rot": 0,
-          "part": {
-            "id": "pw4",
-            "defId": "wheel",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "front",
-          "kind": "part",
-          "x": 3,
-          "y": 0,
-          "rot": 1,
-          "part": {
-            "id": "pfront",
-            "defId": "plates",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "mg",
-          "kind": "part",
-          "x": 4,
-          "y": 1,
-          "rot": 0,
-          "part": {
-            "id": "pmg",
-            "defId": "mg",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "cage",
-          "kind": "part",
-          "x": 4,
-          "y": 3,
-          "rot": 0,
-          "part": {
-            "id": "pcage",
-            "defId": "shotgun",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "g",
-          "kind": "good",
-          "x": 5,
-          "y": 4,
-          "rot": 0,
-          "good": "food"
-        },
-        {
-          "id": "rack",
-          "kind": "part",
-          "x": 4,
-          "y": 4,
-          "rot": 0,
-          "part": {
-            "id": "prack",
-            "defId": "rack",
-            "hp": 10,
-            "wear": 0
-          }
-        }
-      ],
-      "job": {
-        "kind": "refit",
-        "moves": [
-          {
-            "itemId": "mg",
-            "from": {
-              "x": 4,
-              "y": 1,
-              "rot": 0
-            },
-            "to": {
-              "x": 5,
-              "y": 3,
-              "rot": 0
-            }
-          }
-        ],
-        "pickup": {
-          "from": "stock",
-          "stockId": "s",
-          "partId": "mg",
-          "itemId": "n",
-          "to": {
-            "x": 4,
-            "y": 2,
-            "rot": 0
-          }
-        },
-        "turnsLeft": 2,
-        "total": 3
-      }
+     "id": "cab",
+     "kind": "part",
+     "x": 1,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pcab",
+      "defId": "cabPickup",
+      "hp": 10,
+      "wear": 0
+     }
     },
     {
-      "id": "npc",
-      "chassisId": "scout",
-      "items": [
-        {
-          "id": "cab",
-          "kind": "part",
-          "x": 1,
-          "y": 3,
-          "rot": 0,
-          "part": {
-            "id": "pcab",
-            "defId": "cabPickup",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "tr",
-          "kind": "part",
-          "x": 2,
-          "y": 5,
-          "rot": 0,
-          "part": {
-            "id": "ptr",
-            "defId": "transmission",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "tk",
-          "kind": "part",
-          "x": 4,
-          "y": 5,
-          "rot": 0,
-          "part": {
-            "id": "ptk",
-            "defId": "tank",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "w1",
-          "kind": "part",
-          "x": 1,
-          "y": 1,
-          "rot": 0,
-          "part": {
-            "id": "pw1",
-            "defId": "wheel",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "w2",
-          "kind": "part",
-          "x": 5,
-          "y": 1,
-          "rot": 0,
-          "part": {
-            "id": "pw2",
-            "defId": "wheel",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "w3",
-          "kind": "part",
-          "x": 1,
-          "y": 5,
-          "rot": 0,
-          "part": {
-            "id": "pw3",
-            "defId": "wheel",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "w4",
-          "kind": "part",
-          "x": 5,
-          "y": 5,
-          "rot": 0,
-          "part": {
-            "id": "pw4",
-            "defId": "wheel",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "cannon",
-          "kind": "part",
-          "x": 4,
-          "y": 3,
-          "rot": 0,
-          "part": {
-            "id": "pcannon",
-            "defId": "cannon",
-            "hp": 10,
-            "wear": 0
-          }
-        }
-      ],
-      "job": {
-        "kind": "refit",
-        "moves": [
-          {
-            "itemId": "mg",
-            "from": {
-              "x": 4,
-              "y": 1,
-              "rot": 0
-            },
-            "to": {
-              "x": 5,
-              "y": 3,
-              "rot": 0
-            }
-          }
-        ],
-        "pickup": {
-          "from": "stock",
-          "stockId": "s",
-          "partId": "mg",
-          "itemId": "n",
-          "to": {
-            "x": 4,
-            "y": 2,
-            "rot": 0
-          }
-        },
-        "turnsLeft": 2,
-        "total": 3
-      }
+     "id": "tr",
+     "kind": "part",
+     "x": 2,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "ptr",
+      "defId": "transmission",
+      "hp": 10,
+      "wear": 0
+     }
     },
     {
-      "id": "npc",
-      "chassisId": "hauler",
-      "items": [
-        {
-          "id": "h",
-          "kind": "part",
-          "x": 4,
-          "y": 1,
-          "rot": 0,
-          "part": {
-            "id": "ph",
-            "defId": "mg",
-            "hp": 10,
-            "wear": 0
-          }
-        }
-      ],
-      "job": null
-    }
-  ],
-  "removed": [
+     "id": "tk",
+     "kind": "part",
+     "x": 4,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "ptk",
+      "defId": "tank",
+      "hp": 10,
+      "wear": 0
+     }
+    },
     {
-      "id": "gone",
-      "chassisId": "scout",
-      "items": [
-        {
-          "id": "cab",
-          "kind": "part",
-          "x": 1,
-          "y": 3,
-          "rot": 0,
-          "part": {
-            "id": "pcab",
-            "defId": "cabPickup",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "tr",
-          "kind": "part",
-          "x": 2,
-          "y": 5,
-          "rot": 0,
-          "part": {
-            "id": "ptr",
-            "defId": "transmission",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "tk",
-          "kind": "part",
-          "x": 4,
-          "y": 5,
-          "rot": 0,
-          "part": {
-            "id": "ptk",
-            "defId": "tank",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "w1",
-          "kind": "part",
-          "x": 1,
-          "y": 1,
-          "rot": 0,
-          "part": {
-            "id": "pw1",
-            "defId": "wheel",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "w2",
-          "kind": "part",
-          "x": 5,
-          "y": 1,
-          "rot": 0,
-          "part": {
-            "id": "pw2",
-            "defId": "wheel",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "w3",
-          "kind": "part",
-          "x": 1,
-          "y": 5,
-          "rot": 0,
-          "part": {
-            "id": "pw3",
-            "defId": "wheel",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "w4",
-          "kind": "part",
-          "x": 5,
-          "y": 5,
-          "rot": 0,
-          "part": {
-            "id": "pw4",
-            "defId": "wheel",
-            "hp": 10,
-            "wear": 0
-          }
-        },
-        {
-          "id": "rear",
-          "kind": "part",
-          "x": 4,
-          "y": 4,
-          "rot": 0,
-          "part": {
-            "id": "prear",
-            "defId": "mg",
-            "hp": 10,
-            "wear": 0
-          }
-        }
-      ],
-      "job": null
+     "id": "w1",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 5,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 1,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w4",
+     "kind": "part",
+     "x": 5,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pw4",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "cannon",
+     "kind": "part",
+     "x": 4,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pcannon",
+      "defId": "cannon",
+      "hp": 10,
+      "wear": 0
+     }
     }
-  ]
+   ],
+   "job": {
+    "kind": "refit",
+    "moves": [
+     {
+      "itemId": "mg",
+      "from": {
+       "x": 4,
+       "y": 1,
+       "rot": 0
+      },
+      "to": {
+       "x": 5,
+       "y": 3,
+       "rot": 0
+      }
+     }
+    ],
+    "pickup": {
+     "from": "stock",
+     "stockId": "s",
+     "partId": "mg",
+     "itemId": "n",
+     "to": {
+      "x": 4,
+      "y": 2,
+      "rot": 0
+     }
+    },
+    "turnsLeft": 2,
+    "total": 3
+   }
+  },
+  {
+   "id": "npc",
+   "chassisId": "hauler",
+   "items": [
+    {
+     "id": "h",
+     "kind": "part",
+     "x": 4,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "ph",
+      "defId": "mg",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "rack",
+     "kind": "part",
+     "x": 5,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "prack",
+      "defId": "rack",
+      "hp": 10,
+      "wear": 0
+     }
+    }
+   ],
+   "job": null
+  },
+  {
+   "id": "c-hauler",
+   "chassisId": "hauler",
+   "items": [
+    {
+     "id": "c0",
+     "kind": "part",
+     "x": 5,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pc0",
+      "defId": "cabOver",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c1",
+     "kind": "part",
+     "x": 3,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pc1",
+      "defId": "transmissionMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c2",
+     "kind": "part",
+     "x": 5,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pc2",
+      "defId": "tankMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w0",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw0",
+      "defId": "wheelMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w1",
+     "kind": "part",
+     "x": 7,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheelMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 1,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheelMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 7,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheelMid",
+      "hp": 10,
+      "wear": 0
+     }
+    }
+   ],
+   "job": null
+  },
+  {
+   "id": "c-buggy",
+   "chassisId": "buggy",
+   "items": [
+    {
+     "id": "c0",
+     "kind": "part",
+     "x": 1,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pc0",
+      "defId": "cab",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c1",
+     "kind": "part",
+     "x": 2,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pc1",
+      "defId": "transmission",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c2",
+     "kind": "part",
+     "x": 4,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pc2",
+      "defId": "tank",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w0",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw0",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w1",
+     "kind": "part",
+     "x": 4,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 1,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 4,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    }
+   ],
+   "job": null
+  },
+  {
+   "id": "c-wagon",
+   "chassisId": "wagon",
+   "items": [
+    {
+     "id": "c0",
+     "kind": "part",
+     "x": 2,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pc0",
+      "defId": "cab",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c1",
+     "kind": "part",
+     "x": 2,
+     "y": 4,
+     "rot": 0,
+     "part": {
+      "id": "pc1",
+      "defId": "transmissionHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c2",
+     "kind": "part",
+     "x": 4,
+     "y": 4,
+     "rot": 0,
+     "part": {
+      "id": "pc2",
+      "defId": "tankHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w0",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw0",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w1",
+     "kind": "part",
+     "x": 6,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 1,
+     "y": 4,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 6,
+     "y": 4,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    }
+   ],
+   "job": null
+  },
+  {
+   "id": "c-courier",
+   "chassisId": "courier",
+   "items": [
+    {
+     "id": "c0",
+     "kind": "part",
+     "x": 2,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pc0",
+      "defId": "cab",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c1",
+     "kind": "part",
+     "x": 2,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pc1",
+      "defId": "transmission",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c2",
+     "kind": "part",
+     "x": 4,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pc2",
+      "defId": "tank",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w0",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw0",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w1",
+     "kind": "part",
+     "x": 4,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 1,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 4,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    }
+   ],
+   "job": null
+  },
+  {
+   "id": "c-van",
+   "chassisId": "van",
+   "items": [
+    {
+     "id": "c0",
+     "kind": "part",
+     "x": 2,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pc0",
+      "defId": "cabRow",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c1",
+     "kind": "part",
+     "x": 4,
+     "y": 4,
+     "rot": 0,
+     "part": {
+      "id": "pc1",
+      "defId": "transmissionMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c2",
+     "kind": "part",
+     "x": 4,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pc2",
+      "defId": "tankMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w0",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw0",
+      "defId": "wheelMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w1",
+     "kind": "part",
+     "x": 5,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheelMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 1,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheelMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 5,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheelMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "mg",
+     "kind": "part",
+     "x": 2,
+     "y": 4,
+     "rot": 0,
+     "part": {
+      "id": "pmg",
+      "defId": "mg",
+      "hp": 10,
+      "wear": 0
+     }
+    }
+   ],
+   "job": null
+  },
+  {
+   "id": "c-longbed",
+   "chassisId": "longbed",
+   "items": [
+    {
+     "id": "c0",
+     "kind": "part",
+     "x": 2,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pc0",
+      "defId": "cabWide",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c1",
+     "kind": "part",
+     "x": 3,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pc1",
+      "defId": "transmissionHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c2",
+     "kind": "part",
+     "x": 5,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pc2",
+      "defId": "tankHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w0",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw0",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w1",
+     "kind": "part",
+     "x": 7,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 1,
+     "y": 8,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 7,
+     "y": 8,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    }
+   ],
+   "job": null
+  },
+  {
+   "id": "c-carrier",
+   "chassisId": "carrier",
+   "items": [
+    {
+     "id": "c0",
+     "kind": "part",
+     "x": 5,
+     "y": 2,
+     "rot": 0,
+     "part": {
+      "id": "pc0",
+      "defId": "cab",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c1",
+     "kind": "part",
+     "x": 4,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pc1",
+      "defId": "transmissionHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c2",
+     "kind": "part",
+     "x": 4,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pc2",
+      "defId": "tankHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w0",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw0",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w1",
+     "kind": "part",
+     "x": 6,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 1,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 6,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    }
+   ],
+   "job": null
+  },
+  {
+   "id": "c-tractor",
+   "chassisId": "tractor",
+   "items": [
+    {
+     "id": "c0",
+     "kind": "part",
+     "x": 2,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pc0",
+      "defId": "cabWide",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c1",
+     "kind": "part",
+     "x": 2,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pc1",
+      "defId": "transmissionHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c2",
+     "kind": "part",
+     "x": 4,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pc2",
+      "defId": "tankHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w0",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw0",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w1",
+     "kind": "part",
+     "x": 7,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 1,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 7,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    }
+   ],
+   "job": null
+  },
+  {
+   "id": "c-jeep",
+   "chassisId": "jeep",
+   "items": [
+    {
+     "id": "c0",
+     "kind": "part",
+     "x": 2,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pc0",
+      "defId": "cab",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c1",
+     "kind": "part",
+     "x": 2,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pc1",
+      "defId": "transmission",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c2",
+     "kind": "part",
+     "x": 2,
+     "y": 7,
+     "rot": 1,
+     "part": {
+      "id": "pc2",
+      "defId": "tank",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w0",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw0",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w1",
+     "kind": "part",
+     "x": 4,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 1,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 4,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    }
+   ],
+   "job": null
+  },
+  {
+   "id": "c-convertible",
+   "chassisId": "convertible",
+   "items": [
+    {
+     "id": "c0",
+     "kind": "part",
+     "x": 3,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pc0",
+      "defId": "cabHardtop",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c1",
+     "kind": "part",
+     "x": 2,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pc1",
+      "defId": "transmission",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c2",
+     "kind": "part",
+     "x": 4,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pc2",
+      "defId": "tankLong",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w0",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw0",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w1",
+     "kind": "part",
+     "x": 5,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 1,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 5,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    }
+   ],
+   "job": null
+  },
+  {
+   "id": "c-bus",
+   "chassisId": "bus",
+   "items": [
+    {
+     "id": "c0",
+     "kind": "part",
+     "x": 2,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pc0",
+      "defId": "cabNarrow",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c1",
+     "kind": "part",
+     "x": 3,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pc1",
+      "defId": "transmissionMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c2",
+     "kind": "part",
+     "x": 5,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pc2",
+      "defId": "tankMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w0",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw0",
+      "defId": "wheelMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w1",
+     "kind": "part",
+     "x": 6,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheelMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 1,
+     "y": 9,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheelMid",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 6,
+     "y": 9,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheelMid",
+      "hp": 10,
+      "wear": 0
+     }
+    }
+   ],
+   "job": null
+  },
+  {
+   "id": "c-loader",
+   "chassisId": "loader",
+   "items": [
+    {
+     "id": "c0",
+     "kind": "part",
+     "x": 3,
+     "y": 2,
+     "rot": 0,
+     "part": {
+      "id": "pc0",
+      "defId": "cabPickup",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c1",
+     "kind": "part",
+     "x": 5,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pc1",
+      "defId": "transmissionHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c2",
+     "kind": "part",
+     "x": 2,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pc2",
+      "defId": "tankHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w0",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw0",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w1",
+     "kind": "part",
+     "x": 7,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 1,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 7,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    }
+   ],
+   "job": null
+  }
+ ],
+ "removed": [
+  {
+   "id": "gone",
+   "chassisId": "scout",
+   "items": [
+    {
+     "id": "cab",
+     "kind": "part",
+     "x": 1,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pcab",
+      "defId": "cabPickup",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "tr",
+     "kind": "part",
+     "x": 2,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "ptr",
+      "defId": "transmission",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "tk",
+     "kind": "part",
+     "x": 4,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "ptk",
+      "defId": "tank",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w1",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 5,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 1,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w4",
+     "kind": "part",
+     "x": 5,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pw4",
+      "defId": "wheel",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "rear",
+     "kind": "part",
+     "x": 4,
+     "y": 4,
+     "rot": 0,
+     "part": {
+      "id": "prear",
+      "defId": "mg",
+      "hp": 10,
+      "wear": 0
+     }
+    }
+   ],
+   "job": null
+  },
+  {
+   "id": "gone-carrier",
+   "chassisId": "carrier",
+   "items": [
+    {
+     "id": "c0",
+     "kind": "part",
+     "x": 5,
+     "y": 2,
+     "rot": 0,
+     "part": {
+      "id": "pc0",
+      "defId": "cab",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c1",
+     "kind": "part",
+     "x": 4,
+     "y": 3,
+     "rot": 0,
+     "part": {
+      "id": "pc1",
+      "defId": "transmissionHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "c2",
+     "kind": "part",
+     "x": 4,
+     "y": 5,
+     "rot": 0,
+     "part": {
+      "id": "pc2",
+      "defId": "tankHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w0",
+     "kind": "part",
+     "x": 1,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw0",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w1",
+     "kind": "part",
+     "x": 6,
+     "y": 1,
+     "rot": 0,
+     "part": {
+      "id": "pw1",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w2",
+     "kind": "part",
+     "x": 1,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw2",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "w3",
+     "kind": "part",
+     "x": 6,
+     "y": 6,
+     "rot": 0,
+     "part": {
+      "id": "pw3",
+      "defId": "wheelHeavy",
+      "hp": 10,
+      "wear": 0
+     }
+    },
+    {
+     "id": "gd",
+     "kind": "good",
+     "x": 4,
+     "y": 1,
+     "rot": 0,
+     "good": "grain"
+    }
+   ],
+   "job": null
+  }
+ ]
 }

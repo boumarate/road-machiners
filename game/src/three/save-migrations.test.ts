@@ -15,56 +15,69 @@ describe('save migrations', () => {
 });
 
 describe('save migration 1 to 2', () => {
-  const next = MIGRATIONS[1](FORMAT_2_1) as { player: { vehicleId: string; storage: { id: string; defId: string }[] }; vehicles: Vehicle[]; removed: Vehicle[] };
+  type Saved = { player: { vehicleId: string; money: number; storage: { id: string; defId: string }[] }; vehicles: Vehicle[]; removed: Vehicle[] };
+  const next = MIGRATIONS[1](FORMAT_2_1) as Saved;
+  const all = [...next.vehicles, ...next.removed];
+  const vehicle = (id: string) => all.find((v) => v.id === id)!;
   const spot = (v: Vehicle, id: string) => {
     const item = v.items.find((it) => it.id === id);
-    return item && [item.x, item.y];
+    return item && [item.x, item.y, item.rot];
   };
-  const scouts = () => [next.vehicles[0], next.vehicles[1], next.removed[0]];
 
-  it('moves the cab one column right and slides narrow items off the new cab cells to column 1', () => {
-    for (const scout of scouts()) expect(spot(scout, 'cab')).toEqual([2, 3]);
-    expect(spot(next.vehicles[0], 'cage')).toEqual([1, 3]);
-    expect(spot(next.removed[0], 'rear')).toEqual([1, 4]);
+  it('puts every core of every chassis on its new cells with its new part, keeping ids, hp and wear', () => {
+    for (const v of all.filter((it) => it.id.startsWith('c-') || it.id === 'gone-carrier')) {
+      for (const c of CHASSIS[v.chassisId].core) {
+        const item = v.items.find((it) => it.kind === 'part' && it.x === c.x && it.y === c.y && it.part.defId === c.defId);
+        expect(item, `${v.id} ${c.defId}`).toBeDefined();
+        expect(item?.rot, `${v.id} ${c.defId}`).toBe(c.rot ?? 0);
+        if (item?.kind === 'part') expect([item.part.hp, item.part.wear]).toEqual([10, 0]);
+      }
+    }
+    expect(vehicle('c-carrier').items.find((it) => it.id === 'c0')).toMatchObject({ id: 'c0', part: { id: 'pc0', defId: 'cabPickup' } });
+    expect(vehicle('c-bus').items.find((it) => it.id === 'c0')).toMatchObject({ x: 2, y: 1, rot: 0, part: { defId: 'cabPickup' } });
   });
 
-  it('keeps the other cores, guns and goods where they stood', () => {
+  it('moves a displaced item to the nearest free deck spot, turning it if needed', () => {
+    expect(spot(vehicle('c-van'), 'mg')).toEqual([1, 4, 0]);
+    expect(spot(next.vehicles[2], 'rack')).toEqual([5, 4, 0]);
+  });
+
+  it('keeps the guns, goods and armor that stood clear of the new cores', () => {
     const scout = next.vehicles[0];
-    expect(spot(scout, 'tr')).toEqual([2, 5]);
-    expect(spot(scout, 'tk')).toEqual([4, 5]);
-    expect([spot(scout, 'w1'), spot(scout, 'w2')]).toEqual([[1, 1], [5, 1]]);
-    expect(spot(scout, 'mg')).toEqual([4, 1]);
-    expect(spot(scout, 'g')).toEqual([5, 4]);
-    expect(spot(scout, 'front')).toEqual([3, 0]);
+    expect(spot(scout, 'mg')).toEqual([4, 1, 0]);
+    expect(spot(scout, 'g6')).toEqual([1, 3, 0]);
+    expect(spot(scout, 'front')).toEqual([3, 0, 1]);
+    expect(spot(scout, 'cab')).toEqual([2, 3, 0]);
   });
 
-  it('moves a displaced part of the player to the garage storage and drops an NPC one', () => {
-    expect(spot(next.vehicles[0], 'rack')).toBeUndefined();
-    expect(next.player.storage.map((p) => p.defId)).toEqual(['rack']);
+  it('sends the player part with no room to the garage, turns the good into cash, and drops what an NPC had with no room', () => {
+    const scout = next.vehicles[0];
+    expect(spot(scout, 'mg2')).toBeUndefined();
+    expect(spot(scout, 'gr')).toBeUndefined();
+    expect(next.player.storage.map((p) => p.defId)).toEqual(['mg']);
+    expect(next.player.money).toBe(100 + 21);
     expect(spot(next.vehicles[1], 'cannon')).toBeUndefined();
+    expect(spot(vehicle('gone-carrier'), 'gd')).toEqual([5, 1, 0]);
   });
 
-  it('cancels the refit job of every scout', () => {
+  it('cancels the refit job of every migrated truck', () => {
     expect(next.vehicles[0].job).toBeNull();
     expect(next.vehicles[1].job).toBeNull();
   });
 
-  it('leaves other chassis and other fields alone', () => {
-    expect(next.vehicles[2]).toEqual(FORMAT_2_1.vehicles[2]);
+  it('leaves other world fields alone', () => {
     expect(next.player.vehicleId).toBe(FORMAT_2_1.player.vehicleId);
+    expect(next.vehicles.length).toBe(FORMAT_2_1.vehicles.length);
+    expect(next.removed.length).toBe(FORMAT_2_1.removed.length);
   });
 
-  it('puts every scout item on a free cell of the new layout, and every core part on its core cells', () => {
-    const grid = baseGrid('scout');
-    for (const scout of scouts()) {
-      scout.items.forEach((item, i) => {
-        expect(placementError(grid, scout.items.filter((_, j) => j !== i), item, null), item.id).toBeNull();
-        if (item.kind === 'part') expect(isMounted('scout', item), item.id).toBe(true);
+  it('puts every item of every truck on a free cell, and every non-core part still mounted', () => {
+    for (const v of all) {
+      const grid = baseGrid(v.chassisId);
+      v.items.forEach((item, i) => {
+        expect(placementError(grid, v.items.filter((_, j) => j !== i), item, null), `${v.id} ${item.id}`).toBeNull();
+        if (item.kind === 'part' && !['mg', 'rack', 'cannon'].includes(item.part.defId)) expect(isMounted(v.chassisId, item), `${v.id} ${item.id}`).toBe(true);
       });
-      for (const core of CHASSIS.scout.core) {
-        const item = scout.items.find((it) => it.kind === 'part' && it.x === core.x && it.y === core.y);
-        expect(item?.kind === 'part' && item.part.defId, `${core.x},${core.y}`).toBe(core.defId);
-      }
     }
   });
 });
