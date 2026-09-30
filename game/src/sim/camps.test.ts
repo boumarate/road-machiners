@@ -8,9 +8,9 @@ import { serviceAtCamp } from './economy';
 import { corePart, goodsCount } from './grid';
 import { fireGuards } from './guards';
 import { addGoods } from './inventory';
-import { resolveNpcActivities, topGoal } from './npc-activities';
+import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { getResources } from './resources';
-import { canUseSite, siteGates } from './sites';
+import { canUseSite, siteGates, sitePads } from './sites';
 import { spawnInitial } from './spawn';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { Faction, World } from './types';
@@ -82,6 +82,33 @@ describe('raider camps', () => {
     planNpcOrders(w);
     expect(topGoal(raider)?.kind).toBe('sell');
     expect(Object.keys(SHOPS)).toContain(topGoal(raider)?.targetId);
+  });
+
+  it('are the only place a stranded raider is served', () => {
+    const town = REGION.towns[0];
+    const townPad = sitePads(town)[0];
+    const strand = (pos: Vec, template: string) => {
+      const w = emptyWorld({ x: 30, y: 30 });
+      const v = addNpc(w, template === 'trader' ? 'traders' : 'raiders', template, pos);
+      getResources(w, v).fuel = 0;
+      getResources(w, v).money = 500;
+      corePart(v, 'cab').hp = 1;
+      return { w, v };
+    };
+    const atTown = strand(townPad, 'buggy');
+    const items = atTown.v.items.map((it) => it.id);
+    thinkNpc(atTown.w, atTown.v);
+    expect(atTown.v.items.map((it) => it.id)).toEqual(items);
+    expect(corePart(atTown.v, 'cab').hp).toBe(1);
+    expect(getResources(atTown.w, atTown.v).fuel).toBe(0);
+
+    const atCamp = strand(outside(1), 'buggy');
+    thinkNpc(atCamp.w, atCamp.v);
+    expect(getResources(atCamp.w, atCamp.v).fuel).toBeGreaterThan(0);
+
+    const trader = strand(townPad, 'trader');
+    thinkNpc(trader.w, trader.v);
+    expect(getResources(trader.w, trader.v).fuel).toBeGreaterThan(0);
   });
 
   it('serve only raiders at a gate', () => {

@@ -879,11 +879,16 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   return currentActivity(world, vehicle, profile);
 }
 
-// A stranded truck parked on the pad of any town or one of its own camps, however it got there, buys the service it
-// can pay for. If that leaves it stranded, it gets a fresh loadout from its pool.
+// The sites that serve a stranded driver: its bases if it has any, else any town.
+function servingSiteIds(profile: NpcProfile): string[] {
+  return profile.bases.length > 0 ? profile.bases : REGION.towns.map((t) => t.id);
+}
+
+// A stranded truck parked on the pad of a site that serves it, however it got there, buys the service it can pay
+// for. If that leaves it stranded, it gets a fresh loadout from its pool.
 function serveStranded(world: World, vehicle: Vehicle, profile: NpcProfile): void {
   if (!isStranded(world, vehicle) || isOnRope(world, vehicle.id) || vehicle.speed > RULES.parkedSpeed) return;
-  const site = [...REGION.towns.map((t) => t.id), ...profile.bases].map(getKnownSite).find((s) => canUseSite(vehicle.pos, s));
+  const site = servingSiteIds(profile).map(getKnownSite).find((s) => canUseSite(vehicle.pos, s));
   if (!site) return;
   serviceAt(world, vehicle, site);
   if (isStranded(world, vehicle)) refitAtHome(world, vehicle);
