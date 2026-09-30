@@ -98,6 +98,9 @@ Do not bypass the quality hook, add suppressions, or raise its limits to make a 
 ## Verification
 
 - Every sim rule change gets a Vitest test.
+- Before calling a change done, inspect how related systems will be affected by it.
+- Find the existing code that does the same kind of thing, and match everything it handles. A new way to end a deal must settle money, states and goals like the old ways.
+- Tests check the side effects of a change, not only the behavior you asked for.
 - After render or game changes, run `npm run playtest`.
 - For behavior checks, drive the game with a Playwright script in `tmp/`. Launch Chromium with `--use-angle=metal --enable-gpu --ignore-gpu-blocklist`, so it renders on the real GPU. SwiftShader renders on the CPU at 10 to 20 fps, so its frame rate says nothing about the game. The game is on `window.__ROAM__` in dev. Its world is `__ROAM__.state`. To set up a situation, clone that world, edit it, and pass it to `apply()`. `debugScreenOf(x, y)` gives the screen point of a map point on the ground, for clicks.
 - Look at screenshots after visual changes. The user confirms small visual details.
