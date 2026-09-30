@@ -26,7 +26,11 @@ mkdir -p "$HERMES_HOME/scripts"
 cp /opt/factory/factory-incidents.sh "$HERMES_HOME/scripts/factory-incidents.sh"
 python3 "$HERMES_HOME/plugins/factory/allowlist.py"
 # Hermes never passes GH_TOKEN to its shell, since a model provider uses that name. So gh saves the login in the Hermes home, and git asks gh.
-printf '%s\n' "$GH_TOKEN" | env -u GH_TOKEN gh auth login --with-token
+# gh auth login would demand the read:org scope the bot token lacks, so the start script writes gh's login file itself.
+mkdir -p "$HOME/.config/gh"
+umask 077
+printf 'github.com:\n    oauth_token: %s\n    git_protocol: https\n' "$GH_TOKEN" > "$HOME/.config/gh/hosts.yml"
+umask 022
 env -u GH_TOKEN gh auth setup-git
 git config --global user.name "ROAM Factory Hermes"
 git config --global user.email "hermes@roam.invalid"
