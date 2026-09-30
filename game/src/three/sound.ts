@@ -28,7 +28,6 @@ const STINGS: {
   { cue: "level-up", match: (e) => e.t === "skillUp" },
   { cue: "discover", match: (e) => e.t === "discover" },
   { cue: "money", match: (e) => e.t === "money" && e.amount > 0 },
-  { cue: "air-brake", match: (e, id) => e.t === "arrived" && e.vehicle === id },
 ];
 
 export function stingOf(events: GameEvent[], playerId: string): CueId | null {
