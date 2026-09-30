@@ -203,20 +203,18 @@ describe('crash with a tow client', () => {
     return { world, client, tower };
   }
 
-  it('deals nothing to the tower on its way', () => {
+  it('hurts neither truck once the tower answers', () => {
     const { world, client, tower } = pair();
     addState(world, 'answering', tower.id, client.id, { kind: 'none' });
     applyContactCrash(world, client, tower, tower.id, 6, geometry);
-    expect(damages(world)).toMatchObject({ onB: 0 });
-    expect(damages(world).onA).toBeGreaterThan(0);
+    expect(damages(world)).toEqual({ onA: 0, onB: 0 });
   });
 
-  it('deals nothing to the tower when the tower is the first body', () => {
+  it('hurts neither truck when the tower is the first body', () => {
     const { world, client, tower } = pair();
     addState(world, 'tow', tower.id, client.id, { kind: 'tow', site: 'bowl', fee: 10, waived: 0, hitched: false });
     applyContactCrash(world, tower, client, client.id, 6, geometry);
-    expect(damages(world)).toMatchObject({ onA: 0 });
-    expect(damages(world).onB).toBeGreaterThan(0);
+    expect(damages(world)).toEqual({ onA: 0, onB: 0 });
   });
 
   it('still hurts both trucks with no tow between them', () => {

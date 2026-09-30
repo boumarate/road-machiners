@@ -89,9 +89,10 @@ function damageVehicleCrash(world: World, a: Vehicle, b: Vehicle, impact: number
   const share = vehicleMass(b) / (vehicleMass(a) + vehicleMass(b));
   const multA = ramMult(a, contact.a.side);
   const multB = ramMult(b, contact.b.side);
-  // A truck that is being towed deals no damage to its tower, whoever drove into whom.
-  const hitsA = towsClient(world, a, b) ? [] : applyContactDamage(world, a, contact.a, impact, share, multB);
-  const hitsB = towsClient(world, b, a) ? [] : applyContactDamage(world, b, contact.b, impact, 1 - share, multA);
+  // A tower and the truck it tows hurt each other in no crash, whoever drove into whom.
+  if (towsClient(world, a, b) || towsClient(world, b, a)) return { hitsA: [], hitsB: [] };
+  const hitsA = applyContactDamage(world, a, contact.a, impact, share, multB);
+  const hitsB = applyContactDamage(world, b, contact.b, impact, 1 - share, multA);
   return { hitsA, hitsB };
 }
 
