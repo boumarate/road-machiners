@@ -11,7 +11,7 @@ import { inCombat, isHostile } from './combat';
 import { patchGoal, startTow, topGoal } from './npc-activities';
 import { vehicleValue } from './market';
 import { hasPerk, practice } from './progress';
-import { answerPlea, answersPlea, answersThreat, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, surrenderTo, yieldTo, type ThreatAnswer } from './parley';
+import { answerPlea, backOffClaims, defyClaims, guardsClaim, answersPlea, answersThreat, answersWarning, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, lootsBesidePlayer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, settleWarning, surrenderTo, yieldTo, type ThreatAnswer, type WarnAnswer } from './parley';
 import { hasCargo, hasSalvage } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
 import { decide, npcProfile, wantsLoot } from './npc-decisions';
@@ -66,6 +66,12 @@ function playerPlea(call: Call): Plea {
 function threatAnswer(call: Call): ThreatAnswer {
   const option = answerOf(call.vars);
   if (option !== 'comply' && option !== 'fightBack' && option !== 'flee') throw new Error(`Bad threat answer ${option}`);
+  return option;
+}
+
+function warnAnswer(call: Call): WarnAnswer {
+  const option = answerOf(call.vars);
+  if (option !== 'comply' && option !== 'refuse' && option !== 'fightBack') throw new Error(`Bad warning answer ${option}`);
   return option;
 }
 
@@ -162,6 +168,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   demandsSurrender: (world, npc) => hasStrandedPrey(world, npc) && wantsLoot(world, npc, playerVehicle(world)) && hasStrippable(playerVehicle(world)),
   // The stranded player is alone with a driver that takes nothing: not a robber, or a robber with nothing to take.
   demandsGiveUp: (world, npc) => offersGiveUp(world, npc) && judgedWorthOffer(world, npc),
+  guardsClaim: (world, npc) => guardsClaim(world, npc),
   atOdds: (world, npc) => isHostile(world, npc, playerVehicle(world)),
   atPeace: (world, npc) => !isHostile(world, npc, playerVehicle(world)),
   noPlayerPlea: (world, npc) => !playerPleaded(world, npc),
@@ -173,6 +180,9 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   complies: (_world, _npc, vars) => answerOf(vars) === 'comply',
   resists: (_world, _npc, vars) => answerOf(vars) === 'fightBack',
   runs: (_world, _npc, vars) => answerOf(vars) === 'flee',
+  // Loots a wreck or knocked-out truck the player truck is in reach of too.
+  claimsPlayerLoot: (world, npc) => lootsBesidePlayer(world, npc),
+  holdsOn: (_world, _npc, vars) => answerOf(vars) === 'refuse',
   canTowNpc: (world, npc) => canTowNpc(world, npc),
   towedByPlayer: (world, npc) => playerTowing(world)?.other === npc.id,
   knowsLastTown: (world, npc) => hasPerk(world, 'marketEars') && npc.brain?.lastTown !== undefined,
@@ -223,6 +233,11 @@ export const EFFECTS: Record<EffectId, Effect> = {
     settle(world, npc, call, 'agreed');
     practice(world, 'deal', 1, null, npc.id);
   },
+  backOffClaim: (world, npc) => backOffClaims(world, npc),
+  defyClaim: (world, npc, call) => {
+    defyClaims(world, npc);
+    settle(world, npc, call, 'refused');
+  },
   acceptPlea: (world, npc) => answerPlea(world, npc, true),
   refusePlea: (world, npc) => answerPlea(world, npc, false),
   settlePlea: (world, npc, call) => settlePlayerPlea(world, npc, playerPlea(call), answerOf(call.vars) === 'yes'),
@@ -235,6 +250,12 @@ export const EFFECTS: Record<EffectId, Effect> = {
     settleThreat(world, npc, answer);
     settle(world, npc, call, answer === 'comply' ? 'agreed' : 'refused');
     if (answer === 'comply') practice(world, 'deal', 1, null, npc.id);
+  },
+  // A warning pays no XP: the wreck it wins is its own reward.
+  settleWarning: (world, npc, call) => {
+    const answer = warnAnswer(call);
+    settleWarning(world, npc, answer);
+    settle(world, npc, call, answer === 'comply' ? 'agreed' : 'refused');
   },
   // The call holds no turn, so the rumor is the one the prepare step told.
   revealRumor: (world, npc, call) => {
@@ -266,6 +287,7 @@ export const PREPARES: Record<PrepareId, Prepare> = {
   truceAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'truce') ? 'yes' : 'no' } }),
   mercyAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'mercy') ? 'yes' : 'no' } }),
   threatAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersThreat(world, npc) } }),
+  warnAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersWarning(world, npc) } }),
   npcTowTerms: (world, npc) => {
     const { site, fee } = npcTowTerms(world, npc);
     return { site: { kind: 'site', id: site.id }, fee: { kind: 'money', amount: fee } };

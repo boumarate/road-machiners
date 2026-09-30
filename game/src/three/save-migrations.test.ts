@@ -6,6 +6,7 @@ import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
 import FORMAT_2_2 from './save-fixtures/format-2-2.json';
 import FORMAT_2_3 from './save-fixtures/format-2-3.json';
+import FORMAT_2_4 from './save-fixtures/format-2-4.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS } from './save-migrations';
@@ -116,5 +117,33 @@ describe('save migration 3 to 4', () => {
 
   it('throws on a value other than 0 or 1', () => {
     expect(() => MIGRATIONS[3]({ player: { explored: [0, 2] } })).toThrow();
+  });
+});
+
+describe('save migration 4 to 5', () => {
+  type Saved = { kind: string; window?: number; rush?: boolean };
+  const next = MIGRATIONS[4](FORMAT_2_4) as unknown as {
+    turn: number;
+    player: { money: number; contracts: Saved[] };
+    shops: { nose: { contracts: Saved[] } };
+  };
+
+  it('gives every held and posted contract a window equal to the time it has left', () => {
+    expect(next.player.contracts.map((c) => c.window)).toEqual([400, 1]);
+    expect(next.shops.nose.contracts.map((c) => c.window)).toEqual([300, 700]);
+  });
+
+  it('marks every haul as no rush and leaves the other kinds without the flag', () => {
+    const all = [...next.player.contracts, ...next.shops.nose.contracts] as Saved[];
+    for (const c of all) expect('rush' in c).toBe(c.kind === 'haul');
+    for (const c of all.filter((c) => c.kind === 'haul')) expect(c.rush).toBe(false);
+  });
+
+  it('changes nothing else', () => {
+    const strip = (cs: Saved[]) => cs.map(({ window: _w, rush: _r, ...rest }) => rest);
+    expect(strip(next.player.contracts)).toEqual(FORMAT_2_4.player.contracts);
+    expect(strip(next.shops.nose.contracts)).toEqual(FORMAT_2_4.shops.nose.contracts);
+    expect(next.turn).toBe(FORMAT_2_4.turn);
+    expect(next.player.money).toBe(FORMAT_2_4.player.money);
   });
 });

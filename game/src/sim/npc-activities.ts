@@ -12,7 +12,7 @@ import type { PartHit } from './armor';
 import { callLawmen, inCombat, isHostile, shotDamage, startFeuds } from './combat';
 import { affordableBuyCount, getTradePrice, sellVehicleCargo, serviceAtCamp, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
-import { corePart, freeCells, goodsCount, mountedParts } from './grid';
+import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods, cargoRoom } from './inventory';
 import { cancelJob } from './jobs';
 import { isFree } from './spawn';
@@ -20,16 +20,17 @@ import { route } from './path';
 import {
   tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
   huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
+  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
 import { hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
-import { canLootTruck, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, isSiteStock, lootTruckTurn, wreckStockId } from './salvage';
+import { canLootTruck, canReachSalvage, canTakeAny, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
-import { judgeStrandedFoe, plead } from './parley';
+import { judgeStrandedFoe, plead, warnedOff } from './parley';
 import { addState, endState, stateOf, statesHeld } from './states';
 import { isStranded, suppliesCap, vehicleStats } from './stats';
 import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Vehicle, World } from './types';
@@ -37,7 +38,7 @@ import { canUseSite, nearestPad, type Site } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { heatAt } from './sun';
 import { canVehicleSee } from './vision';
-import { dropTow, follows, inTowReach, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
+import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut, refitAtHome } from './defeat';
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
@@ -418,28 +419,14 @@ function investigateInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): 
 // A wreck or a loot pile is an opportunity only while it remains observable. A known site stays one.
 function scavengeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   if (goal.targetId === null || [...REGION.towns, ...REGION.locations].some((site) => site.id === goal.targetId)) return null;
-  return world.salvage.some((stock) => stock.id === goal.targetId && canVehicleSee(world, vehicle, stock.pos)) ? null : 'lost sight of the salvage';
+  const seen = world.salvage.some((stock) => stock.id === goal.targetId && canVehicleSee(world, vehicle, stock.pos));
+  return lootTaken(world, vehicle, goal.targetId) ?? (seen ? null : 'lost sight of the salvage');
 }
 
 // A driver learns a stock is empty only once it can reach it.
 function lootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   const truck = world.vehicles.find((v) => v.id === goal.targetId);
-  return truck ? truckLootInvalid(vehicle, truck) : stockLootInvalid(world, vehicle, goal);
-}
-
-function stockLootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
-  const stock = world.salvage.find((s) => s.id === goal.targetId);
-  if (!stock) return 'the loot is gone';
-  if (!canReachSalvage(vehicle, stock)) return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
-  if (!hasSalvage(stock)) return 'nothing left to loot';
-  return canTakeAny(world, vehicle, stock) ? null : 'cargo cannot hold the loot';
-}
-
-// A knocked-out truck is loot until it wakes. A refit on it keeps going until it ends.
-function truckLootInvalid(vehicle: Vehicle, truck: Vehicle): string | null {
-  if (!isKnockedOut(truck)) return 'the truck got away';
-  if (vehicle.job?.kind === 'refit' || !inTowReach(vehicle, truck)) return null;
-  return canTakeFromTruck(vehicle, truck) ? null : 'cargo cannot hold the loot';
+  return lootTaken(world, vehicle, goal.targetId) ?? (truck ? truckLootInvalid(vehicle, truck) : stockLootInvalid(world, vehicle, goal));
 }
 
 function towInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
@@ -699,11 +686,22 @@ function hurtingFoe(world: World, vehicle: Vehicle): Vehicle | null {
 }
 
 // A driver that refuses a threat starts a feud with the one who made it, then fights it or runs from it.
-export function defyThreat(world: World, vehicle: Vehicle, threatener: Vehicle, answer: Exclude<DecisionOptions['threatened'], 'comply'>): void {
+export function defyThreat(world: World, vehicle: Vehicle, threatener: Vehicle, answer: Exclude<DecisionOptions['threatened'], 'comply'>, reason = answer === 'fightBack' ? 'refuse a threat' : 'escape a threat'): void {
   startFeuds(world, threatener, vehicle);
   vehicle.brain!.noticed[`hostileSeen:${threatener.id}`] = world.turn;
-  if (answer === 'fightBack') interrupt(world, vehicle, fightGoal(world, vehicle, threatener, 'refuse a threat'));
-  else interrupt(world, vehicle, fleeFrom(world, vehicle, npcProfile(vehicle), threatener.id, threatener.pos, 'escape a threat'));
+  if (answer === 'fightBack') interrupt(world, vehicle, fightGoal(world, vehicle, threatener, reason));
+  else interrupt(world, vehicle, fleeFrom(world, vehicle, npcProfile(vehicle), threatener.id, threatener.pos, reason));
+}
+
+// A driver warned off its loot gives it up: its job on the target ends, its loot goal pops, and it notices the target
+// as salvage seen, so no roll on the way picks it again while it stays in sight.
+export function backOffLoot(world: World, vehicle: Vehicle): void {
+  const target = lootClaimedBy(world, vehicle);
+  if (target === null) throw new Error(`${vehicle.id} holds no loot claim to back off from`);
+  if (worksOnLoot(vehicle, target)) cancelJob(world, vehicle);
+  vehicle.brain!.noticed[`salvageSeen:${target}`] = world.turn;
+  const goal = topGoal(vehicle);
+  if (goal && ['loot', 'scavenge'].includes(goal.kind) && goal.targetId === target) finishGoal(world, vehicle, 'warned off the loot');
 }
 
 // One roll per new truck in sight the NPC can rob, nearest first. The sighting's perceived danger weighs the roll.
@@ -1138,14 +1136,17 @@ function resolveTow(world: World, vehicle: Vehicle, activity: NpcActivity): void
   if (ended) finishGoal(world, vehicle, ended);
 }
 
-// Looting searches the robbed stock like any salvage, or strips a knocked-out truck.
+// Looting searches the robbed stock like any salvage, or strips a knocked-out truck. A driver that finds another truck
+// looting the target gives it up and starts nothing there.
 function resolveSearch(world: World, vehicle: Vehicle, activity: NpcActivity): void {
+  const taken = lootTaken(world, vehicle, activity.targetId);
+  if (taken) { finishGoal(world, vehicle, taken); return; }
   const truck = world.vehicles.find((v) => v.id === activity.targetId);
   if (truck) { resolveTruckLoot(world, vehicle, activity, truck); return; }
   const stock = world.salvage.find((entry) => entry.id === activity.targetId);
   if (!stock) { finishGoal(world, vehicle, 'salvage no longer available'); return; }
   // A search already runs at this stock: keep parked and wait for it to finish.
-  if (isSearching(vehicle, stock)) { activity.phase = 'act'; return; }
+  if (worksOnLoot(vehicle, stock.id)) { activity.phase = 'act'; return; }
   if (!canReachSalvage(vehicle, stock)) return;
   activity.phase = 'act';
   searchStock(world, vehicle, stock);
@@ -1158,10 +1159,6 @@ function resolveTruckLoot(world: World, vehicle: Vehicle, activity: NpcActivity,
   if (ended) finishGoal(world, vehicle, ended);
 }
 
-function isSearching(vehicle: Vehicle, stock: SalvageStock): boolean {
-  return vehicle.job?.kind === 'search' && vehicle.job.stockId === stock.id;
-}
-
 function searchStock(world: World, vehicle: Vehicle, stock: SalvageStock): void {
   if (!canTakeAny(world, vehicle, stock)) {
     finishGoal(world, vehicle, !hasSalvage(stock) ? 'salvage exhausted' : 'cargo cannot hold salvage');
@@ -1170,7 +1167,7 @@ function searchStock(world: World, vehicle: Vehicle, stock: SalvageStock): void 
   if (vehicle.job) return;
   // No search starts in combat, so the driver gives the salvage up rather than park beside it for good.
   if (inCombat(world, vehicle)) finishGoal(world, vehicle, 'combat stops the search');
-  else beginSearch(world, vehicle, stock.id);
+  else if (!warnedOff(world, vehicle, stock)) beginSearch(world, vehicle, stock.id);
 }
 
 // The goal reach rule: within twice the stop radius of the destination.

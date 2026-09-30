@@ -11,7 +11,7 @@ import { fireBlock, isHostile } from './combat';
 import { NPC_UPKEEP, NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { aidPrice, offerAid, playerAid, spareAid, wantedAid } from './aid';
-import { isMounted } from './grid';
+import { corePart, isMounted } from './grid';
 import { addGoods } from './inventory';
 import { hasCargo } from './salvage';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
@@ -23,6 +23,9 @@ import type { SalvageStock, Vehicle, World } from './types';
 import { dist } from './vec';
 import { refreshVision } from './vision';
 import { autoRuns, endTurn, setMoveOrder } from './world';
+import { beginSearch } from './search';
+import { knockOutNpc } from './defeat';
+import { chassisDef } from '../data/chassis';
 
 const TRAITS_OF: Record<string, TraitId[]> = { trader: ['trader'], scavenger: ['scavenger'], buggy: ['raider'] };
 
@@ -466,6 +469,69 @@ describe('demand', () => {
     stateOf(w, 'truce', raider.id, me)!.turnsLeft = 1;
     w = endTurn(w, testDrive);
     expect(stateOf(w, 'truce', raider.id, me)).toBeNull();
+  });
+});
+
+describe('warn off', () => {
+  const WARN = TOPICS.warnOff.ask!.text;
+  const asks = (w: World, npcId: string) => currentOptions(callVehicle(w, npcId)).map((o) => o.text);
+
+  // A scavenger parked at a road wreck at `at` with a scavenge goal in the act phase. With `search` it searches it.
+  function looterAt(at: { x: number; y: number }, search: boolean): { w: World; npc: Vehicle; wreckId: string } {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const wreck = { id: 'wreck901', pos: { ...at }, radius: 1, goods: { scrap: 6 }, parts: [] };
+    w.salvage.push(wreck);
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine', 'mg'], { x: at.x + 1, y: at.y });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    npc.speed = 0;
+    if (search) {
+      npc.brain.goals = [{ kind: 'scavenge', targetId: wreck.id, destination: { ...wreck.pos }, phase: 'act', reason: 'test loot' }];
+      beginSearch(w, npc, wreck.id);
+    }
+    refreshVision(w);
+    return { w, npc, wreckId: wreck.id };
+  }
+
+  it('is asked of a driver looting the wreck the player is parked at', () => {
+    const { w, npc } = looterAt({ x: 30.5, y: 30 }, true);
+    expect(asks(w, npc.id)).toContain(WARN);
+  });
+
+  it('is not asked of a looter at another wreck, or of a driver merely parked at the player\'s wreck', () => {
+    const far = looterAt({ x: 40, y: 30 }, true);
+    expect(asks(far.w, far.npc.id)).not.toContain(WARN);
+    const idle = looterAt({ x: 30.5, y: 30 }, false);
+    expect(asks(idle.w, idle.npc.id)).not.toContain(WARN);
+  });
+
+  it('is not asked of a driver at odds with the player', () => {
+    const { w, npc } = looterAt({ x: 30.5, y: 30 }, true);
+    addState(w, 'feud', npc.id, w.player.vehicleId, { kind: 'feud', robbery: false });
+    expect(asks(w, npc.id)).not.toContain(WARN);
+  });
+
+  it('is asked of a driver stripping a knocked-out truck beside the player', () => {
+    const gap = chassisDef('scout').radius + chassisDef('buggy').radius + 0.2;
+    const w = emptyWorld({ x: 30, y: 30 });
+    const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + gap, y: 30 });
+    buggy.brain = npcBrain('buggy', buggy.pos, ['raider']);
+    corePart(buggy, 'cab').hp = 0;
+    knockOutNpc(w, buggy);
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine', 'mg'], { x: 30 + 2 * gap, y: 30 });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    npc.speed = 0;
+    npc.brain.goals = [{ kind: 'loot', targetId: buggy.id, destination: { ...buggy.pos }, phase: 'act', reason: 'test loot' }];
+    refreshVision(w);
+    expect(asks(w, npc.id)).toContain(WARN);
+  });
+
+  it('is asked once per driver', () => {
+    const { w: start, npc } = looterAt({ x: 30.5, y: 30 }, true);
+    const open = callVehicle(start, npc.id);
+    const w = hangUp(chooseOption(open, optionIndex(open, WARN)));
+    expect(w.player.talked[npc.id]).toEqual({ warnOff: 'refused' });
+    const again = callVehicle(w, npc.id);
+    expect(chooseOption(again, optionIndex(again, WARN)).player.call?.topic).toBeNull();
   });
 });
 

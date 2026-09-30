@@ -10,7 +10,7 @@ import { canUseSite } from '../sim/sites';
 import { vehicleStats } from '../sim/stats';
 import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
 import type { World } from '../sim/types';
-import { dist } from '../sim/vec';
+import { angleDiff, dist } from '../sim/vec';
 import { endTurn, newWorld, setMoveOrder } from '../sim/world';
 import { buildDrive, freeDrive, initPhysics, type Drive } from './drive';
 import { physicsMove } from './turn';
@@ -45,6 +45,22 @@ describe('NPC driving', () => {
     expect(w.vehicles.find((v) => v.id === npc.id)!.brain!.recovery).toBeGreaterThan(0);
     ({ w, d } = turn(w, d));
     expect(w.vehicles.find((v) => v.id === npc.id)!.pos.x).toBeLessThan(startX);
+    freeDrive(d);
+  });
+
+  it('an NPC whose recovery ended turns around nose first toward a goal behind it', () => {
+    let w = emptyWorld({ x: 60, y: 40 });
+    const npc = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 60, y: 30 });
+    npc.brain = npcBrain('trader', npc.pos, ['trader']);
+    npc.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 5, y: 30 }, reason: 'look around', phase: 'travel' }];
+    npc.brain.recovery = 2;
+    npc.brain.recoveryGoal = { x: 56, y: 30 };
+    let d = buildDrive(w);
+    for (let i = 0; i < 10; i++) ({ w, d } = turn(w, d));
+    const after = w.vehicles.find((v) => v.id === npc.id)!;
+    expect(after.brain!.recovery).toBe(0);
+    expect(Math.abs(angleDiff(after.heading, Math.PI))).toBeLessThan(Math.PI / 4);
+    expect(after.pos.x).toBeLessThan(56);
     freeDrive(d);
   });
 

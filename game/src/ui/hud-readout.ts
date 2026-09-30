@@ -23,7 +23,7 @@ import type { ContextAction } from './hud';
 import { SHOPS } from '../data/market';
 import { canUseSite, locationAt } from '../sim/sites';
 import { shopAt } from '../sim/market';
-import { canUseOasis, downedHere, downedNear, emptySalvageNear, salvageHere, salvageNear } from '../sim/locations';
+import { canUseOasis, downedHere, downedNear, emptySalvageNear, lootBlockerHere, salvageHere, salvageNear } from '../sim/locations';
 import { playerCanAct } from '../sim/world';
 import { combatTurnsLeft } from '../sim/combat';
 import { isBusy } from '../sim/jobs';
@@ -71,9 +71,12 @@ function getSiteAction(world: World): ContextAction | null {
   return getStockAction(world, stock);
 }
 
-// A search needs no combat. Looting a searched stock does not.
+// A search needs no combat. Looting a searched stock does not. Neither starts while another truck loots it.
 function getStockAction(world: World, stock: SalvageStock): ContextAction {
-  if (world.player.scavenged.includes(stock.id)) return { label: `Loot ${getSalvageName(stock)}`, ready: salvageHere(world) !== null };
+  const searched = world.player.scavenged.includes(stock.id);
+  const blocker = lootBlockerHere(world);
+  if (blocker) return { label: `${searched ? 'Loot' : 'Search'} ${getSalvageName(stock)}`, ready: false, hint: `${blocker.name} is looting it` };
+  if (searched) return { label: `Loot ${getSalvageName(stock)}`, ready: salvageHere(world) !== null };
   const combat = combatTurnsLeft(world, playerVehicle(world)) ?? undefined;
   return { label: `Search ${getSalvageName(stock)}`, ready: combat === undefined && salvageHere(world) !== null, combat };
 }

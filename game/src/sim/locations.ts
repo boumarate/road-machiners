@@ -6,7 +6,8 @@ import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
 import { isKnockedOut } from './defeat';
 import { inTowReach } from './tow';
-import { canLootTruck, canReachSalvage, collectSalvage, hasSalvage, pourStores, salvageInRange, takeBasis } from './salvage';
+import { canLootTruck, canReachSalvage, collectSalvage, hasSalvage, lootBlocker, pourStores, requireLootFree, salvageInRange, takeBasis } from './salvage';
+import { takeClaimed } from './parley';
 import { newId } from './factory';
 import { goodsCount, isMounted, type Spot } from './grid';
 import { getLayoutError, lootRefitTurns, requireIdleRefit } from './inventory';
@@ -98,10 +99,18 @@ export function emptySalvageNear(world: World): SalvageStock | null {
   return world.salvage.find((stock) => !stock.pile && !hasSalvage(stock) && salvageInRange(me, stock)) ?? null;
 }
 
-// An unsearched stock is in reach: the player can start a search.
+// The truck looting the stock or knocked-out truck in the parked player's reach, which keeps the player off it, or
+// null.
+export function lootBlockerHere(world: World): Vehicle | null {
+  const target = salvageHere(world) ?? downedHere(world);
+  return target && lootBlocker(world, playerVehicle(world), target.id);
+}
+
+// An unsearched stock is in reach and nobody else loots it: the player can start a search.
 export function canScavenge(world: World): boolean {
+  const me = playerVehicle(world);
   const stock = salvageHere(world);
-  return stock !== null && !world.player.scavenged.includes(stock.id) && !inCombat(world, playerVehicle(world));
+  return stock !== null && !world.player.scavenged.includes(stock.id) && !inCombat(world, me) && !lootBlocker(world, me, stock.id);
 }
 
 // A searched stock is in reach: the player can take its loot.
@@ -113,8 +122,10 @@ export function canLoot(world: World): boolean {
 // Starts a timed search of the reachable stock. When it ends, the stock opens for looting.
 export function scavenge(world: World): World {
   return playerCommand(world, (w) => {
-    if (!canScavenge(w)) throw new Error('Nothing unsearched in reach');
-    beginSearch(w, playerVehicle(w), salvageHere(w)!.id);
+    const stock = salvageHere(w);
+    if (stock) requireLootFree(w, playerVehicle(w), stock.id);
+    if (!stock || !canScavenge(w)) throw new Error('Nothing unsearched in reach');
+    beginSearch(w, playerVehicle(w), stock.id);
   });
 }
 
@@ -182,6 +193,8 @@ function requireLootable(world: World, stockId: string): SalvageStock {
   if (!stock) throw new Error(`Unknown salvage ${stockId}`);
   if (!world.player.scavenged.includes(stockId)) throw new Error('Search this site first');
   if (!canReachSalvage(playerVehicle(world), stock)) throw new Error('Stop within reach of the salvage');
+  requireLootFree(world, playerVehicle(world), stockId);
+  takeClaimed(world, stock);
   return stock;
 }
 

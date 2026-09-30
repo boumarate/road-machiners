@@ -1,0 +1,19 @@
+{
+  "turn": 1000,
+  "player": {
+    "vehicleId": "player",
+    "money": 340,
+    "contracts": [
+      { "id": "h1", "shop": "bowl", "kind": "haul", "good": "salt", "units": 3, "to": "nose", "reward": 120, "deadline": 1400, "tier": 1 },
+      { "id": "b1", "shop": "bowl", "kind": "bounty", "template": "buggy", "targetName": "Raider", "reward": 400, "deadline": 990, "tier": 2 }
+    ]
+  },
+  "shops": {
+    "nose": {
+      "contracts": [
+        { "id": "f1", "shop": "nose", "kind": "fetch", "defId": "mg", "reward": 90, "deadline": 1300, "tier": 1 },
+        { "id": "h2", "shop": "nose", "kind": "haul", "good": "salt", "units": 5, "to": "bowl", "reward": 200, "deadline": 1700, "tier": 1 }
+      ]
+    }
+  }
+}
