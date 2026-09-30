@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { runJob } from './job';
+import { progressNote, runJob } from './job';
 import { EMPTY_STATE, readState, writeState } from './state';
 import type { Ctx, FactoryConfig } from './types';
 
@@ -44,6 +44,29 @@ describe('runJob', () => {
     expect(state.pendingShip).toBeNull();
     expect(state.release).not.toBeNull();
     expect(labels).toEqual(['20:factory-stuck']);
+  });
+
+  it('comments on the issue when a card stage fails, after the report', async () => {
+    rmSync(ROOT, { recursive: true, force: true });
+    mkdirSync(ROOT, { recursive: true });
+    const statePath = join(ROOT, 'state.json');
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), job: { stage: 'design', issue: 7, pid: 1, startedAt: '2026-01-10T11:50:00Z', log: 'l' } });
+    const events: string[] = [];
+    const fail = async () => { throw new Error('offline'); };
+    const ctx = {
+      cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c' } as FactoryConfig, statePath, now: () => new Date('2026-01-10T12:00:00Z'), log: () => undefined,
+      repo: { sync: fail },
+      telegram: { sendMessage: async () => { events.push('report'); return 1; } },
+      github: { issue: fail, cards: fail, addLabel: async () => undefined, comment: async (n: number, body: string) => { events.push(`comment ${n} ${body}`); } },
+    } as unknown as Ctx;
+    await runJob(ctx, 'design', 7);
+    expect(events).toEqual(['report', 'comment 7 Design failed after 10 min. Hermes is looking into it.']);
+  });
+
+  it('writes a finished note with the stage time', () => {
+    const ctx = { now: () => new Date('2026-01-10T12:00:00Z') } as unknown as Ctx;
+    expect(progressNote(ctx, 'implement', '2026-01-10T11:15:00Z', 'finished')).toBe('Implementation finished after 45 min.');
+    expect(progressNote(ctx, 'testing', null, 'finished')).toBe('Testing finished.');
   });
 
   it('drops only the failed removal from the queue', async () => {
