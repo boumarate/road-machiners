@@ -10,7 +10,10 @@ import type { PreparedTurn, TurnRequest, TurnResponse } from "../phys/turn";
 import { emptyWorld } from "../sim/testkit";
 import { setMoveOrder } from "../sim/world";
 import type { World } from "../sim/types";
+import { reportError } from "./crash";
 import { TurnPreparation } from "./travel";
+
+vi.mock("./crash", () => ({ reportError: vi.fn() }));
 
 class TestWorker {
   static latest: TestWorker;
@@ -80,12 +83,30 @@ it("discards a stale result after replanning and sends stable terrain only once"
   expect(turns.take(changed)).toBe(reply);
 });
 
-it("reports calculation failures instead of continuing with stale results", () => {
+it("throws a calculation failure once, then prepares again", () => {
   const turns = new TurnPreparation();
   turns.prepare(world, drive);
   const worker = TestWorker.latest;
-  expect(worker?.requests).toHaveLength(1);
-  expect(() =>
-    worker.respond({ id: worker.requests[0].id, error: "physics failed" }),
-  ).toThrow("physics failed");
+  worker.respond({ id: worker.requests[0].id, error: "physics failed" });
+  expect(() => turns.take(world)).toThrow("physics failed");
+  expect(turns.take(world)).toBeNull();
+  turns.prepare(world, drive);
+  expect(worker.requests).toHaveLength(2);
+});
+
+it("fails the pending turn on a worker error event", () => {
+  const turns = new TurnPreparation();
+  turns.prepare(world, drive);
+  TestWorker.latest.onerror?.({ message: "boom" } as ErrorEvent);
+  expect(() => turns.take(world)).toThrow("Turn worker failed: boom");
+});
+
+it("does not fail the pending turn when the warm-up fails", () => {
+  const turns = new TurnPreparation();
+  turns.warm(world, drive);
+  const worker = TestWorker.latest;
+  turns.prepare(world, drive);
+  worker.respond({ id: worker.requests[0].id, error: "warm failed" });
+  expect(turns.take(world)).toBeNull();
+  expect(reportError).toHaveBeenCalledOnce();
 });

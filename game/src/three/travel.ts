@@ -8,6 +8,7 @@ import {
 } from "../phys/drive";
 import type { PreparedTurn, TurnRequest, TurnResponse } from "../phys/turn";
 import { mergePerf } from "../perf";
+import { reportError } from "./crash";
 import { playerVehicle } from "../sim/damage";
 import type { GameEvent, World } from "../sim/types";
 import { dist, type Vec } from "../sim/vec";
@@ -233,13 +234,14 @@ export class Travel {
     elapsed: number,
   ): { world: World; playback: Playback; towed: boolean } {
     const world = { ...prepared.world, terrain: before.terrain };
+    // Frames first: a throw here must not leave a restored Rapier world behind.
+    addRopeFrames(before, world, prepared.result.frames);
     const result: TurnResult = {
       ...prepared.result,
       next: restoreDrive(prepared.result.next),
     };
     if (!playerCanAct(world)) this.pause();
     const towed = isTowed(before) || isTowed(world);
-    addRopeFrames(before, world, result.frames);
     const playback: Playback = {
       result,
       before,
@@ -280,6 +282,7 @@ export class TurnPreparation {
     id: number;
     before: World;
     ready: PreparedTurn | null;
+    failure: string | null;
   } | null = null;
 
   private createWorker(): Worker {
@@ -288,18 +291,21 @@ export class TurnPreparation {
     });
     worker.onmessage = (event: MessageEvent<TurnResponse>) => {
       const response = event.data;
-      if ("error" in response) throw new Error(response.error);
+      if ("error" in response) return this.fail(response.id, response.error);
       // A warm-up turn is no player turn, so it keeps its own timer.
       mergePerf(response.id === this.warmId ? { "turn-warm": response.perf.turn } : response.perf);
       if (this.pending?.id === response.id) this.pending.ready = response.turn;
     };
-    worker.onerror = (event) => {
-      throw new Error(`Turn worker failed: ${event.message}`);
-    };
-    worker.onmessageerror = () => {
-      throw new Error("Could not read turn worker response");
-    };
+    worker.onerror = (event) => this.fail(null, `Turn worker failed: ${event.message}`);
+    worker.onmessageerror = () => this.fail(null, "Could not read turn worker response");
     return worker;
+  }
+
+  // A failure of the pending turn waits in it for take() to throw. A failure that belongs to no pending turn, like the
+  // warm-up's, goes to the error route. A worker event without a request id belongs to the pending turn.
+  private fail(id: number | null, message: string): void {
+    if (this.pending && (id === null || this.pending.id === id)) this.pending.failure = message;
+    else reportError(new Error(message));
   }
 
   // Runs the turn after `world` once and drops it. The worker then has its route grids built, its code compiled
@@ -311,7 +317,7 @@ export class TurnPreparation {
 
   prepare(world: World, drive: Drive): void {
     if (this.pending?.before === world) return;
-    this.pending = { id: this.post(world, drive), before: world, ready: null };
+    this.pending = { id: this.post(world, drive), before: world, ready: null, failure: null };
   }
 
   private post(world: World, drive: Drive): number {
@@ -333,10 +339,17 @@ export class TurnPreparation {
     return id;
   }
 
+  // The prepared turn after `world`, or null while it is not ready. It throws the worker's failure once and then
+  // forgets the turn, so the next prepare() asks again.
   take(world: World): PreparedTurn | null {
-    if (this.pending?.before !== world || !this.pending.ready) return null;
-    const result = this.pending.ready;
+    const pending = this.pending;
+    if (pending?.before !== world) return null;
+    if (pending.failure) {
+      this.pending = null;
+      throw new Error(pending.failure);
+    }
+    if (!pending.ready) return null;
     this.pending = null;
-    return result;
+    return pending.ready;
   }
 }
