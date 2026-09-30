@@ -75,12 +75,16 @@ describe('prop footprints', () => {
     const boxes = propBoxes(w.obstacles[0]);
     const near = (p: Vec) => boxes.some((b) => boxDistance(b, p) < radius + CLEARANCE);
 
+    // Every cell is compared, but a mismatch is collected and asserted once, since an expect per cell of the whole map takes half a minute.
     let stamped = 0;
+    const wrong: number[] = [];
     for (let c = 0; c < layer.n * layer.n; c++) {
       const p = { x: ((c % layer.n) + 0.5) * CELL, y: (Math.floor(c / layer.n) + 0.5) * CELL };
-      expect(overlay.stamp[c] === overlay.gen, `cell ${c}`).toBe(near(p));
-      if (near(p)) stamped++;
+      const isNear = near(p);
+      if ((overlay.stamp[c] === overlay.gen) !== isNear) wrong.push(c);
+      if (isNear) stamped++;
     }
+    expect(wrong).toEqual([]);
     expect(stamped).toBeGreaterThan(0);
   });
 

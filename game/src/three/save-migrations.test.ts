@@ -4,6 +4,7 @@ import { baseGrid, isMounted, placementError } from '../sim/grid';
 import type { Vehicle } from '../sim/types';
 import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
+import FORMAT_2_2 from './save-fixtures/format-2-2.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { MIGRATIONS } from './save-migrations';
 
@@ -89,5 +90,16 @@ describe('save migration 1 to 2', () => {
         if (item.kind === 'part' && !['mg', 'rack', 'cannon'].includes(item.part.defId)) expect(isMounted(v.chassisId, item), `${v.id} ${item.id}`).toBe(true);
       });
     }
+  });
+});
+
+describe('save migration 2 to 3', () => {
+  it('gives the player aid XP 0 and keeps every other XP source and field', () => {
+    const next = MIGRATIONS[2](FORMAT_2_2);
+
+    expect(next).toEqual({
+      ...FORMAT_2_2,
+      player: { ...FORMAT_2_2.player, xpBySource: { ...FORMAT_2_2.player.xpBySource, aid: 0 } },
+    });
   });
 });

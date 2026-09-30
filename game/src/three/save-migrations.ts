@@ -161,6 +161,11 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     const removed = (world.removed as SavedJson[]).map((v) => relayVehicle(v, null));
     return { ...world, player, vehicles, removed };
   },
+  // 2 to 3: the new aid XP source starts at 0, as in a new game.
+  (world) => {
+    const player = world.player as SavedJson;
+    return { ...world, player: { ...player, xpBySource: { ...(player.xpBySource as SavedJson), aid: 0 } } };
+  },
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

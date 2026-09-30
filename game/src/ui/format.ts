@@ -17,7 +17,7 @@ import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
 import { hasPerk } from '../sim/progress';
-import { pleaData, statesHeld, strayData, towData } from '../sim/states';
+import { aidData, pleaData, statesHeld, strayData, towData } from '../sim/states';
 import { RULES } from '../data/rules';
 import { isJunk } from '../sim/wear';
 import { clockOf } from '../sim/sun';
@@ -149,6 +149,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   trade: () => 'Pulling over to trade with you',
   revenge: () => 'Wants revenge on you',
   escort: () => 'Escorting you',
+  aid: (s) => (aidData(s).giver === 'npc' ? 'Bringing you fuel' : 'Waiting for your fuel'),
   strayFire: (s) => `Hit by your stray fire, ${Math.round(strayData(s).damage)} of ${RULES.stray.feudDamage} damage forgiven`,
 };
 
@@ -170,6 +171,12 @@ const STATE_ENDED_TEXT: Partial<Record<StateKindId, Record<StateEnding, ((holder
     expired: (holder) => ({ text: `${holder} stops backing off from you.`, cls: 'dim' }),
     fulfilled: null,
     broken: null,
+  },
+  // A fulfilled deal logs through its aid event.
+  aid: {
+    expired: (holder) => ({ text: `The fuel deal with ${holder} ran out: you never met.`, cls: 'dim' }),
+    fulfilled: null,
+    broken: (holder) => ({ text: `The fuel deal with ${holder} is off.`, cls: 'dim' }),
   },
 };
 
@@ -304,6 +311,15 @@ function patchText(world: World, e: Extract<GameEvent, { t: 'patch' }>): LogLine
     lapsed: `The patch with ${other} is off: nobody worked on it.`,
   };
   return { text: lines[e.outcome], cls: e.outcome === 'lapsed' ? 'dim' : e.outcome === 'done' ? 'good' : '' };
+}
+
+// Fuel and supplies that changed hands between the player and a driver, and what the driver paid.
+function aidText(world: World, e: Extract<GameEvent, { t: 'aid' }>): LogLine {
+  const me = world.player.vehicleId;
+  if (e.fuel === 0 && e.supplies === 0) return { text: `Nothing changed hands with ${vehicleName(world, e.giver === me ? e.receiver : e.giver)}.`, cls: 'dim' };
+  const moved = `${fillLine('{aid}', { aid: { kind: 'aid', fuel: e.fuel, supplies: e.supplies } })}${e.paid > 0 ? ` for ${e.paid}` : ''}`;
+  if (e.giver === me) return { text: `You give ${vehicleName(world, e.receiver)} ${moved}.`, cls: '' };
+  return { text: `${vehicleName(world, e.giver)} gives you ${moved}.`, cls: 'good' };
 }
 
 function sayText(world: World, e: Extract<GameEvent, { t: 'say' }>): LogLine {
@@ -478,6 +494,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   weather: weatherText,
   honk: honkText,
   patch: patchText,
+  aid: aidText,
   towOffer: towOfferText,
   towHitched: towHitchedText,
   towDone: towDoneText,

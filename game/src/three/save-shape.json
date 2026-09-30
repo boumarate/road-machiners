@@ -1,5 +1,5 @@
 {
- "format": "2.2",
+ "format": "2.3",
  "shape": {
   "broken": [],
   "dustClouds": [],
@@ -70,6 +70,7 @@
     "number"
    ],
    "xpBySource": {
+    "aid": "number",
     "call": "number",
     "contact": "number",
     "contract": "number",

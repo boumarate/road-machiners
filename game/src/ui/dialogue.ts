@@ -13,7 +13,7 @@ import type { CallVar, CallVars, GameEvent, World } from '../sim/types';
 import { playerSees } from '../sim/vision';
 import { playerCanAct } from '../sim/world';
 import { el, panel } from './dom';
-import { meters } from './units';
+import { fuelLiters, meters } from './units';
 
 const COMPASS = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'];
 const METERS_PER_KM = 1000;
@@ -53,6 +53,16 @@ function pricesText(v: Extract<CallVar, { kind: 'prices' }>): string {
   return v.goods.map((g) => `${GOODS[g.good].name.toLowerCase()} buy ${g.buy} sell ${g.sell}`).join(', ');
 }
 
+// Fuel and supplies in words: "12 L of fuel and 3 supplies", leaving out a zero part.
+function aidText(v: Extract<CallVar, { kind: 'aid' }>): string {
+  const parts = [
+    ...(v.fuel > 0 ? [`${fuelLiters(v.fuel)} L of fuel`] : []),
+    ...(v.supplies > 0 ? [`${v.supplies} ${v.supplies === 1 ? 'supply' : 'supplies'}`] : []),
+  ];
+  if (parts.length === 0) throw new Error('Aid of no fuel and no supplies is never named in a line');
+  return parts.join(' and ');
+}
+
 type VarText = { [K in CallVar['kind']]: (v: Extract<CallVar, { kind: K }>) => string };
 
 const VAR_TEXT: VarText = {
@@ -64,6 +74,7 @@ const VAR_TEXT: VarText = {
   count: (v) => `${v.n} ${v.n === 1 ? v.unit : `${v.unit}s`}`,
   deal: dealText,
   prices: pricesText,
+  aid: aidText,
   answer: () => { throw new Error('A rolled answer is never shown in a line'); },
 };
 
