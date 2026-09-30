@@ -102,6 +102,7 @@ export interface GitHub {
   addCard(issue: number, column: Column): Promise<void>;
   move(issue: number, column: Column): Promise<void>;
   openPullRequest(branch: string, base: string, title: string, body: string): Promise<string>;
+  createRelease(tag: string, target: string, title: string, notes: string): Promise<void>; // tags `target` and publishes a GitHub release
   pullRequestFor(branch: string): Promise<string | null>; // URL of the open pull request with that head branch
   closePullRequest(branch: string, comment: string): Promise<void>;
   reopen(number: number): Promise<void>;

@@ -84,6 +84,14 @@ describe('ship', () => {
     expect(f.calls.filter((call) => call === 'close completed')).toHaveLength(2);
   });
 
+  it('publishes a GitHub release of main with the changelog, after the itch push', async () => {
+    const f = shippable();
+    await ship(f.ctx, 11, 'Ann');
+    const at = (name: string) => f.calls.findIndex((call) => call.startsWith(name));
+    expect(at('run butler')).toBeLessThan(at('release release-2026-09-29'));
+    expect(f.calls).toContain('release release-2026-09-29 main ROAM release 2026-09-29\nTrucks are faster.\n\nChanges:\n- #3 faster trucks');
+  });
+
   it('stops before it merges anything when the itch keys are missing', async () => {
     const f = shippable();
     Object.assign(f.ctx.cfg, { itchTarget: null, butlerKey: null });

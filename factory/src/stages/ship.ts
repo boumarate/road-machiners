@@ -58,7 +58,10 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   await publish(ctx, keys);
   const channel = ctx.cfg.publicChannel;
   await ctx.telegram.sendPhoto(channel, screenshot, `ROAM release ${release.day}`);
-  await ctx.telegram.sendMessage(channel, `${readFileSync(notesPath, 'utf8').trim()}\n\nChanges:\n${features.map((feature) => `- ${featureLine(feature)}`).join('\n')}`);
+  const changelog = `${readFileSync(notesPath, 'utf8').trim()}\n\nChanges:\n${features.map((feature) => `- ${featureLine(feature)}`).join('\n')}`;
+  await ctx.telegram.sendMessage(channel, changelog);
+  // Only the factory pushes main, so main still holds the release merge here.
+  await ctx.github.createRelease(`release-${release.day}`, 'main', `ROAM release ${release.day}`, changelog);
   await deployDev(ctx, agentLog(ctx, issue, 'ship'));
   // Each shipped issue stayed open as a release candidate since its approval. It is on main and itch.io now, so it closes.
   for (const feature of features) {
