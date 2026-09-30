@@ -130,6 +130,36 @@ describe("route", () => {
       for (const building of buildings) expect(dist(building.pos, town.pos) + building.r).toBeLessThanOrEqual(town.radius);
     }
   });
+
+  it('player routes on the real map stay direct', () => {
+    const w = w1337;
+    const size = w.terrain.size;
+    let seed = 1337;
+    const next = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32;
+    const clamp = (v: number) => Math.min(size - 20, Math.max(20, v));
+    let waypoints = 0;
+    let length = 0;
+    let straight = 0;
+    for (let k = 0; k < 150; k++) {
+      const from = { x: 20 + next() * (size - 40), y: 20 + next() * (size - 40) };
+      const heading = next() * Math.PI * 2;
+      const span = 15 + next() * 120;
+      const to = { x: clamp(from.x + Math.cos(heading) * span), y: clamp(from.y + Math.sin(heading) * span) };
+      let pts: Vec[];
+      try {
+        pts = route(w, from, to, 0.6, []);
+      } catch {
+        continue;
+      }
+      waypoints += pts.length;
+      length += routeLength(from, pts);
+      straight += dist(from, to);
+    }
+    // Issue 36, measured on this seed: slopeCost 3 gave 4003 waypoints and 1.32 times straight, the current
+    // rules 1277 and 1.14 on TEST_MAP.
+    expect(waypoints).toBeLessThanOrEqual(2000);
+    expect(length).toBeLessThanOrEqual(1.28 * straight);
+  });
 });
 
 describe('driver taste', () => {
