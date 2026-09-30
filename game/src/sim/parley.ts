@@ -11,16 +11,17 @@ import { partSellPrice } from './economy';
 import { corePart, isMounted } from './grid';
 import { applyRefitLayout } from './inventory';
 import { creditBounty } from './market';
-import { backOffLoot, defyThreat, pushGoal, topGoal } from './npc-activities';
-import { decide, perceiveDanger, visibleHostiles, wantsLoot } from './npc-decisions';
+import { backOffLoot, defyThreat, finishGoal, pushGoal, topGoal } from './npc-activities';
+import { decide, firepower, perceiveDanger, visibleHostiles, wantsLoot } from './npc-decisions';
 import { SPARE_LINE } from '../data/dialogue';
 import { vehicleHasPerk } from './progress';
-import { createCargoSalvage, dumpOnPile, hasCargo, lootClaimedBy, salvageInRange, takeError } from './salvage';
+import { backedOff, canReachSalvage, claimantOf, claimPile, createCargoSalvage, dumpOnPile, hasCargo, lootClaimedBy, salvageInRange, takeError } from './salvage';
 import { isStranded } from './stats';
 import { addState, endState, pleaData, stateOf } from './states';
 import { inTowReach } from './tow';
 import type { DecisionOptions } from '../data/npcs';
 import type { Aim, GridItem, Plea, SalvageStock, Vehicle, World } from './types';
+import { canVehicleSee } from './vision';
 import { dist } from './vec';
 
 export type ThreatAnswer = DecisionOptions['threatened'];
@@ -59,7 +60,10 @@ export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, dumped: S
   makePeace(world, loser, winner);
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');
-  if (stock && winner.brain) pushGoal(world, winner, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'take the handed-over cargo' });
+  if (stock && winner.brain) {
+    pushGoal(world, winner, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'take the handed-over cargo' });
+    claimPile(world, stock, winner, [loser.id]);
+  }
   creditYield(world, loser, winner);
 }
 
@@ -164,6 +168,63 @@ export function settleThreat(world: World, npc: Vehicle, answer: ThreatAnswer): 
   const me = playerVehicle(world);
   if (answer === 'comply') yieldTo(world, npc, me);
   else defyThreat(world, npc, me, answer);
+}
+
+// ---- Pile claims. A robber handed a pile claims it, so it warns other drivers off while it takes the loot.
+
+// The claimant fights a trespasser that refuses to back off, or runs when it has no firepower.
+export function defendClaim(world: World, claimant: Vehicle, trespasser: Vehicle): void {
+  defyThreat(world, claimant, trespasser, firepower(world, claimant) > 0 ? 'fightBack' : 'flee', 'defend its claimed loot');
+}
+
+// An NPC about to search a claimed pile that its claimant sees answers the warning. True when it does not search.
+export function warnedOff(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
+  const claimant = claimantOf(world, stock);
+  if (!claimant || claimant.id === vehicle.id || !canVehicleSee(world, claimant, vehicle.pos)) return false;
+  if (!backedOff(stock, vehicle.id)) {
+    const answer = decide(world, vehicle, 'threatened', claimant.id, perceiveDanger(world, vehicle, claimant));
+    if (answer === 'fightBack') {
+      defyThreat(world, vehicle, claimant, 'fightBack', 'take the claimed loot');
+      defendClaim(world, claimant, vehicle);
+      return true;
+    }
+    stock.pile!.claim!.warned.push(vehicle.id);
+  }
+  finishGoal(world, vehicle, 'the loot is claimed');
+  return true;
+}
+
+// The piles the NPC claims.
+function claimedBy(world: World, npc: Vehicle): SalvageStock[] {
+  return world.salvage.filter((stock) => claimantOf(world, stock) === npc);
+}
+
+// The player takes from a claimed pile. A claimant that sees it fights for the pile, or runs without a gun.
+export function takeClaimed(world: World, stock: SalvageStock): void {
+  const claimant = claimantOf(world, stock);
+  const me = playerVehicle(world);
+  if (!claimant || !canVehicleSee(world, claimant, me.pos)) return;
+  stock.pile!.claim!.warned.push(me.id);
+  defendClaim(world, claimant, me);
+}
+
+// The NPC claims a pile in the parked player's reach, sees the player, and has not warned it yet.
+export function guardsClaim(world: World, npc: Vehicle): boolean {
+  const me = playerVehicle(world);
+  if (!canVehicleSee(world, npc, me.pos)) return false;
+  return claimedBy(world, npc).some((stock) => canReachSalvage(me, stock) && !backedOff(stock, me.id));
+}
+
+// The player agrees to roll on from every pile the NPC claims.
+export function backOffClaims(world: World, npc: Vehicle): void {
+  for (const stock of claimedBy(world, npc)) if (!backedOff(stock, world.player.vehicleId)) stock.pile!.claim!.warned.push(world.player.vehicleId);
+}
+
+// The player refuses to roll on. The claimant fights for every pile it claims in the player's reach.
+export function defyClaims(world: World, npc: Vehicle): void {
+  const me = playerVehicle(world);
+  backOffClaims(world, npc);
+  defendClaim(world, npc, me);
 }
 
 // The driver loots a target the player truck is in reach of too, so the player can warn it off. A call from afar has

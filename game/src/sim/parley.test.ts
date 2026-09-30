@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { REFUSED } from '../data/dialogue';
+import { SALVAGE } from '../data/salvage';
 import { NPCS, type TraitId } from '../data/npcs';
 import { isHostile, noteCollision } from './combat';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, raiseCalls } from './dialogue';
 import { addGoods } from './inventory';
-import { pushGoal, thinkNpc, topGoal } from './npc-activities';
+import { takeAllLoot } from './locations';
+import { pushGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { visibleSalvage } from './npc-decisions';
 import { makePeace, plead, yieldTo } from './parley';
-import { hasCargo, looterOf } from './salvage';
+import { hasCargo, lootBlocker, looterOf } from './salvage';
 import { beginSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf } from './testkit';
@@ -469,5 +472,172 @@ describe('bounty talk', () => {
     w.player.contracts = [{ ...bounty }];
     yieldTo(w, playerVehicle(w), npc);
     expect(w.player.contracts).toEqual([bounty]);
+  });
+});
+
+describe('pile claims', () => {
+  function handover(winnerKind: 'npc' | 'player') {
+    const w = quietWorld();
+    const robber = npcAt(w, 'scavengers', ['raider'], 36);
+    const victim = addVehicle(w, 'scavengers', 'scout', ['mg'], { x: 37, y: 30 });
+    victim.brain = npcBrain('trader', victim.pos, ['raider']);
+    addGoods(w, victim, 'scrap', 2);
+    refreshVision(w);
+    if (winnerKind === 'npc') yieldTo(w, victim, robber);
+    else yieldTo(w, victim, playerVehicle(w));
+    return { w, robber, victim, pile: w.salvage.find((s) => s.pile)! };
+  }
+
+  it('an NPC winner claims the handed-over pile', () => {
+    const { w, robber, victim, pile } = handover('npc');
+    expect(pile.pile!.claim).toEqual({ by: robber.id, until: w.turn + SALVAGE.claimTurns, warned: [victim.id] });
+  });
+
+  it('a player winner makes no claim', () => {
+    expect(handover('player').pile.pile!.claim).toBeUndefined();
+  });
+
+  it('a claimant starts no tow of its stranded victim before it takes the pile', () => {
+    const { w, robber, victim } = handover('npc');
+    forceOption('strandedSeen', 'tow');
+    thinkNpc(w, robber);
+    expect(robber.brain!.goals.some((g) => g.kind === 'tow' && g.targetId === victim.id)).toBe(false);
+    expect(topGoal(robber)?.kind).toBe('loot');
+  });
+
+  it('a player parked at the pile does not keep its claimant from starting there', () => {
+    const { w, robber, pile } = handover('npc');
+    const me = playerVehicle(w);
+    me.pos = { x: pile.pos.x + 1, y: pile.pos.y };
+    expect(lootBlocker(w, robber, pile.id)).toBeNull();
+  });
+
+  it('a backed-off driver does not see the pile', () => {
+    const { w, pile } = handover('npc');
+    const other = npcAt(w, 'scavengers', [], 34);
+    expect(visibleSalvage(w, other)).toContain(pile);
+    pile.pile!.claim!.warned.push(other.id);
+    expect(visibleSalvage(w, other)).not.toContain(pile);
+  });
+});
+
+describe('warning off a trespasser', () => {
+  function trespass(armed = true) {
+    const w = quietWorld();
+    const claimant = npcAt(w, 'scavengers', ['raider'], 30);
+    const victim = addVehicle(w, 'scavengers', 'scout', ['mg'], { x: 40, y: 34 });
+    victim.brain = npcBrain('trader', victim.pos, ['raider']);
+    addGoods(w, victim, 'scrap', 2);
+    yieldTo(w, victim, claimant);
+    if (!armed) claimant.items = claimant.items.filter((item) => item.kind !== 'part' || !/mg/.test(item.part.defId));
+    const pile = w.salvage.find((s) => s.pile)!;
+    const trespasser = npcAt(w, 'scavengers', ['scavenger'], pile.pos.x + 1, pile.pos.y);
+    pushGoal(w, trespasser, { kind: 'loot', targetId: pile.id, destination: { ...pile.pos }, phase: 'travel', reason: 'test' });
+    refreshVision(w);
+    return { w, claimant, trespasser, pile };
+  }
+
+  it('comply: the trespasser backs off and starts no search', () => {
+    const { w, trespasser, pile } = trespass();
+    forceOption('threatened', 'comply');
+    resolveNpcActivities(w);
+    expect(pile.pile!.claim!.warned).toContain(trespasser.id);
+    expect(trespasser.job).toBeNull();
+    expect(trespasser.brain!.goals.some((g) => g.kind === 'loot')).toBe(false);
+  });
+
+  it('fightBack: both feud and fight, and nobody searches', () => {
+    const { w, claimant, trespasser } = trespass();
+    forceOption('threatened', 'fightBack');
+    resolveNpcActivities(w);
+    expect(stateOf(w, 'feud', trespasser.id, claimant.id)).not.toBeNull();
+    expect(stateOf(w, 'feud', claimant.id, trespasser.id)).not.toBeNull();
+    expect(topGoal(claimant)).toMatchObject({ kind: 'fight', reason: 'defend its claimed loot' });
+    expect(topGoal(trespasser)?.kind).toBe('fight');
+    expect(trespasser.job).toBeNull();
+  });
+
+  it('a claimant that cannot see the trespasser lets it search', () => {
+    const { w, claimant, trespasser } = trespass();
+    claimant.pos = { x: 5, y: 5 };
+    refreshVision(w);
+    forceOption('threatened', 'comply');
+    resolveNpcActivities(w);
+    expect(trespasser.job?.kind).toBe('search');
+  });
+
+  it('an unarmed claimant flees a refusal', () => {
+    const { w, claimant } = trespass(false);
+    forceOption('threatened', 'fightBack');
+    resolveNpcActivities(w);
+    expect(topGoal(claimant)).toMatchObject({ kind: 'flee', reason: 'defend its claimed loot' });
+  });
+});
+
+describe('the player at a claimed pile', () => {
+  function claimedNearPlayer() {
+    const w = quietWorld();
+    const claimant = npcAt(w, 'scavengers', ['raider'], 30, 38);
+    const victim = addVehicle(w, 'scavengers', 'scout', ['mg'], { x: 31, y: 31 });
+    victim.brain = npcBrain('trader', victim.pos, ['raider']);
+    addGoods(w, victim, 'scrap', 2);
+    yieldTo(w, victim, claimant);
+    const pile = w.salvage.find((s) => s.pile)!;
+    w.player.scavenged.push(pile.id);
+    refreshVision(w);
+    return { w, claimant, pile };
+  }
+  const me = (w: World) => playerVehicle(w);
+  const feuding = (w: World, claimant: Vehicle) => stateOf(w, 'feud', claimant.id, me(w).id) !== null;
+
+  it('a take in the claimant sight starts a feud and a fight', () => {
+    const { w, claimant, pile } = claimedNearPlayer();
+    const next = takeAllLoot(w, pile.id);
+    expect(feuding(next, claimant)).toBe(true);
+    expect(topGoal(next.vehicles.find((v) => v.id === claimant.id)!)?.kind).toBe('fight');
+  });
+
+  it('the player who handed the pile over gets no warning call, but taking it back is a refusal', () => {
+    const w = quietWorld();
+    const claimant = npcAt(w, 'scavengers', ['raider'], 30, 38);
+    addGoods(w, me(w), 'scrap', 2);
+    yieldTo(w, me(w), claimant);
+    const pile = w.salvage.find((s) => s.pile)!;
+    w.player.scavenged.push(pile.id);
+    refreshVision(w);
+    raiseCalls(w);
+    expect(w.player.call).toBeNull();
+    expect(feuding(takeAllLoot(w, pile.id), claimant)).toBe(true);
+  });
+
+  it('a take the claimant cannot see starts nothing', () => {
+    const { w, claimant, pile } = claimedNearPlayer();
+    claimant.pos = { x: 5, y: 5 };
+    refreshVision(w);
+    expect(feuding(takeAllLoot(w, pile.id), claimant)).toBe(false);
+  });
+
+  it('the claimant calls once, and rolling on leaves no feud and no second call', () => {
+    const { w, claimant } = claimedNearPlayer();
+    raiseCalls(w);
+    expect(w.player.call).toMatchObject({ with: claimant.id, topic: 'claim' });
+    const done = pick(w, 'Rolling on.');
+    expect(feuding(done, claimant)).toBe(false);
+    raiseCalls(done);
+    expect(done.player.call).toBeNull();
+  });
+
+  it('refusing starts the feud', () => {
+    const { w, claimant } = claimedNearPlayer();
+    raiseCalls(w);
+    expect(feuding(pick(w, 'Finders keepers.'), claimant)).toBe(true);
+  });
+
+  it('hanging up backs off', () => {
+    const { w, claimant, pile } = claimedNearPlayer();
+    raiseCalls(w);
+    const done = hangUp(w);
+    expect(feuding(done, claimant)).toBe(false);
+    expect(done.salvage.find((s) => s.id === pile.id)!.pile!.claim!.warned).toContain(me(done).id);
   });
 });
