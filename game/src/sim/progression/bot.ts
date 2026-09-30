@@ -356,6 +356,7 @@ export function raiderHuntGrounds(): Vec[] {
 function hunt(o: Orders): void {
   const order = o.me.order;
   const grounds = raiderHuntGrounds();
+  if (grounds.length === 0) throw new Error('no raider hunting ground to hunt on');
   if (order?.kind === 'stopAt' && grounds.some((g) => g.x === order.dest.x && g.y === order.dest.y)) return;
   const here = grounds.indexOf(nearest(o.me.pos, grounds) ?? grounds[0]);
   driveTo(o, grounds[(here + 1) % grounds.length]);

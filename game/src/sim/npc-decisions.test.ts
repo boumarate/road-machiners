@@ -1,4 +1,4 @@
-import { HUNT, MIN_CHANCE, NPC_BEHAVIOR, TRAITS } from '../data/npcs';
+import { HUNT, MIN_CHANCE, NPCS, NPC_BEHAVIOR, TRAITS } from '../data/npcs';
 import { partDef, type PartDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { describe, expect, it, onTestFinished } from 'vitest';
@@ -484,6 +484,11 @@ describe('robbery after a truce', () => {
 });
 
 describe('hunting grounds', () => {
+  it('belong to the camps every raider template knows, so a raider camp owns its grounds', () => {
+    const camps = REGION.locations.filter((l) => l.kind === 'camp').map((l) => l.id).sort();
+    for (const t of Object.values(NPCS).filter((t) => t.traits.includes('raider'))) expect([...TRAITS.raider.bases].sort(), t.id).toEqual(camps);
+  });
+
   const grounds = huntingGrounds();
   const lootPads = REGION.locations.filter((l) => l.kind !== 'camp' && siteLootTable(l)).flatMap((l) => sitePads(l));
   const isPad = (p: Vec) => lootPads.some((pad) => dist(p, pad) < 0.01);
