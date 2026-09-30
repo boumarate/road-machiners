@@ -13,13 +13,13 @@ describe('isAlive', () => {
 });
 
 describe('killJob', () => {
-  it('removes every factory container', async () => {
+  it('removes only the containers of that job', async () => {
     const calls: string[][] = [];
     const run: Run = async (_cmd, args) => {
       calls.push(args);
       return { code: 0, stdout: args[0] === 'ps' ? 'abc\ndef\n' : '', stderr: '' };
     };
-    await killJob(run, 2 ** 22 - 1);
-    expect(calls).toEqual([['ps', '-q', '--filter', 'label=factory=1'], ['rm', '-f', 'abc'], ['rm', '-f', 'def']]);
+    await killJob(run, 2 ** 22 - 1, 'testing-8-x');
+    expect(calls).toEqual([['ps', '-q', '--filter', 'label=factory-job=testing-8-x'], ['rm', '-f', 'abc'], ['rm', '-f', 'def']]);
   });
 });

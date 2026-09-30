@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { must } from './exec';
+import { withLock } from './lock';
 import { OUT_DIR, TASK_DIR, type FactoryConfig, type HostRepo, type Run } from './types';
 
 // Hooks are switched off on every call, so no git command here runs code from a repository.
@@ -53,7 +54,7 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
     return (await git(['diff', '--name-only', '--diff-filter=U'])).split('\n').filter(Boolean);
   }
 
-  return {
+  return lockEach(join(cfg.home, 'locks', 'repo'), {
     path,
     async sync(...extra) {
       if (!existsSync(path)) {
@@ -131,5 +132,19 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
     async mergeLog(from, to) {
       return (await git(['log', '--first-parent', '--merges', '--format=%s', `${to}..${from}`])).split('\n').filter(Boolean);
     },
-  };
+  });
+}
+
+// The longest single step is a clone of the repo. A job that waits this long found a stuck lock.
+const REPO_LOCK_MS = 15 * 60_000;
+
+// Parallel jobs share the host clone. Each method checks out branches and merges, so each runs whole under one lock.
+// A job's steps may interleave with another job's, which is safe: every method leaves the clone clean, and a sync only fast-forwards.
+function lockEach(dir: string, repo: HostRepo): HostRepo {
+  const entries = Object.entries(repo).map(([key, value]) => {
+    if (typeof value !== 'function') return [key, value];
+    const method = value as (...args: unknown[]) => Promise<unknown>;
+    return [key, (...args: unknown[]) => withLock(dir, REPO_LOCK_MS, () => method(...args))];
+  });
+  return Object.fromEntries(entries) as HostRepo;
 }

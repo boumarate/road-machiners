@@ -21,7 +21,15 @@ The design and its reasons are in [the factory task](docs/tasks/game-factory.md)
 11. A committee member can ask Hermes for one-off work, like "simulate 10 battles and tell me if the MG is too weak". The factory opens an `adhoc` issue and runs Sonnet in a fresh clone of `dev`. It may run any repo harness, pushes nothing, and answers the member's message with a report.
 12. A hotfix fixes a bug in the shipped game, like broken saves. It is an issue with the label `hotfix`. A collaborator can set the label, and then intake puts the issue into Design with no votes. Triage can set it too, for a bug that loses saves, crashes the game or blocks play. Then the committee chat gets a warning. Hotfix jobs run before other cards, at the cap too. Its branch starts from `main`, and testing merges `main` into it. The approval post opens with a hotfix warning, and its button reads "Approve and ship to players". Approve merges it into `main` and ships to itch.io, like a release. The public channel and a GitHub release tagged `hotfix-<day>-issue-<N>` get a one-line changelog. The issue closes. Then `main` merges into `dev` and into an open release branch. That release gets a new candidate, since the played one lacks the fix. Every merge runs before the first push, so a conflict stops the hotfix before anything is public.
 
-Every tick, after intake, the factory deletes each folder in the web root except `dev` and the builds of cards now in Approval.
+Each stage runs as its own job process, and jobs run in parallel in three queues.
+
+- The agent queue runs triage, design, implementation and ad hoc jobs, up to `FACTORY_AGENT_WORKERS` at once.
+- The test queue runs testing, up to `FACTORY_TEST_WORKERS` at once. Testing builds the game and plays it in a browser, so it needs the most memory.
+- The branch queue runs approve, remove, ship, the release cut, the candidate, `/dev/` rebuilds and `/change`, one at a time. These move `dev`, `main` or the release.
+
+Every tick checks the running jobs in `jobs` in the state file, then starts each job that fits. Within a queue the order is as follows: hotfix cards, ad hoc tasks, release tasks, then the card furthest along. An issue has at most one job at a time. Each job's containers carry its id as a label, so a timeout kills only that job. Jobs share the host clone and the state file, so each git step and each state update runs under a lock in `$FACTORY_HOME/locks` or next to the state file. A lock of a dead process is taken over.
+
+Every tick, after intake, the factory deletes each folder in the web root except `dev` and the builds of cards now in Approval. It skips this while a testing or branch job runs, since those deploy builds.
 
 When `dev` on GitHub moves past the commit `/dev/` serves, the next free tick rebuilds `/dev/`. So a merge made outside the factory also reaches the dev link. A failed build records its commit in `devFailed` in the state file. The tick skips that commit until `dev` moves again, and Hermes gets the incident.
 

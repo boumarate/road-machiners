@@ -31,6 +31,8 @@ export type FactoryConfig = {
   itchTarget: string | null; // itch.io page as "user/game". Null until set, and then a release fails loud.
   butlerKey: string | null; // BUTLER_API_KEY, only ever in the env of the butler call
   maxJobsPerDay: number; // public-driven agent jobs allowed in any 24 hours
+  agentWorkers: number; // jobs of the agent queue that run at once
+  testWorkers: number; // jobs of the test queue that run at once
 };
 
 export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string };
@@ -57,7 +59,18 @@ export type Card = { itemId: string; issue: number; column: Column; labels: stri
 // A job is one detached `factory run` process. `issue` is null for the release cut and a change id for change.
 // Candidate and ship carry the tracking issue, remove the issue of the feature to take out. Dev rebuilds /dev/ and has no issue.
 export type JobStage = CardStage | ReleaseStage | 'approve' | 'change' | 'adhoc' | 'dev';
-export type Job = { stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
+// `id` names the job's containers, so a kill stops only its own.
+export type Job = { id: string; stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
+
+// Jobs run in parallel up to a limit per queue.
+// The branch queue moves dev, main and the release, or rebuilds a shared build, so it runs one job at a time.
+// The agent queue runs light agent jobs. The test queue builds the game and plays it in a browser, which is heavy.
+export type Queue = 'branch' | 'agent' | 'test';
+export const QUEUE_OF: Record<JobStage, Queue> = {
+  triage: 'agent', design: 'agent', implement: 'agent', adhoc: 'agent',
+  testing: 'test',
+  approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', change: 'branch',
+};
 export type ChangeRequest = { id: number; text: string; by: string };
 export type Removal = { issue: number; by: string; text: string };
 
@@ -71,7 +84,7 @@ export type ReleaseState = {
 };
 
 export type FactoryState = {
-  job: Job | null;
+  jobs: Job[]; // running jobs, at most one per issue
   approvalPosts: Record<string, number>; // Telegram message id -> issue number
   lastRelease: string | null; // ISO time
   release: ReleaseState | null;

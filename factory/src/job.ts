@@ -38,11 +38,16 @@ async function noteProgress(ctx: Ctx, stage: JobStage, issue: number | null, job
   await ctx.github.comment(issue, progressNote(ctx, stage, job?.startedAt ?? null, outcome));
 }
 
-// Runs one job to its end. Success or failure, the job slot and its queued command are cleared, so nothing retries.
+// The tick records a job before it starts it. A job run by hand has no record.
+function ownJob(ctx: Ctx, stage: JobStage, issue: number | null): Job | null {
+  return readState(ctx.statePath).jobs.find((job) => job.stage === stage && job.issue === issue) ?? null;
+}
+
+// Runs one job to its end. Success or failure, the job's record and its queued command are cleared, so nothing retries.
 export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null): Promise<void> {
-  const job = readState(ctx.statePath).job;
+  const job = ownJob(ctx, stage, issue);
   try {
-    await dispatch(ctx, stage, issue);
+    await dispatch(ctx, stage, issue, job);
     ctx.log(stage, issue, 'done');
     await noteProgress(ctx, stage, issue, job, 'finished');
   } catch (error) {
@@ -53,10 +58,10 @@ export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null): P
   }
 }
 
-async function dispatch(ctx: Ctx, stage: JobStage, issue: number | null): Promise<void> {
+async function dispatch(ctx: Ctx, stage: JobStage, issue: number | null, job: Job | null): Promise<void> {
   if (stage === 'release') return release(ctx);
   // A dev job run by hand has no job in the state, so its build output goes to a fixed log.
-  if (stage === 'dev') return rebuildDev(ctx, readState(ctx.statePath).job?.log ?? `${ctx.cfg.home}/logs/dev-build.log`);
+  if (stage === 'dev') return rebuildDev(ctx, job?.log ?? `${ctx.cfg.home}/logs/dev-build.log`);
   if (issue === null) throw new Error(`Job ${stage} needs an issue or change id`);
   return HANDLERS[stage](ctx, issue);
 }
@@ -69,6 +74,7 @@ function clearJob(ctx: Ctx, stage: JobStage, issue: number | null): void {
     const pendingShip = stage === 'ship' ? null : state.pendingShip;
     const first = stage === 'remove' ? state.pendingRemovals.findIndex((item) => item.issue === issue) : -1;
     const pendingRemovals = state.pendingRemovals.filter((_, index) => index !== first);
-    return { ...state, job: null, pendingApprovals, pendingChanges, pendingShip, pendingRemovals };
+    const jobs = state.jobs.filter((job) => job.stage !== stage || job.issue !== issue);
+    return { ...state, jobs, pendingApprovals, pendingChanges, pendingShip, pendingRemovals };
   });
 }

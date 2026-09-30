@@ -1,8 +1,16 @@
 import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { must } from './exec';
+import { jobLabel } from './jobs';
+import { withLock } from './lock';
 import { AGENT_NETWORK, GAME_DIR, PROXY_NAME, PROXY_PORT, type Container, type FactoryConfig, type Run } from './types';
 
-const BASE_ARGS = ['run', '--rm', '--label', 'factory=1'];
+const FACTORY_LABEL = 'factory=1';
+
+// Every factory container carries the factory label. A job's containers also carry its own label, so a kill finds them.
+function baseArgs(jobId: string | null): string[] {
+  return ['run', '--rm', '--label', FACTORY_LABEL, ...(jobId === null ? [] : ['--label', jobLabel(jobId)])];
+}
 const PROXY_URL = `http://${PROXY_NAME}:${PROXY_PORT}`;
 const NO_PROXY = 'localhost,127.0.0.1';
 
@@ -28,19 +36,32 @@ function networkArgs(open: boolean): string[] {
   return ['--network', AGENT_NETWORK, ...envArgs(proxyEnv)];
 }
 
+// Setting up the proxy takes seconds. A job that waits this long found a stuck lock.
+const PROXY_LOCK_MS = 120_000;
+
 // Creates the internal network and the proxy container when they are missing. Throws when either cannot start.
-// A proxy from an older image is replaced here, before an agent starts, so a deploy never cuts off a running agent.
-async function ensureProxy(run: Run, cfg: FactoryConfig): Promise<void> {
+// Parallel jobs set it up under one lock, so two never start the proxy at once.
+function ensureProxy(run: Run, cfg: FactoryConfig): Promise<void> {
+  return withLock(join(cfg.home, 'locks', 'proxy'), PROXY_LOCK_MS, () => setUpProxy(run, cfg));
+}
+
+// A proxy from an older image is replaced only while no factory container runs, so a deploy never cuts off a running agent.
+async function setUpProxy(run: Run, cfg: FactoryConfig): Promise<void> {
   const docker = async (what: string, args: string[]) => must(await run('docker', args), what);
   if ((await run('docker', ['network', 'inspect', AGENT_NETWORK])).code !== 0) {
     await docker(`create network ${AGENT_NETWORK}`, ['network', 'create', '--internal', AGENT_NETWORK]);
   }
   const image = (await docker(`inspect image ${cfg.image}-proxy`, ['image', 'inspect', '-f', '{{.Id}}', `${cfg.image}-proxy`])).trim();
   const state = await run('docker', ['inspect', '-f', '{{.State.Running}} {{.Image}}', PROXY_NAME]);
-  if (state.code === 0 && state.stdout.trim() === `true ${image}`) return;
+  const running = state.code === 0 && state.stdout.startsWith('true ');
+  if (running && (state.stdout.trim() === `true ${image}` || (await othersRun(docker)))) return;
   await run('docker', ['rm', '-f', PROXY_NAME]);
   await docker(`start ${PROXY_NAME}`, ['run', '-d', '--restart', 'unless-stopped', '--name', PROXY_NAME, '--network', AGENT_NETWORK, `${cfg.image}-proxy`]);
   await docker(`connect ${PROXY_NAME} to the default bridge`, ['network', 'connect', 'bridge', PROXY_NAME]);
+}
+
+async function othersRun(docker: (what: string, args: string[]) => Promise<string>): Promise<boolean> {
+  return (await docker('docker ps', ['ps', '-q', '--filter', `label=${FACTORY_LABEL}`])).trim() !== '';
 }
 
 // Prompts name agent files relative to the agent folder. An agent that changes directory, say to commit from the repo root, would write them elsewhere, so the full path comes first.
@@ -50,13 +71,13 @@ export function outputsNote(dir: string): string {
 
 // Agents get the work clone, the npm cache, the OAuth token and the ElevenLabs key with its cap, nothing else. Secrets travel in the docker process env, never in argv.
 // Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
-export function dockerContainer(run: Run, cfg: FactoryConfig): Container {
+export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null): Container {
   return {
     async agent({ clone, dir, model, prompt, log, openNetwork }) {
       if (!openNetwork) await ensureProxy(run, cfg);
       const env = { CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken, ELEVENLABS_API_KEY: cfg.elevenlabsKey, SFX_MAX_GENERATIONS: String(cfg.sfxMaxGenerations) };
       const args = [
-        ...BASE_ARGS, '-i', ...mountArgs(cfg, clone, dir), ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
+        ...baseArgs(jobId), '-i', ...mountArgs(cfg, clone, dir), ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
         'factory-agent', '-p', '--model', model, '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose',
       ];
       const result = await run('docker', args, { env, input: `${outputsNote(dir)}\n\n${prompt}`, logPath: log });
@@ -64,7 +85,7 @@ export function dockerContainer(run: Run, cfg: FactoryConfig): Container {
     },
     async shell(clone, script, log, env = {}) {
       await ensureProxy(run, cfg);
-      const args = [...BASE_ARGS, ...mountArgs(cfg, clone, GAME_DIR), ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', script];
+      const args = [...baseArgs(jobId), ...mountArgs(cfg, clone, GAME_DIR), ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', script];
       const result = await run('docker', args, { logPath: log });
       must(result, `shell in ${clone}`);
     },

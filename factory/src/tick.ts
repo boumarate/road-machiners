@@ -6,11 +6,13 @@ import { pruneCaptions } from './post-status';
 import { isAlive, killJob, spawnJob } from './jobs';
 import { readState, updateState } from './state';
 import { isAnswered } from './questions';
-import { ADHOC_LABEL, HOTFIX_LABEL, NEEDS_INFO_LABEL, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
-import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Run } from './types';
+import { ADHOC_LABEL, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
+import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Queue, Run } from './types';
 
 export type JobPick = { stage: JobStage; issue: number | null };
-type Due = Pick<FactoryConfig, 'releaseDays' | 'maxJobsPerDay'>;
+// A candidate job and whether it may start at the daily cap.
+type Candidate = JobPick & { uncapped: boolean };
+type Due = Pick<FactoryConfig, 'releaseDays' | 'maxJobsPerDay' | 'agentWorkers' | 'testWorkers'>;
 
 const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
@@ -37,28 +39,24 @@ function openCards(cards: Card[]): Card[] {
   return cards.filter((card) => !card.labels.includes(STUCK_LABEL) && !card.labels.includes(NEEDS_INFO_LABEL));
 }
 
-// A shipped bug waits for nothing else. A hotfix card runs at the cap too, since the committee chose it.
-function hotfixJob(cards: Card[]): JobPick | null {
-  return furthestCard(openCards(cards).filter((card) => card.labels.includes(HOTFIX_LABEL)));
+// Furthest along first, lowest issue first.
+function byProgress(cards: Card[]): JobPick[] {
+  return CARD_ORDER.flatMap(([column, stage]) => cards.filter((card) => card.column === column).sort((a, b) => a.issue - b.issue).map((card) => ({ stage, issue: card.issue })));
 }
 
-function adhocJob(cards: Card[]): JobPick | null {
-  const first = openCards(cards).filter((card) => card.column === 'Implementation' && card.labels.includes(ADHOC_LABEL)).sort((a, b) => a.issue - b.issue)[0];
-  return first ? { stage: 'adhoc', issue: first.issue } : null;
-}
+const has = (label: string) => (card: Card): boolean => card.labels.includes(label);
+const lacks = (label: string) => (card: Card): boolean => !card.labels.includes(label);
 
-function furthestCard(cards: Card[]): JobPick | null {
-  for (const [column, stage] of CARD_ORDER) {
-    const first = cards.filter((card) => card.column === column).sort((a, b) => a.issue - b.issue)[0];
-    if (first) return { stage, issue: first.issue };
-  }
-  return null;
-}
-
-// Release tasks go before other cards. The tracking issue card only waits for Ship, so it never gets a card job.
-function cardJob(cards: Card[]): JobPick | null {
-  const open = openCards(cards).filter((card) => ![ADHOC_LABEL, RELEASE_LABEL, HOTFIX_LABEL].some((label) => card.labels.includes(label)));
-  return furthestCard(open.filter((card) => card.labels.includes(RELEASE_TASK_LABEL))) ?? furthestCard(open.filter((card) => !card.labels.includes(RELEASE_TASK_LABEL)));
+// Card jobs in order: hotfixes, ad hoc tasks, release tasks, then the rest. The tracking issue card only waits for Ship, so it never gets a card job.
+// A shipped bug waits for nothing else, and a hotfix card runs at the cap too, since the committee chose it.
+function cardCandidates(cards: Card[]): Candidate[] {
+  const open = openCards(cards).filter(lacks(RELEASE_LABEL));
+  const hotfix = byProgress(open.filter(has(HOTFIX_LABEL))).map((pick) => ({ ...pick, uncapped: true }));
+  const rest = open.filter(lacks(HOTFIX_LABEL));
+  const adhoc = rest.filter((card) => card.column === 'Implementation' && has(ADHOC_LABEL)(card)).sort((a, b) => a.issue - b.issue).map((card) => ({ stage: 'adhoc' as const, issue: card.issue }));
+  const work = rest.filter(lacks(ADHOC_LABEL));
+  const normal = [...adhoc, ...byProgress(work.filter(has(RELEASE_TASK_LABEL))), ...byProgress(work.filter(lacks(RELEASE_TASK_LABEL)))];
+  return [...hotfix, ...normal.map((pick) => ({ ...pick, uncapped: !countsAgainstCap(pick.stage) }))];
 }
 
 // The candidate waits until the tracking issue is healthy and every release task is done.
@@ -69,6 +67,22 @@ function candidateJob(state: FactoryState, cards: Card[]): JobPick | null {
   if (!tracking || tracking.labels.includes(STUCK_LABEL)) return null;
   if (cards.some((card) => card.labels.includes(RELEASE_TASK_LABEL) && card.column !== 'Done')) return null;
   return { stage: 'candidate', issue: release.issue };
+}
+
+function releaseCut(state: FactoryState, now: Date, cfg: Due): JobPick | null {
+  return state.release === null && isDue(state.lastRelease, now, cfg.releaseDays * DAY_MS) ? { stage: 'release', issue: null } : null;
+}
+
+// /dev/ is stale when dev moved past its build, by a factory merge or any other push. A failed commit waits for the next push or for Hermes.
+function devJob(state: FactoryState, devHead: string | null): JobPick | null {
+  if (devHead === null || devHead === state.devBuild || devHead === state.devFailed) return null;
+  return { stage: 'dev', issue: null };
+}
+
+// Branch jobs in order: queued approvals, removals, ships and changes, then a stale /dev/, then a due release cut, then the candidate.
+function branchCandidates(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null): Candidate[] {
+  const picks = [queued(state), devJob(state, devHead), releaseCut(state, now, cfg), candidateJob(state, cards)];
+  return picks.filter((pick) => pick !== null).map((pick) => ({ ...pick, uncapped: !countsAgainstCap(pick.stage) }));
 }
 
 export function countsAgainstCap(stage: JobStage): boolean {
@@ -83,69 +97,62 @@ export function atCap(state: FactoryState, now: Date, cfg: Pick<FactoryConfig, '
   return recentStarts(state, now).length >= cfg.maxJobsPerDay;
 }
 
-// /dev/ is stale when dev moved past its build, by a factory merge or any other push. A failed commit waits for the next push or for Hermes.
-function devJob(state: FactoryState, devHead: string | null): JobPick | null {
-  if (devHead === null || devHead === state.devBuild || devHead === state.devFailed) return null;
-  return { stage: 'dev', issue: null };
+function limits(cfg: Due): Record<Queue, number> {
+  return { branch: 1, agent: cfg.agentWorkers, test: cfg.testWorkers };
 }
 
-function pickJob(state: FactoryState, cards: Card[], now: Date, cfg: Due, allowCounted: boolean, devHead: string | null): JobPick | null {
-  if (state.job) return null;
-  const next = uncappedJob(state, cards, devHead);
-  if (next) return next;
-  return allowCounted ? countedJob(state, cards, now, cfg) : null;
+// A job fits when its queue has a free worker and no other job works on its issue.
+function fits(pick: JobPick, running: JobPick[], cfg: Due): boolean {
+  const queue = QUEUE_OF[pick.stage];
+  const busy = running.filter((job) => QUEUE_OF[job.stage] === queue).length >= limits(cfg)[queue];
+  return !busy && (pick.issue === null || !running.some((job) => job.issue === pick.issue));
 }
 
-function uncappedJob(state: FactoryState, cards: Card[], devHead: string | null): JobPick | null {
-  return queued(state) ?? devJob(state, devHead) ?? hotfixJob(cards) ?? adhocJob(cards);
-}
-
-function countedJob(state: FactoryState, cards: Card[], now: Date, cfg: Due): JobPick | null {
-  if (state.release === null && isDue(state.lastRelease, now, cfg.releaseDays * DAY_MS)) return { stage: 'release', issue: null };
-  return candidateJob(state, cards) ?? cardJob(cards);
-}
-
-// Picks the next job. Queued approvals, removals, ships and changes first, then a stale /dev/, then hotfix cards, then ad hoc tasks, then a due release cut or candidate, then the card furthest along.
-// At the daily cap only the uncapped jobs are left. `devHead` is the short hash of dev on origin, or null to skip the /dev/ check.
-export function chooseJob(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): JobPick | null {
-  return pickJob(state, cards, now, cfg, !atCap(state, now, cfg), devHead);
+// Picks the jobs to start now, in priority order within each queue, next to the jobs that already run.
+// At the daily cap only the uncapped jobs start. `devHead` is the short hash of dev on origin, or null to skip the /dev/ check.
+export function chooseJobs(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): JobPick[] {
+  let capLeft = cfg.maxJobsPerDay - recentStarts(state, now).length;
+  const chosen: JobPick[] = [];
+  for (const candidate of [...branchCandidates(state, cards, now, cfg, devHead), ...cardCandidates(cards)]) {
+    const pick = { stage: candidate.stage, issue: candidate.issue };
+    const capped = candidate.uncapped ? 0 : 1;
+    if (capped > capLeft || !fits(pick, [...state.jobs, ...chosen], cfg)) continue;
+    capLeft -= capped;
+    chosen.push(pick);
+  }
+  return chosen;
 }
 
 // Process control the tick uses. The CLI uses the real ones, and tests pass fakes.
 export type TickDeps = {
   isAlive: (pid: number) => boolean;
-  kill: (run: Run, pid: number) => Promise<void>;
-  spawn: (args: string[], cwd: string, log: string) => number;
+  kill: (run: Run, pid: number, id: string) => Promise<void>;
+  spawn: (args: string[], cwd: string, log: string, id: string) => number;
 };
 export const REAL_DEPS: TickDeps = { isAlive, kill: killJob, spawn: spawnJob };
 
-function clearJob(ctx: Ctx): void {
-  updateState(ctx.statePath, (state) => ({ ...state, job: null }));
+function dropJob(ctx: Ctx, id: string): void {
+  updateState(ctx.statePath, (state) => ({ ...state, jobs: state.jobs.filter((job) => job.id !== id) }));
 }
 
-async function checkJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<boolean> {
+// A dead or timed-out job leaves the list and reports. A job in time stays.
+async function checkJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<void> {
   const minutes = (ctx.now().getTime() - new Date(job.startedAt).getTime()) / MINUTE_MS;
-  if (!deps.isAlive(job.pid)) {
-    clearJob(ctx);
-    await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), 'job process died without finishing', job.log);
-    return false;
-  }
-  if (minutes <= ctx.cfg.stageTimeoutMinutes) {
-    ctx.log('tick', job.issue, `${job.stage} still running`);
-    return true;
-  }
-  await deps.kill(ctx.run, job.pid);
-  clearJob(ctx);
-  await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), `timed out after ${ctx.cfg.stageTimeoutMinutes} minutes`, job.log);
-  return false;
+  const alive = deps.isAlive(job.pid);
+  if (alive && minutes <= ctx.cfg.stageTimeoutMinutes) return ctx.log('tick', job.issue, `${job.stage} still running`);
+  if (alive) await deps.kill(ctx.run, job.pid, job.id);
+  dropJob(ctx, job.id);
+  const reason = alive ? `timed out after ${ctx.cfg.stageTimeoutMinutes} minutes` : 'job process died without finishing';
+  await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), reason, job.log);
 }
 
 function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): void {
   const stamp = ctx.now().toISOString().replaceAll(':', '');
-  const log = join(ctx.cfg.home, 'logs', `${pick.stage}-${pick.issue ?? '-'}-${stamp}.log`);
-  const pid = deps.spawn([pick.stage, String(pick.issue ?? '-')], codeDir, log);
-  const job: Job = { ...pick, pid, startedAt: ctx.now().toISOString(), log };
-  updateState(ctx.statePath, (state) => ({ ...state, job, jobStarts: countsAgainstCap(pick.stage) ? [...recentStarts(state, ctx.now()), job.startedAt] : state.jobStarts }));
+  const id = `${pick.stage}-${pick.issue ?? '-'}-${stamp}`;
+  const log = join(ctx.cfg.home, 'logs', `${id}.log`);
+  const pid = deps.spawn([pick.stage, String(pick.issue ?? '-')], codeDir, log, id);
+  const job: Job = { ...pick, id, pid, startedAt: ctx.now().toISOString(), log };
+  updateState(ctx.statePath, (state) => ({ ...state, jobs: [...state.jobs, job], jobStarts: countsAgainstCap(pick.stage) ? [...recentStarts(state, ctx.now()), job.startedAt] : state.jobStarts }));
   ctx.log('tick', pick.issue, `started ${pick.stage}, pid ${pid}, log ${log}`);
 }
 
@@ -166,23 +173,25 @@ async function releaseAnswered(ctx: Ctx, cards: Card[]): Promise<Card[]> {
 }
 
 // Removes builds no card in Approval still needs.
+// Testing and branch jobs deploy builds before they record them, so cleanup waits while one of them runs.
 function cleanBuilds(ctx: Ctx, cards: Card[]): void {
-  const builds = readState(ctx.statePath).builds;
+  const state = readState(ctx.statePath);
+  if (state.jobs.some((job) => QUEUE_OF[job.stage] !== 'agent')) return;
   // The candidate's card is the tracking issue, so its 'rc' build stays while the card waits in Approval.
-  const keep = cards.filter((card) => card.column === 'Approval').map((card) => builds[String(card.issue)]).filter((name) => name !== undefined);
+  const keep = cards.filter((card) => card.column === 'Approval').map((card) => state.builds[String(card.issue)]).filter((name) => name !== undefined);
   removeStaleBuilds(ctx.cfg.webRoot, new Set(keep), (msg) => ctx.log('tick', null, msg));
 }
 
 // Tells the committee once per cap window that the cap holds work back. The flag clears when the cap frees.
-async function noteCap(ctx: Ctx, cards: Card[]): Promise<void> {
+async function noteCap(ctx: Ctx, cards: Card[], devHead: string | null): Promise<void> {
   const state = readState(ctx.statePath);
   const now = ctx.now();
   if (!atCap(state, now, ctx.cfg)) {
     if (state.capNoticed) updateState(ctx.statePath, (s) => ({ ...s, capNoticed: false }));
     return;
   }
-  // Only the counted jobs wait at the cap. The rest, hotfix cards too, run anyway.
-  const waiting = state.job === null && countedJob(state, cards, now, ctx.cfg) !== null;
+  // Work waits when more jobs would start without the cap.
+  const waiting = chooseJobs(state, cards, now, { ...ctx.cfg, maxJobsPerDay: Infinity }, devHead).length > chooseJobs(state, cards, now, ctx.cfg, devHead).length;
   if (state.capNoticed || !waiting) return;
   const starts = recentStarts(state, now);
   const free = new Date(new Date(starts[0]).getTime() + DAY_MS).toISOString();
@@ -190,17 +199,17 @@ async function noteCap(ctx: Ctx, cards: Card[]): Promise<void> {
   updateState(ctx.statePath, (s) => ({ ...s, capNoticed: true }));
 }
 
-// One tick: check the running job, run intake, clean old builds, start at most one job. `deps` defaults to the real process control.
+// One tick: check the running jobs, run intake, clean old builds, then start every job that fits. `deps` defaults to the real process control.
 export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS): Promise<void> {
-  const running = readState(ctx.statePath).job;
-  if (running && (await checkJob(ctx, running, deps))) return;
+  for (const job of readState(ctx.statePath).jobs) await checkJob(ctx, job, deps);
   await intake(ctx);
   const cards = await releaseAnswered(ctx, await ctx.github.cards());
   cleanBuilds(ctx, cards);
   updateState(ctx.statePath, pruneCaptions);
-  await noteCap(ctx, cards);
   await ctx.repo.sync();
-  const pick = chooseJob(readState(ctx.statePath), cards, ctx.now(), ctx.cfg, await ctx.repo.headHash('dev'));
-  if (!pick) return ctx.log('tick', null, 'nothing to do');
-  startJob(ctx, codeDir, pick, deps);
+  const devHead = await ctx.repo.headHash('dev');
+  await noteCap(ctx, cards, devHead);
+  const picks = chooseJobs(readState(ctx.statePath), cards, ctx.now(), ctx.cfg, devHead);
+  if (picks.length === 0) return ctx.log('tick', null, 'nothing to start');
+  for (const pick of picks) startJob(ctx, codeDir, pick, deps);
 }

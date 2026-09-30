@@ -21,7 +21,7 @@ function tmpHome(): string {
 describe('hostRepo', () => {
   it('turns hooks off on every git call', async () => {
     const { run, calls } = fakeRun();
-    const repo = hostRepo(run, cfg('/nowhere/home'));
+    const repo = hostRepo(run, cfg(tmpHome()));
     await repo.push('b');
     await repo.headHash('b');
     await repo.diff('dev', 'b');
@@ -38,13 +38,13 @@ describe('hostRepo', () => {
 
   it('aborts and names the files when a merge conflicts', async () => {
     const { run, calls } = fakeRun((args) => args.includes('--no-ff'));
-    await expect(hostRepo(run, cfg('/h')).merge('b', 'dev', 'msg')).rejects.toThrow('Conflicting files: a.ts');
+    await expect(hostRepo(run, cfg(tmpHome())).merge('b', 'dev', 'msg')).rejects.toThrow('Conflicting files: a.ts');
     expect(calls.some((a) => a.includes('--abort'))).toBe(true);
   });
 
   it('fetches a work branch into the host clone', async () => {
     const { run, calls } = fakeRun();
-    await hostRepo(run, cfg('/h')).fetchFromWork('/w/x', 'factory/issue-3');
+    await hostRepo(run, cfg(tmpHome())).fetchFromWork('/w/x', 'factory/issue-3');
     expect(calls[0].slice(6)).toEqual(['fetch', '/w/x', '+factory/issue-3:factory/issue-3']);
   });
 
@@ -171,7 +171,7 @@ describe('release branch operations', () => {
       if (args.includes('--diff-filter=U')) return { code: 0, stdout: '', stderr: '' };
       return { code: 0, stdout: '', stderr: '' };
     };
-    await expect(hostRepo(run, cfg('/h')).revertIssueMerge(3, 'dev')).rejects.toThrow('without a conflict');
+    await expect(hostRepo(run, cfg(tmpHome())).revertIssueMerge(3, 'dev')).rejects.toThrow('without a conflict');
     expect(calls.some((a) => a.includes('--abort'))).toBe(true);
   });
 
