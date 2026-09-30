@@ -2,7 +2,8 @@ import { rmSync } from 'node:fs';
 import { deployDev } from '../deploy';
 import { readState, updateState } from '../state';
 import { BRANCH, FEEDBACK_HEADING, RELEASE_CANDIDATE_LABEL, WONT_DO_LABEL, type Ctx } from '../types';
-import { BASE_BRANCH, agentLog, baseBranchFor, syncBase, workDir } from './common';
+import { BASE_BRANCH, HOTFIX_BASE, agentLog, baseBranchFor, syncBase, workDir } from './common';
+import { shipHotfix } from './hotfix';
 
 async function requireApproval(ctx: Ctx, issue: number): Promise<void> {
   const card = (await ctx.github.cards()).find((item) => item.issue === issue);
@@ -23,18 +24,23 @@ function forgetPosts(ctx: Ctx, issue: number, dropPending: boolean): void {
 export async function approve(ctx: Ctx, issue: number, by: string): Promise<void> {
   await requireApproval(ctx, issue);
   const item = await ctx.github.issue(issue);
-  const base = baseBranchFor(ctx, item.labels);
-  await syncBase(ctx, base);
-  await ctx.repo.merge(BRANCH(issue), base, `Merge issue #${issue}: ${item.title}`);
-  await ctx.repo.push(base);
-  const message = base === BASE_BRANCH ? await mergedIntoDev(ctx, issue, item.title, by) : await mergedIntoRelease(ctx, issue, item.title, by, base);
-  // The issue stays open until its release ships to main. Ship closes it and drops the label.
-  await ctx.github.addLabel(issue, RELEASE_CANDIDATE_LABEL);
+  const message = await mergeApproved(ctx, issue, item.title, by, baseBranchFor(ctx, item.labels));
   await ctx.github.move(issue, 'Done');
   forgetPosts(ctx, issue, true);
   rmSync(workDir(ctx, issue), { recursive: true, force: true });
   rmSync(`${ctx.cfg.home}/work/check-issue-${issue}`, { recursive: true, force: true });
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, message);
+}
+
+// A hotfix ships at once. Other work stays open with the label until its release ships to main. Ship closes it and drops the label.
+async function mergeApproved(ctx: Ctx, issue: number, title: string, by: string, base: string): Promise<string> {
+  if (base === HOTFIX_BASE) return shipHotfix(ctx, issue, title, by);
+  await syncBase(ctx, base);
+  await ctx.repo.merge(BRANCH(issue), base, `Merge issue #${issue}: ${title}`);
+  await ctx.repo.push(base);
+  const message = base === BASE_BRANCH ? await mergedIntoDev(ctx, issue, title, by) : await mergedIntoRelease(ctx, issue, title, by, base);
+  await ctx.github.addLabel(issue, RELEASE_CANDIDATE_LABEL);
+  return message;
 }
 
 // The pushed dev holds the branch head, so GitHub marks the pull request merged by itself.

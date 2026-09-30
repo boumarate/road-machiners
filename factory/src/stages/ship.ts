@@ -7,10 +7,10 @@ import { GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, RELEASE_TASK_LABEL, type Ct
 import { agentLog } from './common';
 import { candidateDir, featureLine, releaseFeatures, releaseLog, requireRelease } from './release-common';
 
-type ItchKeys = { itchTarget: string; butlerKey: string };
+export type ItchKeys = { itchTarget: string; butlerKey: string };
 
 // Checked first, so a ship without them stops before it merges anything into main.
-function itchKeys(ctx: Ctx): ItchKeys {
+export function itchKeys(ctx: Ctx): ItchKeys {
   const { itchTarget, butlerKey } = ctx.cfg;
   if (!itchTarget || !butlerKey) throw new Error('A release needs ITCH_TARGET and BUTLER_API_KEY in factory/.env.');
   return { itchTarget, butlerKey };
@@ -29,11 +29,11 @@ async function requireShippable(ctx: Ctx, issue: number, by: string | null): Pro
 
 // Builds main in a fresh clone inside the container, so build code never runs next to the butler key.
 // The empty save scope keeps the itch save key. Only the butler call gets the key.
-async function publish(ctx: Ctx, keys: ItchKeys): Promise<void> {
+export async function publish(ctx: Ctx, keys: ItchKeys, logName: string): Promise<void> {
   const dir = join(ctx.cfg.home, 'work', 'release-main');
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone('main', 'main', dir);
-  const log = releaseLog(ctx, 'ship');
+  const log = releaseLog(ctx, logName);
   await ctx.container.shell(dir, 'npm ci && npm run build', log, { SAVE_SCOPE: '' });
   const version = await ctx.repo.headHash('main');
   const args = ['push', join(dir, GAME_DIR, 'dist'), `${keys.itchTarget}:html5`, '--userversion', version];
@@ -55,7 +55,7 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   // A conflict in dev fails here, before anything public happens.
   await ctx.repo.merge('main', 'dev', `Merge main into dev after release ${release.day}`);
   await ctx.repo.push('dev');
-  await publish(ctx, keys);
+  await publish(ctx, keys, 'ship');
   const channel = ctx.cfg.publicChannel;
   await ctx.telegram.sendPhoto(channel, screenshot, `ROAM release ${release.day}`);
   const changelog = `${readFileSync(notesPath, 'utf8').trim()}\n\nChanges:\n${features.map((feature) => `- ${featureLine(feature)}`).join('\n')}`;

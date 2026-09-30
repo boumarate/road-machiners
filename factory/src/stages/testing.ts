@@ -4,7 +4,7 @@ import { stripAnsi } from '../fail';
 import { updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx } from '../types';
 import { approve } from './approval';
-import { agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, syncBase, throwIfNeedsCommittee, workDir } from './common';
+import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, syncBase, throwIfNeedsCommittee, workDir } from './common';
 
 // Each step logs its start time, so the log shows where the time goes.
 // The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
@@ -170,7 +170,8 @@ async function pullRequestUrl(ctx: Ctx, issue: number, title: string, approval: 
 
 export function approvalCaption(title: string, url: string, link: string, pr: string, approval: Approval, base: string): string {
   const head = `${title}\n\nPlay: ${url}\nIssue: ${link}\nPR: ${pr}`;
-  const tail = `Approve merges into ${base}. Deny closes the issue. A reply to this post sends feedback to design.`;
+  const action = base === HOTFIX_BASE ? 'Approve ships this hotfix to main and itch.io at once.' : `Approve merges into ${base}.`;
+  const tail = `${action} Deny closes the issue. A reply to this post sends feedback to design.`;
   const room = CAPTION_LIMIT - head.length - tail.length - '\n\n'.repeat(3).length - 'How to try: '.length;
   const [description, howToTry] = fitBoth(approval.description, approval.howToTry, room);
   return [head, description, `How to try: ${howToTry}`, tail].join('\n\n');

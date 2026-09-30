@@ -101,6 +101,13 @@ describe('chooseJob', () => {
     expect(chooseJob(queuedChange, cards, NOW, CFG)).toEqual({ stage: 'change', issue: 3 });
   });
 
+  it('runs a hotfix card before ad hoc work, a due release and other cards, at the cap too', () => {
+    const cards = [card(2, 'Implementation', ['adhoc']), card(3, 'Testing'), card(9, 'Design', ['bug', 'hotfix']), card(8, 'Design', ['hotfix', 'factory-stuck'])];
+    expect(chooseJob(state({ lastRelease: null }), cards, NOW, CFG)).toEqual({ stage: 'design', issue: 9 });
+    expect(chooseJob(state({ jobStarts: starts(23, 5, 1) }), cards, NOW, CFG)).toEqual({ stage: 'design', issue: 9 });
+    expect(chooseJob(state(), cards.filter((c) => c.issue !== 9 && c.issue !== 2), NOW, CFG)).toEqual({ stage: 'testing', issue: 3 });
+  });
+
   it('skips ad hoc cards in the normal implement pick', () => {
     const cards = [card(2, 'Implementation', ['adhoc']), card(3, 'Implementation')];
     expect(chooseJob(state(), cards, NOW, CFG)).toEqual({ stage: 'adhoc', issue: 2 });

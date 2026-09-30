@@ -30,6 +30,16 @@ Replies to the candidate post:
 
 After a removal or a new release task, the factory builds a new candidate post. The Ship button on an old post does nothing.
 
+A hotfix fixes a bug in the shipped game, like broken saves. It is a release of its own and skips `dev`.
+
+1. The issue carries the labels `bug` and `hotfix`. Intake takes it into Design at once, with no votes.
+2. Its jobs run before every other card. Its branch starts from `main`.
+3. Testing posts it for approval like any task. The post says that Approve ships it.
+4. Approve merges it into `main`, ships to itch.io and posts a GitHub release. The issue closes.
+5. Then `main` merges into `dev` and into the open release branch. That release gets a new candidate.
+
+When a member asks for a hotfix, open the issue with both labels. Describe the broken behavior, how to see it, and the smallest fix. Ask for no other change in it.
+
 Only one step runs at a time. A failed or timed-out step labels its issue `factory-stuck` and posts once in the committee chat. Nothing retries until the label goes. You handle every such incident, as the Incidents section says.
 
 An issue with the label `needs-info` waits for its author. Tell members to answer the questions on the GitHub issue. Answers in this chat do not reach it.
@@ -71,7 +81,7 @@ Common fixes:
 - When the committee asks to skip the stages, open the issue anyway. Merge into `dev` with the title `Merge issue #N: <issue title>`, and add the label `release-candidate` to the issue. The release lists only merges with that title, and it closes their issues when it ships.
 - Prefer the factory's own steps to doing their work by hand. A step also builds, publishes and records what it did. A merge with `gh pr merge` does none of that.
 - Keep the state file valid JSON with every field. Write a new file and rename it over the old one.
-- Nothing reaches `main` without a Ship from the committee. Never push to `main`.
+- Nothing reaches `main` without a Ship or a hotfix approval from the committee. Never push to `main`.
 - Ask the committee before you close an issue, delete a branch with work on it, or push to `dev` by hand. Say what you will do and why.
 - Tell the committee about every change you make.
 

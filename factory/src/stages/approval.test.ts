@@ -26,15 +26,19 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 function fakeCtx(): Ctx {
   const record = (name: string) => async (...args: unknown[]) => { calls.push(`${name} ${args.join(' ')}`); };
   const fake = {
-    cfg: { home, committeeChat: 'chat', publicUrl: 'https://play.test' },
+    cfg: { home, committeeChat: 'chat', publicChannel: 'public', publicUrl: 'https://play.test', itchTarget: 'u/g', butlerKey: 'key' },
     statePath: `${home}/state.json`,
+    now: () => new Date('2026-09-30T10:00:00Z'),
+    run: async (cmd: string, args: string[]) => { calls.push(`run ${cmd} ${args[0]}`); return { code: 0, stdout: '', stderr: '' }; },
     github: {
       cards: async () => [{ itemId: 'x', issue: 7, column, labels: [] }],
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels, createdAt: '', state: 'OPEN', thumbsUp: [] }),
       comment: record('comment'), addLabel: record('addLabel'), pullRequestFor: async () => openPr, closePullRequest: record('closePullRequest'), close: record('close'), move: record('move'),
+      createRelease: record('release'),
     },
     telegram: { sendMessage: record('message') },
-    repo: { sync: record('sync'), merge: record('merge'), push: record('push') },
+    container: { shell: record('shell') },
+    repo: { sync: record('sync'), merge: record('merge'), push: record('push'), prepareWorkClone: record('prepare'), headHash: async () => 'abc1234' },
   };
   return fake as unknown as Ctx;
 }
@@ -71,6 +75,41 @@ describe('approve', () => {
       'message chat Issue #7 Big horn is merged into the release release/2026-09-29.',
     ]);
     expect(readState(`${home}/state.json`).release?.removed).toEqual([9]);
+  });
+
+  it('ships a hotfix from main to itch.io, brings main into dev and the open release, and closes the issue', async () => {
+    labels = ['bug', 'hotfix'];
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [] }, pendingShip: 'ann', pendingApprovals: { 7: 'bob' } });
+    await approve(fakeCtx(), 7, 'bob');
+    const changelog = 'ROAM hotfix 2026-09-30\n\nFixed: #7 Big horn';
+    expect(calls.filter((call) => !call.startsWith('prepare') && !call.startsWith('shell'))).toEqual([
+      'sync main dev release/2026-09-29',
+      'merge factory/issue-7 main Hotfix #7: Big horn',
+      'merge main dev Merge main into dev after hotfix #7',
+      'merge main release/2026-09-29 Merge main into release/2026-09-29 after hotfix #7',
+      'push main',
+      'push dev',
+      'push release/2026-09-29',
+      'run butler push',
+      `message public ${changelog}`,
+      `release hotfix-2026-09-30-issue-7 main ROAM hotfix 2026-09-30 ${changelog}`,
+      'comment 7 Approved by bob in the committee chat and shipped as a hotfix. It is on main and itch.io.',
+      'close 7 completed',
+      'move 7 Done',
+      'message chat Hotfix #7 Big horn is on main and itch.io.\nRelease 2026-09-29 took the fix, so its candidate is built again.',
+    ]);
+    const state = readState(`${home}/state.json`);
+    expect(state.release?.postId).toBeNull();
+    expect(state.pendingShip).toBeNull();
+    expect(state.pendingApprovals).toEqual({});
+  });
+
+  it('refuses a hotfix without itch.io keys before any git call', async () => {
+    labels = ['hotfix'];
+    const ctx = fakeCtx();
+    ctx.cfg.butlerKey = null;
+    await expect(approve(ctx, 7, 'bob')).rejects.toThrow('BUTLER_API_KEY');
+    expect(calls).toEqual([]);
   });
 
   it('throws for a release task when no release is open, before any git call', async () => {

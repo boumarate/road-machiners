@@ -124,6 +124,11 @@ describe('testing stage', () => {
     expect(caption).toContain('Deny closes the issue');
   });
 
+  it('says a hotfix approval ships to main and itch.io', () => {
+    const caption = approvalCaption('#7 Big horn', 'u', 'l', 'p', { description: 'd', howToTry: 'h' }, 'main');
+    expect(caption).toContain('Approve ships this hotfix to main and itch.io at once.');
+  });
+
   it('throws when approval.json lacks howToTry', async () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'x' })));
     await expect(runStage(ctx, 7)).rejects.toThrow('howToTry');

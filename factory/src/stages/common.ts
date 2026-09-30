@@ -3,12 +3,14 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { changesSaveMajor } from '../save-guard';
 import { readState } from '../state';
-import { BRANCH, GAME_DIR, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type CardStage, type Ctx, type Stage } from '../types';
+import { BRANCH, GAME_DIR, HOTFIX_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type CardStage, type Ctx, type Stage } from '../types';
 
 export const BASE_BRANCH = 'dev';
+export const HOTFIX_BASE = 'main';
 
-// A release task works on the release branch, every other card on dev. No open release is a bug, so it throws.
+// A hotfix works on main, a release task on the release branch, every other card on dev. No open release is a bug, so it throws.
 export function baseBranchFor(ctx: Ctx, labels: string[]): string {
+  if (labels.includes(HOTFIX_LABEL)) return HOTFIX_BASE;
   if (!labels.includes(RELEASE_TASK_LABEL)) return BASE_BRANCH;
   const release = readState(ctx.statePath).release;
   if (release === null) throw new Error(`A ${RELEASE_TASK_LABEL} issue needs an open release, and none is open`);

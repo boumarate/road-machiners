@@ -6,7 +6,7 @@ import { pruneCaptions } from './post-status';
 import { isAlive, killJob, spawnJob } from './jobs';
 import { readState, updateState } from './state';
 import { isAnswered } from './questions';
-import { ADHOC_LABEL, NEEDS_INFO_LABEL, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
+import { ADHOC_LABEL, HOTFIX_LABEL, NEEDS_INFO_LABEL, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
 import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Run } from './types';
 
 export type JobPick = { stage: JobStage; issue: number | null };
@@ -37,6 +37,11 @@ function openCards(cards: Card[]): Card[] {
   return cards.filter((card) => !card.labels.includes(STUCK_LABEL) && !card.labels.includes(NEEDS_INFO_LABEL));
 }
 
+// A shipped bug waits for nothing else. A hotfix card runs at the cap too, since the committee chose it.
+function hotfixJob(cards: Card[]): JobPick | null {
+  return furthestCard(openCards(cards).filter((card) => card.labels.includes(HOTFIX_LABEL)));
+}
+
 function adhocJob(cards: Card[]): JobPick | null {
   const first = openCards(cards).filter((card) => card.column === 'Implementation' && card.labels.includes(ADHOC_LABEL)).sort((a, b) => a.issue - b.issue)[0];
   return first ? { stage: 'adhoc', issue: first.issue } : null;
@@ -52,7 +57,7 @@ function furthestCard(cards: Card[]): JobPick | null {
 
 // Release tasks go before other cards. The tracking issue card only waits for Ship, so it never gets a card job.
 function cardJob(cards: Card[]): JobPick | null {
-  const open = openCards(cards).filter((card) => !card.labels.includes(ADHOC_LABEL) && !card.labels.includes(RELEASE_LABEL));
+  const open = openCards(cards).filter((card) => ![ADHOC_LABEL, RELEASE_LABEL, HOTFIX_LABEL].some((label) => card.labels.includes(label)));
   return furthestCard(open.filter((card) => card.labels.includes(RELEASE_TASK_LABEL))) ?? furthestCard(open.filter((card) => !card.labels.includes(RELEASE_TASK_LABEL)));
 }
 
@@ -86,13 +91,13 @@ function devJob(state: FactoryState, devHead: string | null): JobPick | null {
 
 function pickJob(state: FactoryState, cards: Card[], now: Date, cfg: Due, allowCounted: boolean, devHead: string | null): JobPick | null {
   if (state.job) return null;
-  const first = queued(state);
-  if (first) return first;
-  const dev = devJob(state, devHead);
-  if (dev) return dev;
-  const adhoc = adhocJob(cards);
-  if (adhoc) return adhoc;
+  const next = uncappedJob(state, cards, devHead);
+  if (next) return next;
   return allowCounted ? countedJob(state, cards, now, cfg) : null;
+}
+
+function uncappedJob(state: FactoryState, cards: Card[], devHead: string | null): JobPick | null {
+  return queued(state) ?? devJob(state, devHead) ?? hotfixJob(cards) ?? adhocJob(cards);
 }
 
 function countedJob(state: FactoryState, cards: Card[], now: Date, cfg: Due): JobPick | null {
@@ -100,7 +105,7 @@ function countedJob(state: FactoryState, cards: Card[], now: Date, cfg: Due): Jo
   return candidateJob(state, cards) ?? cardJob(cards);
 }
 
-// Picks the next job. Queued approvals, removals, ships and changes first, then a stale /dev/, then ad hoc tasks, then a due release cut or candidate, then the card furthest along.
+// Picks the next job. Queued approvals, removals, ships and changes first, then a stale /dev/, then hotfix cards, then ad hoc tasks, then a due release cut or candidate, then the card furthest along.
 // At the daily cap only the uncapped jobs are left. `devHead` is the short hash of dev on origin, or null to skip the /dev/ check.
 export function chooseJob(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): JobPick | null {
   return pickJob(state, cards, now, cfg, !atCap(state, now, cfg), devHead);
@@ -176,8 +181,9 @@ async function noteCap(ctx: Ctx, cards: Card[]): Promise<void> {
     if (state.capNoticed) updateState(ctx.statePath, (s) => ({ ...s, capNoticed: false }));
     return;
   }
-  const waiting = pickJob(state, cards, now, ctx.cfg, true, null);
-  if (state.capNoticed || waiting === null || !countsAgainstCap(waiting.stage)) return;
+  // Only the counted jobs wait at the cap. The rest, hotfix cards too, run anyway.
+  const waiting = state.job === null && countedJob(state, cards, now, ctx.cfg) !== null;
+  if (state.capNoticed || !waiting) return;
   const starts = recentStarts(state, now);
   const free = new Date(new Date(starts[0]).getTime() + DAY_MS).toISOString();
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Daily job cap reached: ${starts.length} of ${ctx.cfg.maxJobsPerDay} agent jobs ran in the last 24 hours. Public work waits. The next slot frees at ${free}.`);

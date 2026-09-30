@@ -178,6 +178,8 @@ export const MAINTENANCE_LABEL = 'maintenance';
 export const RELEASE_LABEL = 'release'; // the tracking issue of the open release
 export const RELEASE_TASK_LABEL = 'release-task'; // work that runs on the release branch
 export const RELEASE_CANDIDATE_LABEL = 'release-candidate'; // approved and merged, waiting for a ship to main. The issue closes on ship.
+// A fix for a shipped bug. It branches from main, and its approval ships it to main and itch.io at once. Only collaborators set labels, so it needs no votes.
+export const HOTFIX_LABEL = 'hotfix';
 export const ADHOC_LABEL = 'adhoc';
 export const CANDIDATE_LABELS = ['feature-request', 'bug'];
 export const NEEDS_INFO_LABEL = 'needs-info';
