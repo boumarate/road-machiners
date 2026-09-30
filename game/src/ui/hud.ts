@@ -18,7 +18,7 @@ import {
   formatNpcTraits,
   type LogLine,
 } from "./format";
-import { bugReportUrl, getHudReadout, getRescueReadout, moneyLabel, versionLabel, type RescueReadout } from "./hud-readout";
+import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, moneyLabel, versionLabel, type RescueReadout } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
 import { aimMarks } from "./weapons";
 import { createSwitch } from "./switch";
@@ -83,7 +83,7 @@ export class Hud {
   private info = panel("info");
   private infoBody = el("div");
   private help = panel("help", topLeft());
-  private bugReport = panel("bug-report", topLeft());
+  private feedback = panel("feedback", topLeft());
   private action = panel("action");
   private toastBox = panel("toast");
   private rescue = panel("rescue");
@@ -123,21 +123,32 @@ export class Hud {
       el("summary", { title: "Driving and combat controls" }, "?"),
     );
     this.help.append(guide);
-    this.bugReport.append(
+    const feedbackMenu = el("details", {});
+    const feedbackLink = (href: string, text: string) =>
       el(
         "a",
         {
-          href: bugReportUrl(versionLabel()),
+          href,
           target: "_blank",
           rel: "noopener noreferrer",
-          title: "Report a bug",
-          "aria-label": "Report a bug",
+          onclick: () => feedbackMenu.removeAttribute("open"),
         },
+        text,
+      );
+    feedbackMenu.append(
+      el(
+        "summary",
+        { title: "Report a bug or request a feature", "aria-label": "Report a bug or request a feature" },
         "!",
       ),
+      feedbackLink(bugReportUrl(versionLabel()), "Report a bug"),
+      feedbackLink(featureRequestUrl(), "Request a feature"),
     );
+    this.feedback.append(feedbackMenu);
     window.addEventListener("keydown", (e) => {
-      if (e.code === "Escape") guide.removeAttribute("open");
+      if (e.code !== "Escape") return;
+      guide.removeAttribute("open");
+      feedbackMenu.removeAttribute("open");
     });
     guide.append(
       el("div", {}, "Click the ground: drive there by road. Shift-click: stop there."),

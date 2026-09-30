@@ -571,22 +571,30 @@ body {
   outline: none;
 }
 #ui .help,
-#ui .bug-report {
+#ui .feedback {
   padding: 5px 9px;
   background: #272b2ef5;
   font-size: 12px;
 }
 .help summary,
-.bug-report a {
+.feedback summary {
   font-size: 16px;
-}
-.help summary {
   list-style: none;
 }
-.bug-report a {
+.feedback details[open] summary {
+  margin-bottom: 6px;
+}
+.feedback details a {
   display: block;
+  margin: 4px 0;
   color: var(--ink);
   text-decoration: none;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.feedback details a:hover,
+.feedback details a:focus-visible {
+  text-decoration: underline;
 }
 .help details[open] {
   width: calc(var(--inspection-width) - 20px);
