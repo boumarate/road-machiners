@@ -21,6 +21,16 @@ export function uiRoot(): HTMLElement {
   return root;
 }
 
+// Panels in the top left corner sit side by side in one row.
+export function topLeft(): HTMLElement {
+  const root = uiRoot();
+  const found = root.querySelector<HTMLElement>(':scope > .top-left');
+  if (found) return found;
+  const row = el('div', { class: 'top-left' });
+  root.append(row);
+  return row;
+}
+
 // Panels in the top right corner sit side by side in one row.
 export function topRight(): HTMLElement {
   const root = uiRoot();
