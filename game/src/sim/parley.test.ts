@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { REFUSED } from '../data/dialogue';
+import { SALVAGE } from '../data/salvage';
 import { NPCS, type TraitId } from '../data/npcs';
 import { isHostile, noteCollision } from './combat';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, raiseCalls } from './dialogue';
 import { addGoods } from './inventory';
 import { pushGoal, thinkNpc, topGoal } from './npc-activities';
+import { visibleSalvage } from './npc-decisions';
 import { makePeace, plead, yieldTo } from './parley';
 import { hasCargo } from './salvage';
 import { addState, endState, stateOf } from './states';
@@ -405,5 +407,44 @@ describe('bounty talk', () => {
     w.player.contracts = [{ ...bounty }];
     yieldTo(w, playerVehicle(w), npc);
     expect(w.player.contracts).toEqual([bounty]);
+  });
+});
+
+describe('pile claims', () => {
+  function handover(winnerKind: 'npc' | 'player') {
+    const w = quietWorld();
+    const robber = npcAt(w, 'raiders', ['raider'], 36);
+    const victim = addVehicle(w, 'scavengers', 'scout', ['mg'], { x: 37, y: 30 });
+    victim.brain = npcBrain('trader', victim.pos, []);
+    addGoods(w, victim, 'scrap', 2);
+    refreshVision(w);
+    if (winnerKind === 'npc') yieldTo(w, victim, robber);
+    else yieldTo(w, victim, playerVehicle(w));
+    return { w, robber, victim, pile: w.salvage.find((s) => s.pile)! };
+  }
+
+  it('an NPC winner claims the handed-over pile', () => {
+    const { w, robber, pile } = handover('npc');
+    expect(pile.pile!.claim).toEqual({ by: robber.id, until: w.turn + SALVAGE.claimTurns, warned: [] });
+  });
+
+  it('a player winner makes no claim', () => {
+    expect(handover('player').pile.pile!.claim).toBeUndefined();
+  });
+
+  it('a claimant starts no tow of its stranded victim before it takes the pile', () => {
+    const { w, robber, victim } = handover('npc');
+    forceOption('strandedSeen', 'tow');
+    thinkNpc(w, robber);
+    expect(robber.brain!.goals.some((g) => g.kind === 'tow' && g.targetId === victim.id)).toBe(false);
+    expect(topGoal(robber)?.kind).toBe('loot');
+  });
+
+  it('a backed-off driver does not see the pile', () => {
+    const { w, pile } = handover('npc');
+    const other = npcAt(w, 'scavengers', [], 34);
+    expect(visibleSalvage(w, other)).toContain(pile);
+    pile.pile!.claim!.warned.push(other.id);
+    expect(visibleSalvage(w, other)).not.toContain(pile);
   });
 });

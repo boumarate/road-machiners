@@ -15,7 +15,7 @@ import { defyThreat, pushGoal, topGoal } from './npc-activities';
 import { decide, perceiveDanger, visibleHostiles, wantsLoot } from './npc-decisions';
 import { SPARE_LINE } from '../data/dialogue';
 import { vehicleHasPerk } from './progress';
-import { createCargoSalvage, dumpOnPile, hasCargo, takeError } from './salvage';
+import { claimPile, createCargoSalvage, dumpOnPile, hasCargo, takeError } from './salvage';
 import { isStranded } from './stats';
 import { addState, endState, pleaData, stateOf } from './states';
 import type { DecisionOptions } from '../data/npcs';
@@ -57,7 +57,10 @@ export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, dumped: S
   makePeace(world, loser, winner);
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');
-  if (stock && winner.brain) pushGoal(world, winner, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'take the handed-over cargo' });
+  if (stock && winner.brain) {
+    pushGoal(world, winner, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'take the handed-over cargo' });
+    claimPile(world, stock, winner);
+  }
   creditYield(world, loser, winner);
 }
 
