@@ -4,8 +4,7 @@ import { DialoguePanel, type DialogueHost } from "./dialogue";
 import type { Vehicle, World } from "../sim/types";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
-import { GAME_VERSION } from "../config";
-import { el, panel, topRight } from "./dom";
+import { el, panel, topLeft, topRight } from "./dom";
 import {
   contractDue,
   contractSummary,
@@ -19,7 +18,7 @@ import {
   formatNpcTraits,
   type LogLine,
 } from "./format";
-import { getHudReadout, getRescueReadout, moneyLabel, type RescueReadout } from "./hud-readout";
+import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, moneyLabel, versionLabel, type RescueReadout } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
 import { aimMarks } from "./weapons";
 import { createSwitch } from "./switch";
@@ -83,7 +82,8 @@ export class Hud {
   private log = panel("log");
   private info = panel("info");
   private infoBody = el("div");
-  private help = panel("help");
+  private help = panel("help", topLeft());
+  private feedback = panel("feedback", topLeft());
   private action = panel("action");
   private toastBox = panel("toast");
   private rescue = panel("rescue");
@@ -123,8 +123,32 @@ export class Hud {
       el("summary", { title: "Driving and combat controls" }, "?"),
     );
     this.help.append(guide);
+    const feedbackMenu = el("details", {});
+    const feedbackLink = (href: string, text: string) =>
+      el(
+        "a",
+        {
+          href,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          onclick: () => feedbackMenu.removeAttribute("open"),
+        },
+        text,
+      );
+    feedbackMenu.append(
+      el(
+        "summary",
+        { title: "Report a bug or request a feature", "aria-label": "Report a bug or request a feature" },
+        "!",
+      ),
+      feedbackLink(bugReportUrl(versionLabel()), "Report a bug"),
+      feedbackLink(featureRequestUrl(), "Request a feature"),
+    );
+    this.feedback.append(feedbackMenu);
     window.addEventListener("keydown", (e) => {
-      if (e.code === "Escape") guide.removeAttribute("open");
+      if (e.code !== "Escape") return;
+      guide.removeAttribute("open");
+      feedbackMenu.removeAttribute("open");
     });
     guide.append(
       el("div", {}, "Click the ground: drive there by road. Shift-click: stop there."),
@@ -135,7 +159,7 @@ export class Hud {
       el("div", {}, "Click a truck: target it. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
       el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
       el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
-      el("div", { class: "version" }, `v${GAME_VERSION}`),
+      el("div", { class: "version" }, versionLabel()),
     );
   }
 

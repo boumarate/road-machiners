@@ -55,23 +55,6 @@ function paintTexture(w: World): THREE.CanvasTexture {
   return texture;
 }
 
-// Height of the drawn ground at a map point. Each tile is two triangles split on the diagonal from its
-// (x, y + 1) corner to its (x + 1, y) corner, as the chunk planes are built. Meshes laid on the ground use
-// this rather than the sim's bilinear height, so they neither float over nor sink under a tile's crease.
-export function meshHeightAt(t: Terrain, x: number, y: number): number {
-  const i = Math.min(Math.max(Math.floor(x), 0), t.size - 1);
-  const j = Math.min(Math.max(Math.floor(y), 0), t.size - 1);
-  const fx = Math.min(Math.max(x - i, 0), 1);
-  const fy = Math.min(Math.max(y - j, 0), 1);
-  const n = t.size + 1;
-  const a = t.heights[j * n + i];
-  const b = t.heights[(j + 1) * n + i];
-  const c = t.heights[(j + 1) * n + i + 1];
-  const d = t.heights[j * n + i + 1];
-  if (fx + fy <= 1) return a + (d - a) * fx + (b - a) * fy;
-  return c + (b - c) * (1 - fx) + (d - c) * (1 - fy);
-}
-
 // The ground map's uv per meter. The map spans the world plus TERRAIN_MARGIN tiles on each side.
 export function groundUvPerMeter(size: number): number {
   return 1 / ((size + 2 * TERRAIN_MARGIN) * S);

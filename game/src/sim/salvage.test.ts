@@ -11,7 +11,7 @@ import { partDef } from '../data/parts';
 import { chassisDef } from '../data/chassis';
 import { BREAKABLE, RULES } from '../data/rules';
 import { takeAllLoot, takeLoot, takeStores, canScavenge, scavenge } from './locations';
-import { breakProp, clearPiles, collectSalvage, createCargoSalvage, hasSalvage, initializeSalvage, isRoadWreck, renewSalvage, salvageInRange, salvageUnits, siteLootTable } from './salvage';
+import { breakProp, canTakeAny, clearPiles, collectSalvage, createCargoSalvage, hasSalvage, initializeSalvage, isRoadWreck, renewSalvage, salvageInRange, salvageUnits, siteLootTable } from './salvage';
 import { SHOPS } from '../data/market';
 import type { Obstacle, SalvageStock, World } from './types';
 import { propReach } from './mapgen';
@@ -139,6 +139,16 @@ describe('finite salvage', () => {
     expect(stock.fuel).toBe(2);
     expect(stock.supplies).toBe(3);
     expect(hasSalvage(stock)).toBe(true);
+  });
+
+  it('does not count a nearly full store as room for the stock left', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'traders', 'scout', [], { x: 10, y: 10 });
+    const stock: SalvageStock = { id: 'test-stock', pos: { x: 10, y: 10 }, radius: 1, goods: {}, parts: [], supplies: 2 };
+    npc.resources!.supplies = RULES.baseSupplies - 0.015;
+    expect(canTakeAny(w, npc, stock)).toBe(false);
+    npc.resources!.supplies = RULES.baseSupplies - 1;
+    expect(canTakeAny(w, npc, stock)).toBe(true);
   });
 
   it('lets an NPC collector take fuel and supplies', () => {

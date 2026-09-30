@@ -104,7 +104,11 @@ export function getKnownSite(id: string) {
 // The share left of the cab or the average share left over every mounted part, whichever is lower, and 0 for a
 // truck that cannot drive. One damaged wheel barely counts, but a truck broken up all around gives up.
 export function getCombatCondition(world: World, vehicle: Vehicle): number {
-  if (isStranded(world, vehicle)) return 0;
+  return isStranded(world, vehicle) ? 0 : bodyCondition(vehicle);
+}
+
+// The same share, whether or not the truck can drive. An empty tank alone does not lower it.
+export function bodyCondition(vehicle: Vehicle): number {
   const cab = corePart(vehicle, 'cab');
   const parts = mountedParts(vehicle);
   const overall = parts.reduce((sum, part) => sum + part.hp / maxHp(part), 0) / parts.length;

@@ -236,23 +236,30 @@ const STEP: Record<Side, { dx: number; dy: number }> = {
 
 // The sides a mounted gun can fire toward past the tall parts on its truck.
 export function openSides(v: Vehicle, item: GridItem): Side[] {
-  const blocked = sideBlockers(v, item);
-  return SIDES.filter((side) => !blocked[side]);
+  return openIn(gridOf(v), tallCells(v), item);
 }
 
 // The nearest tall item in the gun's lane toward each blocked side. An open side has no entry.
 export function sideBlockers(v: Vehicle, item: GridItem): Partial<Record<Side, GridItem>> {
-  const tall = tallCells(v, item.id);
+  return blockersIn(gridOf(v), tallCells(v), item);
+}
+
+function openIn(g: Grid, tall: Map<number, GridItem>, item: GridItem): Side[] {
+  const blocked = blockersIn(g, tall, item);
+  return SIDES.filter((side) => !blocked[side]);
+}
+
+// Walks the gun's lanes over a prebuilt tall map. A cell the gun owns never blocks it.
+function blockersIn(g: Grid, tall: Map<number, GridItem>, item: GridItem): Partial<Record<Side, GridItem>> {
   const out: Partial<Record<Side, GridItem>> = {};
   if (tall.size === 0) return out;
-  const g = gridOf(v);
   const { w, h } = itemSize(item);
   const center = { x: item.x + Math.floor(w / 2), y: item.y + Math.floor(h / 2) };
   for (const side of SIDES) {
     const { dx, dy } = STEP[side];
     for (let x = center.x, y = center.y; inGrid(g, { x, y }); x += dx, y += dy) {
       const blocker = tall.get(cellKey(x, y));
-      if (blocker) {
+      if (blocker && blocker.id !== item.id) {
         out[side] = blocker;
         break;
       }
@@ -261,10 +268,10 @@ export function sideBlockers(v: Vehicle, item: GridItem): Partial<Record<Side, G
   return out;
 }
 
-// The item on each cell covered by a tall part, leaving out one item.
-function tallCells(v: Vehicle, exceptId: string): Map<number, GridItem> {
+// The item on each cell covered by a tall part.
+function tallCells(v: Vehicle): Map<number, GridItem> {
   const tall = new Map<number, GridItem>();
-  for (const it of v.items) if (it.id !== exceptId && isTall(it)) paintCells(tall, it);
+  for (const it of v.items) if (isTall(it)) paintCells(tall, it);
   return tall;
 }
 
@@ -279,24 +286,29 @@ function paintCells(cells: Map<number, GridItem>, it: GridItem): void {
 
 // True when every mounted gun has at least one open side inside its own arc.
 export function everyGunFires(v: Vehicle): boolean {
+  const g = gridOf(v);
+  const tall = tallCells(v);
   return mountedItems(v, 'weapon').every((item) => {
     const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
-    return openSides(v, item).some((side) => reach.includes(side));
+    return openIn(g, tall, item).some((side) => reach.includes(side));
   });
 }
 
 // Compares gun layouts. The sides any gun covers count first, so a new gun goes where it fires toward a side no
 // other gun does. Open sides summed over every gun break ties. Only sides a gun's own arc reaches count.
 export function gunLayoutScore(v: Vehicle): number {
+  const guns = mountedItems(v, 'weapon');
+  const g = gridOf(v);
+  const tall = tallCells(v);
   const covered = new Set<Side>();
   let sum = 0;
-  for (const item of mountedItems(v, 'weapon')) {
+  for (const item of guns) {
     const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
-    const open = openSides(v, item).filter((side) => reach.includes(side));
+    const open = openIn(g, tall, item).filter((side) => reach.includes(side));
     for (const side of open) covered.add(side);
     sum += open.length;
   }
-  return covered.size * (SIDES.length * mountedItems(v, 'weapon').length + 1) + sum;
+  return covered.size * (SIDES.length * guns.length + 1) + sum;
 }
 
 // The sides a centered arc reaches. The front quarter spans 90 degrees, so a wider arc reaches the flanks, and one

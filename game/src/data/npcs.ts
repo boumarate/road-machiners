@@ -840,7 +840,6 @@ export type DecisionOptions = {
   hireOffered: 'take' | 'decline'; // a driver asks this merc to escort it for a fee
 };
 export type DecisionId = keyof DecisionOptions;
-export type OptionId = DecisionOptions[DecisionId];
 
 // The user's rule: "0 only for can't. For something you physically can, never go below 1% probability."
 // Every option a driver can take now gets at least this chance, and shares the rest by its weight.
