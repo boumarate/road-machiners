@@ -160,7 +160,7 @@ export function getWeaponReadout(w: World, mw: MountedWeapon) {
     status,
     chance:
       block === null && target && order
-        ? hitOdds(w, me, mw, target, order.aim).chance
+        ? hitOdds(w, me, mw, target, order.aim).damageChance
         : null,
     canFire: block === null,
   };

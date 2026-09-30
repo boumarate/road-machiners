@@ -144,28 +144,47 @@ function laneCells(g: Grid, side: Side, lane: number): { x: number; y: number }[
 // by its armor, and damage drops in the same proportion as pen. The walk stops at zero pen. Holes, empty cells, goods, spares and broken parts let the round pass.
 // A part covering several cells of the lane is hit once.
 export function walkLane(world: World, v: Vehicle, side: Side, lane: number, round: Round): PartHit[] {
+  return planLane(v, side, lane, round).map((h) => ({ part: h.part.id, damage: damagePart(world, v, h.part, h.amount) }));
+}
+
+// The parts a round walking this lane would hit and the damage each would take, without dealing it.
+export function planLane(v: Vehicle, side: Side, lane: number, round: Round): { part: PartInstance; amount: number }[] {
   checkRound(round);
   const g = gridOf(v);
-  const owner = new Map<number, PartInstance>();
-  for (const it of mountedItems(v)) for (const c of itemCells(it)) owner.set(cellKey(c.x, c.y), it.part);
-  const hits: PartHit[] = [];
+  const owner = cellOwners(v);
+  const hits: { part: PartInstance; amount: number }[] = [];
   const struck = new Set<string>();
-  let pen = round.pen;
-  let damage = round.damage;
+  const left = { pen: round.pen, damage: round.damage };
   for (const c of laneCells(g, side, lane)) {
-    if (pen <= 0) break;
+    if (left.pen <= 0) break;
     if (g.cells[c.y][c.x] === null) continue;
-    pen -= RULES.cellPen;
+    left.pen -= RULES.cellPen;
     const part = owner.get(cellKey(c.x, c.y));
-    if (pen <= 0 || !part || part.hp <= 0 || struck.has(part.id)) continue;
+    if (!takesHit(part, left.pen, struck)) continue;
     struck.add(part.id);
-    const def = wornDef(part);
-    const armor = armorAgainst(def, round.blast);
-    hits.push({ part: part.id, damage: damagePart(world, v, part, damage * shareOf(def, round) * Math.min(1, pen / armor)) });
-    damage *= Math.max(0, pen - armor) / pen;
-    pen -= armor;
+    hits.push(hitPart(part, left, round));
   }
   return hits;
+}
+
+function cellOwners(v: Vehicle): Map<number, PartInstance> {
+  const owner = new Map<number, PartInstance>();
+  for (const it of mountedItems(v)) for (const c of itemCells(it)) owner.set(cellKey(c.x, c.y), it.part);
+  return owner;
+}
+
+function takesHit(part: PartInstance | undefined, pen: number, struck: Set<string>): part is PartInstance {
+  return pen > 0 && part !== undefined && part.hp > 0 && !struck.has(part.id);
+}
+
+// The part takes damage × min(1, pen / armor). Its armor then lowers the pen and damage left in the round.
+function hitPart(part: PartInstance, left: { pen: number; damage: number }, round: Round): { part: PartInstance; amount: number } {
+  const def = wornDef(part);
+  const armor = armorAgainst(def, round.blast);
+  const amount = left.damage * shareOf(def, round) * Math.min(1, left.pen / armor);
+  left.damage *= Math.max(0, left.pen - armor) / left.pen;
+  left.pen -= armor;
+  return { part, amount };
 }
 
 function checkRound(round: Round): void {

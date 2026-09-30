@@ -23,17 +23,29 @@ describe('hover card rows', () => {
     const o = hitOdds(world, me, mine, them, 'body');
     const card = hitCardRows(world, them.id)!;
     expect(card.name).toBe(them.name);
-    expect(card.mine[0]).toMatchObject({ odds: o, text: `${Math.round(o.chance * 100)}%` });
+    expect(card.mine[0]).toMatchObject({ odds: o, text: `${Math.round(o.damageChance * 100)}%` });
     const deg = (r: number) => (r / DEG).toFixed(1);
     expect(o.causes.crossing).toBeGreaterThan(0);
     expect(o.causes.recoil).toBeGreaterThan(0);
-    expect(card.mine[0].detail).toBe(`${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon +${deg(o.causes.range)}° range +${deg(o.causes.crossing)}° crossing +${deg(o.causes.recoil)}° recoil`);
+    expect(card.mine[0].detail).toBe(`${Math.round(o.chance * 100)}% land on aim · ${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon +${deg(o.causes.range)}° range +${deg(o.causes.crossing)}° crossing +${deg(o.causes.recoil)}° recoil`);
   });
 
   it('names the biggest reasons in plain words and keeps at most two', () => {
     const { world, them } = createDuel();
     const cause = hitCardRows(world, them.id)!.mine[0].cause!;
     expect(cause).toMatch(/^(far|target crossing fast|you are moving|gun kick|bad weather|loose gun)(, (far|target crossing fast|you are moving|gun kick|bad weather|loose gun))?$/);
+  });
+
+  it('names parts in the way of an aimed part they shield', () => {
+    const world = emptyWorld();
+    const me = world.vehicles[0];
+    const them = addVehicle(world, 'raiders', 'courier', ['stockEngine'], { x: 33, y: 30 }, Math.PI);
+    refreshVision(world);
+    const mine = vehicleStats(world, me).weapons[0];
+    me.weaponOrders[mine.part.id] = { targetId: them.id, aim: corePart(them, 'cab').id };
+    const row = hitCardRows(world, them.id)!.mine[0];
+    expect(row.odds!.damageChance).toBeLessThan(row.odds!.chance);
+    expect(row.cause).toContain('parts in the way');
   });
 
   it('calls a parked target easy', () => {

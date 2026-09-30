@@ -16,12 +16,17 @@ export function damagePart(
   amount: number,
 ): number {
   const wasWorking = part.hp > 0;
-  const dealt = Math.min(part.hp, Math.max(0, Math.round(amount)));
+  const dealt = Math.min(part.hp, wholeDamage(amount));
   wear.damagePart(part, dealt, 0);
   if (wasWorking && part.hp === 0)
     world.events.push({ t: "partDisabled", vehicle: v.id, part: part.id });
   if (hurtsDriver(world, v, part)) hurtDriver(world, v, dealt);
   return dealt;
+}
+
+// Damage lands in whole hit points, so an amount under half a point does nothing.
+export function wholeDamage(amount: number): number {
+  return Math.max(0, Math.round(amount));
 }
 
 function hurtsDriver(world: World, v: Vehicle, part: PartInstance): boolean {

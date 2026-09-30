@@ -24,7 +24,7 @@ function detailLine(o: HitOdds): string {
     .filter(([r]) => deg(r) !== '0.0')
     .map(([r, name]) => ` ${r < 0 ? '−' : '+'}${deg(r)}° ${name}`)
     .join('');
-  return `${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon${extra}`;
+  return `${Math.round(o.chance * 100)}% land on aim · ${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon${extra}`;
 }
 
 // A cause is a main reason when it makes up at least this share of the scatter. Smaller ones are noise to a player.
@@ -32,13 +32,16 @@ const MAIN_SHARE = 0.25;
 const MAX_REASONS = 2;
 
 // The biggest reasons the chance is low, in plain words: "far, you are moving". A parked target reads as easy.
-function reasonLine(o: HitOdds): string {
+// An aimed part that other parts shield from this side leads.
+function reasonLine(o: HitOdds, aim: Aim): string {
   const c = o.causes;
+  const covered = aim !== 'body' && Math.round(o.damageChance * 100) < Math.round(o.chance * 100);
   const reasons: string[] = ([[c.range, 'far'], [c.crossing, 'target crossing fast'], [c.own, 'you are moving'], [c.recoil, 'gun kick'], [c.weather, 'bad weather'], [c.weapon, 'loose gun']] as const)
     .filter(([r]) => r / o.spread >= MAIN_SHARE)
     .sort((a, b) => b[0] - a[0])
-    .slice(0, MAX_REASONS)
+    .slice(0, covered ? MAX_REASONS - 1 : MAX_REASONS)
     .map(([, name]) => name);
+  if (covered) reasons.unshift('parts in the way');
   if (deg(c.still) !== '0.0') reasons.unshift('target is parked: easy');
   return reasons.length > 0 ? reasons.join(', ') : 'clear shot';
 }
@@ -48,7 +51,7 @@ function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle,
   const label = `${name} ${ammoText(mw)}`;
   if (block !== null) return { label, odds: null, text: blockText(mw, block), cause: null, detail: null };
   const odds = hitOdds(world, shooter, mw, target, aim);
-  return { label, odds, text: `${Math.round(odds.chance * 100)}%`, cause: reasonLine(odds), detail: detailLine(odds) };
+  return { label, odds, text: `${Math.round(odds.damageChance * 100)}%`, cause: reasonLine(odds, aim), detail: detailLine(odds) };
 }
 
 // A weapon's aim at a target: its order's aim when the order is at that target, else a body shot.

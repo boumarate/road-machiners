@@ -250,6 +250,7 @@ describe("automatic travel safety", () => {
         weapon: "gun",
         aim: "body",
         chance: 1,
+        damageChance: 1,
         side: "front",
         rounds: [],
       },

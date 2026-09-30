@@ -23,7 +23,7 @@ import { isJunk } from '../sim/wear';
 import { clockOf } from '../sim/sun';
 import type { PartHit } from '../sim/armor';
 import { shotDamage } from '../sim/combat';
-import type { GameEvent, GridItem, Job, NpcState, PartInstance, RefitJob, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
+import type { GameEvent, GridItem, Job, NpcState, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
 
 // What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
@@ -241,14 +241,20 @@ function hurts(hits: PartHit[] | undefined): boolean {
   return hits !== undefined && hits.some((h) => h.damage > 0);
 }
 
+// A round hits when it damages the aimed part, or for a body shot any part of the target, directly or by splash.
+function hitsAim(e: Extract<GameEvent, { t: 'shot' }>, r: ShotRound): boolean {
+  const onTarget = [...(r.struck === e.target ? r.hits : []), ...r.blast.filter((b) => b.vehicle === e.target).flatMap((b) => b.hits)];
+  return onTarget.some((h) => h.damage > 0 && (e.aim === 'body' || h.part === e.aim));
+}
+
 // "MG → Buggy at Cab · 3/6 hit (40%) · 1 crit", then the damage per part.
 function aimedSpans(world: World, e: Extract<GameEvent, { t: 'shot' }>, onTarget: PartHit[]): LogSpan[] {
   const aim = e.aim === 'body' ? '' : ` at ${partName(world, e.target, e.aim)}`;
-  const hits = e.rounds.filter((r) => r.hit).length;
+  const hits = e.rounds.filter((r) => hitsAim(e, r)).length;
   const crits = e.rounds.filter((r) => r.crit).length;
   return [
     { text: `${partName(world, e.shooter, e.weapon)} → ${vehicleName(world, e.target)}${aim} · ${hits}/${e.rounds.length} hit`, cls: '' },
-    { text: ` (${Math.round(e.chance * 100)}%)`, cls: 'dim' },
+    { text: ` (${Math.round(e.damageChance * 100)}%)`, cls: 'dim' },
     ...(crits ? [{ text: ` · ${crits} crit`, cls: '' }] : []),
     ...damageSpans(world, e.target, onTarget),
   ];
