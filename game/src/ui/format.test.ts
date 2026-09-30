@@ -6,7 +6,7 @@ import { partDef } from "../data/parts";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import type { GameEvent, Job, PartInstance } from "../sim/types";
 import { maxHp } from "../sim/wear";
-import { contractDue, contractSummary, eventText, jobLabel, roundLabel, vehicleName, wearLabel } from "./format";
+import { contractDue, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel } from "./format";
 import { mountedParts } from "../sim/grid";
 
 function part(wear: number): PartInstance {
@@ -29,8 +29,8 @@ describe("wearLabel", () => {
 });
 
 describe("contract text", () => {
-  const bounty: Contract = { id: "c1", shop: "bowl", kind: "bounty", template: "buggy", targetName: "Raider outrider", reward: 100, deadline: 100, tier: 1 };
-  const fetch: Contract = { id: "c2", shop: "bowl", kind: "fetch", defId: "mg", reward: 100, deadline: 100, tier: 1 };
+  const bounty: Contract = { id: "c1", shop: "bowl", kind: "bounty", template: "buggy", targetName: "Raider outrider", reward: 100, deadline: 100, window: 100, tier: 1 };
+  const fetch: Contract = { id: "c2", shop: "bowl", kind: "fetch", defId: "mg", reward: 100, deadline: 100, window: 100, tier: 1 };
 
   it("shows the deadline as the game time the contract fails", () => {
     expect(contractDue(bounty)).toBe("by Day 1 12:19");
@@ -42,6 +42,17 @@ describe("contract text", () => {
 
   it("says the hand-in part must still work and be rebuilt at most once", () => {
     expect(contractSummary(fetch)).toBe("Bring MG turret to Bowl: working, rebuilt at most once");
+  });
+
+  it("starts a rush haul's summary with Rush and leaves a standard haul plain", () => {
+    const haul: Contract = { id: "c3", shop: "bowl", kind: "haul", good: "salt", units: 3, to: "nose", reward: 100, deadline: 100, window: 100, rush: false, tier: 1 };
+    expect(contractSummary(haul).startsWith("Haul 3")).toBe(true);
+    expect(contractSummary({ ...haul, rush: true }).startsWith("Rush: Haul 3")).toBe(true);
+  });
+
+  it("shows the window in whole game hours, at least one", () => {
+    expect(contractWindow({ ...bounty, window: 525 })).toBe("28 h");
+    expect(contractWindow({ ...bounty, window: 1 })).toBe("1 h");
   });
 });
 

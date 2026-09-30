@@ -9,23 +9,24 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
 import type { PartHit } from './armor';
-import { callLawmen, isHostile, shotDamage, startFeuds } from './combat';
+import { callLawmen, inCombat, isHostile, shotDamage, startFeuds } from './combat';
 import { affordableBuyCount, getTradePrice, sellVehicleCargo, serviceAtCamp, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
-import { corePart, freeCells, goodsCount, mountedParts } from './grid';
+import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods, cargoRoom } from './inventory';
-import { cancelJob, inCombat } from './jobs';
+import { cancelJob } from './jobs';
 import { isFree } from './spawn';
 import { route } from './path';
 import {
   tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
   huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
+  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
 import { hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
-import { canLootTruck, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, isSiteStock, lootTruckTurn, wreckStockId } from './salvage';
+import { canLootTruck, canReachSalvage, canTakeAny, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
@@ -37,7 +38,7 @@ import { canUseSite, nearestPad, type Site } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { heatAt } from './sun';
 import { canVehicleSee } from './vision';
-import { dropTow, follows, inTowReach, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
+import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut, refitAtHome } from './defeat';
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
@@ -207,10 +208,12 @@ function fuelSense(world: World, vehicle: Vehicle): number {
   return 1 + NPC_UPKEEP.fuelSense * (2 * roll - 1);
 }
 
-function isLowOnFuel(world: World, vehicle: Vehicle, profile: NpcProfile): boolean {
-  const reserve = NPC_UPKEEP.fuelReserve * profile.fuelMargin * fuelSense(world, vehicle);
-  return getResources(world, vehicle).fuel <= fuelToPump(world, vehicle, profile) * reserve;
+// The fuel the driver wants in hand for the way to its nearest pump.
+export function fuelReserveFor(world: World, vehicle: Vehicle, profile: NpcProfile = npcProfile(vehicle)): number {
+  return fuelToPump(world, vehicle, profile) * NPC_UPKEEP.fuelReserve * profile.fuelMargin * fuelSense(world, vehicle);
 }
+
+const isLowOnFuel = (world: World, vehicle: Vehicle, profile: NpcProfile): boolean => getResources(world, vehicle).fuel <= fuelReserveFor(world, vehicle, profile);
 
 // Low fuel, low supplies or a damaged cab or part needs service. Null when none is needed.
 function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): ServiceNeed | null {
@@ -416,28 +419,14 @@ function investigateInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): 
 // A wreck or a loot pile is an opportunity only while it remains observable. A known site stays one.
 function scavengeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   if (goal.targetId === null || [...REGION.towns, ...REGION.locations].some((site) => site.id === goal.targetId)) return null;
-  return world.salvage.some((stock) => stock.id === goal.targetId && canVehicleSee(world, vehicle, stock.pos)) ? null : 'lost sight of the salvage';
+  const seen = world.salvage.some((stock) => stock.id === goal.targetId && canVehicleSee(world, vehicle, stock.pos));
+  return lootTaken(world, vehicle, goal.targetId) ?? (seen ? null : 'lost sight of the salvage');
 }
 
 // A driver learns a stock is empty only once it can reach it.
 function lootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   const truck = world.vehicles.find((v) => v.id === goal.targetId);
-  return truck ? truckLootInvalid(vehicle, truck) : stockLootInvalid(world, vehicle, goal);
-}
-
-function stockLootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
-  const stock = world.salvage.find((s) => s.id === goal.targetId);
-  if (!stock) return 'the loot is gone';
-  if (!canReachSalvage(vehicle, stock)) return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
-  if (!hasSalvage(stock)) return 'nothing left to loot';
-  return canTakeAny(world, vehicle, stock) ? null : 'cargo cannot hold the loot';
-}
-
-// A knocked-out truck is loot until it wakes. A refit on it keeps going until it ends.
-function truckLootInvalid(vehicle: Vehicle, truck: Vehicle): string | null {
-  if (!isKnockedOut(truck)) return 'the truck got away';
-  if (vehicle.job?.kind === 'refit' || !inTowReach(vehicle, truck)) return null;
-  return canTakeFromTruck(vehicle, truck) ? null : 'cargo cannot hold the loot';
+  return lootTaken(world, vehicle, goal.targetId) ?? (truck ? truckLootInvalid(vehicle, truck) : stockLootInvalid(world, vehicle, goal));
 }
 
 function towInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
@@ -481,19 +470,14 @@ const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
   follow: (world, vehicle, goal) => (follows(world, vehicle, goal.targetId!) ? null : 'no longer follows its leader'),
 };
 
-// Goals that park the truck or tie it to another truck. A driver under attack never holds one.
+// Goals that park the truck or tie it to another truck. A driver in combat never holds one.
 const EXPOSED: readonly NpcActivity['kind'][] = ['repair', 'patch', 'meet', 'tow', 'loot'];
-// Deals a driver under attack calls off.
+// Deals a driver in combat calls off.
 const BROKEN_OFF: readonly NpcState['kind'][] = ['patch', 'trade', 'aid'];
 
-// A hostile in sight shot at the driver, a nearby faction mate or the truck it escorts.
-export function underAttack(vehicle: Vehicle): boolean {
-  return Object.keys(vehicle.brain!.attackers).length > 0;
-}
-
-// A driver under attack drops a held tow and calls off its patch, trade and aid deals. Its exposed goals then pop.
+// A driver in combat drops a held tow and calls off its patch, trade and aid deals. Its exposed goals then pop.
 function breakOffDeals(world: World, vehicle: Vehicle): void {
-  if (!underAttack(vehicle)) return;
+  if (!inCombat(world, vehicle)) return;
   const tow = heldTow(world, vehicle);
   if (tow) dropTow(world, tow, 'danger');
   for (const s of world.states.filter((x) => BROKEN_OFF.includes(x.kind) && (x.holder === vehicle.id || x.other === vehicle.id))) endState(world, s, 'broken');
@@ -506,7 +490,7 @@ export function goalHolds(world: World, vehicle: Vehicle, goal: NpcActivity): bo
 }
 
 function invalidReason(world: World, vehicle: Vehicle, goal: NpcActivity, contacts: Contact[]): string | null {
-  if (EXPOSED.includes(goal.kind) && underAttack(vehicle)) return 'under attack';
+  if (EXPOSED.includes(goal.kind) && inCombat(world, vehicle)) return 'in combat';
   const check = GOAL_CHECKS[goal.kind];
   return check ? check(world, vehicle, goal, contacts) : null;
 }
@@ -709,6 +693,17 @@ export function defyThreat(world: World, vehicle: Vehicle, threatener: Vehicle, 
   else interrupt(world, vehicle, fleeFrom(world, vehicle, npcProfile(vehicle), threatener.id, threatener.pos, 'escape a threat'));
 }
 
+// A driver warned off its loot gives it up: its job on the target ends, its loot goal pops, and it notices the target
+// as salvage seen, so no roll on the way picks it again while it stays in sight.
+export function backOffLoot(world: World, vehicle: Vehicle): void {
+  const target = lootClaimedBy(world, vehicle);
+  if (target === null) throw new Error(`${vehicle.id} holds no loot claim to back off from`);
+  if (worksOnLoot(vehicle, target)) cancelJob(world, vehicle);
+  vehicle.brain!.noticed[`salvageSeen:${target}`] = world.turn;
+  const goal = topGoal(vehicle);
+  if (goal && ['loot', 'scavenge'].includes(goal.kind) && goal.targetId === target) finishGoal(world, vehicle, 'warned off the loot');
+}
+
 // One roll per new truck in sight the NPC can rob, nearest first. The sighting's perceived danger weighs the roll.
 // Rob starts a feud with the target and fights it. The feud makes the target a hostile in sight, so it is noticed
 // as one and fires no second roll.
@@ -728,10 +723,10 @@ function onPreySeen(world: World, vehicle: Vehicle): void {
 }
 
 // One roll per stranded truck the driver could tow, nearest first. A driver in a fight or on the run never starts
-// a tow. It decides once the danger goal pops. A driver under attack starts none either. A player in combat gets
+// a tow. It decides once the danger goal pops. A driver in combat starts none either. A player in combat gets
 // no new tow until the fight ends.
 function onStrandedSeen(world: World, vehicle: Vehicle): void {
-  if (inDanger(vehicle) || underAttack(vehicle)) return;
+  if (inDanger(vehicle) || inCombat(world, vehicle)) return;
   const clients = world.vehicles
     .filter((client) => client.id !== world.player.vehicleId || !inCombat(world, client))
     .map((client) => ({ client, at: strandedAt(world, vehicle, client) }))
@@ -742,10 +737,10 @@ function onStrandedSeen(world: World, vehicle: Vehicle): void {
 }
 
 // One roll per wreck or pile in sight while the driver travels to a long-term goal, nearest first. Sites are goals
-// of their own. Loot pushes a loot goal, and popping it fires the resume roll. A driver under attack loots nothing.
+// of their own. Loot pushes a loot goal, and popping it fires the resume roll. A driver in combat loots nothing.
 function onSalvageSeen(world: World, vehicle: Vehicle): void {
   const top = topGoal(vehicle);
-  if (underAttack(vehicle) || !top || top.phase !== 'travel' || INTERRUPTIONS.includes(top.kind)) return;
+  if (inCombat(world, vehicle) || !top || top.phase !== 'travel' || INTERRUPTIONS.includes(top.kind)) return;
   const stocks = visibleSalvage(world, vehicle).filter((stock) => !isSiteStock(stock));
   const passed = [...stocks, ...visibleDowned(world, vehicle)].filter((s) => s.id !== top.targetId).sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   const loot = passed.find((s) => react(world, vehicle, 'salvageSeen', s.id) === 'loot');
@@ -947,12 +942,12 @@ function needsUrgentSupplies(world: World, vehicle: Vehicle, profile: NpcProfile
   return resources.fuel > 0 && isLowOnFuel(world, vehicle, profile);
 }
 
-// A repair goal in the stack holds, in place once the tank is empty. A foe in sight keeps a repair from starting, so
-// a driver not already patching gives the goal up then. A new one starts at the recover condition, but not with a foe
-// in sight, under attack or while a danger goal is on top. True while the driver repairs.
+// A repair goal in the stack holds, in place once the tank is empty. Combat keeps a repair from starting, so
+// a driver not already patching gives the goal up then. A new one starts at the recover condition, but not in combat
+// or while a danger goal is on top. True while the driver repairs.
 function keepRepairing(world: World, vehicle: Vehicle): boolean {
   if (holdRepair(world, vehicle)) return true;
-  if (inCombat(world, vehicle) || inDanger(vehicle) || underAttack(vehicle)) return false;
+  if (inCombat(world, vehicle) || inDanger(vehicle)) return false;
   const repair = chooseNpcRepair(world, vehicle, NPC_BEHAVIOR.recoverCondition);
   if (repair) pushGoal(world, vehicle, repair);
   return repair !== null;
@@ -963,7 +958,7 @@ function holdRepair(world: World, vehicle: Vehicle): boolean {
   const current = goalsOf(vehicle).find((g) => g.kind === 'repair');
   if (!current) return false;
   if (inCombat(world, vehicle) && vehicle.job?.kind !== 'repair') {
-    dropGoal(world, vehicle, current, 'a foe in sight stops the repair');
+    dropGoal(world, vehicle, current, 'combat stops the repair');
     return false;
   }
   continueNpcRepair(world, vehicle, current);
@@ -1141,14 +1136,17 @@ function resolveTow(world: World, vehicle: Vehicle, activity: NpcActivity): void
   if (ended) finishGoal(world, vehicle, ended);
 }
 
-// Looting searches the robbed stock like any salvage, or strips a knocked-out truck.
+// Looting searches the robbed stock like any salvage, or strips a knocked-out truck. A driver that finds another truck
+// looting the target gives it up and starts nothing there.
 function resolveSearch(world: World, vehicle: Vehicle, activity: NpcActivity): void {
+  const taken = lootTaken(world, vehicle, activity.targetId);
+  if (taken) { finishGoal(world, vehicle, taken); return; }
   const truck = world.vehicles.find((v) => v.id === activity.targetId);
   if (truck) { resolveTruckLoot(world, vehicle, activity, truck); return; }
   const stock = world.salvage.find((entry) => entry.id === activity.targetId);
   if (!stock) { finishGoal(world, vehicle, 'salvage no longer available'); return; }
   // A search already runs at this stock: keep parked and wait for it to finish.
-  if (isSearching(vehicle, stock)) { activity.phase = 'act'; return; }
+  if (worksOnLoot(vehicle, stock.id)) { activity.phase = 'act'; return; }
   if (!canReachSalvage(vehicle, stock)) return;
   activity.phase = 'act';
   searchStock(world, vehicle, stock);
@@ -1161,18 +1159,14 @@ function resolveTruckLoot(world: World, vehicle: Vehicle, activity: NpcActivity,
   if (ended) finishGoal(world, vehicle, ended);
 }
 
-function isSearching(vehicle: Vehicle, stock: SalvageStock): boolean {
-  return vehicle.job?.kind === 'search' && vehicle.job.stockId === stock.id;
-}
-
 function searchStock(world: World, vehicle: Vehicle, stock: SalvageStock): void {
   if (!canTakeAny(world, vehicle, stock)) {
     finishGoal(world, vehicle, !hasSalvage(stock) ? 'salvage exhausted' : 'cargo cannot hold salvage');
     return;
   }
   if (vehicle.job) return;
-  // No search starts with a foe in sight, so the driver gives the salvage up rather than park beside it for good.
-  if (inCombat(world, vehicle)) finishGoal(world, vehicle, 'a foe in sight stops the search');
+  // No search starts in combat, so the driver gives the salvage up rather than park beside it for good.
+  if (inCombat(world, vehicle)) finishGoal(world, vehicle, 'combat stops the search');
   else beginSearch(world, vehicle, stock.id);
 }
 

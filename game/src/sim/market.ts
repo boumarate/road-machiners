@@ -19,7 +19,7 @@ import { playerVehicle } from './damage';
 import { freeCells, goodsCount } from './grid';
 import { addGoods, removeGoods, spareParts } from './inventory';
 import { practice } from './progress';
-import { randInt, type Rng } from './rng';
+import { chance, randInt, type Rng } from './rng';
 import { canUseSite, type Site } from './sites';
 import { playerCommand } from './world';
 import type { PartInstance, Vehicle, World } from './types';
@@ -161,10 +161,12 @@ export function addStockPart(state: ShopState, part: PartInstance): void {
 
 // Contracts. Shops post them; rewards follow the effort model.
 
+// `window` is the turns a contract allows from acceptance. `deadline` is the withdrawal turn while
+// the offer is posted and the due turn once it is held.
 export type Contract =
-  | { id: string; shop: string; kind: 'haul'; good: string; units: number; to: string; reward: number; deadline: number; tier: Tier }
-  | { id: string; shop: string; kind: 'fetch'; defId: string; reward: number; deadline: number; tier: Tier }
-  | { id: string; shop: string; kind: 'bounty'; template: string; targetName: string; reward: number; deadline: number; tier: Tier };
+  | { id: string; shop: string; kind: 'haul'; good: string; units: number; to: string; reward: number; deadline: number; window: number; rush: boolean; tier: Tier }
+  | { id: string; shop: string; kind: 'fetch'; defId: string; reward: number; deadline: number; window: number; tier: Tier }
+  | { id: string; shop: string; kind: 'bounty'; template: string; targetName: string; reward: number; deadline: number; window: number; tier: Tier };
 
 // Estimated turns to travel between two points: straight distance stretched to a road-like route,
 // at cruise speed, plus the turns spent handling the stop.
@@ -173,10 +175,16 @@ export function estimateTurns(from: Vec, to: Vec): number {
 }
 
 // A haul's reward: turns of estimated travel at the good's tier wage, times the haul's reward
-// factor, plus a small cut of the hauled goods' value.
-export function contractReward(turns: number, tier: Tier, cargoValue: number): number {
+// factor, plus a small cut of the hauled goods' value. A rush haul pays the rush premium on top.
+export function contractReward(turns: number, tier: Tier, cargoValue: number, rush: boolean): number {
   const commission = cargoValue * CONTRACTS.haul.valueShare;
-  return Math.round(turns * EFFORT.wage[tier] * CONTRACTS.haul.rewardFactor + commission);
+  const standard = turns * EFFORT.wage[tier] * CONTRACTS.haul.rewardFactor + commission;
+  return Math.round(rush ? standard * CONTRACTS.haul.rush.premium : standard);
+}
+
+// Turns a haul allows from acceptance.
+export function haulWindow(turns: number, rush: boolean): number {
+  return Math.round(turns * (rush ? CONTRACTS.haul.rush.durationFactor : CONTRACTS.haul.durationFactor));
 }
 
 // A vehicle's total worth: its chassis value plus every part it carries, mounted or spare, at each
@@ -248,9 +256,10 @@ function rollHaul(world: World, input: RollInput, id: string): Contract {
   const tier = GOODS[good].tier;
   const units = randInt(world.marketRng, CONTRACTS.haul.units[0], CONTRACTS.haul.units[1]);
   const turns = estimateTurns(input.shop.pos, to.pos);
-  const reward = contractReward(turns, tier, units * goodValue(good));
-  const deadline = world.turn + Math.round(turns * CONTRACTS.haul.durationFactor);
-  return { id, shop: input.shop.id, kind: 'haul', good, units, to: to.id, reward, deadline, tier };
+  const rush = chance(world.marketRng, CONTRACTS.haul.rush.chance);
+  const reward = contractReward(turns, tier, units * goodValue(good), rush);
+  const window = haulWindow(turns, rush);
+  return { id, shop: input.shop.id, kind: 'haul', good, units, to: to.id, reward, deadline: world.turn + window, window, rush, tier };
 }
 
 function rollFetch(world: World, input: RollInput, id: string): Contract {
@@ -258,7 +267,7 @@ function rollFetch(world: World, input: RollInput, id: string): Contract {
   const tier = PARTS[defId].tier;
   const turns = randInt(world.marketRng, CONTRACTS.fetch.durationTurns[0], CONTRACTS.fetch.durationTurns[1]);
   const reward = fetchReward(defId, tier);
-  return { id, shop: input.shop.id, kind: 'fetch', defId, reward, deadline: world.turn + turns, tier };
+  return { id, shop: input.shop.id, kind: 'fetch', defId, reward, deadline: world.turn + turns, window: turns, tier };
 }
 
 function rollBounty(world: World, input: RollInput, id: string): Contract {
@@ -267,7 +276,7 @@ function rollBounty(world: World, input: RollInput, id: string): Contract {
   const tier = highestPartTier(target);
   const turns = randInt(world.marketRng, CONTRACTS.bounty.durationTurns[0], CONTRACTS.bounty.durationTurns[1]);
   const reward = bountyReward(target);
-  return { id, shop: input.shop.id, kind: 'bounty', template: target.brain.templateId, targetName: target.name, reward, deadline: world.turn + turns, tier };
+  return { id, shop: input.shop.id, kind: 'bounty', template: target.brain.templateId, targetName: target.name, reward, deadline: world.turn + turns, window: turns, tier };
 }
 
 const ROLLS = { haul: rollHaul, fetch: rollFetch, bounty: rollBounty };
@@ -418,6 +427,7 @@ export function acceptContract(world: World, contractId: string): World {
     if (isExpired(w, contract)) throw new Error(`Offer ${contractId} has expired`);
     if (w.player.contracts.length >= CONTRACTS.maxActive) throw new Error(`You already hold ${CONTRACTS.maxActive} contracts`);
     if (contract.kind === 'haul') loadHaul(w, contract);
+    contract.deadline = w.turn + contract.window;
     board.splice(board.indexOf(contract), 1);
     w.player.contracts.push(contract);
     w.events.push({ t: 'contract', contract: { ...contract }, outcome: 'accepted' });

@@ -11,6 +11,7 @@ import type { Terrain } from './terrain';
 import { TEST_MAP } from '../test/map';
 import { onTestFinished } from 'vitest';
 import { DECISIONS, STATE_WEIGHTS, TRAITS, type DecisionId, type DecisionOptions, type TraitId } from '../data/npcs';
+import { addState } from './states';
 import type { Faction, GameEvent, NpcBrain, Vehicle, World, XpSource } from './types';
 import { dist, type Vec } from './vec';
 import { refreshVision } from './vision';
@@ -152,4 +153,9 @@ function driveOne(world: World, v: Vehicle): void {
   v.trail = [from, { ...v.pos, heading: v.heading }];
   v.speed = speed;
   burnFuel(world, v, speed);
+}
+
+// Puts `aggressor` in combat with `target`, as a shot would.
+export function startCombat(w: World, aggressor: Vehicle, target: Vehicle): void {
+  addState(w, 'combat', aggressor.id, target.id, { kind: 'none' });
 }

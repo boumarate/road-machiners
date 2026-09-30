@@ -161,8 +161,9 @@ export const NPC_UPKEEP = {
 // Fuel and supply aid between the player and NPCs, see src/sim/aid.ts. A truck is low on a supply at or below
 // RULES.lowFuelThreshold of its cap, where its speed halves.
 export const AID = {
-  // A low driver asks the player for enough of each low supply to reach this share of its cap.
-  fillShare: 0.4,
+  // A low driver asks the player for enough of each low supply to reach this share of its cap, the same small share it
+  // gives. Fuel is also capped by the driver's pump reserve.
+  fillShare: 0.25,
   // A giving driver hands over this share of the player's cap per low supply, only from stock above
   // NPC_UPKEEP.tradeReserve. A small gift, enough to reach a pump.
   giftShare: 0.25,
