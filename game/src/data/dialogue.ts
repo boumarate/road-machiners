@@ -280,25 +280,26 @@ export const TOPICS: Record<TopicId, Topic> = {
       refused: { line: 'No deals.', options: [{ text: 'Then come and get me.', when: [], effects: [], go: END }] },
     },
   },
-  // The player demands the cargo and best parts of a badly broken foe for its life. The driver answers once while it
-  // keeps the player in sight, like a stranded NPC offered a way out.
+  // The player demands a badly broken foe give up. The driver answers once while it keeps the player in sight, like
+  // a stranded NPC offered a way out. One that agrees gives up where it stands, and the player strips its truck like a
+  // knocked-out one.
   yieldDemand: {
     id: 'yieldDemand',
     once: false,
-    ask: { text: 'Your truck is finished. Dump your cargo and your best parts, and drive off alive.', when: ['atOdds', 'npcBeaten', 'notOfferedYield'], duringFeud: true },
+    ask: { text: 'Your truck is finished. Stand down and let me strip it, and you live.', when: ['atOdds', 'npcBeaten', 'notOfferedYield'], duringFeud: true },
     raise: null,
     prepare: 'yieldAnswer',
     hangUp: [],
     start: 'hear',
     nodes: {
       hear: {
-        line: 'You want my truck stripped?',
+        line: 'You want to pick my truck clean?',
         options: [
           { text: 'Your call. Last chance.', when: ['accepts'], effects: [], go: 'agreed' },
           { text: 'Your call. Last chance.', when: ['refuses'], effects: [], go: 'refused' },
         ],
       },
-      agreed: { line: 'All right. It is on the ground. Let me go.', options: [{ text: 'Go.', when: [], effects: ['yieldToPlayer'], go: END }] },
+      agreed: { line: 'All right. I am done. Take what you want.', options: [{ text: 'Sit tight.', when: [], effects: ['yieldToPlayer'], go: END }] },
       refused: { line: 'Not while I can still pull a trigger.', options: [{ text: 'Then we finish this.', when: [], effects: ['settleRefused'], go: END }] },
     },
   },

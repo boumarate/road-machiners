@@ -9,11 +9,17 @@ import { corePart, mountedParts } from './grid';
 import { addGoods } from './inventory';
 import { CONDITIONS } from './dialogue-rules';
 import { hasCargo } from './salvage';
+import { chassisDef } from '../data/chassis';
+import { partDef } from '../data/parts';
+import { advanceNpcKnockouts, isKnockedOut } from './defeat';
+import { downedHere } from './locations';
+import { takeFromTruck } from './salvage';
+import { findSpot, goodsCount, gridOf, isMounted, MOUNT_CELLS } from './grid';
 import { aimAt } from './parley';
 import { addState, stateOf } from './states';
 import { topGoal } from './npc-activities';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
-import type { Vehicle, World } from './types';
+import type { GridItem, Vehicle, World } from './types';
 import { endTurn } from './world';
 
 // A raider with a machine gun sees a stranded player who carries goods. It always picks the fight.
@@ -226,7 +232,7 @@ describe('surrender between NPCs', () => {
 });
 
 describe('the player demands a beaten NPC give up', () => {
-  const DEMAND = 'Your truck is finished. Dump your cargo and your best parts, and drive off alive.';
+  const DEMAND = 'Your truck is finished. Stand down and let me strip it, and you live.';
 
   // A trader with cargo and spare mounted parts, feuding with the player within sight.
   function beaten(): { w: World; npc: Vehicle } {
@@ -254,23 +260,63 @@ describe('the player demands a beaten NPC give up', () => {
     expect(asks(callVehicle(healthy.w, healthy.npc.id))).toBe(false);
   });
 
-  it('accepting drops the cargo and the best parts, and makes peace', () => {
+  // Accepts the demand and returns the world and the NPC after it.
+  function accepted(start: World, npc: Vehicle): { w: World; after: Vehicle } {
     forceOption('surrenderOffered', 'accept');
-    const { w: start, npc } = beaten();
-    const before = mountedParts(npc).length;
     let w = pick(callVehicle(start, npc.id), DEMAND);
     w = pick(w, 'Your call. Last chance.');
-    w = pick(w, 'Go.');
-    const after = npcOf(w, npc);
-    expect(hasCargo(after)).toBe(false);
-    expect(w.salvage.some((s) => Math.hypot(s.pos.x - after.pos.x, s.pos.y - after.pos.y) < 10)).toBe(true);
-    expect(mountedParts(after).length).toBe(before - RULES.surrenderParts);
-    expect(corePart(after, 'cab')).toBeDefined();
+    w = pick(w, 'Sit tight.');
+    return { w, after: npcOf(w, npc) };
+  }
+
+  it('accepting leaves the truck lying with all its gear, and makes peace', () => {
+    const { w: start, npc } = beaten();
+    addState(start, 'combat', npc.id, start.player.vehicleId, { kind: 'none' });
+    const items = npc.items.length;
+    const cab = corePart(npc, 'cab').hp;
+    const salvage = start.salvage.length;
+    const { w, after } = accepted(start, npc);
+    expect(isKnockedOut(after)).toBe(true);
+    expect(after.items.length).toBe(items);
+    expect(corePart(after, 'cab').hp).toBe(cab);
+    expect(w.salvage.length).toBe(salvage);
     expect(isHostile(w, after, playerVehicle(w))).toBe(false);
     expect(isHostile(w, playerVehicle(w), after)).toBe(false);
-    expect(stateOf(w, 'feud', npc.id, w.player.vehicleId)).toBeNull();
-    expect(stateOf(w, 'feud', w.player.vehicleId, npc.id)).toBeNull();
+    for (const [a, b] of [[npc.id, w.player.vehicleId], [w.player.vehicleId, npc.id]]) {
+      expect(stateOf(w, 'feud', a, b)).toBeNull();
+      expect(stateOf(w, 'combat', a, b)).toBeNull();
+    }
+    expect(stateOf(w, 'revenge', npc.id, w.player.vehicleId)).toBeNull();
     expect(practiceOf(w, 'deal')).toHaveLength(1);
+    expect(w.player.call).toBeNull();
+  });
+
+  it('a parked player strips the truck that gave up, goods at once and parts by refit', () => {
+    const { w: start, npc } = beaten();
+    const me = playerVehicle(start);
+    npc.pos = { x: me.pos.x + chassisDef(me.chassisId).radius + chassisDef(npc.chassisId).radius + 0.2, y: me.pos.y };
+    me.speed = 0;
+    const { w, after } = accepted(start, npc);
+    expect(downedHere(w)?.id).toBe(npc.id);
+    const probe = (from: World, item: GridItem) => {
+      const mine = playerVehicle(from);
+      const avoid = item.kind === 'part' ? MOUNT_CELLS[partDef(item.part.defId).kind] : null;
+      return findSpot(gridOf(mine), mine.items, { ...item, id: 'probe' }, null, avoid)!;
+    };
+    const gun = after.items.find((it) => it.kind === 'part' && it.part.defId === 'mg' && isMounted(npc.chassisId, it))!;
+    const refit = takeFromTruck(w, after.id, gun.id, probe(w, gun));
+    const scrap = after.items.find((it) => it.kind === 'good')!;
+    const before = goodsCount(playerVehicle(w)).scrap ?? 0;
+    const looted = takeFromTruck(w, after.id, scrap.id, probe(w, scrap));
+    expect(goodsCount(playerVehicle(looted)).scrap ?? 0).toBeGreaterThan(before);
+    expect(playerVehicle(refit).job?.kind).toBe('refit');
+  });
+
+  it('the driver comes to and retreats like a knocked-out one', () => {
+    const { w: start, npc } = beaten();
+    let { w } = accepted(start, npc);
+    for (let i = 0; i < RULES.knockoutMaxTurns; i++) advanceNpcKnockouts(w);
+    expect(npcOf(w, npc).defeat?.phase).toBe('retreat');
   });
 
   it('refusing keeps the fight and the demand is not offered again', () => {

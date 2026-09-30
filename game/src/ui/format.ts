@@ -8,7 +8,7 @@ import { PERK_LEVELS, SKILL_INFO } from '../data/skills';
 import { TERRAIN } from '../data/terrain';
 import { TIME } from '../data/time';
 import { playerVehicle, vehicleById } from '../sim/damage';
-import { isKnockedOut } from '../sim/defeat';
+import { gaveUp, isKnockedOut } from '../sim/defeat';
 import type { Work, WorkLeft } from '../sim/states';
 import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
@@ -105,7 +105,7 @@ function partName(world: World, vehicleId: string, partId: string): string {
 // driver pursues no goal.
 export function formatNpcActivity(world: World, vehicle: Vehicle): string | null {
   if (!vehicle.brain || !playerSees(world, vehicle.pos)) return null;
-  if (isKnockedOut(vehicle)) return 'Knocked out';
+  if (isKnockedOut(vehicle)) return gaveUp(vehicle) ? 'Gave up' : 'Knocked out';
   const activity = topGoal(vehicle);
   if (!activity) return null;
   return activity.reason.charAt(0).toUpperCase() + activity.reason.slice(1);

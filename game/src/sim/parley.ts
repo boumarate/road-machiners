@@ -4,7 +4,7 @@
 
 import { SPAWN } from '../data/npcs';
 import { isHostile } from './combat';
-import { isKnockedOut } from './defeat';
+import { isKnockedOut, standDown } from './defeat';
 import { RULES } from '../data/rules';
 import { playerVehicle, vehicleById } from './damage';
 import { partSellPrice } from './economy';
@@ -73,6 +73,20 @@ export function giveUpTo(world: World, loser: Vehicle, winner: Vehicle): void {
   makePeace(world, loser, winner);
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');
+}
+
+// A beaten NPC gives up to the player where it stands. It lies as if knocked out, so the player strips its truck on the
+// loot grid, and both sides make peace. Combat states end at once, so a job can start this turn.
+export function standDownTo(world: World, loser: Vehicle, winner: Vehicle): void {
+  standDown(world, loser, winner.id);
+  makePeace(world, loser, winner);
+  for (const [a, b] of [[loser, winner], [winner, loser]]) {
+    const fight = stateOf(world, 'combat', a.id, b.id);
+    if (fight) endState(world, fight, 'broken');
+  }
+  const grudge = stateOf(world, 'revenge', winner.id, loser.id);
+  if (grudge) endState(world, grudge, 'fulfilled');
+  creditYield(world, loser, winner);
 }
 
 // With Bounty talk, an NPC that gives up to the player counts for a bounty on its template.
