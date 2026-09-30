@@ -35,6 +35,7 @@ import { applyWear } from './wear';
 import { advanceDust } from './detect';
 import { advanceJobs, startAutoRepair } from './jobs';
 import { advanceEngineHeat } from './engine-heat';
+import { nearestPad } from './sites';
 import { clamp, dist, type Vec } from './vec';
 
 // The world seed and the random streams it starts.
@@ -45,7 +46,7 @@ export function seedStreams(seed: number): Pick<World, 'seed' | 'rngState' | 'ma
 
 // A new game on the baked map. The map gives terrain and props; the world seed drives all other randomness.
 // `populate` false leaves the map with no NPCs and no spawn draws, for tools that place their own trucks.
-export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = true): World {
+export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = true, start: { pos: Vec; heading: number } = startPose()): World {
   if (map.terrain.size !== REGION.size)
     throw new Error(`Map size ${map.terrain.size} does not match region size ${REGION.size}`);
   const world: World = {
@@ -112,7 +113,6 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     states: [],
   };
   world.obstacles = generateObstacles(world, map);
-  const start = startPose();
   const truck = makeVehicle(world, {
     name: kit.name,
     faction: "player",
@@ -165,6 +165,14 @@ export function startPose(): { pos: Vec; heading: number } {
     };
   }
   throw new Error(`Player start lies ${distance} tiles along road ${road}, past its end`);
+}
+
+// The pad of the town nearest the new-game start, facing away from the town: where a carried-over save parks.
+export function townStart(): { pos: Vec; heading: number } {
+  const from = startPose().pos;
+  const town = [...REGION.towns].sort((a, b) => dist(from, a.pos) - dist(from, b.pos))[0];
+  const pos = nearestPad(town, from);
+  return { pos, heading: Math.atan2(pos.y - town.pos.y, pos.x - town.pos.x) };
 }
 
 export function cloneWorld(world: World): World {

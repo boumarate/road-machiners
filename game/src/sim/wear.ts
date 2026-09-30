@@ -158,6 +158,12 @@ export function restorePart(part: PartInstance, hp: number): void {
   part.hp = next;
 }
 
+// Sets HP for a part carried over from an old save, within 0 to max HP. A working part keeps at least 1 HP.
+export function carryHp(part: PartInstance, hp: number): void {
+  const floor = isJunk(part) ? 0 : 1;
+  part.hp = Math.min(maxHp(part), Math.max(floor, hp));
+}
+
 // A junk part goes back to the last wear step at full HP, once per part. The Rebuild perk's town garage work.
 export function rebuildJunk(part: PartInstance): void {
   const name = partDef(part.defId).name;
