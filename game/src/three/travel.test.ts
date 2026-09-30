@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { RULES } from "../data/rules";
-import { buildDrive, freeDrive, initPhysics, type Drive } from "../phys/drive";
+import { buildDrive, freeDrive, initPhysics, TURN_STEPS, type Drive } from "../phys/drive";
+import { PHYSICS } from "../data/physics";
 import { physicsMove } from "../phys/turn";
 import { emptyWorld } from "../sim/testkit";
 import { dist } from "../sim/vec";
@@ -287,6 +288,25 @@ describe("rope frames", () => {
 
     expect(frames[me.id]?.length).toBeGreaterThan(0);
     expect(frames[tower.id]).toBeUndefined();
+  });
+});
+
+describe("rope frames for a truck that jumped", () => {
+  it("stands a truck let off the rope with no trail at its new pose", () => {
+    const before = makeSafeWorld();
+    const me = playerVehicle(before);
+    const tower = { ...me, id: "tower", pos: { x: me.pos.x + 3, y: me.pos.y } };
+    before.vehicles.push(tower);
+    addState(before, "tow", tower.id, me.id, { kind: "tow", site: "bowl", fee: 0, waived: 0, hitched: true });
+    const after = structuredClone(before);
+    after.states = [];
+    playerVehicle(after).trail = [];
+    const frames: Parameters<typeof addRopeFrames>[2] = {};
+
+    addRopeFrames(before, after, frames);
+
+    expect(frames[me.id]).toHaveLength(TURN_STEPS);
+    expect(frames[me.id]?.[0].pos.x).toBeCloseTo(me.pos.x * PHYSICS.metersPerTile, 5);
   });
 });
 

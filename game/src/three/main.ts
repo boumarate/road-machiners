@@ -22,7 +22,7 @@ import { uiRoot } from '../ui/dom';
 import { chooseSaveFate, showCarryReport } from '../ui/save-screen';
 import { mountPerfPanel } from '../ui/perf-panel';
 import { SoundSettings } from '../ui/sound';
-import { installCrashScreen, keepRunningOnErrors } from './crash';
+import { installCrashScreen, keepRunningOnErrors, onEveryError } from './crash';
 import { Game } from './game';
 import { clearGame, loadWorld, SAVE_KEY, SaveError, storedSave, writeSave } from './save';
 import { newestSlot, takeBootRequest, type SlotId } from './save-slots';
@@ -103,6 +103,7 @@ const game = new Game(world, element('game'), overlay, new SoundPlayer(mixer, ba
 const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game.follow.keyPan.setSpeed(factor) };
 const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
 keepRunningOnErrors((text) => debugConsole.error(text));
+onEveryError(() => game.holdSaves());
 performance.mark('roam:ready');
 setTimeout(() => warmAfterBoot(routeRadii(game.state)));
 if (import.meta.env.DEV) {

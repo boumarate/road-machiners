@@ -5,7 +5,7 @@ import { emptyWorld } from '../sim/testkit';
 import { moveItem } from '../sim/inventory';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
-import { clearGame, clearSlot, hasSave, loadWorld, packExplored, SaveError, unpackExplored, saveKey, saveInTown, isDayStart, saveOf, saveWorld, writeSave } from './save';
+import { clearGame, clearSlot, hasSave, loadWorld, packExplored, SaveError, unpackExplored, saveKey, saveInTown, isDayStart, saveOf, saveWorld, SaveHold, writeSave } from './save';
 import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
 import { TEST_MAP } from '../test/map';
@@ -368,5 +368,38 @@ describe('explored bitset', () => {
 
   it('refuses to pack a value other than 0 or 1', () => {
     expect(() => packExplored(Uint8Array.from([0, 2]))).toThrow(/not 0 or 1/);
+  });
+});
+
+describe('SaveHold', () => {
+  it('starts free', () => {
+    expect(new SaveHold().held).toBe(false);
+  });
+
+  it('holds after an error until a turn that began after it finishes clean', () => {
+    const hold = new SaveHold();
+    hold.noteError();
+    hold.finishTurn();
+    expect(hold.held).toBe(true);
+    hold.beginTurn();
+    hold.finishTurn();
+    expect(hold.held).toBe(false);
+  });
+
+  it('stays held when an error happens during the turn', () => {
+    const hold = new SaveHold();
+    hold.noteError();
+    hold.beginTurn();
+    hold.noteError();
+    hold.finishTurn();
+    expect(hold.held).toBe(true);
+  });
+
+  it('holds again on an error after a clean turn', () => {
+    const hold = new SaveHold();
+    hold.beginTurn();
+    hold.finishTurn();
+    hold.noteError();
+    expect(hold.held).toBe(true);
   });
 });
