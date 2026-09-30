@@ -31,7 +31,7 @@ import { repairPlan, type RepairPlan } from "../sim/repair";
 import { townAt } from "../sim/sites";
 import { downedHere, takeAllLoot, takeLoot, takeStores } from "../sim/locations";
 import { hasStores, takeFromTruck } from "../sim/salvage";
-import { isKnockedOut } from "../sim/defeat";
+import { gaveUp, isKnockedOut } from "../sim/defeat";
 import { REGION } from "../data/region";
 import type {
   GridItem,
@@ -658,7 +658,7 @@ export class InventoryView {
     return el(
       "div",
       { class: "inv-truck inv-target" },
-      el("h3", {}, `${npcName(target)}, knocked out`),
+      el("h3", {}, `${npcName(target)}, ${gaveUp(target) ? "gave up" : "knocked out"}`),
       el("div", { class: "truck-shell" }, el("div", { class: "truck-nose", "aria-hidden": "true" }), grid),
       el("div", { class: "dim" }, "Drag items onto your grid."),
     );

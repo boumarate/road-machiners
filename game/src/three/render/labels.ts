@@ -105,7 +105,7 @@ function markerNode(mark: VehicleMark): HTMLElement {
   return el('div', { class: 'vehicle-marker' },
     mark.weapons.length > 0 ? el('div', { class: 'marker-weapons' }, ...mark.weapons.map(weaponChip)) : null,
     mark.radio ? el('div', { class: 'marker-radio' }, '[T] Radio') : null,
-    mark.out ? el('div', { class: 'marker-out' }, 'Knocked out') : null,
+    mark.out ? el('div', { class: 'marker-out' }, mark.gaveUp ? 'Gave up' : 'Knocked out') : null,
     mark.job ? jobChip(mark.job) : null,
   );
 }

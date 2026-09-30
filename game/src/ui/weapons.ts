@@ -1,7 +1,7 @@
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { fireBlock, gunOf, hitOdds, type FireBlock } from "../sim/combat";
-import { isKnockedOut } from "../sim/defeat";
+import { gaveUp, isKnockedOut } from "../sim/defeat";
 import { findPart, playerVehicle } from "../sim/damage";
 import { vehicleStats, type MountedWeapon } from "../sim/stats";
 import type { Aim, Vehicle, World } from "../sim/types";
@@ -34,7 +34,7 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
 export type WeaponMark = { slot: number; look: "mg" | "cannon"; status: string; ready: boolean };
 // Timed work a seen NPC does, with its progress from 0 to 1.
 export type JobMark = { label: string; progress: number };
-export type VehicleMark = { weapons: WeaponMark[]; radio: boolean; job: JobMark | null; out: boolean };
+export type VehicleMark = { weapons: WeaponMark[]; radio: boolean; job: JobMark | null; out: boolean; gaveUp: boolean };
 
 // Markers above vehicles, by vehicle id: each player weapon aimed at the vehicle with its status, the
 // radio key on the hovered truck when it can take a call, the job of each seen NPC, and each seen knocked-out NPC.
@@ -43,7 +43,7 @@ export function vehicleMarks(w: World, hovered: string | null): Map<string, Vehi
   const markOf = (id: string) => {
     const found = marks.get(id);
     if (found) return found;
-    const made: VehicleMark = { weapons: [], radio: false, job: null, out: false };
+    const made: VehicleMark = { weapons: [], radio: false, job: null, out: false, gaveUp: false };
     marks.set(id, made);
     return made;
   };
@@ -56,7 +56,10 @@ export function vehicleMarks(w: World, hovered: string | null): Map<string, Vehi
   for (const v of w.vehicles.filter((x) => x.brain && playerSees(w, x.pos))) {
     const job = seenNpcJob(w, v);
     if (job) markOf(v.id).job = job;
-    if (isKnockedOut(v)) markOf(v.id).out = true;
+    if (isKnockedOut(v)) {
+      markOf(v.id).out = true;
+      markOf(v.id).gaveUp = gaveUp(v);
+    }
   }
   return marks;
 }
