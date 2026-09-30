@@ -25,7 +25,9 @@ import { canUseSite, locationAt } from '../sim/sites';
 import { shopAt } from '../sim/market';
 import { canUseOasis, downedHere, downedNear, emptySalvageNear, salvageHere, salvageNear } from '../sim/locations';
 import { playerCanAct } from '../sim/world';
-import { inCombat, isBusy } from '../sim/jobs';
+import { combatTurnsLeft } from '../sim/combat';
+import { isBusy } from '../sim/jobs';
+import { npcName } from '../sim/spawn';
 
 // The shop in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
 function shopNear(world: World): { id: string; name: string } | null {
@@ -44,7 +46,7 @@ export function getContextAction(world: World, playing: boolean): ContextAction 
 
 function getTradeAction(world: World): ContextAction | null {
   const partner = tradePartner(world);
-  return partner && { label: `Trade with ${partner.name}`, ready: tradeReady(world) !== null };
+  return partner && { label: `Trade with ${npcName(partner)}`, ready: tradeReady(world) !== null };
 }
 
 function getPlaceAction(world: World): ContextAction | null {
@@ -52,7 +54,7 @@ function getPlaceAction(world: World): ContextAction | null {
   if (shop) return { label: `Enter ${shop.name}`, ready: shopAt(world) === shop.id };
   // A knocked-out truck stays open to looting while a removal from it runs.
   const downed = downedNear(world);
-  if (downed) return { label: `Loot ${downed.name}`, ready: downedHere(world) !== null };
+  if (downed) return { label: `Loot ${npcName(downed)}`, ready: downedHere(world) !== null };
   if (isBusy(playerVehicle(world))) return null;
   return getSiteAction(world);
 }
@@ -69,11 +71,11 @@ function getSiteAction(world: World): ContextAction | null {
   return getStockAction(world, stock);
 }
 
-// A search needs no hostile in sight. Looting a searched stock does not.
+// A search needs no combat. Looting a searched stock does not.
 function getStockAction(world: World, stock: SalvageStock): ContextAction {
   if (world.player.scavenged.includes(stock.id)) return { label: `Loot ${getSalvageName(stock)}`, ready: salvageHere(world) !== null };
-  const combat = inCombat(world, playerVehicle(world));
-  return { label: `Search ${getSalvageName(stock)}`, ready: !combat && salvageHere(world) !== null, combat };
+  const combat = combatTurnsLeft(world, playerVehicle(world)) ?? undefined;
+  return { label: `Search ${getSalvageName(stock)}`, ready: combat === undefined && salvageHere(world) !== null, combat };
 }
 
 function getSalvageName(stock: SalvageStock): string {

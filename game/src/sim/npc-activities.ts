@@ -9,12 +9,12 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
 import type { PartHit } from './armor';
-import { callLawmen, isHostile, shotDamage, startFeuds } from './combat';
+import { callLawmen, inCombat, isHostile, shotDamage, startFeuds } from './combat';
 import { affordableBuyCount, getTradePrice, sellVehicleCargo, serviceAtCamp, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
 import { addGoods, cargoRoom } from './inventory';
-import { cancelJob, inCombat } from './jobs';
+import { cancelJob } from './jobs';
 import { isFree } from './spawn';
 import { route } from './path';
 import {
@@ -207,10 +207,12 @@ function fuelSense(world: World, vehicle: Vehicle): number {
   return 1 + NPC_UPKEEP.fuelSense * (2 * roll - 1);
 }
 
-function isLowOnFuel(world: World, vehicle: Vehicle, profile: NpcProfile): boolean {
-  const reserve = NPC_UPKEEP.fuelReserve * profile.fuelMargin * fuelSense(world, vehicle);
-  return getResources(world, vehicle).fuel <= fuelToPump(world, vehicle, profile) * reserve;
+// The fuel the driver wants in hand for the way to its nearest pump.
+export function fuelReserveFor(world: World, vehicle: Vehicle, profile: NpcProfile = npcProfile(vehicle)): number {
+  return fuelToPump(world, vehicle, profile) * NPC_UPKEEP.fuelReserve * profile.fuelMargin * fuelSense(world, vehicle);
 }
+
+const isLowOnFuel = (world: World, vehicle: Vehicle, profile: NpcProfile): boolean => getResources(world, vehicle).fuel <= fuelReserveFor(world, vehicle, profile);
 
 // Low fuel, low supplies or a damaged cab or part needs service. Null when none is needed.
 function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): ServiceNeed | null {
@@ -481,19 +483,14 @@ const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
   follow: (world, vehicle, goal) => (follows(world, vehicle, goal.targetId!) ? null : 'no longer follows its leader'),
 };
 
-// Goals that park the truck or tie it to another truck. A driver under attack never holds one.
+// Goals that park the truck or tie it to another truck. A driver in combat never holds one.
 const EXPOSED: readonly NpcActivity['kind'][] = ['repair', 'patch', 'meet', 'tow', 'loot'];
-// Deals a driver under attack calls off.
+// Deals a driver in combat calls off.
 const BROKEN_OFF: readonly NpcState['kind'][] = ['patch', 'trade', 'aid'];
 
-// A hostile in sight shot at the driver, a nearby faction mate or the truck it escorts.
-export function underAttack(vehicle: Vehicle): boolean {
-  return Object.keys(vehicle.brain!.attackers).length > 0;
-}
-
-// A driver under attack drops a held tow and calls off its patch, trade and aid deals. Its exposed goals then pop.
+// A driver in combat drops a held tow and calls off its patch, trade and aid deals. Its exposed goals then pop.
 function breakOffDeals(world: World, vehicle: Vehicle): void {
-  if (!underAttack(vehicle)) return;
+  if (!inCombat(world, vehicle)) return;
   const tow = heldTow(world, vehicle);
   if (tow) dropTow(world, tow, 'danger');
   for (const s of world.states.filter((x) => BROKEN_OFF.includes(x.kind) && (x.holder === vehicle.id || x.other === vehicle.id))) endState(world, s, 'broken');
@@ -506,7 +503,7 @@ export function goalHolds(world: World, vehicle: Vehicle, goal: NpcActivity): bo
 }
 
 function invalidReason(world: World, vehicle: Vehicle, goal: NpcActivity, contacts: Contact[]): string | null {
-  if (EXPOSED.includes(goal.kind) && underAttack(vehicle)) return 'under attack';
+  if (EXPOSED.includes(goal.kind) && inCombat(world, vehicle)) return 'in combat';
   const check = GOAL_CHECKS[goal.kind];
   return check ? check(world, vehicle, goal, contacts) : null;
 }
@@ -728,10 +725,10 @@ function onPreySeen(world: World, vehicle: Vehicle): void {
 }
 
 // One roll per stranded truck the driver could tow, nearest first. A driver in a fight or on the run never starts
-// a tow. It decides once the danger goal pops. A driver under attack starts none either. A player in combat gets
+// a tow. It decides once the danger goal pops. A driver in combat starts none either. A player in combat gets
 // no new tow until the fight ends.
 function onStrandedSeen(world: World, vehicle: Vehicle): void {
-  if (inDanger(vehicle) || underAttack(vehicle)) return;
+  if (inDanger(vehicle) || inCombat(world, vehicle)) return;
   const clients = world.vehicles
     .filter((client) => client.id !== world.player.vehicleId || !inCombat(world, client))
     .map((client) => ({ client, at: strandedAt(world, vehicle, client) }))
@@ -742,10 +739,10 @@ function onStrandedSeen(world: World, vehicle: Vehicle): void {
 }
 
 // One roll per wreck or pile in sight while the driver travels to a long-term goal, nearest first. Sites are goals
-// of their own. Loot pushes a loot goal, and popping it fires the resume roll. A driver under attack loots nothing.
+// of their own. Loot pushes a loot goal, and popping it fires the resume roll. A driver in combat loots nothing.
 function onSalvageSeen(world: World, vehicle: Vehicle): void {
   const top = topGoal(vehicle);
-  if (underAttack(vehicle) || !top || top.phase !== 'travel' || INTERRUPTIONS.includes(top.kind)) return;
+  if (inCombat(world, vehicle) || !top || top.phase !== 'travel' || INTERRUPTIONS.includes(top.kind)) return;
   const stocks = visibleSalvage(world, vehicle).filter((stock) => !isSiteStock(stock));
   const passed = [...stocks, ...visibleDowned(world, vehicle)].filter((s) => s.id !== top.targetId).sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   const loot = passed.find((s) => react(world, vehicle, 'salvageSeen', s.id) === 'loot');
@@ -947,12 +944,12 @@ function needsUrgentSupplies(world: World, vehicle: Vehicle, profile: NpcProfile
   return resources.fuel > 0 && isLowOnFuel(world, vehicle, profile);
 }
 
-// A repair goal in the stack holds, in place once the tank is empty. A foe in sight keeps a repair from starting, so
-// a driver not already patching gives the goal up then. A new one starts at the recover condition, but not with a foe
-// in sight, under attack or while a danger goal is on top. True while the driver repairs.
+// A repair goal in the stack holds, in place once the tank is empty. Combat keeps a repair from starting, so
+// a driver not already patching gives the goal up then. A new one starts at the recover condition, but not in combat
+// or while a danger goal is on top. True while the driver repairs.
 function keepRepairing(world: World, vehicle: Vehicle): boolean {
   if (holdRepair(world, vehicle)) return true;
-  if (inCombat(world, vehicle) || inDanger(vehicle) || underAttack(vehicle)) return false;
+  if (inCombat(world, vehicle) || inDanger(vehicle)) return false;
   const repair = chooseNpcRepair(world, vehicle, NPC_BEHAVIOR.recoverCondition);
   if (repair) pushGoal(world, vehicle, repair);
   return repair !== null;
@@ -963,7 +960,7 @@ function holdRepair(world: World, vehicle: Vehicle): boolean {
   const current = goalsOf(vehicle).find((g) => g.kind === 'repair');
   if (!current) return false;
   if (inCombat(world, vehicle) && vehicle.job?.kind !== 'repair') {
-    dropGoal(world, vehicle, current, 'a foe in sight stops the repair');
+    dropGoal(world, vehicle, current, 'combat stops the repair');
     return false;
   }
   continueNpcRepair(world, vehicle, current);
@@ -1171,8 +1168,8 @@ function searchStock(world: World, vehicle: Vehicle, stock: SalvageStock): void 
     return;
   }
   if (vehicle.job) return;
-  // No search starts with a foe in sight, so the driver gives the salvage up rather than park beside it for good.
-  if (inCombat(world, vehicle)) finishGoal(world, vehicle, 'a foe in sight stops the search');
+  // No search starts in combat, so the driver gives the salvage up rather than park beside it for good.
+  if (inCombat(world, vehicle)) finishGoal(world, vehicle, 'combat stops the search');
   else beginSearch(world, vehicle, stock.id);
 }
 

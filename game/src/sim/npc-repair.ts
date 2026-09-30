@@ -4,7 +4,8 @@
 import { NPC_UPKEEP } from '../data/npcs';
 import { isJunk, maxHp } from './wear';
 import { mountedParts } from './grid';
-import { inCombat, startJob } from './jobs';
+import { inCombat } from './combat';
+import { startJob } from './jobs';
 import { withinReach } from './npc-activities';
 import { straightClear } from './path';
 import { repairPlan } from './repair';

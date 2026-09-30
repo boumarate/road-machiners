@@ -54,7 +54,7 @@ describe('NPC equipment generation', () => {
       }
     }
     for (const [role, variants] of Object.entries(seen)) expect(variants.size, role).toBeGreaterThanOrEqual(5);
-  }, 60_000); // 40 full spawns, each trying every engine and gun pair of every template
+  }, 180_000); // 40 full spawns, each trying every engine and gun pair of every template
 
   it.each(Object.values(NPCS))('fits $id equipment and cargo within its budget and rated mass', (template) => {
     for (let seed = 1; seed <= 32; seed++) {

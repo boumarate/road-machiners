@@ -20,13 +20,12 @@ import { chassisDef } from '../data/chassis';
 import { ECONOMY } from '../data/goods';
 import { NPC_BEHAVIOR, NPCS } from '../data/npcs';
 import { BEACON, TOW } from '../data/tow';
-import { isHostile } from './combat';
+import { inCombat, inCombatWithOther, isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
 import { isDefeated, isKnockedOut } from './defeat';
 import { contactsOf, hearsBeacon } from './detect';
-import { inCombat } from './jobs';
 import { route, routeLength } from './path';
-import { busyWithFight, decide, getKnownSite, getUpkeepReserve, isWeak, npcProfile } from './npc-decisions';
+import { decide, getKnownSite, getUpkeepReserve, isWeak, npcProfile } from './npc-decisions';
 import { placeBase, popGoal } from './npc-activities';
 import { skillEffect } from './progress';
 import { canUseSite, nearestPad, type Site } from './sites';
@@ -227,9 +226,10 @@ export function towGoal(world: World, vehicle: Vehicle): NpcActivity {
 }
 
 // Where this NPC puts the client when it could tow it: in sight, or for the player also on the beacon. Otherwise
-// null.
+// null. An NPC client in combat with another truck is not towed. A player in combat keeps its tower, which waits
+// for the fight to end. See readyToTow().
 export function strandedAt(world: World, vehicle: Vehicle, client: Vehicle): Vec | null {
-  if (busyWithFight(client, vehicle.id) || !canTow(world, vehicle, client)) return null;
+  if ((!isPlayer(world, client) && inCombatWithOther(world, client, vehicle.id)) || !canTow(world, vehicle, client)) return null;
   if (canVehicleSee(world, vehicle, client.pos)) return client.pos;
   return isPlayer(world, client) ? beaconCenter(world, vehicle, client) : null;
 }
@@ -556,7 +556,7 @@ export function isFreeMerc(world: World, v: Vehicle): boolean {
 
 // Free mercs the client sees and is at peace with, nearest first.
 export function mercsInSight(world: World, client: Vehicle): Vehicle[] {
-  const mercs = world.vehicles.filter((v) => v.id !== client.id && isFreeMerc(world, v) && !busyWithFight(v, client.id) && !isHostile(world, client, v) && canVehicleSee(world, client, v.pos));
+  const mercs = world.vehicles.filter((v) => v.id !== client.id && isFreeMerc(world, v) && !inCombatWithOther(world, v, client.id) && !isHostile(world, client, v) && canVehicleSee(world, client, v.pos));
   return mercs.sort((a, b) => dist(client.pos, a.pos) - dist(client.pos, b.pos));
 }
 
