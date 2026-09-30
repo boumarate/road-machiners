@@ -355,12 +355,16 @@ function towDroppedText(world: World, e: Extract<GameEvent, { t: 'towDropped' }>
   return { text: e.reason === 'gone' ? `${by} is gone. ${client} is off the rope.` : `${by} drops the tow of ${client}.`, cls: 'dim' };
 }
 
+const PLAYER_TOW_DROPPED: Record<Extract<GameEvent, { t: 'towDropped' }>['reason'], (by: string) => string> = {
+  refused: (by) => `You turn down the tow from ${by}.`,
+  unhitched: (by) => `You unhitch from ${by}.`,
+  danger: (by) => `${by} drops the tow. There is danger.`,
+  stranded: (by) => `${by} can no longer drive. The tow is off.`,
+  gone: (by) => `${by} is gone. The tow is off.`,
+};
+
 function playerTowDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped' }>['reason']): LogLine {
-  const text = reason === 'refused' ? `You turn down the tow from ${by}.`
-    : reason === 'unhitched' ? `You unhitch from ${by}.`
-    : reason === 'danger' ? `${by} drops the tow. There is danger.`
-    : `${by} is gone. The tow is off.`;
-  return { text, cls: reason === 'refused' || reason === 'unhitched' ? 'dim' : 'bad' };
+  return { text: PLAYER_TOW_DROPPED[reason](by), cls: reason === 'refused' || reason === 'unhitched' ? 'dim' : 'bad' };
 }
 
 // Whether the player's truck is one of the vehicles, or the player sees or detects one of them.

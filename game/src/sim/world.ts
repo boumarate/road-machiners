@@ -22,7 +22,7 @@ import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
 import { timed } from '../perf';
 import { noteHurt, resolveNpcActivities } from './npc-activities';
 import { advanceStates } from './states';
-import { checkBeacon, followTower, isTowed, playerTow } from './tow';
+import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from './tow';
 import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
@@ -264,6 +264,7 @@ export function endTurn(
     leakFuel(w);
     fitAllStores(w);
     applyGodMode(w);
+    dropStrandedTowers(w);
     resolveDestroyed(w);
     advanceContracts(w);
     advancePatches(w);

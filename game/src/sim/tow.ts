@@ -357,6 +357,15 @@ export function dropTow(world: World, tow: NpcState, reason: DropReason): void {
   world.events.push({ t: 'towDropped', by: tow.holder, client: tow.other, reason });
 }
 
+// A tower that cannot drive any more, with a wrecked wheel or an empty tank, lets its hitched truck go. A tower that
+// left the world is not here: ending its state logs that.
+export function dropStrandedTowers(world: World): void {
+  for (const tow of hitchedTows(world)) {
+    const tower = world.vehicles.find((v) => v.id === tow.holder);
+    if (tower && isStranded(world, tower)) dropTow(world, tow, 'stranded');
+  }
+}
+
 // Places each hitched truck TOW.gap tiles behind its tower along the path both trucks drive: the towed truck's own
 // last pose, then the tower's trail. Each trail pose of the towed truck trails the matching pose of the tower.
 export function followTower(world: World): void {

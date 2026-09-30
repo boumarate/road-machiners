@@ -191,12 +191,21 @@ export class Travel {
     this.turns.prepare(world, drive);
   }
 
+  // Turns on a tow rope chain like waypoint travel: the next turn is prepared during playback and starts with no pause.
+  private onRope(world: World): boolean {
+    return isTowed(world) && this.autoAllowed(world);
+  }
+
+  private wantsTurn(world: World, now: number): boolean {
+    return this.isAdvancing(null, now) || this.onRope(world);
+  }
+
   takeReady(world: World, drive: Drive, now: number): PreparedTurn | null {
     if (world.player.state === "dead") {
       this.pause();
       return null;
     }
-    if (!this.isAdvancing(null, now)) return null;
+    if (!this.wantsTurn(world, now)) return null;
     this.turns.prepare(world, drive);
     const prepared = this.turns.take(world);
     if (!prepared) return null;
@@ -210,7 +219,7 @@ export class Travel {
   }
 
   prepareNext(world: World, playback: Playback | null, now: number): void {
-    if (playback && this.shouldAdvance(now))
+    if (playback && (this.shouldAdvance(now) || this.onRope(world)))
       this.turns.prepare(world, playback.result.next);
   }
 

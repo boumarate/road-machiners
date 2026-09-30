@@ -295,6 +295,18 @@ describe('towing', () => {
   });
 
   it('a tower that is destroyed drops the tow', () => {
+  it('a tower that can no longer drive drops the tow', () => {
+    const s = stranded();
+    let w = acceptTow(offered(s));
+    w = endTurn(w, testDrive);
+    expect(isOnRope(w, w.player.vehicleId)).toBe(true);
+    find(w, s.trader.id).resources!.fuel = 0;
+    w = endTurn(w, testDrive);
+    expect(playerTow(w)).toBeNull();
+    expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, client: w.player.vehicleId, reason: 'stranded' });
+    expect(isOnRope(w, w.player.vehicleId)).toBe(false);
+  });
+
     const s = stranded();
     let w = acceptTow(offered(s));
     w = endTurn(w, testDrive);
