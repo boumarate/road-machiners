@@ -112,6 +112,7 @@ export class InventoryView {
   constructor(
     private host: UiHost,
     private onChange: () => void,
+    private dumpZone: boolean,
   ) {
     window.addEventListener("pointermove", (e) => this.onMove(e));
     window.addEventListener("pointerup", (e) => this.onDrop(e));
@@ -196,11 +197,7 @@ export class InventoryView {
                   { class: "dim" },
                   "Park to install or remove parts.",
                 ),
-          el(
-            "div",
-            { class: "inv-dump", "data-drop": "dump" },
-            "Drop here to dump",
-          ),
+          ...(this.dumpZone ? [el("div", { class: "inv-dump", "data-drop": "dump" }, "Drop here to dump")] : []),
           // Below the lists, so selecting an item never moves the chips a second click aims at.
           this.inspection,
         ),
@@ -912,7 +909,7 @@ export class InventoryScreen {
     this.root.style.display = "none";
     // The truck grid fits its cells to the window height, so a resize lays the screen out again.
     window.addEventListener("resize", () => this.render());
-    this.view = new InventoryView(host, () => this.render());
+    this.view = new InventoryView(host, () => this.render(), true);
   }
 
   isOpen(): boolean {
