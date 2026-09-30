@@ -4,6 +4,7 @@ import { baseGrid, isMounted, placementError } from '../sim/grid';
 import type { Vehicle } from '../sim/types';
 import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
+import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { MIGRATIONS } from './save-migrations';
 
 describe('save migrations', () => {
@@ -26,7 +27,7 @@ describe('save migration 1 to 2', () => {
 
   it('puts every core of every chassis on its new cells with its new part, keeping ids, hp and wear', () => {
     for (const v of all.filter((it) => it.id.startsWith('c-') || it.id === 'gone-carrier')) {
-      for (const c of CHASSIS[v.chassisId].core) {
+      for (const c of CORES_2_2[v.chassisId].filter((core) => !core.defId.startsWith('wheel'))) {
         const item = v.items.find((it) => it.kind === 'part' && it.x === c.x && it.y === c.y && it.part.defId === c.defId);
         expect(item, `${v.id} ${c.defId}`).toBeDefined();
         expect(item?.rot, `${v.id} ${c.defId}`).toBe(c.rot ?? 0);
@@ -71,6 +72,15 @@ describe('save migration 1 to 2', () => {
     expect(next.removed.length).toBe(FORMAT_2_1.removed.length);
   });
 
+  // Delete this test at the next format step: it is the only guard that the step's copies match live data while 2.2 is current.
+  it('holds copies of the layouts and cores that equal the live chassis data', () => {
+    for (const c of Object.values(CHASSIS).filter((it) => LAYOUTS_2_2[it.id])) {
+      expect(LAYOUTS_2_2[c.id], c.id).toEqual(c.layout);
+      expect(CORES_2_2[c.id], c.id).toEqual(c.core.filter((k) => !k.defId.startsWith('wheel')).map((k) => ({ defId: k.defId, x: k.x, y: k.y, rot: k.rot ?? 0 })));
+    }
+  });
+
+  // Guns, racks and cannons may stand on any free cell, so only the other parts must stay mounted.
   it('puts every item of every truck on a free cell, and every non-core part still mounted', () => {
     for (const v of all) {
       const grid = baseGrid(v.chassisId);
