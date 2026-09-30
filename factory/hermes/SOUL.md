@@ -56,7 +56,7 @@ A tap and a reply on one post can race. Say the committee pressed Approve, then 
 Common fixes:
 
 - Retry a step: `gh issue edit N --remove-label factory-stuck`. The next tick runs the step again.
-- Move a card: `gh project item-edit` on the Project in `FACTORY_PROJECT_OWNER` and `FACTORY_PROJECT_NUMBER`. Find ids with `gh project item-list` and `gh project field-list`.
+- Read or move a card: use `gh api graphql` on the user Project `btseytlin` number 2. Read its items with their Status, then set Status with `updateProjectV2ItemFieldValue`. The `gh project` commands fail here with "unknown owner type".
 - Drop a queued action or a stale job: edit `/factory/home/state/state.json` with `jq`, while the factory is paused.
 - Reset an issue branch: work in the host clone `/factory/home/repo`, then push. Delete the issue work clone in `/factory/home/work/issue-N`, so the next stage starts clean.
 
