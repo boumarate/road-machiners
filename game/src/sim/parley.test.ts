@@ -413,9 +413,9 @@ describe('bounty talk', () => {
 describe('pile claims', () => {
   function handover(winnerKind: 'npc' | 'player') {
     const w = quietWorld();
-    const robber = npcAt(w, 'raiders', ['raider'], 36);
+    const robber = npcAt(w, 'scavengers', ['raider'], 36);
     const victim = addVehicle(w, 'scavengers', 'scout', ['mg'], { x: 37, y: 30 });
-    victim.brain = npcBrain('trader', victim.pos, []);
+    victim.brain = npcBrain('trader', victim.pos, ['raider']);
     addGoods(w, victim, 'scrap', 2);
     refreshVision(w);
     if (winnerKind === 'npc') yieldTo(w, victim, robber);
