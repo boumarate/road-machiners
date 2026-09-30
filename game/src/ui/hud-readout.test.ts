@@ -3,7 +3,8 @@ import { chassisDef } from "../data/chassis";
 import { RULES } from "../data/rules";
 import { corePart } from "../sim/grid";
 import { knockOutNpc } from "../sim/defeat";
-import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
+import { STATE_TURNS } from "../data/npcs";
+import { addVehicle, emptyWorld, npcBrain , startCombat } from "../sim/testkit";
 import { maxHealthOf } from "../sim/health";
 import { XP_TO_REACH } from "../data/skills";
 import { addState, towData } from "../sim/states";
@@ -55,21 +56,32 @@ describe('salvage interaction', () => {
     const site = REGION.locations.find((site) => site.id === 'podfield')!;
     const w = emptyWorld({ ...sitePads(site)[0] });
     w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [] }];
-    expect(getContextAction(w, false)).toEqual({ label: `Search ${site.name}`, ready: true, combat: false });
+    expect(getContextAction(w, false)).toEqual({ label: `Search ${site.name}`, ready: true, combat: undefined });
     w.salvage[0].goods.scrap = 0;
     expect(getContextAction(w, false)).toEqual({ label: `${site.name} is picked clean`, ready: false, hint: 'No loot left' });
   });
 });
 
 describe('search in combat', () => {
-  it('blocks a search while a hostile is in sight', () => {
+  function siteScene() {
     const site = REGION.locations.find((site) => site.id === 'podfield')!;
     const w = emptyWorld({ ...sitePads(site)[0] });
     w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [] }];
     const me = playerVehicle(w).pos;
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: me.x + 6, y: me.y });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
-    expect(getContextAction(w, false)).toEqual({ label: `Search ${site.name}`, ready: false, combat: true });
+    return { w, site, raider };
+  }
+
+  it('does not block a search beside a hostile that has not attacked', () => {
+    const { w, site } = siteScene();
+    expect(getContextAction(w, false)).toMatchObject({ label: `Search ${site.name}`, combat: undefined });
+  });
+
+  it('blocks a search in combat and says how many turns are left', () => {
+    const { w, site, raider } = siteScene();
+    startCombat(w, raider, playerVehicle(w));
+    expect(getContextAction(w, false)).toEqual({ label: `Search ${site.name}`, ready: false, combat: STATE_TURNS.combat });
   });
 });
 

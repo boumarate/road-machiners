@@ -6,13 +6,12 @@
 import { ECONOMY } from '../data/goods';
 import { AID } from '../data/npc-behavior';
 import { RULES } from '../data/rules';
-import { inFeud, isHostile } from './combat';
+import { inCombat, inFeud, isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
 import { talkOf } from './dialogue';
 import { isMeeting, supplyRoom, transfer, truckSupplyForSale, type Supply } from './economy';
-import { inCombat } from './jobs';
 import { vehicleValue } from './market';
-import { inDanger, meetGoal, react, underAttack } from './npc-activities';
+import { inDanger, meetGoal, react } from './npc-activities';
 import { bodyCondition } from './npc-decisions';
 import { practice } from './progress';
 import { getResources } from './resources';
@@ -148,9 +147,9 @@ function moveSupply(world: World, giver: Vehicle, receiver: Vehicle, kind: Suppl
 
 // ---- The unprompted offer.
 
-// A driver that takes up the unprompted offer, out of danger and not under attack, may help.
-function mayHelp(npc: Vehicle): boolean {
-  return !inDanger(npc) && !underAttack(npc) && talkOf(npc).topics.includes('aidOffer');
+// A driver that takes up the unprompted offer, out of danger and not in combat, may help.
+function mayHelp(world: World, npc: Vehicle): boolean {
+  return !inDanger(npc) && !inCombat(world, npc) && talkOf(npc).topics.includes('aidOffer');
 }
 
 // A poor player low on fuel or supplies, out of combat.
@@ -160,7 +159,7 @@ function looksNeedy(world: World, me: Vehicle): boolean {
 
 function mayOfferAid(world: World, npc: Vehicle): boolean {
   const me = playerVehicle(world);
-  if (playerAid(world) !== null || !mayHelp(npc)) return false;
+  if (playerAid(world) !== null || !mayHelp(world, npc)) return false;
   return canVehicleSee(world, npc, me.pos) && !isHostile(world, npc, me) && looksNeedy(world, me);
 }
 

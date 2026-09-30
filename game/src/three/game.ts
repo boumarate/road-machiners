@@ -43,7 +43,7 @@ import { timed } from "../perf";
 import { CharacterScreen } from "../ui/character";
 import { HitCard } from "../ui/hitCard";
 import type { UiHost } from "../ui/host";
-import { COMBAT_BLOCKED, Hud } from "../ui/hud";
+import { combatBlocked, Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import { TownScreen, TruckTradeScreen } from "../ui/town";
 import { aimAtPart, HoverHold, toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
@@ -387,11 +387,11 @@ export class Game {
     return shopAt(this.world) ? this.town.open() : this.useSite();
   }
 
-  // A search that a hostile in sight blocks says so in the log.
+  // A search that combat blocks says so in the log, with the turns left.
   private noteCombatBlock(): boolean {
-    if (!getContextAction(this.world, false)?.combat) return false;
-    this.hud.note(this.world, COMBAT_BLOCKED, "bad");
-    return true;
+    const turns = getContextAction(this.world, false)?.combat;
+    if (turns !== undefined) this.hud.note(this.world, combatBlocked(turns), "bad");
+    return turns !== undefined;
   }
 
   private useSite(): void {

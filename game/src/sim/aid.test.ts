@@ -14,7 +14,7 @@ import { thinkNpc, topGoal } from './npc-activities';
 import { bodyCondition, optionWeights } from './npc-decisions';
 import { addState, aidData, stateOf } from './states';
 import { fuelCap, suppliesCap } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls, testDrive , startCombat } from './testkit';
 import type { TraitId } from '../data/npcs';
 import type { GameEvent, Vehicle, World } from './types';
 import { maxHp } from './wear';
@@ -290,7 +290,7 @@ describe('unprompted aid offer', () => {
     const { w, npc } = needyScene();
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 24, y: 30 });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
-    addState(w, 'feud', raider.id, w.player.vehicleId, { kind: 'feud', robbery: false });
+    startCombat(w, raider, w.vehicles[0]);
     onNeedySeen(w, npc);
     expect(playerAid(w)).toBeNull();
   });

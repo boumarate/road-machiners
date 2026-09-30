@@ -136,6 +136,7 @@ A timed state between two vehicles, like a feud or a tow, is owned by `src/sim/s
 | escort |  | true |
 | strayFire | 60 | false |
 | aid | 20 | true |
+| combat | 10 | false |
 <!-- /wiki:state-kinds -->
 
 ## Gear levels

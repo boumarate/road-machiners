@@ -12,7 +12,7 @@ import { dealAvailable, needsPatch, patchData, patchTerms, settlePatch } from '.
 import { makePeace } from './parley';
 import { addState, stateOf } from './states';
 import { isStranded } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive , startCombat } from './testkit';
 import type { GameEvent, PatchDeal, Vehicle, World } from './types';
 import { cloneWorld, endTurn, setMoveOrder } from './world';
 
@@ -141,6 +141,7 @@ describe('asking a driver for a patch', () => {
     let w = agreedTerms(start, trader.id, 'free');
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 38, y: 34 });
     find(w, trader.id).brain!.attackers[raider.id] = true;
+    startCombat(w, raider, find(w, trader.id));
     const open = callVehicle(cloneWorld(w), trader.id);
     expect(currentOptions(open).map((o) => o.text)).not.toContain('My truck is broken down. Can you patch it?');
     thinkNpc(w, find(w, trader.id));
