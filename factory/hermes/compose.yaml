@@ -30,6 +30,10 @@ services:
       FACTORY_COMMITTEE_CHAT: ${FACTORY_COMMITTEE_CHAT:?set FACTORY_COMMITTEE_CHAT}
       # The committee chat is Hermes's home channel, so it does not ask for one.
       TELEGRAM_HOME_CHANNEL: ${FACTORY_COMMITTEE_CHAT:?set FACTORY_COMMITTEE_CHAT}
+      # Hermes's mention filter dropped "@bot ..." messages in the committee chat without a log line. The chat exists for Hermes,
+      # so every message the bot gets there reaches it. With privacy mode on, the bot gets only mentions, replies and commands.
+      TELEGRAM_FREE_RESPONSE_CHATS: ${FACTORY_COMMITTEE_CHAT:?set FACTORY_COMMITTEE_CHAT}
+      TELEGRAM_EXCLUSIVE_BOT_MENTIONS: "false"
       FACTORY_INBOX: /factory/home/inbox
       FACTORY_STATE_DIR: /factory/home/state
     volumes:
