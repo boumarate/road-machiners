@@ -264,9 +264,9 @@ export class Travel {
     return this.isFast(now) ? fastSpeed : 1;
   }
 
-  advanceClock(playback: Playback, now: number, speed: number): number {
+  advanceClock(playback: Playback, now: number, speed: number, maxFrameMs: number): number {
     if (playback.lastTick !== null)
-      playback.elapsed += (now - playback.lastTick) * speed;
+      playback.elapsed += Math.min(now - playback.lastTick, maxFrameMs) * speed;
     playback.lastTick = now;
     return playback.elapsed;
   }

@@ -992,7 +992,7 @@ export class Game {
   private animStep(now: number, speed: number): number | null {
     const a = this.anim;
     if (!a) return null;
-    const elapsed = this.travel.advanceClock(a, now, speed);
+    const elapsed = this.travel.advanceClock(a, now, speed, CONFIG.playbackFrameMs);
     if (elapsed < MOVE_MS)
       return Math.floor((elapsed / 1000) * PHYSICS.stepsPerSecond);
     if (!a.moved) this.finishMovement(a);

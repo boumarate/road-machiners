@@ -94,6 +94,32 @@ describe("turn advancement", () => {
   });
 });
 
+describe("playback clock", () => {
+  const playback = (elapsed = 0) => ({ elapsed, lastTick: null as number | null }) as Parameters<Travel["advanceClock"]>[0];
+
+  it("adds a normal frame in full, times the speed", () => {
+    const travel = new Travel(250);
+    const a = playback();
+    travel.advanceClock(a, 1000, 1, 50);
+    expect(travel.advanceClock(a, 1016, 1, 50)).toBe(16);
+    expect(travel.advanceClock(a, 1032, 4, 50)).toBe(16 + 64);
+  });
+
+  it("stretches the turn on a slow frame instead of skipping ahead", () => {
+    const travel = new Travel(250);
+    const a = playback();
+    travel.advanceClock(a, 1000, 1, 50);
+    expect(travel.advanceClock(a, 1400, 1, 50)).toBe(50);
+    expect(travel.advanceClock(a, 1800, 4, 50)).toBe(250);
+  });
+
+  it("keeps the carried elapsed time on the first call", () => {
+    const travel = new Travel(250);
+    const a = playback(120);
+    expect(travel.advanceClock(a, 5000, 1, 50)).toBe(120);
+  });
+});
+
 describe("turns that run on their own", () => {
   const space = (repeat = false) => ({ repeat, preventDefault: () => {} }) as KeyboardEvent;
 
