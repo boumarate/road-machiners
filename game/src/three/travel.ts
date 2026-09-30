@@ -1,6 +1,7 @@
 import {
   captureDrive,
   restoreDrive,
+  restFrames,
   trailFrames,
   type Drive,
   type TurnResult,
@@ -69,10 +70,12 @@ export function overshoots(world: World, next: Pick<World, "events" | "vehicles"
 }
 
 // A truck on a rope has no physics frames. Its tower placed it along its trail after the physics step. A truck let
-// off the rope at the end of the turn, like on arrival in town, rode the rope during the step too.
+// off the rope at the end of the turn, like on arrival in town, rode the rope during the step too. One that
+// jumped this turn, like a retreating truck sent home, has no trail and stands at its new pose.
 export function addRopeFrames(before: World, after: World, frames: TurnResult["frames"]): void {
   for (const v of after.vehicles) {
-    if (isOnRope(after, v.id) || (!frames[v.id] && isOnRope(before, v.id))) frames[v.id] = trailFrames(after, v);
+    if (!isOnRope(after, v.id) && (frames[v.id] || !isOnRope(before, v.id))) continue;
+    frames[v.id] = v.trail.length < 2 ? restFrames(after, v) : trailFrames(after, v);
   }
 }
 

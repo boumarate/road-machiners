@@ -13,11 +13,14 @@ import { partDef } from '../data/parts';
 import { topGoal } from '../sim/npc-activities';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from '../sim/testkit';
 import { chooseOption, currentOptions } from '../sim/dialogue';
-import { playerTow, setBeacon } from '../sim/tow';
+import { npcHomeSite, playerTow, setBeacon } from '../sim/tow';
 import type { GameEvent, Vehicle, World } from '../sim/types';
 import { dist, type Vec } from '../sim/vec';
 import { endTurn } from '../sim/world';
-import { buildDrive, freeDrive, initPhysics, type Drive } from './drive';
+import { addRopeFrames } from '../three/travel';
+import { RULES } from '../data/rules';
+import { addState } from '../sim/states';
+import { buildDrive, freeDrive, initPhysics, TURN_STEPS, type Drive } from './drive';
 import { physicsMove } from './turn';
 
 beforeAll(async () => {
@@ -162,6 +165,30 @@ describe('after a tow into town', () => {
     expect(crashesBetween(r.events, s.trader.id, r.w.player.vehicleId)).toEqual([]);
     expect(dist(playerVehicle(r.w).pos, parkedAt)).toBeLessThan(0.05);
     expect(r.events.some((e) => e.t === 'activity' && e.vehicle === s.trader.id && e.reason === 'arrived')).toBe(true);
+  });
+});
+
+describe('a client that jumps home as its NPC tow ends', () => {
+  it('still gets frames', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const tower = withTower(w, 'trader', 'traders', 'hauler', { x: 150, y: 150 });
+    const client = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 147, y: 150 });
+    client.brain = npcBrain('buggy', client.pos, ['raider']);
+    client.defeat = { phase: 'retreat', turns: 3, unseen: RULES.retreatTeleportTurns, foes: [] };
+    tower.items = tower.items.filter((it) => !(it.kind === 'part' && partDef(it.part.defId).kind === 'engine'));
+    tower.brain!.goals = [{ kind: 'tow', targetId: client.id, destination: null, phase: 'act', reason: 'test' }];
+    addState(w, 'tow', tower.id, client.id, { kind: 'tow', site: npcHomeSite(client)!.id, fee: 0, waived: 0, hitched: true });
+    const before = w;
+
+    const after = play(before, 1).w;
+
+    expect(after.events.some((e) => e.t === 'towDropped')).toBe(true);
+    const c = after.vehicles.find((v) => v.id === client.id)!;
+    expect(c.trail).toHaveLength(0);
+    expect(c.defeat).toBeUndefined();
+    const frames: Parameters<typeof addRopeFrames>[2] = {};
+    addRopeFrames(before, after, frames);
+    expect(frames[client.id]).toHaveLength(TURN_STEPS);
   });
 });
 
