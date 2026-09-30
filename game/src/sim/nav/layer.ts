@@ -23,7 +23,8 @@ export type TerrainNav = {
   size: number;
   n: number; // grid cells per side
   cliffTile: Uint8Array; // 1 where the tile is too steep to drive
-  tileCost: Float64Array; // route cost per tile driven: 1 / terrain speed, times offRoadCost off the road and the slope multiplier
+  tileCost: Float64Array; // route cost per tile driven: flatCost times the slope multiplier
+  flatCost: Float64Array; // route cost per tile before the slope multiplier: 1 / terrain speed, times offRoadCost off the road
   slow: Float32Array; // step cost multiplier per cell, the tileCost under its center
 };
 
@@ -78,13 +79,15 @@ function terrainEntry(t: Terrain) {
     const n = Math.ceil(t.size / CELL);
     const cliffTile = new Uint8Array(t.size * t.size);
     const tileCost = new Float64Array(t.size * t.size);
+    const flatCost = new Float64Array(t.size * t.size);
     for (let i = 0; i < t.size * t.size; i++) {
       cliffTile[i] = isCliff(t, i) ? 1 : 0;
-      tileCost[i] = routeCost(t.types[i], nearSite((i % t.size) + 0.5, Math.floor(i / t.size) + 0.5)) * slopeCost(t, i);
+      flatCost[i] = routeCost(t.types[i], nearSite((i % t.size) + 0.5, Math.floor(i / t.size) + 0.5));
+      tileCost[i] = flatCost[i] * slopeCost(t, i);
     }
     const slow = new Float32Array(n * n);
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) slow[y * n + x] = tileCost[tileIndex(t.size, (x + 0.5) * CELL, (y + 0.5) * CELL)];
-    e = { nav: { size: t.size, n, cliffTile, tileCost, slow }, cellCliff: new Map(), solidGrids: new Map(), layers: new Map() };
+    e = { nav: { size: t.size, n, cliffTile, tileCost, flatCost, slow }, cellCliff: new Map(), solidGrids: new Map(), layers: new Map() };
     terrains.set(t, e);
   }
   return e;

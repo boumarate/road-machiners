@@ -1,7 +1,7 @@
 // Parked jobs: work that needs the truck to stay parked for several turns. One rule for every driver.
 // A job is cancelled on any turn its truck ends above parked speed, and its finished turns are lost.
 // A player truck with a drive order counts as moving too, since it still rolls slowly as it starts.
-// No driver works with a hostile in sight: no job starts then, and a running job is cancelled.
+// No driver works while in combat: no job starts then, and a running job is cancelled.
 // A repair is also cancelled once the grid holds no parts for it.
 
 import { GOODS } from "../data/goods";
@@ -9,9 +9,8 @@ import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { STRIP } from "../data/salvage";
 import { PERK_NUMBERS } from "../data/skills";
-import { isHostile } from "./combat";
+import { inCombat } from "./combat";
 import { playerVehicle } from "./damage";
-import { canVehicleSee } from "./vision";
 import { partValue } from "./wear";
 import { corePart, coreParts, freeCells, goodsCount, isMounted, itemSize, mountedParts } from "./grid";
 import { addGoods, applyRefitLayout, getRefitLayout, removeGoods, stowPart } from "./inventory";
@@ -20,7 +19,7 @@ import { isJunk, maxHp } from "./wear";
 import { repairPlan, repairTurn } from "./repair";
 import { practice, vehicleHasPerk } from "./progress";
 import { finishTruckPickup } from "./salvage";
-import { searchTurn } from "./search";
+import { isSearchStalled, searchTurn } from "./search";
 import type { GridItem, Job, PartInstance, RefitJob, RefitPickup, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
 
@@ -43,11 +42,6 @@ export function isParkedForWork(world: World, v: Vehicle): boolean {
   return v.id !== world.player.vehicleId || v.order === null || v.order.kind === "brake";
 }
 
-// A hostile the driver sees.
-export function inCombat(world: World, v: Vehicle): boolean {
-  return world.vehicles.some((other) => isHostile(world, v, other) && canVehicleSee(world, v, other.pos));
-}
-
 // A player truck standing still that starts work has chosen to stay, so a drive order left from before is dropped.
 // Otherwise the order would stop the work at once.
 function dropLeftoverOrder(world: World, v: Vehicle): void {
@@ -55,7 +49,7 @@ function dropLeftoverOrder(world: World, v: Vehicle): void {
 }
 
 export function startJob(world: World, v: Vehicle, job: Job): void {
-  if (inCombat(world, v)) throw new Error("Not with a hostile in sight");
+  if (inCombat(world, v)) throw new Error("Not while in combat");
   if (isAutoPatch(v.job)) cancelJob(world, v);
   if (v.job)
     throw new Error(`${v.name} is already busy with a ${v.job.kind} job`);
@@ -214,6 +208,7 @@ function advanceJob(world: World, v: Vehicle, job: Job): void {
 function isStalled(world: World, v: Vehicle, job: Job): boolean {
   if (job.kind === "repair") return isRepairStalled(world, v, job.partId, job.parts);
   if (job.kind === "weld") return !hasWeldScrap(v) || !weldFits(v);
+  if (job.kind === "search") return isSearchStalled(world, v, job);
   return job.kind === "strip" && isStripStalled(v, job.partId);
 }
 

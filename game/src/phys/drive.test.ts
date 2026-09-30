@@ -304,12 +304,57 @@ describe('physics turns', () => {
   });
 
   it('facing a wall, a click back and to the side backs the truck out instead of pushing into the wall', () => {
-    const w = ordered({ kind: 'through', dest: { x: 28, y: 33 } });
+    const w = ordered({ kind: 'through', dest: { x: 28, y: 27 } });
     const at = me(w).pos;
     w.obstacles = [-3, -2, -1, 0, 1, 2, 3].map((i) => ({ id: `r${i}`, pos: { x: at.x + 1.8, y: at.y + i * 1.2 }, r: 0.7, kind: 'rock' as const }));
     // The truck rolls forward one or two turns until a rock stops it, then backs out; a rock's turn decides which.
     const { w: after, d } = play(w, 14);
     expect(me(after).order).toBeNull();
+    freeDrive(d);
+  });
+
+  it('after backing to a close click behind, a far click behind turns the truck around nose first', () => {
+    let w = ordered({ kind: 'through', dest: { x: 24, y: 30 } });
+    let d = buildDrive(w);
+    const step = () => {
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      freeDrive(d);
+      d = next!;
+    };
+    step();
+    const backedTo = me(w).pos.x;
+    w = setMoveOrder(w, { kind: 'through', dest: { x: 5, y: 30 } });
+    for (let i = 0; i < 8; i++) step();
+    expect(Math.abs(angleDiff(me(w).heading, Math.PI))).toBeLessThan(Math.PI / 4);
+    expect(me(w).pos.x).toBeLessThan(backedTo);
+    freeDrive(d);
+  });
+
+  it('a truck blocked in front backs out about a tile, then turns nose first toward a far point behind', () => {
+    const dest = { x: 5, y: 40 };
+    let w = ordered({ kind: 'through', dest });
+    const at = me(w).pos;
+    w.obstacles = [-3, -2, -1, 0, 1, 2, 3].map((i) => ({ id: `r${i}`, pos: { x: at.x + 1.8, y: at.y + i * 1.2 }, r: 0.7, kind: 'rock' as const }));
+    let d = buildDrive(w);
+    let run = 0;
+    let longest = 0;
+    let heading = 0;
+    for (let i = 0; i < 14; i++) {
+      const before = me(w).pos;
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      freeDrive(d);
+      d = next!;
+      const m = me(w);
+      if (m.order) heading = angleDiff(m.heading, bearing(m.pos, dest));
+      const moved = { x: m.pos.x - before.x, y: m.pos.y - before.y };
+      const backing = moved.x * Math.cos(m.heading) + moved.y * Math.sin(m.heading) < -0.05;
+      run = backing ? run + dist(before, m.pos) : 0;
+      longest = Math.max(longest, run);
+    }
+    expect(longest).toBeLessThan(RULES.reverse.distance + 1);
+    expect(Math.abs(heading)).toBeLessThan(Math.PI / 4);
     freeDrive(d);
   });
 

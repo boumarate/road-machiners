@@ -9,7 +9,7 @@ import { route, routeLength } from './path';
 import { canUseSite, nearestPad, siteGates, sitePads, type Site } from './sites';
 import { getResources } from './resources';
 import { isStranded, vehicleStats } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere, testDrive , startCombat } from './testkit';
 import { hasLoot, mountedParts } from './grid';
 import { CONDITION } from '../data/wear';
 import { thinkNpc, topGoal } from './npc-activities';
@@ -130,11 +130,13 @@ describe('tow offer', () => {
   function startFight(w: World): string {
     const foe = addVehicle(w, 'traders', 'scout', [], { x: 24, y: 30 });
     addState(w, 'feud', w.player.vehicleId, foe.id, { kind: 'feud', robbery: false });
+    startCombat(w, playerVehicle(w), foe);
     return foe.id;
   }
 
   function endFight(w: World, foeId: string): World {
     endState(w, stateOf(w, 'feud', w.player.vehicleId, foeId)!, 'broken');
+    for (const c of w.states.filter((x) => x.kind === 'combat')) endState(w, c, 'broken');
     return w;
   }
 
@@ -147,12 +149,23 @@ describe('tow offer', () => {
     offered({ w: endFight(w, foe), trader: s.trader });
   });
 
+  it('a hostile that only passes by does not hold back a tow offer to the player', () => {
+    forceOption('strandedSeen', 'tow');
+    const s = stranded();
+    addVehicle(s.w, 'raiders', 'buggy', [], { x: 24, y: 30 });
+    offered(s);
+  });
+
   it('a tower already on its way waits beside a player in combat and offers once the fight ends', () => {
     forceOption('strandedSeen', 'tow');
     const s = stranded();
     const setOut = runUntil(s.w, 30, (w) => topGoal(find(w, s.trader.id))?.kind === 'tow');
     const foe = startFight(setOut.w);
-    const r = runUntil(setOut.w, 30, (w) => playerTow(w) !== null || w.player.call !== null);
+    // The foe keeps shooting, so the combat lasts while the tower waits.
+    const r = runUntil(setOut.w, 30, (w) => {
+      startCombat(w, find(w, foe), playerVehicle(w));
+      return playerTow(w) !== null || w.player.call !== null;
+    });
     expect(r.events.some((e) => e.t === 'towOffer')).toBe(false);
     expect(r.w.player.call).toBeNull();
     expect(topGoal(find(r.w, s.trader.id))?.kind).toBe('tow');
