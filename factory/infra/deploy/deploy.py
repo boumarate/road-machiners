@@ -105,6 +105,21 @@ systemd.service(
     _sudo=True,
 )
 
+# Hermes runs factory steps on the server through ssh as the factory user, with the same rights as the tick.
+# Its key lives in the Hermes home, which only the factory user reads.
+hermes_key = f"{HERMES_DIR}/.ssh/id_ed25519"
+authorized = f"/home/{FACTORY_USER}/.ssh/authorized_keys"
+server.shell(
+    name="Hermes ssh key, authorized for the factory user",
+    commands=[
+        f"mkdir -p -m 700 {HERMES_DIR}/.ssh /home/{FACTORY_USER}/.ssh",
+        f"test -f {hermes_key} || ssh-keygen -q -t ed25519 -N '' -C factory-hermes -f {hermes_key}",
+        f"grep -qxF \"$(cat {hermes_key}.pub)\" {authorized} 2>/dev/null || cat {hermes_key}.pub >> {authorized}",
+        f"chmod 600 {authorized}",
+    ],
+    **as_factory,
+)
+
 # Hermes takes its paths from env. The server layout differs from the Mac default.
 hermes_env = f"FACTORY_HERMES_DIR={HERMES_DIR} FACTORY_UID={FACTORY_UID}"
 server.shell(

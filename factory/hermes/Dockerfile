@@ -14,6 +14,7 @@ RUN apt-get update \
 COPY config.yaml /opt/factory/config.yaml
 COPY SOUL.md /opt/factory/SOUL.md
 COPY --chmod=755 factory-incidents.sh /opt/factory/factory-incidents.sh
+COPY --chmod=755 factory-host /usr/local/bin/factory-host
 
 # The image supervises the gateway with s6, and the gateway reads its env from $HERMES_HOME/.env.
 # So the start script writes the repo's config, identity and committee allow list there, then hands over.

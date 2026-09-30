@@ -1,0 +1,4 @@
+#!/bin/sh
+# Runs a command on the factory server as the factory user. Deploy puts the key in the Hermes home and authorizes it.
+# Hermes runs tools under changing HOMEs, so every ssh setting is given here.
+exec ssh -i /opt/data/.ssh/id_ed25519 -o UserKnownHostsFile=/opt/data/.ssh/known_hosts -o StrictHostKeyChecking=accept-new -o BatchMode=yes factory@host.docker.internal "$@"

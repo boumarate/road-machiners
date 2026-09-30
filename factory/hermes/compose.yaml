@@ -38,6 +38,9 @@ services:
       # Hermes manages the factory: it reads and edits the whole factory home and reads the factory code. SOUL.md names these paths.
       - ${FACTORY_HOME:?set FACTORY_HOME}:/factory/home
       - ../..:/factory/code:ro
+    # factory-host reaches the server's sshd through this name.
+    extra_hosts:
+      - host.docker.internal:host-gateway
     security_opt:
       - no-new-privileges:true
     cap_drop:

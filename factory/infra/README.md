@@ -45,6 +45,7 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 - `/opt/factory/www` is `FACTORY_WEB_ROOT`. Set it in the factory `.env`.
 - `/opt/factory/hermes` holds the Hermes state and login.
 - Hermes runs as the factory user, uid 1001. It writes the inbox and the committee file, and the tick reads and deletes inbox files.
+- Hermes also has ssh access to the server as the factory user, so it can run factory steps, Docker builds and deploys. Deploy makes its key in `/opt/factory/hermes/.ssh` and adds it to the factory user's `authorized_keys`.
 - The `committee` folder has the same owner, group and mode. Hermes writes `committee.json` there. The tick only reads it.
 
 ## First-time steps
