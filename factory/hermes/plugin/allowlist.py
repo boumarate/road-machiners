@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 
 KEY = "TELEGRAM_ALLOWED_USERS"
-PASSED = ("FACTORY_REPO",)
+PASSED = ("FACTORY_REPO", "GH_CONFIG_DIR")
 
 
 def with_allowlist(text: str, ids) -> str:
