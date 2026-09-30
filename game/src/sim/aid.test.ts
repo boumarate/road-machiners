@@ -3,14 +3,14 @@ import { ECONOMY } from '../data/goods';
 import { AID } from '../data/npc-behavior';
 import { NPC_UPKEEP, NPCS, STATE_TURNS } from '../data/npcs';
 import { RULES } from '../data/rules';
-import { agreeAid, aidPrice, onNeedySeen, playerAid, spareAid } from './aid';
+import { agreeAid, aidPrice, onNeedySeen, playerAid, spareAid, wantedAid } from './aid';
 import { playerVehicle } from './damage';
 import { truckSupplyForSale } from './economy';
 import { makePart } from './factory';
-import { mountedParts } from './grid';
+import { corePart, mountedParts } from './grid';
 import { stowPart } from './inventory';
 import { vehicleValue } from './market';
-import { thinkNpc, topGoal } from './npc-activities';
+import { fuelReserveFor, thinkNpc, topGoal } from './npc-activities';
 import { bodyCondition, optionWeights } from './npc-decisions';
 import { addState, aidData, stateOf } from './states';
 import { fuelCap, suppliesCap } from './stats';
@@ -310,5 +310,27 @@ describe('unprompted aid offer', () => {
     npc.brain!.traits = ['raider'];
     onNeedySeen(w, npc);
     expect(playerAid(w)).toBeNull();
+  });
+});
+
+describe('what a low driver asks for', () => {
+  it('asks for fuel up to its pump reserve, never more than the small share of its tank', () => {
+    const { w, npc } = withDriver(36);
+    npc.resources!.fuel = 0;
+    const cap = Math.floor(fuelCap(npc) * AID.fillShare);
+    expect(wantedAid(w, npc).fuel).toBe(Math.min(cap, Math.max(1, Math.ceil(fuelReserveFor(w, npc)))));
+    expect(wantedAid(w, npc).fuel).toBeLessThanOrEqual(cap);
+  });
+
+  it('asks for no fuel while its tank leaks, but still asks for supplies', () => {
+    const { w, npc } = withDriver(36);
+    npc.resources!.fuel = 0;
+    npc.resources!.supplies = 0;
+    corePart(npc, 'tank')!.hp = 0;
+    const wanted = wantedAid(w, npc);
+    expect(wanted.fuel).toBe(0);
+    expect(wanted.supplies).toBeGreaterThan(0);
+    npc.resources!.supplies = suppliesCap(npc);
+    expect(wantedAid(w, npc)).toEqual({ fuel: 0, supplies: 0 });
   });
 });
