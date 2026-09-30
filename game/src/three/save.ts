@@ -4,7 +4,7 @@ import { townAt } from '../sim/sites';
 import type { BrokenProp, Obstacle, World } from '../sim/types';
 import { clearTips } from '../ui/tips';
 import { clockOf } from '../sim/sun';
-import { allSlots, listSaves, manualSlots, slotKey, type SlotId } from './save-slots';
+import { allSlots, listSaves, manualSlots, requestBoot, slotKey, type BootRequest, type SlotId } from './save-slots';
 import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR, type SavedJson } from './save-migrations';
 
 declare const __SAVE_SCOPE__: string;
@@ -194,13 +194,16 @@ export function unpackExplored(packed: unknown, tiles: number): Uint8Array {
   return explored;
 }
 
-// What the menus do with the saves: the game's world in, the slots of local storage out.
-export function saveStore(storage: Storage, world: () => World, slotCount: number) {
+// What the menus do with the saves: the game's world in, the slots of local storage out. Loading and starting a new
+// game reload the page, so they leave a boot request in session storage.
+export function saveStore(storage: Storage, session: Storage, world: () => World, slotCount: number) {
   return {
     list: () => listSaves(storage, SAVE_KEY, slotCount),
     manualSlots: () => manualSlots(slotCount),
     hasSave: () => hasSave(storage, allSlots(slotCount)),
     save: (slot: SlotId) => writeSave(storage, slot, world(), Date.now()),
-    clearGame: () => clearGame(storage),
+    requestBoot: (request: BootRequest) => requestBoot(session, SAVE_KEY, request),
   };
 }
+
+export type SaveStore = ReturnType<typeof saveStore>;

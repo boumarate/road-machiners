@@ -277,8 +277,8 @@ export class Game {
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
-    const saves = saveStore(window.localStorage, () => this.world, CONFIG.saveSlots);
-    this.menu = new GameMenu({ save: () => saves.save("auto"), hasSave: saves.hasSave, clearGame: saves.clearGame, isBusy: () => this.anim !== null });
+    const saves = saveStore(window.localStorage, window.sessionStorage, () => this.world, CONFIG.saveSlots);
+    this.menu = new GameMenu(saves, () => this.anim !== null);
     this.death = new DeathScreen(saves);
 
     this.bindInput();
@@ -333,7 +333,7 @@ export class Game {
   }
 
   private modalOpen(): boolean {
-    return this.town.isOpen() || this.trade.isOpen() || this.character.isOpen() || this.inventory.isOpen() || this.world.player.call !== null;
+    return this.town.isOpen() || this.trade.isOpen() || this.character.isOpen() || this.inventory.isOpen() || this.world.player.call !== null || this.menu.isPanelOpen();
   }
 
   // Until a turn's shots land, the panels show the world as it was when the turn began.
