@@ -71,7 +71,7 @@ describe('shared wreck', () => {
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 31.5, y: 30 });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
     npc.speed = 0;
-    expect(getContextAction(w, false)).toEqual({ label: 'Search the wreck', ready: true, combat: false });
+    expect(getContextAction(w, false)).toEqual({ label: 'Search the wreck', ready: true, combat: undefined });
     beginSearch(w, npc, 'wreck901');
     expect(getContextAction(w, false)).toEqual({ label: 'Search the wreck', ready: false, hint: `${npc.name} is looting it` });
   });
