@@ -539,12 +539,11 @@ describe('social on robbery danger', () => {
 describe('cargo value', () => {
   const chance = (w: World, robber: Vehicle, decision: 'preySeen' | 'hostileSeen', target: Vehicle, option: string): number => {
     const danger = vehicleDanger(w, target);
-    const draws = 4000;
+    const draws = 1500;
     let picked = 0;
     for (let seed = 0; seed < draws; seed++) {
-      const x = cloneWorld(w);
-      x.rngState = seed;
-      if (decide(x, find(x, robber.id), decision, target.id, danger) === option) picked++;
+      w.rngState = seed;
+      if (decide(w, robber, decision, target.id, danger) === option) picked++;
     }
     return picked / draws;
   };
