@@ -902,7 +902,7 @@ export type DecisionOptions = {
   // A driver that takes nothing fights a stranded foe alone: offer it a way out, or judge it not worth the trouble and
   // leave.
   strandedFoe: 'offer' | 'spare';
-  surrenderOffered: 'accept' | 'refuse'; // a stranded NPC is offered a way out by the foe that beat it
+  surrenderOffered: 'accept' | 'refuse'; // a weak NPC is offered a way out by the foe that beat it, NPC or player
   threatened: 'comply' | 'fightBack' | 'flee'; // the player demands the driver's cargo
   mugging: 'demand' | 'attack'; // the driver sets out to fight the player: radio for the cargo first, or just open fire
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal

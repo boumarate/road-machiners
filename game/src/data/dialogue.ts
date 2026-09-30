@@ -7,18 +7,18 @@ import type { DecisionOptions, TraitId } from './npcs';
 
 type PatchDeal = DecisionOptions['patchDeal'];
 
-export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest' | 'demand' | 'surrender' | 'giveUp' | 'trade' | 'truce' | 'mercy' | 'rob' | 'truceOffer' | 'mercyPlea' | 'offerTow' | 'releaseTow' | 'offerPatch' | 'marketNews' | 'rumor' | 'buyTruce' | 'offerAid' | 'askAid' | 'aidOffer';
+export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest' | 'demand' | 'surrender' | 'giveUp' | 'trade' | 'truce' | 'mercy' | 'rob' | 'truceOffer' | 'mercyPlea' | 'offerTow' | 'releaseTow' | 'offerPatch' | 'marketNews' | 'rumor' | 'buyTruce' | 'offerAid' | 'askAid' | 'aidOffer' | 'yieldDemand';
 export type ConditionId =
   | 'knowsTown' | 'offersTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'hasDeal' | 'noDeal' | 'demandsCargo' | 'demandsSurrender' | 'demandsGiveUp'
   | 'atOdds' | 'atPeace' | 'noPlayerPlea' | 'npcHasCargo' | 'offersTruce' | 'begsMercy'
   | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'canTowNpc' | 'towedByPlayer' | 'noTrade' | 'npcCalm'
   | 'knowsLastTown' | 'hearsRumor' | 'rumorOfSite' | 'rumorOfWreck' | 'canPayTruce'
-  | 'npcLow' | 'playerLow' | 'noAid' | 'aidGiven' | 'aidRefused' | 'offersAid';
+  | 'npcLow' | 'playerLow' | 'noAid' | 'aidGiven' | 'aidRefused' | 'offersAid' | 'npcBeaten' | 'notOfferedYield';
 export type EffectId =
   | 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch' | 'handOver' | 'surrender' | 'giveUp'
   | 'acceptPlea' | 'refusePlea' | 'settlePlea' | 'withdrawPlea' | 'settleThreat' | 'hitchNpc' | 'hitchNpcFree' | 'releaseNpc' | 'startTrade'
-  | 'revealRumor' | 'payTruce' | 'giveAidPaid' | 'giveAidFree' | 'takeAid' | 'acceptAidOffer' | 'refuseAidOffer';
-export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'npcTowTerms' | 'lastTownPrices' | 'nearestRumor' | 'trucePrice' | 'aidWanted' | 'aidAnswer' | 'aidOffered';
+  | 'revealRumor' | 'payTruce' | 'giveAidPaid' | 'giveAidFree' | 'takeAid' | 'acceptAidOffer' | 'refuseAidOffer' | 'yieldToPlayer';
+export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'npcTowTerms' | 'lastTownPrices' | 'nearestRumor' | 'trucePrice' | 'aidWanted' | 'aidAnswer' | 'aidOffered' | 'yieldAnswer';
 
 // `go` is a node of the same topic, the hub of topics, or the end of the call.
 export type DialogueOption = { text: string; when: ConditionId[]; effects: EffectId[]; go: string };
@@ -278,6 +278,28 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
       spared: { line: 'Leave it on the ground and go.', options: [{ text: 'Going.', when: [], effects: [], go: END }] },
       refused: { line: 'No deals.', options: [{ text: 'Then come and get me.', when: [], effects: [], go: END }] },
+    },
+  },
+  // The player demands the cargo and best parts of a badly broken foe for its life. The driver answers once while it
+  // keeps the player in sight, like a stranded NPC offered a way out.
+  yieldDemand: {
+    id: 'yieldDemand',
+    once: false,
+    ask: { text: 'Your truck is finished. Dump your cargo and your best parts, and drive off alive.', when: ['atOdds', 'npcBeaten', 'notOfferedYield'], duringFeud: true },
+    raise: null,
+    prepare: 'yieldAnswer',
+    hangUp: [],
+    start: 'hear',
+    nodes: {
+      hear: {
+        line: 'You want my truck stripped?',
+        options: [
+          { text: 'Your call. Last chance.', when: ['accepts'], effects: [], go: 'agreed' },
+          { text: 'Your call. Last chance.', when: ['refuses'], effects: [], go: 'refused' },
+        ],
+      },
+      agreed: { line: 'All right. It is on the ground. Let me go.', options: [{ text: 'Go.', when: [], effects: ['yieldToPlayer'], go: END }] },
+      refused: { line: 'Not while I can still pull a trigger.', options: [{ text: 'Then we finish this.', when: [], effects: ['settleRefused'], go: END }] },
     },
   },
   // The player demands the cargo of a driver at peace, once. It gives the cargo up, fights or runs.
@@ -571,7 +593,7 @@ export type TraitTalk = { voice: Voice | null; topics: TopicId[] };
 export const HONK_RANGE = DETECT.sound.limp;
 
 // Every driver can be asked for peace, robbed, towed, patched and given fuel or supplies, and can plead for peace.
-const PARLEY: TopicId[] = ['surrender', 'giveUp', 'truce', 'mercy', 'buyTruce', 'rob', 'truceOffer', 'mercyPlea', 'offerTow', 'releaseTow', 'offerPatch', 'offerAid'];
+const PARLEY: TopicId[] = ['surrender', 'giveUp', 'truce', 'mercy', 'yieldDemand', 'buyTruce', 'rob', 'truceOffer', 'mercyPlea', 'offerTow', 'releaseTow', 'offerPatch', 'offerAid'];
 
 export const TRAIT_TALK: Record<TraitId, TraitTalk> = {
   trader: { voice: { greeting: 'Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tow', 'askTow', 'askAid', 'aidOffer', 'patch', 'patchRequest', 'trade', ...PARLEY] },

@@ -28,7 +28,7 @@ const TRAITS_OF: Record<string, TraitId[]> = { trader: ['trader'], scavenger: ['
 
 function withNpc(templateId: string, faction: Vehicle['faction'], x = 36): { w: World; npc: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
-  const npc = addVehicle(w, faction, 'scout', [], { x, y: 30 });
+  const npc = addVehicle(w, faction, 'scout', ['stockEngine'], { x, y: 30 });
   npc.brain = npcBrain(templateId, npc.pos, TRAITS_OF[templateId]);
   refreshVision(w);
   return { w, npc };

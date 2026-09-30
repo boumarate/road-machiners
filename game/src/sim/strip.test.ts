@@ -3,7 +3,7 @@ import { NPCS } from '../data/npcs';
 import { SPARE_LINE } from '../data/dialogue';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
-import { chooseOption, currentOptions, hangUp } from './dialogue';
+import { callVehicle, chooseOption, currentOptions, hangUp } from './dialogue';
 import { isHostile } from './combat';
 import { corePart, mountedParts } from './grid';
 import { addGoods } from './inventory';
@@ -12,7 +12,7 @@ import { hasCargo } from './salvage';
 import { aimAt } from './parley';
 import { addState, stateOf } from './states';
 import { topGoal } from './npc-activities';
-import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
 import type { Vehicle, World } from './types';
 import { endTurn } from './world';
 
@@ -222,5 +222,76 @@ describe('surrender between NPCs', () => {
     w = endTurn(w, testDrive);
     const aims = w.events.flatMap((e) => (e.t === 'shot' && e.shooter === raider.id && e.target === trader.id ? [e.aim] : []));
     expect(aims.every((aim) => aim === cab)).toBe(true);
+  });
+});
+
+describe('the player demands a beaten NPC give up', () => {
+  const DEMAND = 'Your truck is finished. Dump your cargo and your best parts, and drive off alive.';
+
+  // A trader with cargo and spare mounted parts, feuding with the player within sight.
+  function beaten(): { w: World; npc: Vehicle } {
+    const w = emptyWorld({ x: 30, y: 30 });
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine', 'mg', 'mg', 'mg'], { x: 40, y: 30 }, Math.PI);
+    npc.brain = npcBrain('trader', npc.pos, ['trader']);
+    addGoods(w, npc, 'scrap', 3);
+    addState(w, 'feud', npc.id, w.player.vehicleId, { kind: 'feud', robbery: false });
+    addState(w, 'feud', w.player.vehicleId, npc.id, { kind: 'feud', robbery: false });
+    corePart(npc, 'cab').hp = 1;
+    return { w, npc };
+  }
+
+  const npcOf = (w: World, npc: Vehicle) => w.vehicles.find((v) => v.id === npc.id)!;
+  const asks = (w: World) => currentOptions(w).some((o) => o.text === DEMAND);
+
+  it('is offered only while the foe is weak', () => {
+    const { w, npc } = beaten();
+    expect(asks(callVehicle(w, npc.id))).toBe(true);
+    const healthy = beaten();
+    const cab = corePart(healthy.npc, 'cab');
+    cab.hp = cab.hp + 1000;
+    mountedParts(healthy.npc).forEach((p) => { p.hp = 1000; });
+    expect(asks(callVehicle(healthy.w, healthy.npc.id))).toBe(false);
+  });
+
+  it('accepting drops the cargo and the best parts, and makes peace', () => {
+    forceOption('surrenderOffered', 'accept');
+    const { w: start, npc } = beaten();
+    const before = mountedParts(npc).length;
+    let w = pick(callVehicle(start, npc.id), DEMAND);
+    w = pick(w, 'Your call. Last chance.');
+    w = pick(w, 'Go.');
+    const after = npcOf(w, npc);
+    expect(hasCargo(after)).toBe(false);
+    expect(w.salvage.some((s) => Math.hypot(s.pos.x - after.pos.x, s.pos.y - after.pos.y) < 10)).toBe(true);
+    expect(mountedParts(after).length).toBe(before - RULES.surrenderParts);
+    expect(corePart(after, 'cab')).toBeDefined();
+    expect(isHostile(w, after, playerVehicle(w))).toBe(false);
+    expect(isHostile(w, playerVehicle(w), after)).toBe(false);
+    expect(stateOf(w, 'feud', npc.id, w.player.vehicleId)).toBeNull();
+    expect(stateOf(w, 'feud', w.player.vehicleId, npc.id)).toBeNull();
+    expect(practiceOf(w, 'deal')).toHaveLength(1);
+  });
+
+  it('refusing keeps the fight and the demand is not offered again', () => {
+    forceOption('surrenderOffered', 'refuse');
+    const { w: start, npc } = beaten();
+    const parts = mountedParts(npc).length;
+    let w = pick(callVehicle(start, npc.id), DEMAND);
+    w = pick(w, 'Your call. Last chance.');
+    w = pick(w, 'Then we finish this.');
+    const after = npcOf(w, npc);
+    expect(isHostile(w, after, playerVehicle(w))).toBe(true);
+    expect(hasCargo(after)).toBe(true);
+    expect(mountedParts(after).length).toBe(parts);
+    expect(asks(callVehicle(w, npc.id))).toBe(false);
+  });
+
+  it('a foe with a healthy truck but a broken driver counts as weak', () => {
+    const { w, npc } = beaten();
+    corePart(npc, 'cab').hp = corePart(npc, 'cab').hp + 1000;
+    mountedParts(npc).forEach((p) => { p.hp = 1000; });
+    npc.resources!.health = 1;
+    expect(asks(callVehicle(w, npc.id))).toBe(true);
   });
 });
