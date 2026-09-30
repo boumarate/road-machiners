@@ -93,7 +93,11 @@ function migratedWorld(save: unknown): unknown {
   if (major !== SAVE_MAJOR) throw new SaveError(`Game save format ${major}.${minor} is from an incompatible game version. Start a new game.`);
   if (minor > MIGRATIONS.length) throw new SaveError(`Game save format ${major}.${minor} is from a newer game version`);
   if (!isJsonObject(save.world)) throw new SaveError('Invalid saved world');
-  return MIGRATIONS.slice(minor).reduce((world, step) => step(world), save.world);
+  try {
+    return MIGRATIONS.slice(minor).reduce((world, step) => step(world), save.world);
+  } catch {
+    throw new SaveError(`Game save format ${major}.${minor} could not be migrated`);
+  }
 }
 
 // Saves from before save formats carry the game version 1.0.0 and hold format 1.0.

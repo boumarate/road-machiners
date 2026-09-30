@@ -265,4 +265,10 @@ describe('saveKey', () => {
     storage.setItem('roam.save', '{"format":');
     expect(() => loadWorld(storage, TEST_MAP)).toThrow(SaveError);
   });
+
+  it('throws a SaveError when a migration step cannot read an old save', () => {
+    const storage = makeStorage();
+    storage.setItem('roam.save', JSON.stringify({ format: { major: SAVE_MAJOR, minor: 0 }, world: { vehicles: 5, player: 7 } }));
+    expect(() => loadWorld(storage, TEST_MAP)).toThrow(SaveError);
+  });
 });
