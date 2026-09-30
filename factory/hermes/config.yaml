@@ -27,6 +27,10 @@ terminal:
     # Hermes runs tools with its own HOME, so gh needs the folder of its login.
     - GH_CONFIG_DIR
 
+# Hermes acts on the factory without waiting on approval cards. Its prompt waited 5 minutes for an answer nobody saw, then dropped the step. SOUL.md says what to ask the committee first.
+approvals:
+  mode: "off"
+
 plugins:
   enabled:
     - factory
