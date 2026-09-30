@@ -21,7 +21,7 @@ import { moveItem, storePart, takeFromStorage } from '../inventory';
 import { shopAt, shopState } from '../market';
 import { canLoot, salvageHere, takeAllLoot } from '../locations';
 import { getUpkeepReserve, huntingGrounds } from '../npc-decisions';
-import { canReachSalvage, hasSalvage } from '../salvage';
+import { canReachSalvage, hasSalvage, lootBlocker } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, townAt, type Site } from '../sites';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from '../stats';
@@ -387,13 +387,15 @@ function lootHere(o: Orders): void {
   if (!canLoot(o.world) || freeCells(o.me) === 0) return;
   const stock = salvageHere(o.world);
   if (!stock) throw new Error('A lootable stock is in reach but salvageHere found none');
+  if (lootBlocker(o.world, o.me, stock.id)) return;
   o.run((w) => takeAllLoot(w, stock.id));
 }
 
-// A player cannot start a search with a hostile in sight, so the bot waits beside the stock and lets auto fire work.
+// A player cannot start a search with a hostile in sight or while another truck loots the stock, so the bot waits
+// beside the stock and lets auto fire or the other looter finish.
 function visitStock(o: Orders, stock: SalvageStock): void {
   if (canReachSalvage(o.me, stock)) {
-    if (!inCombat(o.world, o.me)) o.run((w) => startSearch(w, stock.id));
+    if (!inCombat(o.world, o.me) && !lootBlocker(o.world, o.me, stock.id)) o.run((w) => startSearch(w, stock.id));
     return;
   }
   const site = REGION.locations.find((l) => l.id === stock.id);

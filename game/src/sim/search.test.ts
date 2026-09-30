@@ -7,7 +7,10 @@ import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { beginSearch } from './search';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import { goodsCount } from './grid';
-import { canLoot, canScavenge, scavenge, takeAllLoot, takeLoot } from './locations';
+import { canLoot, canScavenge, lootBlockerHere, scavenge, takeAllLoot, takeLoot, takeStores } from './locations';
+import { resolveNpcActivities } from './npc-activities';
+import { sitePads } from './sites';
+import { refreshVision } from './vision';
 import { findSpot, gridOf } from './grid';
 import { endTurn, setMoveOrder } from './world';
 import { advanceJobs, isBusy, startAutoRepair } from './jobs';
@@ -201,4 +204,68 @@ describe('machining on searches', () => {
   });
 });
 
+describe('one looter per wreck, for the player', () => {
+  // The parked player at 30,30 beside a road wreck, and a scavenger parked on its other side.
+  function sharedWreck() {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const wreck = { id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 3 }, parts: [], fuel: 2 };
+    w.salvage.push(wreck);
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 31.5, y: 30 });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    npc.speed = 0;
+    return { w, wreck, npc };
+  }
 
+  const scrapSpot = (w: ReturnType<typeof emptyWorld>) =>
+    findSpot(gridOf(w.vehicles[0]), w.vehicles[0].items, { id: 'x', kind: 'good', good: 'scrap', x: 0, y: 0, rot: 0 }, null, null)!;
+
+  it('refuses a search while another driver searches the wreck, and names the driver', () => {
+    const { w, wreck, npc } = sharedWreck();
+    beginSearch(w, npc, wreck.id);
+    expect(canScavenge(w)).toBe(false);
+    expect(lootBlockerHere(w)).toBe(npc);
+    expect(() => scavenge(w)).toThrow(`${npc.name} is looting this wreck`);
+  });
+
+  it('refuses to take from a searched wreck while another driver searches it', () => {
+    const { w, wreck, npc } = sharedWreck();
+    w.player.scavenged.push(wreck.id);
+    beginSearch(w, npc, wreck.id);
+    const error = `${npc.name} is looting this wreck`;
+    expect(() => takeLoot(w, wreck.id, { kind: 'good', good: 'scrap' }, scrapSpot(w))).toThrow(error);
+    expect(() => takeAllLoot(w, wreck.id)).toThrow(error);
+    expect(() => takeStores(w, wreck.id)).toThrow(error);
+    expect(wreck.goods.scrap).toBe(SALVAGE.unitsPerTurn * 3);
+    expect(wreck.fuel).toBe(2);
+  });
+
+  it('searches and loots once the other driver is gone', () => {
+    const { w, wreck, npc } = sharedWreck();
+    beginSearch(w, npc, wreck.id);
+    w.vehicles = w.vehicles.filter((v) => v.id !== npc.id);
+    expect(lootBlockerHere(w)).toBeNull();
+    expect(scavenge(w).vehicles[0].job).toMatchObject({ kind: 'search', stockId: wreck.id });
+    w.player.scavenged.push(wreck.id);
+    expect(goodsCount(takeAllLoot(w, wreck.id).vehicles[0]).scrap).toBeGreaterThan(0);
+  });
+
+  it('keeps an arriving driver from starting at a wreck the parked player holds', () => {
+    const { w, wreck, npc } = sharedWreck();
+    npc.brain!.goals = [{ kind: 'loot', targetId: wreck.id, destination: { ...wreck.pos }, phase: 'travel', reason: 'test loot' }];
+    refreshVision(w);
+    resolveNpcActivities(w);
+    expect(npc.job).toBeNull();
+    expect(npc.brain!.goals).toEqual([]);
+    expect(canScavenge(w)).toBe(true);
+  });
+
+  it('shares a salvage site with other searchers', () => {
+    const site = REGION.locations.find((l) => l.id === 'podfield')!;
+    const w = emptyWorld({ ...sitePads(site)[0] });
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 4 }, parts: [] }];
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { ...site.pos });
+    beginSearch(w, npc, site.id);
+    expect(lootBlockerHere(w)).toBeNull();
+    expect(canScavenge(w)).toBe(true);
+  });
+});

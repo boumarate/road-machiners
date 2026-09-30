@@ -451,6 +451,7 @@ export function takeFromTruck(world: World, targetId: string, itemId: string, to
     const target = vehicleById(w, targetId);
     requireIdleRefit(me);
     if (!canLootTruck(me, target)) throw new Error('Park beside a knocked-out truck to loot it');
+    requireLootFree(w, me, targetId);
     const item = target.items.find((it) => it.id === itemId);
     if (!item) throw new Error(`No item ${itemId} on ${target.name}`);
     takeItem(w, me, target, item, to);
@@ -499,6 +500,12 @@ export function looterOf(world: World, targetId: string): Vehicle | null {
 export function lootBlocker(world: World, looter: Vehicle, targetId: string): Vehicle | null {
   const holder = looterOf(world, targetId);
   return holder && holder.id !== looter.id ? holder : null;
+}
+
+// Throws when another truck is looting the target, so `looter` cannot start there.
+export function requireLootFree(world: World, looter: Vehicle, targetId: string): void {
+  const blocker = lootBlocker(world, looter, targetId);
+  if (blocker) throw new Error(lootBlockedError(world, blocker, targetId));
 }
 
 export function lootBlockedError(world: World, blocker: Vehicle, targetId: string): string {
