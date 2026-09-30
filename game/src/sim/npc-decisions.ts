@@ -8,6 +8,7 @@
 // can rob, mostly a weaker one away from guards.
 
 import { dealAvailable } from './patch';
+import { canSpareFor } from './aid';
 import { ECONOMY } from '../data/goods';
 import { GOOD_SOURCES, SHOPS, type ShopDef } from '../data/market';
 import {
@@ -16,12 +17,13 @@ import {
 } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { isHostile } from './combat';
+import { huntsForLoot, isHostile } from './combat';
 import { ramFactor, ramImpact } from './crash-contact';
 import { isKnockedOut } from './defeat';
 import { vehicleById } from './damage';
 import { contactsOf } from './detect';
 import { getTradePrice } from './economy';
+import { cargoValue } from './market';
 import { maxHp } from './wear';
 import { corePart, freeCells, hasLoot, mountedParts } from './grid';
 import { isTownGuarded } from './guards';
@@ -355,6 +357,13 @@ type Availability = (world: World, vehicle: Vehicle, decision: DecisionId, subje
 
 const always = (): boolean => true;
 
+// A driver gives the player fuel or supplies only from stock above its trade reserve, and only while no aid deal with
+// the player is open.
+function canSpareSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  if (subjectOf(world, decision, subject).id !== world.player.vehicleId) throw new Error(`${decision} gives aid only to the player`);
+  return canSpareFor(world, vehicle);
+}
+
 // A client hires a free merc it sees while on a trip, with the fee above its upkeep reserve.
 function canHireSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
   return canHire(world, vehicle, subjectOf(world, decision, subject));
@@ -500,6 +509,8 @@ const AVAILABLE: Record<OptionName, Availability> = {
   hire: canHireSubject,
   take: canTakeSubject,
   decline: always,
+  give: canSpareSubject,
+  aid: canSpareSubject,
 };
 
 // ---- Situation factors, one per option. Each returns a number above 0.
@@ -543,14 +554,29 @@ function fleeFactor(world: World, vehicle: Vehicle, decision: DecisionId, subjec
   return factor(world, vehicle, decision, subject, danger);
 }
 
+type AppealCurve = { poor: number; rich: number; poorMul: number };
+
+// The factor for a cargo worth `value`: poorMul at or below poor, 1 at or above rich, geometric between.
+export function lootAppeal(value: number, curve: AppealCurve): number {
+  if (value <= curve.poor) return curve.poorMul;
+  if (value >= curve.rich) return 1;
+  return curve.poorMul ** (1 - (value - curve.poor) / (curve.rich - curve.poor));
+}
+
+// A grudge is about the driver, not the load, so a driver with revenge on the target ignores its cargo.
+function appealOf(world: World, vehicle: Vehicle, target: Vehicle, curve: AppealCurve): number {
+  return stateOf(world, 'revenge', vehicle.id, target.id) ? 1 : lootAppeal(cargoValue(target), curve);
+}
+
 // A robber mostly picks a target that looks weaker than itself times its boldness, away from town guards. Each
-// failed judgment scales rob down. Before the sighting's danger roll, `danger` is null and only guards count. The
+// failed judgment scales rob down, and so does a cheap cargo. Before the sighting's danger roll, `danger` is null and only guards count. The
 // player's social skill makes the player truck look more dangerous.
 function robFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
   const target = subjectOf(world, decision, subject);
   const seen = danger === null ? null : danger * (1 + skillEffect(world, target, 'social', 'robberyDanger'));
   const stronger = seen !== null && seen >= ownDanger(world, vehicle) * npcProfile(vehicle).boldness;
-  return (stronger ? NPC_BEHAVIOR.robStronger : 1) * guardFactor(vehicle, target, NPC_BEHAVIOR.robNearGuards);
+  const appeal = appealOf(world, vehicle, target, NPC_BEHAVIOR.lootAppeal.rob);
+  return (stronger ? NPC_BEHAVIOR.robStronger : 1) * appeal * guardFactor(vehicle, target, NPC_BEHAVIOR.robNearGuards);
 }
 
 // Guard caution: starting a fight or a robbery near a town gate is rare. It never lowers fighting back. Lawmen
@@ -560,11 +586,14 @@ function guardFactor(vehicle: Vehicle, subject: Vehicle, nearGuards: number): nu
   return isTownGuarded(vehicle.pos) || isTownGuarded(subject.pos) ? nearGuards : 1;
 }
 
-// A driver free of work mostly takes on a manageable group it sees, away from guards.
+// A driver free of work mostly takes on a manageable group it sees, away from guards. A raider there for the
+// loot attacks a cheap cargo rarely.
 function fightFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
   const target = subjectOf(world, decision, subject);
   const eager = !isBusy(vehicle) && danger !== null && isManageable(world, vehicle, danger);
-  return (eager ? NPC_BEHAVIOR.manageableFight : 1) * guardFactor(vehicle, target, NPC_BEHAVIOR.fightNearGuards);
+  const lootOnly = decision === 'hostileSeen' && huntsForLoot(world, vehicle, target);
+  const appeal = lootOnly ? appealOf(world, vehicle, target, NPC_BEHAVIOR.lootAppeal.raid) : 1;
+  return (eager ? NPC_BEHAVIOR.manageableFight : 1) * appeal * guardFactor(vehicle, target, NPC_BEHAVIOR.fightNearGuards);
 }
 
 // An attacked driver mostly defends against a manageable group, busy or not.
@@ -707,6 +736,8 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   hire: neutral,
   take: neutral,
   decline: (world, vehicle) => declineFactor(world, vehicle),
+  give: neutral,
+  aid: neutral,
 };
 
 // ---- Weights and the roll.
@@ -800,6 +831,8 @@ const DECISION_KINDS: Record<DecisionId, 'venture' | 'response'> = {
   idle: 'venture',
   escortSeen: 'venture',
   hireOffered: 'response',
+  aidAsked: 'response',
+  needySeen: 'venture',
 };
 
 // A driver that gave its word starts no venture until the deal ends, except about the truck it gave it to.

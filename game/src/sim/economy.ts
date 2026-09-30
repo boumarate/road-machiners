@@ -604,7 +604,7 @@ export function tradeWith(world: World, npc: Vehicle): NpcState | null {
 
 export function startTrade(world: World, npc: Vehicle): void {
   addState(world, "trade", npc.id, world.player.vehicleId, { kind: "none" });
-  meetGoal(world, npc, playerVehicle(world));
+  meetGoal(world, npc, playerVehicle(world), "pull over to trade");
 }
 
 // Both trucks of the meeting are parked in reach. It keeps the meeting from lapsing.

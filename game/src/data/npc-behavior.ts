@@ -103,6 +103,16 @@ export const NPC_BEHAVIOR = {
   robStronger: 0.015,
   // Rob weight times this when the robber or target is within guard range of a town gate. Same drop as above.
   robNearGuards: 0.015,
+  // What the target's cargo is worth to a robber or raider: goods and spare parts, not mounted gear. At or below
+  // `poor` the weight is times `poorMul`, at or above `rich` it is unchanged, and between them it rises
+  // geometrically so the chance climbs evenly. Rob: a scumbag's 0.45 falls to the 1% floor up to 150 in cargo,
+  // robs about 5% at 300, 13% at 400 and 31% from 500. Raid: a raider's fight of 45 against manageable prey is
+  // about 4% against an empty truck, 13% against the start cargo (78), 50% at 200 and 96% from 400. A revenge
+  // grudge skips it.
+  lootAppeal: {
+    rob: { poor: 150, rich: 500, poorMul: 0.02 },
+    raid: { poor: 0, rich: 400, poorMul: 0.002 },
+  },
   // Fight weight at a new hostile times this near town guards. A raider's fight weight of 50 against manageable
   // prey drops to 0.05, about 3%. Guards never lower fight back.
   fightNearGuards: 0.001,
@@ -146,6 +156,21 @@ export const NPC_UPKEEP = {
   reserveLoads: 1,
   // A driver sells fuel and supplies to the player only above this share of its caps.
   tradeReserve: 0.5,
+};
+
+// Fuel and supply aid between the player and NPCs, see src/sim/aid.ts. A truck is low on a supply at or below
+// RULES.lowFuelThreshold of its cap, where its speed halves.
+export const AID = {
+  // A low driver asks the player for enough of each low supply to reach this share of its cap.
+  fillShare: 0.4,
+  // A giving driver hands over this share of the player's cap per low supply, only from stock above
+  // NPC_UPKEEP.tradeReserve. A small gift, enough to reach a pump.
+  giftShare: 0.25,
+  // A driver offers aid unprompted only to a player whose truck is below this share of its body condition...
+  poorCondition: 0.5,
+  // ...and worth at most this much. That covers the start scout, worth about 3600 new, and worn tier 1 trucks, not
+  // geared tier 2 and 3 trucks like the combat start kit's hauler, worth about 6000.
+  poorValue: 4000,
 };
 
 // Raiders look for prey on lonely road stretches and at the pads of salvage sites, where scavengers stop.

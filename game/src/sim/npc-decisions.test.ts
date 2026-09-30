@@ -15,6 +15,7 @@ import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls }
 import type { TraitId } from '../data/npcs';
 import type { Faction, Vehicle, World } from './types';
 import { dist, polylineDist, type Vec } from './vec';
+import { fuelCap } from './stats';
 import { refreshVision } from './vision';
 import { cloneWorld } from './world';
 
@@ -198,6 +199,44 @@ describe('decision weights', () => {
     expect(thinkNpc(w, trader)).toMatchObject({ kind: 'tow', targetId: me });
     expect(stateOf(w, 'turnedDown', trader.id, me)).toBeNull();
     expect(thinkNpc(w, trader)).toMatchObject({ kind: 'tow', targetId: me });
+  });
+});
+
+describe('aid decisions', () => {
+  // A driver with the given traits and full tanks beside a player low on fuel, so it can spare some.
+  function aidChances(traits: TraitId[], decision: 'aidAsked' | 'needySeen'): Record<string, number> {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = addNpc(w, 'traders', 'trader', traits, { x: 36, y: 30 });
+    npc.resources!.fuel = fuelCap(npc);
+    w.player.fuel = 1;
+    return optionChances(optionWeights(w, npc, decision, w.player.vehicleId, null)) as Record<string, number>;
+  }
+
+  const HELPERS: TraitId[][] = [['trader'], ['scavenger'], ['roamer']];
+
+  it('a trader, scavenger or roamer offers aid unprompted about 3% of the time, others at the floor', () => {
+    for (const traits of HELPERS) {
+      const aid = aidChances(traits, 'needySeen').aid;
+      expect(aid).toBeGreaterThan(0.025);
+      expect(aid).toBeLessThan(0.035);
+    }
+    expect(aidChances(['lawman'], 'needySeen').aid).toBeCloseTo(MIN_CHANCE);
+  });
+
+  it('a trader, scavenger or roamer gives when asked about twice as often as others', () => {
+    const plain = aidChances(['lawman'], 'aidAsked').give;
+    expect(plain).toBeCloseTo(MIN_CHANCE + (1 - 2 * MIN_CHANCE) * (1 / 10));
+    for (const traits of HELPERS) expect(aidChances(traits, 'aidAsked').give).toBeCloseTo(MIN_CHANCE + (1 - 2 * MIN_CHANCE) * (2 / 11));
+  });
+
+  it('keeps every aid option at MIN_CHANCE or more', () => {
+    for (const traits of [...HELPERS, ['lawman'], ['courier'], ['supplier'], ['raider']] as TraitId[][]) {
+      for (const decision of ['aidAsked', 'needySeen'] as const) {
+        const chances = Object.values(aidChances(traits, decision));
+        expect(chances).toHaveLength(2);
+        for (const chance of chances) expect(chance).toBeGreaterThanOrEqual(MIN_CHANCE);
+      }
+    }
   });
 });
 
