@@ -190,6 +190,11 @@ export function settlePatch(world: World, s: NpcState): void {
   if (s.other === world.player.vehicleId) practice(world, 'deal', 1, null, s.holder);
 }
 
+// A patch that broke, for lack of parts or pay or under attack, ends with no exchange.
+export function breakPatch(world: World, s: NpcState): void {
+  world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'broken' });
+}
+
 // A patch nobody worked on for its whole timer lapses for free.
 export function lapsePatch(world: World, s: NpcState): void {
   world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'lapsed' });

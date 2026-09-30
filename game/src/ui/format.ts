@@ -310,8 +310,10 @@ function patchText(world: World, e: Extract<GameEvent, { t: 'patch' }>): LogLine
     started: e.patcher === me ? `You start patching ${other}. Stay parked beside it.` : `${other} starts patching your truck. Stay parked.`,
     done: e.patcher === me ? `You patched ${other}.` : `${other} patched your truck.`,
     lapsed: `The patch with ${other} is off: nobody worked on it.`,
+    broken: `The patch with ${other} is off.`,
   };
-  return { text: lines[e.outcome], cls: e.outcome === 'lapsed' ? 'dim' : e.outcome === 'done' ? 'good' : '' };
+  const cls = { started: '', done: 'good', lapsed: 'dim', broken: 'dim' }[e.outcome];
+  return { text: lines[e.outcome], cls };
 }
 
 // Fuel and supplies that changed hands between the player and a driver, and what the driver paid.

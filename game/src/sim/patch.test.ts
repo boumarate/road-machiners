@@ -50,6 +50,8 @@ function brokenPlayer(traderParts: number): { w: World; trader: Vehicle } {
   return { w, trader };
 }
 
+const patchOutcomes = (events: GameEvent[]) => events.flatMap((e) => (e.t === 'patch' ? [e.outcome] : []));
+
 function askPatch(w: World, traderId: string): World {
   w = callVehicle(w, traderId);
   return answer(w, 'My truck is broken down. Can you patch it?');
@@ -159,6 +161,7 @@ describe('asking a driver for a patch', () => {
     const open = callVehicle(cloneWorld(w), trader.id);
     expect(currentOptions(open).map((o) => o.text)).not.toContain('My truck is broken down. Can you patch it?');
     thinkNpc(w, find(w, trader.id));
+    expect(patchOutcomes(w.events)).toEqual(['broken']);
     expect(stateOf(w, 'patch', trader.id, w.player.vehicleId)).toBeNull();
     expect(find(w, trader.id).brain!.goals.some((g) => g.kind === 'patch')).toBe(false);
   });
@@ -293,7 +296,9 @@ describe('a stranded driver asking the player', () => {
     Object.assign(deal, { deal: 'paid', price: Math.max(deal.price, 1) });
     find(w, npc.id).resources!.money = 0;
     w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 38, y: 30 } });
-    w = runUntil(w, 40, (x) => stateOf(x, 'patch', x.player.vehicleId, npc.id) === null).w;
+    const r = runUntil(w, 40, (x) => stateOf(x, 'patch', x.player.vehicleId, npc.id) === null);
+    w = r.w;
+    expect(patchOutcomes(r.events).filter((o) => o !== 'started')).toEqual(['broken']);
     expect(find(w, npc.id).resources!.money).toBe(0);
     expect(isStranded(w, find(w, npc.id))).toBe(true);
     expect(parts(playerVehicle(w))).toBe(4);
