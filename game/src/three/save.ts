@@ -63,10 +63,9 @@ export function loadWorld(storage: Storage, map: BakedMap): World | null {
   if (raw === null) return null;
   const world = savedWorld(parsedSave(raw));
   if (world.mapHash !== map.hash) throw new SaveError(`Game save was made on map ${world.mapHash}, not on the current map ${map.hash}`);
-  const explored: unknown = world.player.explored;
-  if (!Array.isArray(explored) || explored.length !== world.size * world.size) throw new SaveError('Invalid saved explored tiles');
+  const explored = unpackExplored(world.player.explored, world.size * world.size);
   if (world.obstacles.some(isBakedObstacle)) throw new SaveError('Game save holds baked map props, which come from the map file');
-  const player = { ...world.player, explored: Uint8Array.from(explored) };
+  const player = { ...world.player, explored };
   return { ...world, player, obstacles: [...standingBaked(map, world.broken), ...world.obstacles], terrain: map.terrain };
 }
 
@@ -153,8 +152,35 @@ export function writeSave(storage: Storage, world: World): void {
 // The save of a world as it goes into JSON.
 export function saveOf(world: World): { format: typeof SAVE_FORMAT; world: object } {
   const { terrain: _terrain, ...saved } = world;
-  // JSON writes a typed array as an object keyed by index, so explored goes out as a plain list.
-  const player = { ...saved.player, explored: Array.from(saved.player.explored) };
+  // JSON writes a typed array as an object keyed by index, so explored goes out as a base64 bitset.
+  const player = { ...saved.player, explored: packExplored(saved.player.explored) };
   const obstacles = saved.obstacles.filter((o) => !isBakedObstacle(o));
   return { format: SAVE_FORMAT, world: { ...saved, player, obstacles } };
+}
+
+// Explored tiles go into a save as a base64 bitset, one bit per tile and the least significant bit first. A list of zeros
+// and ones would take 2 characters per tile, past what five saves leave of the local storage quota.
+export function packExplored(explored: Uint8Array): string {
+  const bytes = new Uint8Array(Math.ceil(explored.length / 8));
+  explored.forEach((value, i) => {
+    if (value !== 0 && value !== 1) throw new Error(`Explored tile ${i} is ${value}, not 0 or 1`);
+    bytes[i >> 3] |= value << (i & 7);
+  });
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+export function unpackExplored(packed: unknown, tiles: number): Uint8Array {
+  if (typeof packed !== 'string') throw new SaveError('Invalid saved explored tiles');
+  let binary: string;
+  try {
+    binary = atob(packed);
+  } catch {
+    throw new SaveError('Invalid saved explored tiles');
+  }
+  if (binary.length !== Math.ceil(tiles / 8)) throw new SaveError('Invalid saved explored tiles');
+  const explored = new Uint8Array(tiles);
+  for (let i = 0; i < tiles; i++) explored[i] = (binary.charCodeAt(i >> 3) >> (i & 7)) & 1;
+  return explored;
 }

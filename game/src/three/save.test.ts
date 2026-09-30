@@ -5,7 +5,7 @@ import { emptyWorld } from '../sim/testkit';
 import { moveItem } from '../sim/inventory';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
-import { clearGame, clearSave, hasSave, loadWorld, SaveError, saveKey, saveInTown, saveOf, saveWorld, writeSave } from './save';
+import { clearGame, clearSave, hasSave, loadWorld, packExplored, SaveError, unpackExplored, saveKey, saveInTown, saveOf, saveWorld, writeSave } from './save';
 import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
 import { TEST_MAP } from '../test/map';
@@ -72,6 +72,21 @@ describe('local game save', () => {
     for (let turn = 0; turn < 4; turn++) advanceJobs(loaded);
     expect(loaded.vehicles[0].job).toBeNull();
     expect(loaded.vehicles[0].items.find((item) => item.id === weapon.id)).toMatchObject(to);
+  });
+
+  it('stores explored as a string', () => {
+    const storage = makeStorage();
+    writeSave(storage, newWorld(1337, startKit('standard'), TEST_MAP));
+    expect(typeof JSON.parse(storage.getItem('roam.save')!).world.player.explored).toBe('string');
+  });
+
+  it('rejects explored of the wrong length', () => {
+    const storage = makeStorage();
+    writeSave(storage, newWorld(1337, startKit('standard'), TEST_MAP));
+    const raw = JSON.parse(storage.getItem('roam.save')!);
+    raw.world.player.explored = 'AAAA';
+    storage.setItem('roam.save', JSON.stringify(raw));
+    expect(() => loadWorld(storage, TEST_MAP)).toThrow(SaveError);
   });
 
   it('returns null when there is no saved game', () => {
@@ -270,5 +285,33 @@ describe('saveKey', () => {
     const storage = makeStorage();
     storage.setItem('roam.save', JSON.stringify({ format: { major: SAVE_MAJOR, minor: 0 }, world: { vehicles: 5, player: 7 } }));
     expect(() => loadWorld(storage, TEST_MAP)).toThrow(SaveError);
+  });
+});
+
+function pattern(length: number): Uint8Array {
+  return Uint8Array.from({ length }, (_, i) => (i * 7 + (i >> 3)) % 3 === 0 ? 1 : 0);
+}
+
+describe('explored bitset', () => {
+  it('round-trips any length', () => {
+    for (const length of [1, 8, 9, 360_000]) {
+      const explored = pattern(length);
+      expect(unpackExplored(packExplored(explored), length)).toEqual(explored);
+    }
+  });
+
+  it('packs 360,000 tiles into 60,000 characters', () => {
+    expect(packExplored(new Uint8Array(360_000)).length).toBe(60_000);
+  });
+
+  it('rejects the wrong length and a non-string as a SaveError', () => {
+    const packed = packExplored(pattern(16));
+    expect(() => unpackExplored(packed, 40)).toThrow(SaveError);
+    expect(() => unpackExplored([0, 1], 2)).toThrow(SaveError);
+    expect(() => unpackExplored('!!!', 8)).toThrow(SaveError);
+  });
+
+  it('refuses to pack a value other than 0 or 1', () => {
+    expect(() => packExplored(Uint8Array.from([0, 2]))).toThrow(/not 0 or 1/);
   });
 });
