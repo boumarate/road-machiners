@@ -10,17 +10,17 @@ Parts are defined in `src/data/parts.ts`, chassis in `src/data/chassis.ts` and g
 | id | name | tier | value | max speed (tiles/turn) | accel | brake | mass (kg) | rated mass (kg) | radius (tiles) | fuel cap | fuel per tile | grid (w x h) | core parts |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | scout | Scout pickup | 1 | 2444 | 7.8 | 2 | 3 | 680 | 3840 | 0.6 | 40 | 0.25 | 7 x 8 | cabPickup, transmission, tank, wheel, wheel, wheel, wheel |
-| hauler | Hauler | 2 | 3676 | 5.2 | 1 | 2 | 2730 | 7700 | 0.8 | 80 | 0.4 | 9 x 9 | cabOver, transmissionMid, tankMid, wheelMid, wheelMid, wheelMid, wheelMid |
-| buggy | Buggy | 1 | 1928 | 9.1 | 3 | 3 | 230 | 3190 | 0.5 | 30 | 0.2 | 6 x 8 | cab, transmission, tank, wheel, wheel, wheel, wheel |
-| wagon | Gunwagon | 2 | 3022 | 3.9 | 1 | 2 | 2130 | 5620 | 0.8 | 60 | 0.4 | 8 x 7 | cab, transmissionHeavy, tankHeavy, wheelHeavy, wheelHeavy, wheelHeavy, wheelHeavy |
-| courier | Courier | 1 | 2320 | 9.75 | 3 | 3 | 280 | 3660 | 0.5 | 24 | 0.18 | 6 x 9 | cab, transmission, tank, wheel, wheel, wheel, wheel |
-| van | Utility van | 2 | 3080 | 6.5 | 1.5 | 3 | 1100 | 4900 | 0.7 | 55 | 0.24 | 7 x 9 | cabRow, transmissionMid, tankMid, wheelMid, wheelMid, wheelMid, wheelMid |
-| longbed | Longbed truck | 3 | 5384 | 4.55 | 0.8 | 1.8 | 2900 | 8710 | 0.95 | 100 | 0.48 | 9 x 11 | cabWide, transmissionHeavy, tankHeavy, wheelHeavy, wheelHeavy, wheelHeavy, wheelHeavy |
-| carrier | Armored carrier | 3 | 4876 | 5.2 | 1 | 2.5 | 3200 | 7750 | 0.85 | 70 | 0.5 | 8 x 9 | cab, transmissionHeavy, tankHeavy, wheelHeavy, wheelHeavy, wheelHeavy, wheelHeavy |
-| tractor | Heavy tractor | 3 | 4382 | 3.9 | 1.8 | 2 | 3600 | 8240 | 0.9 | 120 | 0.6 | 9 x 9 | cabWide, transmissionHeavy, tankHeavy, wheelHeavy, wheelHeavy, wheelHeavy, wheelHeavy |
-| jeep | Jeep | 1 | 2186 | 8.2 | 2.5 | 3 | 450 | 3830 | 0.55 | 35 | 0.2 | 6 x 9 | cab, transmission, tank, wheel, wheel, wheel, wheel |
+| hauler | Hauler | 2 | 3676 | 5.2 | 1 | 2 | 2730 | 7590 | 0.8 | 80 | 0.4 | 9 x 9 | cabPickup, transmissionMid, tankMid, wheelMid, wheelMid, wheelMid, wheelMid |
+| buggy | Buggy | 1 | 1928 | 9.1 | 3 | 3 | 230 | 3080 | 0.5 | 30 | 0.2 | 6 x 8 | cab, transmission, tank, wheel, wheel, wheel, wheel |
+| wagon | Gunwagon | 2 | 3022 | 3.9 | 1 | 2 | 2130 | 5510 | 0.8 | 60 | 0.4 | 8 x 7 | cab, transmissionHeavy, tankHeavy, wheelHeavy, wheelHeavy, wheelHeavy, wheelHeavy |
+| courier | Courier | 1 | 2320 | 9.75 | 3 | 3 | 280 | 3550 | 0.5 | 24 | 0.18 | 6 x 9 | cab, transmission, tank, wheel, wheel, wheel, wheel |
+| van | Utility van | 2 | 3080 | 6.5 | 1.5 | 3 | 1100 | 4790 | 0.7 | 55 | 0.24 | 7 x 9 | cabPickup, transmissionMid, tankMid, wheelMid, wheelMid, wheelMid, wheelMid |
+| longbed | Longbed truck | 3 | 5384 | 4.55 | 0.8 | 1.8 | 2900 | 8930 | 0.95 | 100 | 0.48 | 9 x 11 | cabPickup, transmissionHeavy, tankHeavy, wheelHeavy, wheelHeavy, wheelHeavy, wheelHeavy |
+| carrier | Armored carrier | 3 | 4876 | 5.2 | 1 | 2.5 | 3200 | 7420 | 0.85 | 70 | 0.5 | 8 x 9 | cabPickup, transmissionHeavy, tankHeavy, wheelHeavy, wheelHeavy, wheelHeavy, wheelHeavy |
+| tractor | Heavy tractor | 3 | 4382 | 3.9 | 1.8 | 2 | 3600 | 8460 | 0.9 | 120 | 0.6 | 9 x 9 | cabPickup, transmissionHeavy, tankHeavy, wheelHeavy, wheelHeavy, wheelHeavy, wheelHeavy |
+| jeep | Jeep | 1 | 2186 | 8.2 | 2.5 | 3 | 450 | 3720 | 0.55 | 35 | 0.2 | 6 x 9 | cab, transmission, tank, wheel, wheel, wheel, wheel |
 | convertible | Convertible | 2 | 2992 | 9.4 | 2.5 | 3 | 750 | 4440 | 0.6 | 45 | 0.26 | 7 x 9 | cabHardtop, transmission, tankLong, wheel, wheel, wheel, wheel |
-| bus | Bus | 2 | 3800 | 5.5 | 0.9 | 2 | 3000 | 9030 | 0.9 | 110 | 0.45 | 8 x 12 | cabNarrow, transmissionMid, tankMid, wheelMid, wheelMid, wheelMid, wheelMid |
+| bus | Bus | 2 | 3800 | 5.5 | 0.9 | 2 | 3000 | 8810 | 0.9 | 110 | 0.45 | 8 x 12 | cabPickup, transmissionMid, tankMid, wheelMid, wheelMid, wheelMid, wheelMid |
 | loader | Wheel loader | 3 | 5088 | 3.6 | 1.6 | 2.5 | 4200 | 9060 | 0.9 | 130 | 0.65 | 9 x 9 | cabPickup, transmissionHeavy, tankHeavy, wheelHeavy, wheelHeavy, wheelHeavy, wheelHeavy |
 <!-- /wiki:chassis -->
 
@@ -146,13 +146,9 @@ Each weapon's round:
 <!-- wiki:core -->
 | id | name | tier | value | cells (w x h) | mass (kg) | hp | armor | tall | role |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| cab | Driver seat | 1 | 200 | 1 x 1 | 80 | 120 | 3 | false | cab |
-| cabNarrow | Cabin | 1 | 200 | 1 x 2 | 80 | 120 | 3 | true | cab |
-| cabRow | Cab | 1 | 200 | 3 x 1 | 80 | 120 | 3 | true | cab |
+| cab | Driver seat | 1 | 200 | 1 x 2 | 80 | 120 | 3 | false | cab |
 | cabPickup | Cab | 1 | 200 | 3 x 2 | 80 | 120 | 3 | true | cab |
 | cabHardtop | Hardtop cab | 1 | 200 | 3 x 2 | 80 | 120 | 3 | true | cab |
-| cabOver | Cab | 1 | 200 | 2 x 2 | 80 | 120 | 3 | true | cab |
-| cabWide | Cab | 1 | 200 | 5 x 2 | 80 | 120 | 3 | true | cab |
 | transmission | Transmission | 1 | 150 | 2 x 2 | 60 | 40 | 3 | false | transmission |
 | transmissionMid | Truck transmission | 1 | 170 | 2 x 2 | 60 | 60 | 4 | false | transmission |
 | transmissionHeavy | Heavy transmission | 1 | 200 | 2 x 2 | 60 | 90 | 6 | false | transmission |

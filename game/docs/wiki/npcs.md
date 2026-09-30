@@ -15,6 +15,7 @@ NPC behavior has three layers. Traits in `brain.traits` are permanent. A goal st
 | noseArmy | Nose Army patrol | nose | lawman, brave |  | hold | 0 | 0 | 3 | 70 | {"kind":"sites","ids":["nose"]} |
 | courier | Courier | couriers | courier | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 3 | 30 | {"kind":"town"} |
 | roamer | Roamer | roamers | roamer | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 3 | 30 | {"kind":"town"} |
+| vulture | Vulture | vultures | vulture | coward (0.6), scumbag (0.35), brave (0.1) | hold | 0 | 0 | 3 | 30 | {"kind":"town"} |
 | convoy | Supply convoy | convoys | supplier | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 2 | 100 | {"kind":"sites","ids":["bowl","nose"]} |
 | convoyGuard | Convoy guard | convoys | guard, brave | scumbag (0.25) | hold | 0 | 0 | 2 | 100 | {"kind":"escort","of":"convoy"} |
 | merc | Merc | mercs | merc | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 3 | 70 | {"kind":"sites","ids":["bowl","nose"]} |
@@ -35,6 +36,7 @@ NPC behavior has three layers. Traits in `brain.traits` are permanent. A goal st
 | lawman | never | 1 | 1 | idle.patrol +20, idle.wait +2, idle.scavenge  x0.05, hostileSeen.fight +8, attacked.fightBack  x2, strandedSeen.tow +9, parley.truce  x0.3, parley.beg  x0.3, threatened.comply  x0.2, threatened.fightBack +2 |
 | courier | offDuty | 1 | 1 | idle.travel +20, idle.scavenge  x0.001, strandedSeen.tow +2, hostileSeen.fight  x0.1, threatened.comply +1, escortSeen.hire +0.5 |
 | roamer | offDuty | 1 | 1 | idle.explore +10, idle.trade +3, idle.scavenge +2, salvageSeen.loot +3, strandedSeen.tow +3, escortSeen.hire +0.2 |
+| vulture | offDuty | 1 | 1 | idle.prowl +10, idle.scavenge +2, salvageSeen.loot +20, crashed.retaliate +0.5 |
 | supplier | never | 1 | 1 | idle.haul +30, idle.scavenge  x0.001, strandedSeen.tow +9, hostileSeen.fight  x0.002, attacked.fightBack  x0.1, threatened.comply +1, threatened.fightBack  x0.1 |
 | guard | never | 1 | 1 | idle.escort +30, idle.wait +5, idle.travel +1, idle.scavenge  x0.001, hostileSeen.fight +8, attacked.fightBack  x2, threatened.comply  x0.2, threatened.fightBack +2 |
 | merc | offDuty | 1 | 1 | idle.wait +10, idle.travel +1, idle.scavenge  x0.001, hostileSeen.fight +4, attacked.fightBack  x2, threatened.comply  x0.2, threatened.fightBack +2 |
@@ -95,6 +97,7 @@ Base weights of every option at each decision point. Traits and states add or mu
 | idle | trade | 0 |
 | idle | scavenge | 1 |
 | idle | raid | 0 |
+| idle | prowl | 0 |
 | idle | wait | 0.1 |
 | idle | patrol | 0 |
 | idle | travel | 0 |

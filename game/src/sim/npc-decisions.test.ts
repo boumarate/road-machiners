@@ -19,7 +19,7 @@ import { refreshVision } from './vision';
 import { cloneWorld } from './world';
 
 function addNpc(w: World, faction: Faction, templateId: string, traits: TraitId[], pos: Vec, parts = ['mg', 'stockEngine']): Vehicle {
-  const v = addVehicle(w, faction, 'scout', parts, pos);
+  const v = addVehicle(w, faction, 'wagon', parts, pos);
   v.brain = npcBrain(templateId, pos, traits);
   return v;
 }
@@ -102,7 +102,7 @@ describe('decision weights', () => {
     const w = emptyWorld({ x: 80, y: 80 });
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 }, ['mg', 'stockEngine']);
     const weak = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
-    const strong = addVehicle(w, 'raiders', 'scout', ['autocannon'], { x: 14, y: 12 });
+    const strong = addVehicle(w, 'raiders', 'wagon', ['autocannon'], { x: 14, y: 12 });
     const calm = optionWeights(w, npc, 'hostileSeen', weak.id, vehicleDanger(w, weak)).flee!;
     expect(optionWeights(w, npc, 'hostileSeen', strong.id, vehicleDanger(w, strong)).flee).toBeGreaterThan(calm);
     corePart(npc, 'cab').hp = 1;

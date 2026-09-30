@@ -32,7 +32,7 @@ const GUARDED = RULES.guards.range / 2;
 const UNGUARDED = RULES.guards.range + 4;
 
 function addScumbag(w: World, pos: Vec, parts = ['mg', 'stockEngine'], traits: TraitId[] = ['scavenger', 'scumbag']): Vehicle {
-  const v = addVehicle(w, 'scavengers', 'scout', parts, pos);
+  const v = addVehicle(w, 'scavengers', 'wagon', parts, pos);
   v.brain = npcBrain('scavenger', pos, traits);
   return v;
 }
