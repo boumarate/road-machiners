@@ -29,11 +29,20 @@ export function publishBuild(ctx: Ctx, clone: string, scope: string): string {
   return `${ctx.cfg.publicUrl}/${scope}/`;
 }
 
+// Records which dev commit /dev/ serves, or which one failed, so the tick rebuilds /dev/ only when dev moves.
 export async function deployDev(ctx: Ctx, log: string): Promise<string> {
   const dir = `${ctx.cfg.home}/work/dev-build`;
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone('dev', 'dev', dir);
-  return buildAndDeploy(ctx, dir, 'dev', log);
+  const head = await ctx.repo.headHash('dev');
+  try {
+    const url = await buildAndDeploy(ctx, dir, 'dev', log);
+    updateState(ctx.statePath, (state) => ({ ...state, devBuild: head, devFailed: null }));
+    return url;
+  } catch (error) {
+    updateState(ctx.statePath, (state) => ({ ...state, devFailed: head }));
+    throw error;
+  }
 }
 
 // The testing stage calls this after it deploys a build, so cleanup keeps the folder while the card waits in Approval.

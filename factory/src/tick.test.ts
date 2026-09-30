@@ -8,7 +8,8 @@ import { FACTORY_MARK, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Ca
 
 const NOW = new Date('2026-01-10T12:00:00Z');
 const CFG = { releaseDays: 7, maxJobsPerDay: 3 };
-const FRESH = { lastRelease: '2026-01-09T12:00:00Z' };
+const DEV = 'dev0001';
+const FRESH = { lastRelease: '2026-01-09T12:00:00Z', devBuild: DEV };
 
 const state = (over: Partial<FactoryState> = {}): FactoryState => ({ ...structuredClone(EMPTY_STATE), ...FRESH, ...over });
 const card = (issue: number, column: Card['column'], labels: string[] = []): Card => ({ itemId: `i${issue}`, issue, column, labels });
@@ -144,6 +145,19 @@ describe('chooseJob', () => {
     expect(chooseJob(state(), [card(2, 'Triage', [NEEDS_INFO_LABEL]), card(4, 'Triage', [STUCK_LABEL])], NOW, CFG)).toBeNull();
   });
 
+  it('rebuilds /dev/ when dev moved, after queued work and before cards, at the cap too', () => {
+    const cards = [card(6, 'Implementation', ['adhoc']), card(4, 'Design')];
+    expect(chooseJob(state(), cards, NOW, CFG, 'dev0002')).toEqual({ stage: 'dev', issue: null });
+    expect(chooseJob(state({ jobStarts: starts(23, 5, 1) }), [], NOW, CFG, 'dev0002')).toEqual({ stage: 'dev', issue: null });
+    expect(chooseJob(state({ pendingApprovals: { '4': 'u' } }), [], NOW, CFG, 'dev0002')).toEqual({ stage: 'approve', issue: 4 });
+  });
+
+  it('leaves /dev/ alone when it serves dev or dev failed to build', () => {
+    expect(chooseJob(state(), [], NOW, CFG, DEV)).toBeNull();
+    expect(chooseJob(state({ devFailed: 'dev0002' }), [], NOW, CFG, 'dev0002')).toBeNull();
+    expect(chooseJob(state({ devFailed: 'dev0002' }), [], NOW, CFG, 'dev0003')).toEqual({ stage: 'dev', issue: null });
+  });
+
   it('skips stuck cards, Approval and Done', () => {
     const cards = [card(1, 'Testing', [STUCK_LABEL]), card(2, 'Approval'), card(3, 'Done'), card(4, 'Design')];
     expect(chooseJob(state(), cards, NOW, CFG)).toEqual({ stage: 'design', issue: 4 });
@@ -153,7 +167,7 @@ describe('chooseJob', () => {
 
 type Harness = { ctx: Ctx; sent: string[]; labels: string[]; removed: string[]; deps: TickDeps; killed: number[]; spawned: string[][] };
 
-function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: IssueComment[] = []): Harness {
+function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: IssueComment[] = [], devHead = DEV): Harness {
   const dir = mkdtempSync(join(tmpdir(), 'tick-'));
   const statePath = join(dir, 'state.json');
   writeState(statePath, state({ job }));
@@ -165,7 +179,8 @@ function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: 
   const github = { cards: async () => cards, candidates: async () => [], addLabel: async (n: number, l: string) => { labels.push(`${n}:${l}`); }, comments: async () => comments, removeLabel: async (n: number, l: string) => { removed.push(`${n}:${l}`); } };
   const telegram = { sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; } };
   const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', stageTimeoutMinutes: 30, ...CFG };
-  const ctx = { cfg, github, telegram, statePath, now: () => NOW, log: () => undefined } as unknown as Ctx;
+  const repo = { sync: async () => {}, headHash: async (branch: string) => { if (branch !== 'dev') throw new Error(`unexpected branch ${branch}`); return devHead; } };
+  const ctx = { cfg, github, telegram, repo, statePath, now: () => NOW, log: () => undefined } as unknown as Ctx;
   const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid) => { killed.push(pid); }, spawn: (args) => { spawned.push(args); return 77; } };
   return { ctx, sent, labels, removed, deps, killed, spawned };
 }
@@ -205,6 +220,13 @@ describe('tick', () => {
     const started = readState(h.ctx.statePath).job;
     expect(started).toMatchObject({ stage: 'implement', issue: 8, pid: 77 });
     expect(started?.log).toMatch(/logs\/implement-8-2026-01-10T120000\.000Z\.log$/);
+  });
+
+  it('starts a /dev/ rebuild when origin dev moved past the build', async () => {
+    const h = harness(null, false, [card(8, 'Implementation')], [], 'dev0002');
+    await tick(h.ctx, '/code', h.deps);
+    expect(h.spawned).toEqual([['dev', '-']]);
+    expect(readState(h.ctx.statePath).jobStarts).toEqual([]);
   });
 
   it('removes needs-info from an answered Triage card and starts its triage', async () => {

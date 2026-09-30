@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildAndDeploy, recordBuild, removeStaleBuilds } from './deploy';
+import { buildAndDeploy, deployDev, recordBuild, removeStaleBuilds } from './deploy';
 import { EMPTY_STATE, readState, writeState } from './state';
 import type { Ctx } from './types';
 
@@ -52,6 +52,36 @@ describe('removeStaleBuilds', () => {
 
   it('does nothing when the web root does not exist yet', () => {
     expect(removeStaleBuilds(join('tmp', 'factory-no-such-web'), new Set(), () => undefined)).toEqual([]);
+  });
+});
+
+describe('deployDev', () => {
+  function devSetup(buildFails: boolean): { ctx: Ctx; statePath: string } {
+    const { ctx, webRoot } = setup();
+    const home = join(webRoot, '..');
+    const statePath = join(home, 'state.json');
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), devFailed: 'old1234' });
+    const repo = {
+      prepareWorkClone: async (_branch: string, _base: string, dir: string) => {
+        mkdirSync(join(dir, 'game', 'dist'), { recursive: true });
+        writeFileSync(join(dir, 'game', 'dist', 'index.html'), 'dev');
+      },
+      headHash: async () => 'abc1234',
+    };
+    const container = { agent: async () => {}, shell: async () => { if (buildFails) throw new Error('build broke'); } };
+    return { ctx: { ...ctx, cfg: { ...ctx.cfg, home }, repo, container, statePath } as unknown as Ctx, statePath };
+  }
+
+  it('publishes /dev/ and records the dev commit it serves', async () => {
+    const { ctx, statePath } = devSetup(false);
+    expect(await deployDev(ctx, '/l')).toBe('http://x/play/dev/');
+    expect(readState(statePath)).toMatchObject({ devBuild: 'abc1234', devFailed: null });
+  });
+
+  it('records a failed dev commit and throws', async () => {
+    const { ctx, statePath } = devSetup(true);
+    await expect(deployDev(ctx, '/l')).rejects.toThrow('build broke');
+    expect(readState(statePath)).toMatchObject({ devBuild: null, devFailed: 'abc1234' });
   });
 });
 

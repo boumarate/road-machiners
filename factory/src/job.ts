@@ -1,3 +1,4 @@
+import { deployDev } from './deploy';
 import { failureIssue, reportFailure } from './fail';
 import { adhoc } from './stages/adhoc';
 import { approve } from './stages/approval';
@@ -16,7 +17,7 @@ import type { Ctx, JobStage } from './types';
 type Handler = (ctx: Ctx, issue: number) => Promise<void>;
 
 // Ship reads who pressed it from the state, so the job cannot run without a queued Ship.
-const HANDLERS: Record<Exclude<JobStage, 'release'>, Handler> = {
+const HANDLERS: Record<Exclude<JobStage, 'release' | 'dev'>, Handler> = {
   triage, design, implement, testing, change, adhoc, candidate, remove,
   ship: (ctx, issue) => ship(ctx, issue, readState(ctx.statePath).pendingShip),
   approve: (ctx, issue) => approve(ctx, issue, readState(ctx.statePath).pendingApprovals[String(issue)] ?? 'the committee'),
@@ -37,6 +38,8 @@ export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null): P
 
 async function dispatch(ctx: Ctx, stage: JobStage, issue: number | null): Promise<void> {
   if (stage === 'release') return release(ctx);
+  // A dev job run by hand has no job in the state, so its build output goes to a fixed log.
+  if (stage === 'dev') return void (await deployDev(ctx, readState(ctx.statePath).job?.log ?? `${ctx.cfg.home}/logs/dev-build.log`));
   if (issue === null) throw new Error(`Job ${stage} needs an issue or change id`);
   return HANDLERS[stage](ctx, issue);
 }
