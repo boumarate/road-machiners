@@ -1112,14 +1112,14 @@ export const TRAITS: Record<TraitId, Trait> = {
       escortSeen: { hire: { add: 1 } }, aidAsked: { give: { mul: 2 } }, needySeen: { aid: { add: 0.02 } },
     },
   },
-  // Raiders fight most hostiles they see and close in on most useful contacts. A raid ties with salvage in sight.
+  // Raiders fight most hostiles they see and close in on most useful contacts. A raid ties with salvage in sight. An idle raider raids about three times in five and patrols the roads around its camp otherwise.
   // A raider answers half the crashes with a fight, seldom asks for peace and refuses a truce more often than not,
   // and nearly always from prey it expects to beat. Threatened or warned off a wreck, it mostly fights. Nine in ten raiders help a stranded
   // raider, the only truck they tow.
   raider: {
     towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: {
-      idle: { raid: { add: 9 } }, contactHeard: { investigate: { add: 10.8 } }, hostileSeen: { fight: { add: 7.2 } }, strandedSeen: { tow: { add: 9 } },
+      idle: { raid: { add: 9 }, patrol: { add: 6 } }, contactHeard: { investigate: { add: 10.8 } }, hostileSeen: { fight: { add: 7.2 } }, strandedSeen: { tow: { add: 9 } },
       crashed: { retaliate: { add: 3 } }, parley: { truce: { mul: 0.3 }, beg: { mul: 0.3 } }, truceOffered: { refuse: { add: 2 } },
       mercyBegged: { finish: { add: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } }, warnedOff: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
     },

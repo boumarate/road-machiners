@@ -6,9 +6,9 @@ import { TERRAIN } from '../data/terrain';
 import { corePart, coreParts, mountedParts } from './grid';
 import { maxHp } from './wear';
 import { addGoods } from './inventory';
-import { decide, huntingGrounds, isWeak, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
+import { decide, huntingGrounds, isWeak, lawmanTowns, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
 import { siteLootTable } from './salvage';
-import { sitePads } from './sites';
+import { siteGates, sitePads } from './sites';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
 import { addState, endState, stateOf } from './states';
 import { playerVehicle } from './damage';
@@ -500,6 +500,33 @@ describe('hunting grounds', () => {
     for (const p of grounds.filter(onRoad)) for (const site of sites) expect(dist(p, site.pos) - site.radius).toBeGreaterThanOrEqual(HUNT.siteDistance);
     const guarded = [...REGION.towns, ...REGION.locations.filter((l) => l.kind === 'camp')];
     for (const p of grounds) for (const site of guarded) expect(dist(p, site.pos)).toBeGreaterThan(site.radius + REGION.sites.pad.length);
+  });
+});
+
+describe('raider grounds', () => {
+  const camps = REGION.locations.filter((l) => l.kind === 'camp');
+  const scrapjaw = camps.find((c) => c.id === 'scrapjaw')!;
+  const kiln = camps.find((c) => c.id === 'kiln')!;
+  const lawGates = () => lawmanTowns().flatMap((town) => siteGates(town));
+
+  it('are hunting grounds outside lawman reach, for each camp', () => {
+    expect(lawmanTowns().map((t) => t.id).sort()).toEqual(['bowl', 'nose']);
+    for (const camp of [scrapjaw, kiln]) {
+      expect(raiderGrounds(camp).length).toBeGreaterThanOrEqual(2); // Scrapjaw keeps 2 on the current map
+      for (const p of raiderGrounds(camp)) {
+        expect(huntingGrounds()).toContainEqual(p);
+        for (const gate of lawGates()) expect(dist(gate, p)).toBeGreaterThan(HUNT.lawReach);
+      }
+    }
+  });
+
+  it('belong to the nearest camp alone', () => {
+    for (const [camp, other] of [[scrapjaw, kiln], [kiln, scrapjaw]]) {
+      for (const p of raiderGrounds(camp)) {
+        expect(dist(p, camp.pos)).toBeLessThanOrEqual(dist(p, other.pos));
+        expect(raiderGrounds(other)).not.toContainEqual(p);
+      }
+    }
   });
 });
 
