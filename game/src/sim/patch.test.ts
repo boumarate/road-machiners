@@ -322,6 +322,7 @@ describe('a holed fuel tank', () => {
 
   it('gets no patch or aid offer and raises no request while on a tow rope', () => {
     const { w, npc } = holedNpc(0);
+    npc.resources!.supplies = 0; // a leaking tank asks for no fuel, so the aid offer rests on supplies
     const offers = ['Your truck looks dead. Want me to patch it?', 'Running low? I can spare some.'];
     expect(currentOptions(callVehicle(cloneWorld(w), npc.id)).map((o) => o.text)).toEqual(expect.arrayContaining(offers));
     const tower = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 44, y: 30 }, Math.PI);
