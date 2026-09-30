@@ -20,6 +20,12 @@ display:
       long_running_notifications: false
       streaming: false
 
+# Hermes's shell and scripts get only the env keys named here. allowlist.py copies them into the Hermes .env.
+terminal:
+  env_passthrough:
+    - GH_TOKEN
+    - FACTORY_REPO
+
 plugins:
   enabled:
     - factory

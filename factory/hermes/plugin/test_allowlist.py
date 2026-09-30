@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from allowlist import with_allowlist, write_allowlist  # noqa: E402
+from allowlist import with_allowlist, with_values, write_allowlist, write_passed  # noqa: E402
 
 
 def test_replaces_the_line_and_keeps_others():
@@ -28,3 +28,13 @@ def test_write_is_private(tmp_path):
     write_allowlist(env, {"3"})
     assert env.read_text() == "TELEGRAM_ALLOWED_USERS=3\n"
     assert oct(env.stat().st_mode & 0o777) == "0o600"
+
+
+def test_with_values_replaces_old_lines_and_keeps_others():
+    text = "A=1\nGH_TOKEN=old\n# note\n"
+    assert with_values(text, {"GH_TOKEN": "new", "FACTORY_REPO": "o/r"}) == "A=1\n# note\nGH_TOKEN=new\nFACTORY_REPO=o/r\n"
+
+
+def test_write_passed_needs_every_key(tmp_path):
+    with pytest.raises(KeyError, match="FACTORY_REPO"):
+        write_passed(tmp_path / ".env", {"GH_TOKEN": "t"})
