@@ -1,4 +1,14 @@
 {
-  "player": { "money": 120, "vehicleId": "player", "explored": [0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1] },
-  "turn": 7
+  "player": {
+    "vehicleId": "player",
+    "money": 340,
+    "xpBySource": {
+      "roughTiles": 12, "ram": 0, "escape": 3,
+      "hit": 40, "contact": 5, "discover": 60,
+      "fieldJob": 8, "patch": 0, "search": 14,
+      "heat": 2, "damage": 9, "knockout": 0,
+      "profit": 75, "deal": 30, "call": 16, "honk": 4, "contract": 0, "freeTow": 20
+    }
+  },
+  "turn": 412
 }

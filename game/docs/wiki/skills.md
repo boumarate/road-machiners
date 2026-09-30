@@ -50,6 +50,7 @@ Skills and perks are owned by `src/sim/progress.ts`, and the numbers live in `sr
 | honk | social | 2 | false | 0 |
 | contract | social | 1 | false | 0.8 |
 | freeTow | social | 0.8 | false | 0.5 |
+| aid | social | 0.8 | false | 0.5 |
 <!-- /wiki:xp-sources -->
 
 ## Perks

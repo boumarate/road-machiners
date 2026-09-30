@@ -27,6 +27,7 @@ import { hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
 import { canLootTruck, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, isSiteStock, lootTruckTurn, wreckStockId } from './salvage';
 import { beginSearch } from './search';
+import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
 import { judgeStrandedFoe, plead } from './parley';
 import { addState, endState, stateOf, statesHeld } from './states';
@@ -461,14 +462,10 @@ export function patchGoal(world: World, npc: Vehicle, other: Vehicle, patcher: b
   pushGoal(world, npc, goal);
 }
 
-// A meet goal holds while the driver's trade meeting with its target does.
-function meetInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
-  return goal.targetId && stateOf(world, 'trade', vehicle.id, goal.targetId) ? null : 'the trade is off';
-}
-
-// The goal a trade meeting gives the driver: it drives up to the other truck and parks beside it.
-export function meetGoal(world: World, npc: Vehicle, other: Vehicle): void {
-  pushGoal(world, npc, createActivity('meet', other.id, { ...other.pos }, 'pull over to trade'));
+// The goal a trade meeting or an aid deal gives the driver: it drives up to the other truck and parks beside it. A
+// stranded driver waits parked for the other truck to come alongside, like a patch client.
+export function meetGoal(world: World, npc: Vehicle, other: Vehicle, reason: string): void {
+  pushGoal(world, npc, createActivity('meet', other.id, isStranded(world, npc) ? null : { ...other.pos }, reason));
 }
 
 const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
@@ -479,25 +476,27 @@ const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
   loot: lootInvalid,
   tow: towInvalid,
   patch: patchInvalid,
-  meet: meetInvalid,
+  // A meet goal holds while the driver's trade meeting or aid deal with its target does.
+  meet: (world, vehicle, goal) => (world.states.some((s) => (s.kind === 'trade' || s.kind === 'aid') && s.holder === vehicle.id && s.other === goal.targetId) ? null : 'the meeting is off'),
   follow: (world, vehicle, goal) => (follows(world, vehicle, goal.targetId!) ? null : 'no longer follows its leader'),
 };
 
 // Goals that park the truck or tie it to another truck. A driver under attack never holds one.
 const EXPOSED: readonly NpcActivity['kind'][] = ['repair', 'patch', 'meet', 'tow', 'loot'];
+// Deals a driver under attack calls off.
+const BROKEN_OFF: readonly NpcState['kind'][] = ['patch', 'trade', 'aid'];
 
 // A hostile in sight shot at the driver, a nearby faction mate or the truck it escorts.
 export function underAttack(vehicle: Vehicle): boolean {
   return Object.keys(vehicle.brain!.attackers).length > 0;
 }
 
-// A driver under attack drops a held tow and calls off its patch and trade deals. Its exposed goals then pop.
+// A driver under attack drops a held tow and calls off its patch, trade and aid deals. Its exposed goals then pop.
 function breakOffDeals(world: World, vehicle: Vehicle): void {
   if (!underAttack(vehicle)) return;
   const tow = heldTow(world, vehicle);
   if (tow) dropTow(world, tow, 'danger');
-  const party = (s: NpcState) => s.holder === vehicle.id || s.other === vehicle.id;
-  for (const s of world.states.filter((x) => (x.kind === 'patch' || x.kind === 'trade') && party(x))) endState(world, s, 'broken');
+  for (const s of world.states.filter((x) => BROKEN_OFF.includes(x.kind) && (x.holder === vehicle.id || x.other === vehicle.id))) endState(world, s, 'broken');
 }
 
 // Whether a goal still holds, for a driver that has not thought yet this turn. Its stock, tow or target may be
@@ -540,7 +539,7 @@ function perceives(world: World, vehicle: Vehicle, decision: string, id: string,
   return PERCEIVES[decision as NoticedDecision](world, vehicle, id, contacts);
 }
 
-type NoticedDecision = 'hostileSeen' | 'contactHeard' | 'preySeen' | 'strandedSeen' | 'salvageSeen' | 'ramChance' | 'escortSeen' | 'strandedFoe' | 'surrenderOffered';
+export type NoticedDecision = 'hostileSeen' | 'contactHeard' | 'preySeen' | 'strandedSeen' | 'salvageSeen' | 'ramChance' | 'escortSeen' | 'strandedFoe' | 'surrenderOffered' | 'needySeen';
 
 type Perception = (world: World, vehicle: Vehicle, id: string, contacts: Contact[]) => boolean;
 
@@ -574,12 +573,13 @@ const PERCEIVES: Record<NoticedDecision, Perception> = {
   escortSeen: seesVehicle,
   strandedFoe: seesVehicle, // rolled in src/sim/parley.ts judgeStrandedFoe()
   surrenderOffered: seesVehicle, // rolled in src/sim/parley.ts answerOffer()
+  needySeen: seesVehicle, // rolled in src/sim/aid.ts onNeedySeen()
 };
 
 // Rolls a decision about a subject once while the subject stays noticed. Null when it already is. When only keep
 // has weight, the driver keeps without a roll and without noticing, so the decision fires once a choice appears.
 // Otherwise it notices the subject, judges a seen truck's danger once for this sighting, then rolls.
-function react<D extends NoticedDecision>(world: World, vehicle: Vehicle, decision: D, id: string): DecisionOptions[D] | null {
+export function react<D extends NoticedDecision>(world: World, vehicle: Vehicle, decision: D, id: string): DecisionOptions[D] | null {
   const key = `${decision}:${id}`;
   if (key in vehicle.brain!.noticed) return null;
   if (!offersChoice(world, vehicle, decision, id)) return 'keep' as DecisionOptions[D];
@@ -786,7 +786,7 @@ function rollWhim(world: World, vehicle: Vehicle, target: string): void {
   brain.whim = { kind, until: world.turn + NPC_BEHAVIOR.fight.whimTurns, angle };
 }
 
-function inDanger(vehicle: Vehicle): boolean {
+export function inDanger(vehicle: Vehicle): boolean {
   const top = topGoal(vehicle)?.kind;
   return top === 'fight' || top === 'flee';
 }
@@ -823,10 +823,10 @@ const STEERS: Partial<Record<NpcActivity['kind'], Steer>> = {
   follow: steerFollow,
 };
 
-// A driver on its way to trade re-aims at the other truck every turn. The two keep in touch on the radio, so it
-// knows where the other truck is without sight.
+// A driver on its way to meet re-aims at the other truck every turn. The two keep in touch on the radio, so it
+// knows where the other truck is without sight. A waiting driver has no point and stays put.
 function steerToMeet(world: World, goal: NpcActivity): void {
-  goal.destination = { ...vehicleById(world, goal.targetId!).pos };
+  if (goal.destination) goal.destination = { ...vehicleById(world, goal.targetId!).pos };
 }
 
 // A tower on its way re-aims every turn: at the truck once it sees it, else at the newest beacon circle. A stale
@@ -874,6 +874,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   onContactsHeard(world, vehicle, profile, contacts);
   onPreySeen(world, vehicle);
   onStrandedSeen(world, vehicle);
+  onNeedySeen(world, vehicle);
   onSalvageSeen(world, vehicle);
   onEscortSeen(world, vehicle);
   onRamChance(world, vehicle);

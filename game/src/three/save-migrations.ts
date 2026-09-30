@@ -173,7 +173,12 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     const removed = (world.removed as SavedJson[]).map((v) => relayVehicle(v, null));
     return { ...world, player, vehicles, removed };
   },
-  // 2 to 3: player.explored becomes a base64 bitset.
+  // 2 to 3: the new aid XP source starts at 0, as in a new game.
+  (world) => {
+    const player = world.player as SavedJson;
+    return { ...world, player: { ...player, xpBySource: { ...(player.xpBySource as SavedJson), aid: 0 } } };
+  },
+  // 3 to 4: player.explored becomes a base64 bitset.
   (world) => {
     const player = world.player as SavedJson;
     return { ...world, player: { ...player, explored: packExplored_2_3(player.explored as unknown[]) } };

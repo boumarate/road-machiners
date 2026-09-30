@@ -8,14 +8,16 @@ import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, honk, placeholders, raiseCalls } from './dialogue';
 import { fireBlock, isHostile } from './combat';
-import { NPCS } from '../data/npcs';
+import { NPC_UPKEEP, NPCS } from '../data/npcs';
+import { RULES } from '../data/rules';
+import { aidPrice, offerAid, playerAid, spareAid, wantedAid } from './aid';
 import { isMounted } from './grid';
 import { addGoods } from './inventory';
 import { hasCargo } from './salvage';
-import { vehicleStats } from './stats';
+import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
-import { addState, endState, stateOf } from './states';
-import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
+import { addState, aidData, endState, stateOf } from './states';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, rngStateForForcedRolls, testDrive } from './testkit';
 import type { TraitId } from '../data/npcs';
 import type { SalvageStock, Vehicle, World } from './types';
 import { dist } from './vec';
@@ -684,5 +686,142 @@ describe('paid truce', () => {
     w.player.perks = ['paidTruce'];
     w.player.money = 1e6;
     expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).not.toContain(askText);
+  });
+});
+
+describe('fuel and supply aid', () => {
+  const offerText = TOPICS.offerAid.ask!.text;
+  const askText = TOPICS.askAid.ask!.text;
+
+  // A driver with full tanks and 500 money beside the player, both at peace.
+  function aidWorld(templateId = 'trader', faction: Vehicle['faction'] = 'traders'): { w: World; npc: Vehicle } {
+    const { w, npc } = withNpc(templateId, faction);
+    npc.resources = { fuel: fuelCap(npc), supplies: suppliesCap(npc), money: 500, health: 100 };
+    return { w, npc };
+  }
+
+  const lowPlayer = (w: World): void => { w.player.fuel = Math.floor(fuelCap(playerVehicle(w)) * RULES.lowFuelThreshold); };
+  const texts = (w: World) => currentOptions(w).map((o) => o.text);
+  const npcIn = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
+
+  it('only the drivers that answer tow requests take up asking and offering, and never a raider', () => {
+    const helpers = (Object.keys(TRAIT_TALK) as TraitId[]).filter((id) => TRAIT_TALK[id].topics.includes('askAid'));
+    const offerers = (Object.keys(TRAIT_TALK) as TraitId[]).filter((id) => TRAIT_TALK[id].topics.includes('aidOffer'));
+    expect(helpers.sort()).toEqual(['courier', 'lawman', 'roamer', 'scavenger', 'supplier', 'trader']);
+    expect(offerers.sort()).toEqual(helpers);
+    expect(Object.values(TRAIT_TALK).every((t) => t.topics.includes('offerAid'))).toBe(true);
+  });
+
+  it('a player who is not low cannot ask for aid, and a low one can', () => {
+    const { w, npc } = aidWorld();
+    expect(texts(callVehicle(w, npc.id))).not.toContain(askText);
+    lowPlayer(w);
+    expect(texts(callVehicle(w, npc.id))).toContain(askText);
+  });
+
+  it('a low player cannot ask a raider for aid', () => {
+    const { w, npc } = aidWorld('buggy', 'raiders');
+    lowPlayer(w);
+    addState(w, 'truce', npc.id, w.player.vehicleId, { kind: 'none' });
+    expect(texts(callVehicle(w, npc.id))).not.toContain(askText);
+  });
+
+  it('a driver with nothing to spare refuses without a roll, and the same driver cannot be asked again', () => {
+    const { w, npc } = aidWorld();
+    lowPlayer(w);
+    npc.resources!.fuel = fuelCap(npc) * NPC_UPKEEP.tradeReserve;
+    npc.resources!.supplies = suppliesCap(npc) * NPC_UPKEEP.tradeReserve;
+    const rngState = w.rngState;
+    let next = callVehicle(w, npc.id);
+    next = chooseOption(next, optionIndex(next, askText));
+    expect(next.rngState).toBe(rngState);
+    next = chooseOption(next, optionIndex(next, 'Whatever you can spare.'));
+    expect(next.player.call?.line.text).toBe('Sorry. Cannot spare any.');
+    expect(playerAid(next)).toBeNull();
+    next = chooseOption(next, optionIndex(next, 'Understood.'));
+    next = chooseOption(next, optionIndex(next, askText));
+    expect(next.player.call?.topic).toBeNull();
+    expect(next.player.call?.line.text).toBe(TRAIT_TALK.trader.voice!.repeatLine);
+  });
+
+  it('a driver that gives agrees a free gift of what it named and comes over', () => {
+    const { w, npc } = aidWorld();
+    lowPlayer(w);
+    forceOption('aidAsked', 'give');
+    w.rngState = rngStateForForcedRolls(1);
+    const spare = spareAid(w, npc);
+    let next = callVehicle(w, npc.id);
+    next = chooseOption(next, optionIndex(next, askText));
+    next = chooseOption(next, optionIndex(next, 'Whatever you can spare.'));
+    expect(next.player.call?.vars.aid).toEqual({ kind: 'aid', ...spare });
+    next = chooseOption(next, optionIndex(next, 'Thanks. I will wait.'));
+    const deal = stateOf(next, 'aid', npc.id, next.player.vehicleId)!;
+    expect(aidData(deal)).toEqual({ kind: 'aid', giver: 'npc', ...spare, price: 0, free: true, agreed: true });
+    expect(npcIn(next, npc.id).brain!.goals.at(-1)).toMatchObject({ kind: 'meet', targetId: next.player.vehicleId });
+    expect(next.player.talked[npc.id]).toEqual({ askAid: 'done' });
+  });
+
+  it('hanging up on the question settles it as refused', () => {
+    const { w, npc } = aidWorld();
+    lowPlayer(w);
+    let next = callVehicle(w, npc.id);
+    next = hangUp(chooseOption(next, optionIndex(next, askText)));
+    expect(next.player.talked[npc.id]).toEqual({ askAid: 'refused' });
+    expect(playerAid(next)).toBeNull();
+  });
+
+  it('a driver low on fuel names what it wants and its price, and Deal agrees a paid gift at that price', () => {
+    const { w, npc } = aidWorld();
+    npc.resources!.fuel = fuelCap(npc) * 0.1;
+    const wanted = wantedAid(w, npc);
+    let next = callVehicle(w, npc.id);
+    next = chooseOption(next, optionIndex(next, offerText));
+    expect(next.player.call?.vars).toEqual({ aid: { kind: 'aid', ...wanted }, price: { kind: 'money', amount: aidPrice(w, npc, wanted) } });
+    expect(aidPrice(w, npc, wanted)).toBeGreaterThan(0);
+    next = chooseOption(next, optionIndex(next, 'Deal.'));
+    const deal = aidData(stateOf(next, 'aid', npc.id, next.player.vehicleId)!);
+    expect(deal).toEqual({ kind: 'aid', giver: 'player', ...wanted, price: aidPrice(w, npc, wanted), free: false, agreed: true });
+    expect(next.player.fuel).toBe(w.player.fuel);
+  });
+
+  it('No charge agrees a free gift', () => {
+    const { w, npc } = aidWorld();
+    npc.resources!.fuel = fuelCap(npc) * 0.1;
+    let next = callVehicle(w, npc.id);
+    next = chooseOption(next, optionIndex(next, offerText));
+    next = chooseOption(next, optionIndex(next, 'No charge.'));
+    expect(aidData(stateOf(next, 'aid', npc.id, next.player.vehicleId)!)).toMatchObject({ giver: 'player', price: 0, free: true, agreed: true });
+  });
+
+  it('the player cannot offer aid to a driver that is not low, or one already in a deal', () => {
+    const { w, npc } = aidWorld();
+    expect(texts(callVehicle(w, npc.id))).not.toContain(offerText);
+    npc.resources!.fuel = fuelCap(npc) * 0.1;
+    addState(w, 'aid', npc.id, w.player.vehicleId, { kind: 'aid', giver: 'player', fuel: 1, supplies: 0, price: 0, free: true, agreed: true });
+    expect(texts(callVehicle(w, npc.id))).not.toContain(offerText);
+  });
+
+  it('a driver with an offer pending calls, and accepting agrees the offer and sends it over', () => {
+    const { w, npc } = aidWorld();
+    lowPlayer(w);
+    offerAid(w, npc);
+    const offered = aidData(playerAid(w)!);
+    raiseCalls(w);
+    expect(w.player.call).toMatchObject({ with: npc.id, topic: 'aidOffer', vars: { aid: { kind: 'aid', fuel: offered.fuel, supplies: offered.supplies } } });
+    const next = chooseOption(w, optionIndex(w, 'Thanks. I will wait.'));
+    expect(aidData(stateOf(next, 'aid', npc.id, next.player.vehicleId)!)).toEqual({ ...offered, agreed: true });
+    expect(npcIn(next, npc.id).brain!.goals.at(-1)).toMatchObject({ kind: 'meet', targetId: next.player.vehicleId });
+    raiseCalls(next);
+    expect(next.player.call).toBeNull();
+  });
+
+  it('hanging up on an offer breaks it', () => {
+    const { w, npc } = aidWorld();
+    lowPlayer(w);
+    offerAid(w, npc);
+    raiseCalls(w);
+    const next = hangUp(w);
+    expect(playerAid(next)).toBeNull();
+    expect(next.events).toContainEqual(expect.objectContaining({ t: 'stateEnded', ending: 'broken' }));
   });
 });

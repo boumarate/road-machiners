@@ -68,6 +68,7 @@
     "number"
    ],
    "xpBySource": {
+    "aid": "number",
     "call": "number",
     "contact": "number",
     "contract": "number",

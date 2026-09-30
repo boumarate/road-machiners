@@ -4,8 +4,9 @@ import { baseGrid, isMounted, placementError } from '../sim/grid';
 import type { Vehicle } from '../sim/types';
 import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
-import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import FORMAT_2_2 from './save-fixtures/format-2-2.json';
+import FORMAT_2_3 from './save-fixtures/format-2-3.json';
+import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS } from './save-migrations';
 
@@ -95,14 +96,25 @@ describe('save migration 1 to 2', () => {
 });
 
 describe('save migration 2 to 3', () => {
-  it('packs explored into the same bitset a new save writes and keeps other fields', () => {
-    const next = MIGRATIONS[2](FORMAT_2_2) as { player: Record<string, unknown>; turn: number };
+  it('gives the player aid XP 0 and keeps every other XP source and field', () => {
+    const next = MIGRATIONS[2](FORMAT_2_2);
 
-    expect(next.player.explored).toBe(packExplored(Uint8Array.from(FORMAT_2_2.player.explored)));
-    expect(next).toEqual({ ...FORMAT_2_2, player: { ...FORMAT_2_2.player, explored: next.player.explored } });
+    expect(next).toEqual({
+      ...FORMAT_2_2,
+      player: { ...FORMAT_2_2.player, xpBySource: { ...FORMAT_2_2.player.xpBySource, aid: 0 } },
+    });
+  });
+});
+
+describe('save migration 3 to 4', () => {
+  it('packs explored into the same bitset a new save writes and keeps other fields', () => {
+    const next = MIGRATIONS[3](FORMAT_2_3) as { player: Record<string, unknown>; turn: number };
+
+    expect(next.player.explored).toBe(packExplored(Uint8Array.from(FORMAT_2_3.player.explored)));
+    expect(next).toEqual({ ...FORMAT_2_3, player: { ...FORMAT_2_3.player, explored: next.player.explored } });
   });
 
   it('throws on a value other than 0 or 1', () => {
-    expect(() => MIGRATIONS[2]({ player: { explored: [0, 2] } })).toThrow();
+    expect(() => MIGRATIONS[3]({ player: { explored: [0, 2] } })).toThrow();
   });
 });

@@ -22,7 +22,7 @@ import { endTurn, update } from './world';
 function withTrader(x: number): { w: World; npc: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
-  const npc = addVehicle(w, 'traders', 'scout', [], { x, y: 30 }, Math.PI);
+  const npc = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x, y: 30 }, Math.PI);
   npc.brain = npcBrain('trader', npc.pos, ['trader']);
   return { w, npc };
 }
