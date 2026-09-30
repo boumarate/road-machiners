@@ -76,6 +76,7 @@ import {
   type ItemSource,
   type LastClick,
 } from "./inventory-moves";
+import { npcName } from "../sim/spawn";
 
 const CELL_PX = 42;
 // Below this the part icons and condition bars stop being readable, so a taller grid scrolls instead.
@@ -657,7 +658,7 @@ export class InventoryView {
     return el(
       "div",
       { class: "inv-truck inv-target" },
-      el("h3", {}, `${target.name}, knocked out`),
+      el("h3", {}, `${npcName(target)}, knocked out`),
       el("div", { class: "truck-shell" }, el("div", { class: "truck-nose", "aria-hidden": "true" }), grid),
       el("div", { class: "dim" }, "Drag items onto your grid."),
     );
