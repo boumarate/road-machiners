@@ -18,7 +18,7 @@ import { cancelJob, inCombat } from './jobs';
 import { isFree } from './spawn';
 import { route } from './path';
 import {
-  tradeOffers, canRob, decide, getCombatCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
+  tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
   huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
@@ -175,10 +175,10 @@ function isStrandedForGood(vehicle: Vehicle): boolean {
 
 // A part that keeps the truck driving, or a truck broken up all around, needs service. Worn armor, guns and cargo do
 // not. Junk parts do not count, since no service rebuilds them.
-function isDamaged(world: World, vehicle: Vehicle): boolean {
+function isDamaged(vehicle: Vehicle): boolean {
   const drivingPartWorn = [...mountedParts(vehicle, 'core'), ...mountedParts(vehicle, 'engine')]
     .some((part) => !isJunk(part) && part.hp / maxHp(part) <= NPC_BEHAVIOR.fleeCondition);
-  return isStrandedForGood(vehicle) || drivingPartWorn || getCombatCondition(world, vehicle) <= NPC_BEHAVIOR.fleeCondition;
+  return isStrandedForGood(vehicle) || drivingPartWorn || bodyCondition(vehicle) <= NPC_BEHAVIOR.fleeCondition;
 }
 
 function serviceReason(lowFuel: boolean, lowSupplies: boolean): string {
@@ -216,7 +216,7 @@ function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): Servi
   const resources = getResources(world, vehicle);
   const lowFuel = isLowOnFuel(world, vehicle, profile);
   const lowSupplies = resources.supplies <= suppliesCap(vehicle) * NPC_UPKEEP.lowSupplies;
-  const damaged = isDamaged(world, vehicle);
+  const damaged = isDamaged(vehicle);
   if (!lowFuel && !lowSupplies && !damaged) return null;
   return { reason: serviceReason(lowFuel, lowSupplies), suppliesOnly: lowSupplies && !lowFuel && !damaged, damaged };
 }
@@ -366,9 +366,14 @@ type GoalCheck = (world: World, vehicle: Vehicle, goal: NpcActivity, contacts: C
 function fightInvalid(world: World, vehicle: Vehicle, goal: NpcActivity, contacts: Contact[]): string | null {
   const target = world.vehicles.find((v) => v.id === goal.targetId);
   if (!target || !isHostile(world, vehicle, target)) return 'lost the target';
-  if (fightTargetAt(world, vehicle, target, contacts)) return null;
+  if (vehicleStats(world, vehicle).weapons.length === 0) return 'no gun left to fight with';
+  return fightTargetLost(world, vehicle, goal, target, contacts) ? 'lost the target' : null;
+}
+
+function fightTargetLost(world: World, vehicle: Vehicle, goal: NpcActivity, target: Vehicle, contacts: Contact[]): boolean {
+  if (fightTargetAt(world, vehicle, target, contacts)) return false;
   if (goal.perceived === undefined) throw new Error(`${vehicle.id} fights ${target.id} with no turn it last perceived it`);
-  return world.turn - goal.perceived > NPC_BEHAVIOR.fightSearchTurns ? 'lost the target' : null;
+  return world.turn - goal.perceived > NPC_BEHAVIOR.fightSearchTurns;
 }
 
 // Where the driver perceives its fight target now: the truck in sight, else the center of its contact. Undefined

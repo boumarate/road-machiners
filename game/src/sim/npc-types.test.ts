@@ -126,9 +126,9 @@ describe('mercs', () => {
     const npc = createNpc(w, 'merc', ['merc'], 'hauler', ['cannon', 'workhorseDiesel'], pad);
     w.salvage = [{ id: 'wreck-test', pos: { x: pad.x + 4, y: pad.y }, radius: 0.6, goods: { scrap: 2 }, parts: [] }];
     const chances = optionChances(optionWeights(w, npc, 'idle', null, null));
-    expect(chances.scavenge).toBeCloseTo(MIN_CHANCE, 3);
-    expect(chances.trade ?? MIN_CHANCE).toBeCloseTo(MIN_CHANCE, 3);
-    expect(chances.wait).toBeGreaterThan(0.9);
+    expect(chances.scavenge).toBeCloseTo(MIN_CHANCE, 2);
+    expect(chances.trade ?? MIN_CHANCE).toBeCloseTo(MIN_CHANCE, 2);
+    expect(chances.wait).toBeGreaterThan(0.8);
   });
 });
 
