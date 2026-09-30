@@ -158,3 +158,27 @@ export function saveOf(world: World): { format: typeof SAVE_FORMAT; world: objec
   const obstacles = saved.obstacles.filter((o) => !isBakedObstacle(o));
   return { format: SAVE_FORMAT, world: { ...saved, player, obstacles } };
 }
+
+// Whether saving is safe. An error after boot holds saves, since the world may be broken. The hold lifts only when a
+// turn that began after the last error finishes playback with no error during it.
+export class SaveHold {
+  private errors = false;
+  private tainted = false;
+
+  get held(): boolean {
+    return this.errors;
+  }
+
+  noteError(): void {
+    this.errors = true;
+    this.tainted = true;
+  }
+
+  beginTurn(): void {
+    this.tainted = false;
+  }
+
+  finishTurn(): void {
+    if (!this.tainted) this.errors = false;
+  }
+}
