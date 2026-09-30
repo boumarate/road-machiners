@@ -10,7 +10,7 @@ import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
 import type { PartHit } from './armor';
 import { callLawmen, inCombat, isHostile, shotDamage, startFeuds } from './combat';
-import { affordableBuyCount, getTradePrice, sellVehicleCargo, serviceAtCamp, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
+import { affordableBuyCount, cargoSaleValue, sellAtCamp, sellVehicleCargo, serviceAtCamp, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods, cargoRoom } from './inventory';
@@ -258,17 +258,13 @@ function serviceStops(vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed):
   return need.damaged ? profile.towns : pumpsOf(vehicle, profile);
 }
 
-// The shop that pays most for the carried cargo, of the driver's towns and every stall. Nearest wins a tie.
+// The market that pays most for the carried cargo, of the driver's markets. Nearest wins a tie.
 function saleGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity {
-  const goods = Object.entries(goodsCount(vehicle));
-  const shops = [...new Set([...profile.towns, ...STALLS])].map(getKnownSite);
-  const getValue = (id: string) => goods.reduce((sum, [good, count]) => sum + (shopDef(id).goods.includes(good) ? count * getTradePrice(world, vehicle, id, good, 'sell') : 0), 0);
-  shops.sort((a, b) => getValue(b.id) - getValue(a.id) || dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
-  if (!shops[0]) throw new Error(`${vehicle.id} knows no buyer`);
-  return createSiteActivity('sell', shops[0].id, 'sell carried cargo');
+  const buyers = profile.markets.map(getKnownSite);
+  buyers.sort((a, b) => cargoSaleValue(world, vehicle, b.id) - cargoSaleValue(world, vehicle, a.id) || dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
+  if (!buyers[0]) throw new Error(`${vehicle.id} knows no buyer`);
+  return createSiteActivity('sell', buyers[0].id, 'sell carried cargo');
 }
-
-const STALLS: readonly string[] = Object.values(SHOPS).filter((s) => s.kind === 'stall').map((s) => s.id);
 
 function tradeGoal(world: World, vehicle: Vehicle): NpcActivity {
   const offers = tradeOffers(world, vehicle);
@@ -1225,7 +1221,7 @@ function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity):
 function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
   const kind = 'kind' in site ? site.kind : null;
   if (kind === 'oasis') getResources(world, vehicle).supplies = suppliesCap(vehicle);
-  else if (kind === 'camp') serviceAtCamp(world, vehicle, site.id);
+  else if (kind === 'camp') serviceAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else if (shopDef(site.id).kind === 'stall') serviceAtStall(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else serviceVehicle(world, vehicle, site.id, NPC_UPKEEP.repairParts);
 }
@@ -1233,7 +1229,8 @@ function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
 function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
   if (!site) return;
-  sellVehicleCargo(world, vehicle, site.id, NPC_UPKEEP.repairParts);
+  if ('kind' in site && site.kind === 'camp') sellAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
+  else sellVehicleCargo(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   noteTown(vehicle, site.id);
   finishGoal(world, vehicle, 'sold cargo');
 }

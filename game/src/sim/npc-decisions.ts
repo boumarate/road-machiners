@@ -46,6 +46,7 @@ import { canVehicleSee } from './vision';
 export type NpcProfile = {
   towns: string[];
   bases: string[];
+  markets: string[];
   salvageSites: string[];
   supplySites: string[];
   travelSites: string[];
@@ -76,10 +77,11 @@ export function profileOf(traits: TraitId[]): NpcProfile {
     if (!Object.hasOwn(TRAITS, id)) throw new Error(`Unknown trait ${id}`);
     return TRAITS[id];
   });
-  const union = (key: 'towns' | 'bases' | 'salvageSites' | 'supplySites' | 'travelSites' | 'haulSites') => [...new Set(defs.flatMap((t) => t[key]))];
+  const union = (key: 'towns' | 'bases' | 'markets' | 'salvageSites' | 'supplySites' | 'travelSites' | 'haulSites') => [...new Set(defs.flatMap((t) => t[key]))];
   return {
     towns: union('towns'),
     bases: union('bases'),
+    markets: union('markets'),
     salvageSites: union('salvageSites'),
     supplySites: union('supplySites'),
     travelSites: union('travelSites'),

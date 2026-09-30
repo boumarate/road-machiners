@@ -176,12 +176,18 @@ export function serviceVehicle(
   refuelAndRepair(world, vehicle);
 }
 
-// A raider camp sells fuel, supplies and repairs to raiders at the town rates. It buys no cargo.
-export function serviceAtCamp(
-  world: World,
-  vehicle: Vehicle,
-  campId: string,
-): void {
+// A camp is a fence. It pays the NPC road price, the lowest in the region, keeps no stock and leaves the goods out of the world.
+const CAMP_MARGIN = ECONOMY.spread + ECONOMY.roadSpread;
+
+export function campGoodPrice(good: string): number {
+  return roadGoodPrice(good, CAMP_MARGIN, "sell");
+}
+
+export function campPartPrice(part: PartInstance): number {
+  return partPriceAt(part, CAMP_MARGIN, "sell");
+}
+
+function requireCampService(vehicle: Vehicle, campId: string): void {
   const camp = REGION.locations.find((l) => l.id === campId);
   if (camp?.kind !== "camp" || !canUseSite(vehicle.pos, camp))
     throw new Error("Not at a gate of the requested camp");
@@ -189,7 +195,41 @@ export function serviceAtCamp(
     throw new Error("Only raiders use camp services");
   if (vehicle.speed > RULES.parkedSpeed)
     throw new Error("Stop before using camp services");
+}
+
+// Sells every good above `retainedParts` units of parts, and every spare part, at the camp price. No shop state moves.
+export function sellAtCamp(world: World, vehicle: Vehicle, campId: string, retainedParts: number): void {
+  requireCampService(vehicle, campId);
+  const resources = getResources(world, vehicle);
+  for (const [good, count] of Object.entries(goodsCount(vehicle))) {
+    const sellCount = good === "parts" ? Math.max(0, count - retainedParts) : count;
+    if (sellCount <= 0) continue;
+    removeGoods(vehicle, good, sellCount);
+    resources.money += sellCount * campGoodPrice(good);
+  }
+  const spares = spareParts(vehicle);
+  for (const part of spares) resources.money += campPartPrice(part);
+  vehicle.items = vehicle.items.filter((item) => item.kind !== "part" || !spares.includes(item.part));
+}
+
+// A raider camp buys cargo, then sells fuel, supplies and repairs to raiders at the town rates.
+export function serviceAtCamp(
+  world: World,
+  vehicle: Vehicle,
+  campId: string,
+  retainedParts: number,
+): void {
+  sellAtCamp(world, vehicle, campId, retainedParts);
   refuelAndRepair(world, vehicle);
+}
+
+// What the carried cargo sells for at a buyer: a camp buys any good, a shop only the goods it trades.
+export function cargoSaleValue(world: World, vehicle: Vehicle, buyerId: string): number {
+  const camp = REGION.locations.find((l) => l.id === buyerId)?.kind === "camp";
+  return Object.entries(goodsCount(vehicle)).reduce((sum, [good, count]) => {
+    if (camp) return sum + count * campGoodPrice(good);
+    return sum + (shopDef(buyerId).goods.includes(good) ? count * getTradePrice(world, vehicle, buyerId, good, "sell") : 0);
+  }, 0);
 }
 
 // A roadside stall buys an NPC's cargo that it trades and sells the fuel or supplies it stocks. It does no repairs.
@@ -654,9 +694,12 @@ function roadSpread(world: World): number {
 
 // Trucks keep no price pressure, so a good trades at its base value with the road spread either way.
 export function truckGoodPrice(world: World, good: string, direction: "buy" | "sell"): number {
+  return roadGoodPrice(good, roadSpread(world), direction);
+}
+
+function roadGoodPrice(good: string, margin: number, direction: "buy" | "sell"): number {
   const def = GOODS[good];
   if (!def) throw new Error(`Unknown good ${good}`);
-  const margin = roadSpread(world);
   const buy = Math.max(1, Math.ceil(def.value * (1 + margin)));
   return direction === "buy" ? buy : Math.max(0, Math.min(buy - 1, Math.floor(def.value * (1 - margin))));
 }
