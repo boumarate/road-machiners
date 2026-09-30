@@ -46,7 +46,7 @@ Hermes manages the factory. A watch job wakes it when an issue gets stuck or the
 
 ## GitHub setup
 
-- The host needs `gh` logged in with the `repo` and `project` scopes. Run `gh auth setup-git` so git pushes with it.
+- The host needs `gh` logged in with the `repo`, `project` and `read:org` scopes. `gh project` needs `read:org` even for a user's Project. Run `gh auth setup-git` so git pushes with it.
 - The host needs a git identity, since approvals make merge commits.
 - Make a GitHub Project for the repo. Its Status field needs the options Triage, Design, Implementation, Testing, Approval and Done. Put its owner and number in `factory/.env`.
 - The repo needs a `dev` branch.
