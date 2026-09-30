@@ -1,0 +1,4 @@
+{
+  "player": { "money": 120, "vehicleId": "player", "explored": [0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1] },
+  "turn": 7
+}
