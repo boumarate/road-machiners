@@ -144,7 +144,7 @@ NPCs tow each other by the same decision. A stranded driver waits once a tower i
 
 The player can radio a stranded NPC in reach and offer a tow to the place it names. The NPC offers what it can pay. The player can take the fee or tow for free. A free tow gives Social XP on arrival, as much as earning the waived fee in trade profit.
 
-Health at 0 kills the player. The death screen offers Load last save and New game. A dead world is never saved. Cab damage costs health at a quarter of its amount, so a lost fight costs about 30 health.
+Health at 0 kills the player. The death screen offers Load last save and New game. A dead world is never saved. A save that no longer loads, like one from an older map, offers Migrate save, which keeps skills, perks, money, truck, parts and cargo and moves the truck to a town, or New game. Cab damage costs health at a quarter of its amount, so a lost fight costs about 30 health.
 
 A parked driver with supplies heals each turn, five times as fast in a town. Healing spends extra supplies. Starving takes health down to 30 and no lower, so only cab damage can kill. Only a fight or a crash can knock the driver out.
 

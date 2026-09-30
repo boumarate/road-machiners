@@ -19,11 +19,13 @@ import type { World } from '../sim/types';
 import { newWorld } from '../sim/world';
 import { DebugConsole, Noclip } from '../ui/console';
 import { uiRoot } from '../ui/dom';
+import { chooseSaveFate, showCarryReport } from '../ui/save-screen';
 import { mountPerfPanel } from '../ui/perf-panel';
 import { SoundSettings } from '../ui/sound';
 import { installCrashScreen, keepRunningOnErrors } from './crash';
 import { Game } from './game';
-import { loadWorld } from './save';
+import { clearGame, loadWorld, SaveError, storedSave } from './save';
+import { rescueSave } from './save-rescue';
 import { loadModels } from './render/models';
 import { groundTexture } from './render/terrain';
 
@@ -40,13 +42,40 @@ async function fetchMap(): Promise<BakedMap> {
   return decodeMap(new Uint8Array(await response.arrayBuffer()));
 }
 
+// The saved world, or a new one. A save that cannot load goes to the player: migrate it or start over.
+async function bootWorld(): Promise<World> {
+  try {
+    return loadWorld(window.localStorage, map) ?? newGame();
+  } catch (err) {
+    if (!(err instanceof SaveError)) throw err;
+    return rescuedOrNew(err);
+  }
+}
+
+async function rescuedOrNew(error: SaveError): Promise<World> {
+  const stored = storedSave(window.localStorage);
+  const canMigrate = typeof stored === 'object' && stored !== null && !Array.isArray(stored);
+  if ((await chooseSaveFate(error.message, canMigrate)) === 'new') {
+    clearGame(window.localStorage);
+    return newGame();
+  }
+  const rescued = rescueSave(window.localStorage, map, startKit(CONFIG.startKit), freshSeed);
+  if (!rescued) throw new Error('The save became unreadable while migrating');
+  await showCarryReport(rescued.report);
+  return rescued.world;
+}
+
+function newGame(): World {
+  return newWorld(CONFIG.seed ?? freshSeed(), startKit(CONFIG.startKit), map);
+}
+
 installCrashScreen();
 const mixer = new Mixer(MIX);
 mixer.unlockOn(window);
 const loading = Promise.all([initPhysics(), loadModels(), loadBank(mixer.ctx, SOUNDS)]);
 const map = await fetchMap();
 // The world and its ground build while physics, models and sounds load, since those wait mostly on the network and decoders.
-const world = loadWorld(window.localStorage, map) ?? newWorld(CONFIG.seed ?? freshSeed(), startKit(CONFIG.startKit), map);
+const world = await bootWorld();
 groundTexture(world);
 const [, , bank] = await loading;
 const soundSettings = new SoundSettings(mixer, window.localStorage);

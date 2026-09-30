@@ -763,6 +763,13 @@ body {
   font-size: 40px;
   color: #f0a080;
 }
+.save-screen {
+  text-align: center;
+  max-width: none;
+}
+.save-screen > div {
+  max-width: 560px;
+}
 .death .death-buttons {
   display: flex;
   gap: 10px;

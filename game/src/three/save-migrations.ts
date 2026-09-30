@@ -6,7 +6,7 @@ import { CORES_2_1, CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 // A saved world as raw JSON. Steps read it without game types, since those change after a step is written.
 export type SavedJson = Record<string, unknown>;
 
-// Bump for a change old saves cannot follow, like a new map, and empty MIGRATIONS with it. Players start a new game.
+// Bump for a change old saves cannot follow, and empty MIGRATIONS with it. Boot then carries the player's progression over into a new world, since the save screen handles every save that cannot load. A new map needs no bump.
 export const SAVE_MAJOR = 2;
 
 // Step 1 to 2: the chassis grids follow the cab, transmission and tank rules. Cores move, and what stood on their new
