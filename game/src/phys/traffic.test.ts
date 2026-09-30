@@ -16,7 +16,7 @@ beforeAll(async () => {
 });
 
 describe('invariants under AI traffic', () => {
-  it('no negative HP, fuel, supplies, health or money over 80 turns', () => {
+  it('no negative HP, fuel, supplies, health or money over 80 turns', async () => {
     let w = setMoveOrder(newWorld(11, START_KITS.standard, TEST_MAP), { kind: 'stopAt', dest: { x: 45, y: 15 } });
     // One Drive carried across all 80 turns: physicsMove's own syncDrive keeps it in step with
     // spawns, despawns and hangups, so nothing here needs a fresh physics world per turn.
@@ -28,6 +28,8 @@ describe('invariants under AI traffic', () => {
       w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
       freeDrive(d);
       d = next!;
+      // One test of about a minute never returns to the event loop, so the worker's status messages would time out.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
       for (const v of w.vehicles) for (const p of mountedParts(v)) expect(p.hp).toBeGreaterThanOrEqual(0);
       for (const k of ['fuel', 'supplies', 'health', 'money'] as const) expect(w.player[k]).toBeGreaterThanOrEqual(0);
     }
