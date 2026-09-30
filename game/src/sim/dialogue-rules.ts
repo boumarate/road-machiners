@@ -18,7 +18,7 @@ import { decide, npcProfile, wantsLoot } from './npc-decisions';
 import { aidData, stateOf, towData } from './states';
 import { agreeAid, aidPrice, canSpareFor, hasAid, isLow, playerAid, refuseAid, spareAid, wantedAid, type AidAmounts } from './aid';
 import { buyPrice, sellPrice, startTrade, tradeWith, transfer } from './economy';
-import { acceptOffer, canTowNpc, hitchNpc, npcTowTerms, playerTow, playerTowing, refuseOffer, releaseNpc, strandedPlayerAt } from './tow';
+import { acceptOffer, canTowNpc, hitchNpc, isOnRope, npcTowTerms, playerTow, playerTowing, refuseOffer, releaseNpc, strandedPlayerAt } from './tow';
 import type { Call, CallVar, CallVars, NpcState, Plea, SalvageStock, TopicOutcome, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
 
@@ -145,6 +145,8 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   canTowPlayer: (world, npc) => strandedPlayerAt(world, npc) !== null && topGoal(npc)?.kind !== 'tow',
   playerNeedsPatch: (world) => needsPatch(world, playerVehicle(world)) && !inPatch(world, world.player.vehicleId),
   npcNeedsPatch: (world, npc) => needsPatch(world, npc) && !canFixItself(world, npc) && !inPatch(world, npc.id),
+  // A towed truck is already being helped. Its tower owns it.
+  npcOffRope: (world, npc) => !isOnRope(world, npc.id),
   noTrade: (world, npc) => tradeWith(world, npc) === null,
   // A driver under attack takes on no tow, patch or trade.
   npcCalm: (_world, npc) => !underAttack(npc),

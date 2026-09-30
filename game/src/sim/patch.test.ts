@@ -320,6 +320,20 @@ describe('a holed fuel tank', () => {
     expect(needsPatch(w, npc)).toBe(false);
   });
 
+  it('gets no patch or aid offer and raises no request while on a tow rope', () => {
+    const { w, npc } = holedNpc(0);
+    const offers = ['Your truck looks dead. Want me to patch it?', 'Running low? I can spare some.'];
+    expect(currentOptions(callVehicle(cloneWorld(w), npc.id)).map((o) => o.text)).toEqual(expect.arrayContaining(offers));
+    const tower = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 44, y: 30 }, Math.PI);
+    tower.trail = [{ x: tower.pos.x, y: tower.pos.y, heading: Math.PI }];
+    const tow = addState(w, 'tow', tower.id, npc.id, { kind: 'tow', site: 'bowl', fee: 0, waived: 0, hitched: true });
+    const texts = currentOptions(callVehicle(cloneWorld(w), npc.id)).map((o) => o.text);
+    for (const offer of offers) expect(texts).not.toContain(offer);
+    expect(endTurn(cloneWorld(w), testDrive).player.call?.topic).not.toBe('patchRequest');
+    w.states.splice(w.states.indexOf(tow), 1);
+    expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).toEqual(expect.arrayContaining(offers));
+  });
+
   it('is fixed by a driver that carries enough parts, which asks no one', () => {
     const { w: start, npc } = holedNpc(0);
     addGoods(start, npc, 'parts', 6);
