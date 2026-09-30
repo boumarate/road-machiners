@@ -48,7 +48,7 @@ Jobs run in parallel, in three queues, each with its own worker limit.
 
 An issue has at most one job at a time. Hotfix cards go first in their queue. A lock lets only one job use the host clone at a time, for one git step.
 
-A failed or timed-out step labels its issue `factory-stuck` and posts once in the committee chat. Nothing retries until the label goes. You handle every such incident, as the Incidents section says.
+A failed or timed-out step labels its issue `factory-stuck` and records the failure in `failures` in the state file. The factory posts nothing about failures, so your message is the only one the committee sees. Nothing retries until the label goes. You handle every such incident, as the Incidents section says.
 
 An issue with the label `needs-info` waits for its author. Tell members to answer the questions on the GitHub issue. Answers in this chat do not reach it.
 
@@ -62,9 +62,11 @@ An issue with the label `needs-info` waits for its author. Tell members to answe
 
 ## Incidents
 
-An incident is an open issue with the label `factory-stuck`, a tick crash in `lastTickError` in the state file, or a failed `/dev/` build in `devFailed`. A watch job wakes you when the list of incidents changes.
+An incident is an open issue with the label `factory-stuck`, a failed job in `failures`, a tick crash in `lastTickError` in the state file, or a failed `/dev/` build in `devFailed`. A watch job wakes you when the list of incidents changes. Each failed job shows its stage, issue, first error line and log.
 
-1. Find out what happened. Read the failure post, the job log, the state file, the card's column on the board and the recent chat. Search the chat for what members said and pressed about the issue.
+Your post is the committee's only news of an incident. Name the stage and the issue with its link, and say in one line what broke. Then say what you did or what you ask.
+
+1. Find out what happened. Read the error in `failures`, the job log, the state file, the card's column on the board and the recent chat. Search the chat for what members said and pressed about the issue.
 2. Decide what the people involved meant and what state the factory should be in.
 3. When one action clearly fixes it, do it. Then post what happened, what you did and what comes next.
 4. When the right action depends on what people want, ask in the committee chat. Name the options in one short list, and say what each does. Act on the answer.

@@ -1,6 +1,9 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { failureIssue, reportFailure, summarizeError } from './fail';
-import { EMPTY_STATE } from './state';
+import { failureIssue, pruneFailures, reportFailure, summarizeError } from './fail';
+import { EMPTY_STATE, readState, writeState } from './state';
 import type { Ctx, FactoryState } from './types';
 
 describe('summarizeError', () => {
@@ -15,17 +18,32 @@ describe('summarizeError', () => {
 });
 
 describe('reportFailure', () => {
-  it('posts to Telegram before labeling, and posts again when the label fails', async () => {
-    const posts: string[] = [];
-    const ctx = {
-      cfg: { repo: 'o/r', committeeChat: 'c' },
-      log: () => undefined,
-      telegram: { sendMessage: async (_c: string, text: string) => { posts.push(text); return 1; } },
-      github: { addLabel: async () => { throw new Error('x509: certificate is not standards compliant'); } },
-    } as unknown as Ctx;
+  const NOW = new Date('2026-09-30T12:00:00Z');
+  const setup = (addLabel: () => Promise<void>) => {
+    const dir = mkdtempSync(join(tmpdir(), 'factory-fail-'));
+    const statePath = join(dir, 'state.json');
+    writeState(statePath, structuredClone(EMPTY_STATE));
+    const ctx = { cfg: { repo: 'o/r', committeeChat: 'c' }, statePath, now: () => NOW, log: () => undefined, github: { addLabel } } as unknown as Ctx;
+    return { ctx, statePath };
+  };
+
+  it('records the failure for Hermes and labels the issue, with no chat post', async () => {
+    const labels: string[] = [];
+    const { ctx, statePath } = setup(async () => { labels.push('stuck'); });
+    await reportFailure(ctx, 'implement', 4, new Error('agent failed'), 'l');
+    expect(readState(statePath).failures).toEqual([{ stage: 'implement', issue: 4, error: 'agent failed', log: 'l', at: NOW.toISOString() }]);
+    expect(labels).toEqual(['stuck']);
+  });
+
+  it('records the failure before a label that fails, so Hermes still sees it', async () => {
+    const { ctx, statePath } = setup(async () => { throw new Error('x509: certificate is not standards compliant'); });
     await expect(reportFailure(ctx, 'implement', 4, new Error('agent failed'), 'l')).rejects.toThrow('x509');
-    expect(posts[0]).toContain('Factory stage implement failed on issue #4');
-    expect(posts[1]).toContain('Could not label issue #4');
+    expect(readState(statePath).failures).toHaveLength(1);
+  });
+
+  it('keeps failures for a day', () => {
+    const state = { ...structuredClone(EMPTY_STATE), failures: [{ stage: 'design' as const, issue: 1, error: 'e', log: null, at: '2026-09-29T11:00:00Z' }, { stage: 'change' as const, issue: null, error: 'e', log: null, at: '2026-09-29T13:00:00Z' }] };
+    expect(pruneFailures(NOW)(state).failures.map((failure) => failure.stage)).toEqual(['change']);
   });
 });
 

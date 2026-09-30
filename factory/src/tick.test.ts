@@ -209,7 +209,8 @@ describe('tick', () => {
     await tick(h.ctx, '/code', h.deps);
     expect(h.killed).toEqual(['42 design-job']);
     expect(h.labels).toEqual([`5:${STUCK_LABEL}`]);
-    expect(h.sent[0]).toContain('timed out after 30 minutes');
+    expect(readState(h.ctx.statePath).failures[0].error).toBe('timed out after 30 minutes');
+    expect(h.sent).toEqual([]);
     expect(readState(h.ctx.statePath).jobs).toEqual([]);
   });
 
@@ -225,7 +226,7 @@ describe('tick', () => {
     const h = harness(job('2026-01-10T11:50:00Z', 'change', 3), false);
     await tick(h.ctx, '/code', h.deps);
     expect(h.labels).toEqual([]);
-    expect(h.sent[0]).toContain('job process died without finishing');
+    expect(readState(h.ctx.statePath).failures).toMatchObject([{ stage: 'change', issue: null, error: 'job process died without finishing' }]);
     expect(readState(h.ctx.statePath).jobs).toEqual([]);
   });
 

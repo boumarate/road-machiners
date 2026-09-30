@@ -24,8 +24,8 @@ describe('runJob', () => {
     const state = readState(statePath);
     expect(state.jobs.map((job) => job.id)).toEqual(['a']);
     expect(state.pendingChanges).toEqual([]);
-    expect(posts).toHaveLength(1);
-    expect(posts[0]).toContain('offline');
+    expect(posts).toEqual([]);
+    expect(state.failures).toMatchObject([{ stage: 'change', issue: null, error: 'offline' }]);
   });
 
   it('clears the queued ship after a failed ship, and reports on the tracking issue', async () => {
@@ -57,10 +57,10 @@ describe('runJob', () => {
       cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c' } as FactoryConfig, statePath, now: () => new Date('2026-01-10T12:00:00Z'), log: () => undefined,
       repo: { sync: fail },
       telegram: { sendMessage: async () => { events.push('report'); return 1; } },
-      github: { issue: fail, cards: fail, addLabel: async () => undefined, comment: async (n: number, body: string) => { events.push(`comment ${n} ${body}`); } },
+      github: { issue: fail, cards: fail, addLabel: async () => { events.push('label'); }, comment: async (n: number, body: string) => { events.push(`comment ${n} ${body}`); } },
     } as unknown as Ctx;
     await runJob(ctx, 'design', 7);
-    expect(events).toEqual(['report', 'comment 7 Design failed after 10 min. Hermes is looking into it.']);
+    expect(events).toEqual(['label', 'comment 7 Design failed after 10 min. Hermes is looking into it.']);
   });
 
   it('writes a finished note with the stage time', () => {

@@ -39,7 +39,7 @@ When a member acts on an approval or candidate post, by button or reply, the fac
 
 Triage, design, implementation and testing each comment on their issue when they finish or fail, with the time they took.
 
-A failed or timed-out stage labels its issue `factory-stuck` and posts once to the committee chat. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
+A failed or timed-out stage labels its issue `factory-stuck` and records the failure in `failures` in the state file for a day. The factory posts nothing about it, and neither about a tick crash. Hermes's incident watch sees both and posts the one message. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
 
 Hermes manages the factory. A watch job wakes it when an issue gets stuck or the tick crashes. It reads the logs, the state and the chat, then fixes the incident or asks the committee. It has a shell with `gh`, `git` and `jq` as the bot account, and it can edit the factory home. While it edits state, it pauses the factory with the file `$FACTORY_HOME/paused`, and every tick skips.
 

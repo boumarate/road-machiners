@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { removeStaleBuilds } from './deploy';
-import { failureIssue, reportFailure } from './fail';
+import { failureIssue, pruneFailures, reportFailure } from './fail';
 import { intake } from './intake';
 import { pruneCaptions } from './post-status';
 import { isAlive, killJob, spawnJob } from './jobs';
@@ -206,6 +206,7 @@ export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS
   const cards = await releaseAnswered(ctx, await ctx.github.cards());
   cleanBuilds(ctx, cards);
   updateState(ctx.statePath, pruneCaptions);
+  updateState(ctx.statePath, pruneFailures(ctx.now()));
   await ctx.repo.sync();
   const devHead = await ctx.repo.headHash('dev');
   await noteCap(ctx, cards, devHead);

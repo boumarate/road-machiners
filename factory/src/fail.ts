@@ -1,9 +1,12 @@
+import { updateState } from './state';
 import { STUCK_LABEL, type Ctx, type FactoryState, type JobStage, type Stage } from './types';
 
 const ANSI = new RegExp(String.raw`\u001b\[[0-9;]*[A-Za-z]`, 'g');
 const FAILURE_LINE = /FAIL|Error|error:|failed|×/;
 const SUMMARY_LINES = 6;
 const SUMMARY_CHARS = 800;
+// Hermes handles a failure within minutes. A day keeps it in view through an outage of Hermes, and the logs keep it after that.
+const FAILURE_KEEP_MS = 24 * 3_600_000;
 
 export function stripAnsi(text: string): string {
   return text.replace(ANSI, '');
@@ -25,25 +28,16 @@ export function failureIssue(stage: JobStage, issue: number | null, state: Facto
   return issue;
 }
 
-// A failed stage stops its card and tells the committee once. Nothing retries until a human removes the label.
-// Telegram goes first, so a GitHub outage that broke the stage cannot also hide the report.
+// A failed stage stops its card. Nothing retries until a human or Hermes removes the label.
+// The factory posts nothing. It records the failure first, so Hermes's incident watch sees it even when GitHub broke the stage and the label.
 export async function reportFailure(ctx: Ctx, stage: Stage, issue: number | null, error: unknown, log: string | null): Promise<void> {
   const message = error instanceof Error ? error.message : String(error);
   ctx.log(stage, issue, `failed: ${message}`);
-  const where = issue === null ? '' : ` on issue #${issue} https://github.com/${ctx.cfg.repo}/issues/${issue}`;
-  const lines = [`Factory stage ${stage} failed${where}.`, summarizeError(message)];
-  if (log) lines.push(`Log: ${log}`);
-  lines.push('Hermes is looking into it.');
-  await ctx.telegram.sendMessage(ctx.cfg.committeeChat, lines.join('\n\n'));
-  if (issue !== null) await labelStuck(ctx, issue);
+  const failure = { stage, issue, error: summarizeError(message), log, at: ctx.now().toISOString() };
+  updateState(ctx.statePath, (state) => ({ ...state, failures: [...state.failures, failure] }));
+  if (issue !== null) await ctx.github.addLabel(issue, STUCK_LABEL);
 }
 
-async function labelStuck(ctx: Ctx, issue: number): Promise<void> {
-  try {
-    await ctx.github.addLabel(issue, STUCK_LABEL);
-  } catch (error) {
-    const reason = summarizeError(error instanceof Error ? error.message : String(error));
-    await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Could not label issue #${issue} ${STUCK_LABEL}, so the factory may run it again.\n\n${reason}`);
-    throw error;
-  }
+export function pruneFailures(now: Date): (state: FactoryState) => FactoryState {
+  return (state) => ({ ...state, failures: state.failures.filter((failure) => now.getTime() - new Date(failure.at).getTime() < FAILURE_KEEP_MS) });
 }

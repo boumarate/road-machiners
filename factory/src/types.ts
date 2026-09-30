@@ -71,7 +71,9 @@ export const QUEUE_OF: Record<JobStage, Queue> = {
   testing: 'test',
   approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', change: 'branch',
 };
-export type ChangeRequest = { id: number; text: string; by: string };
+// `error` is the short summary. The full text is in `log`.
+export type Failure = { stage: Stage; issue: number | null; error: string; log: string | null; at: string };
+export type ChangeRequest ={ id: number; text: string; by: string };
 export type Removal = { issue: number; by: string; text: string };
 
 // The open release. Its branch takes the release tasks, and Ship merges it into main.
@@ -93,7 +95,8 @@ export type FactoryState = {
   pendingApprovals: Record<string, string>; // issue number -> approving Telegram user, run by the next tick
   approvedResolving: Record<string, string>; // issue number -> approver, for an approved card back in Testing to resolve a conflict with its base. Testing then queues its merge with no new post.
   pendingChanges: ChangeRequest[]; // factory change requests, run by the next ticks in order
-  lastTickError: string | null; // the last tick crash posted to the committee, so a lasting outage posts once
+  lastTickError: string | null; // the last tick crash. Hermes's incident watch reports it.
+  failures: Failure[]; // failed jobs of the last day. Hermes's incident watch reports each one, and the chat hears of it only from Hermes.
   adhocReplies: Record<string, { chat: string; messageId: number }>; // ad hoc issue number -> the chat message its report answers
   builds: Record<string, string>; // issue number -> folder name of its deployed build under the web root
   jobStarts: string[]; // ISO start times of public-driven jobs in the last 24 hours
