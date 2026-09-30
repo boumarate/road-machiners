@@ -17,7 +17,7 @@ import { hasCargo } from './salvage';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
 import { addState, aidData, endState, stateOf } from './states';
-import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, rngStateForForcedRolls, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, rngStateForForcedRolls, startCombat, testDrive } from './testkit';
 import type { TraitId } from '../data/npcs';
 import type { SalvageStock, Vehicle, World } from './types';
 import { dist } from './vec';
@@ -105,9 +105,9 @@ describe('calls', () => {
     expectRefused(w, npc.id, TRAIT_TALK.trader.voice!.refusal);
   });
 
-  it('a truck busy fighting another truck refuses the call with the busy line', () => {
+  it('a truck in combat with another truck refuses the call with the busy line', () => {
     const { w, npc } = withNpc('trader', 'traders');
-    npc.brain!.goals.push({ kind: 'fight', targetId: 'someone-else', destination: { x: 40, y: 30 }, reason: 'fight back', phase: 'travel' });
+    startCombat(w, addVehicle(w, 'scavengers', 'scout', [], { x: 50, y: 50 }), npc);
     expectRefused(w, npc.id, BUSY_LINE);
     expect(hangUp(callVehicle(w, npc.id)).player.call).toBeNull();
   });
@@ -203,19 +203,28 @@ describe('NPC calls', () => {
     expect(closed.player.call).toBeNull();
   });
 
-  it('an NPC busy fighting another truck raises no call', () => {
+  it('an NPC in combat with another truck raises no call', () => {
     const { w, npc } = withNpc('trader', 'traders');
-    npc.brain!.goals.push({ kind: 'flee', targetId: 'someone-else', destination: { x: 50, y: 30 }, reason: 'escape an attacker', phase: 'travel' });
+    startCombat(w, addVehicle(w, 'scavengers', 'scout', [], { x: 50, y: 50 }), npc);
     raiseCalls(w);
     expect(w.player.call).toBeNull();
   });
 
-  // A raider with no brain in the player's sight makes the player in combat without raising calls of its own.
-  function withRaiderInSight(w: World): void {
+  // A raider with no brain in the player's sight. It puts the player in combat only when it attacks.
+  function withRaiderInSight(w: World, attacking = true): void {
     const raider = addVehicle(w, 'raiders', 'scout', [], { x: 26, y: 30 });
     refreshVision(w);
     expect(isHostile(w, raider, playerVehicle(w))).toBe(true);
+    if (attacking) startCombat(w, raider, playerVehicle(w));
   }
+
+  it('an NPC calls a player beside a raider that is only passing by, with a topic outside the fight', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    TOPICS.directions.raise = { ...TOPICS.directions.raise!, duringCombat: false };
+    withRaiderInSight(w, false);
+    raiseCalls(w);
+    expect(w.player.call).toMatchObject({ with: npc.id, topic: 'directions' });
+  });
 
   it('an NPC does not call a player in combat with a topic that is not part of the fight', () => {
     const { w } = withNpc('trader', 'traders');
@@ -277,7 +286,7 @@ describe('honk', () => {
     addState(w, 'feud', feuding.id, w.player.vehicleId, { kind: 'feud', robbery: false });
     npcAt(w, 'buggy', 'raiders', 36);
     const busy = npcAt(w, 'trader', 'traders', 32);
-    busy.brain!.goals.push({ kind: 'flee', targetId: 'someone-else', destination: { x: 60, y: 30 }, reason: 'escape an attacker', phase: 'travel' });
+    startCombat(w, addVehicle(w, 'scavengers', 'scout', [], { x: 60, y: 60 }), busy);
     expect(honkers(honk(w))).toEqual([w.player.vehicleId]);
   });
 

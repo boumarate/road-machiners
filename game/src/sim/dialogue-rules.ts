@@ -7,8 +7,8 @@ import { PERK_NUMBERS } from '../data/skills';
 import { REGION, type TownDef } from '../data/region';
 import { playerVehicle } from './damage';
 import { discoverSite } from './locations';
-import { isHostile } from './combat';
-import { patchGoal, startTow, topGoal, underAttack } from './npc-activities';
+import { inCombat, isHostile } from './combat';
+import { patchGoal, startTow, topGoal } from './npc-activities';
 import { vehicleValue } from './market';
 import { hasPerk, practice } from './progress';
 import { answerPlea, answersPlea, answersThreat, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, surrenderTo, yieldTo, type ThreatAnswer } from './parley';
@@ -149,7 +149,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   npcOffRope: (world, npc) => !isOnRope(world, npc.id),
   noTrade: (world, npc) => tradeWith(world, npc) === null,
   // A driver under attack takes on no tow, patch or trade.
-  npcCalm: (_world, npc) => !underAttack(npc),
+  npcCalm: (world, npc) => !inCombat(world, npc),
   hasDeal: (_world, _npc, vars) => vars.deal !== undefined,
   noDeal: (_world, _npc, vars) => vars.deal === undefined,
   // About to attack the player, who carries something worth taking, and chose to call first.

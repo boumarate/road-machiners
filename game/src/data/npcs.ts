@@ -984,10 +984,7 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   feud: { hostileSeen: { fight: { add: 4 } } },
   // A failed robber mostly leaves the same target alone. A scumbag's rob weight of 0.5 drops to 0.0025, about 1%.
   backedOff: { preySeen: { rob: { mul: 0.005 } } },
-  tow: {},
-  patch: {},
-  trade: {},
-  aid: {},
+  tow: {}, patch: {}, trade: {}, aid: {}, combat: {},
   // A driver rarely robs a truck it holds a truce with. A scumbag's rob weight of 0.5 drops to 0.0025, about 1%.
   truce: { preySeen: { rob: { mul: 0.005 } } },
   grievance: {},
@@ -1057,6 +1054,9 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   answering: null,
   // An escort lasts until the leader reaches its destination, or either party is gone, beaten or hostile.
   escort: null,
+  // Hostile acts between two trucks reset it. 10 turns, like a feud, covers reloads and a chase out of sight behind a
+  // ridge, and is short enough that a raider that drove off stops blocking work soon.
+  combat: 10,
 };
 
 export type Trait = {
