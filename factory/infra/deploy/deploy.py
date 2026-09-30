@@ -16,6 +16,9 @@ FILES = INFRA_DIR / "files"
 factory_env = read_factory_env(settings.factory_env_file)
 image = factory_env["FACTORY_IMAGE"]
 tick_minutes = factory_env["FACTORY_TICK_MINUTES"]
+# ITCH_TARGET is "user/game", and its page is https://user.itch.io/game. The bare domain redirects there.
+itch_user, itch_game = factory_env["ITCH_TARGET"].split("/")
+itch_url = f"https://{itch_user}.itch.io/{itch_game}"
 factory_dir = f"{CODE_DIR}/factory"
 env_path = f"{factory_dir}/.env"
 as_factory = {"_sudo": True, "_sudo_user": FACTORY_USER}
@@ -146,6 +149,7 @@ server.shell(
     name="compose up: caddy",
     commands=[
         f"cd {FACTORY_ROOT}/stacks/caddy && FACTORY_DOMAIN={shlex.quote(settings.factory_domain)} FACTORY_ACME_EMAIL={shlex.quote(settings.factory_acme_email)} "
+        f"FACTORY_ITCH_URL={shlex.quote(itch_url)} "
         "timeout 300 docker compose up -d --remove-orphans --wait --wait-timeout 120"
     ],
     _sudo=True,
