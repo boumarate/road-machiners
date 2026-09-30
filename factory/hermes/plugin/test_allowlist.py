@@ -37,4 +37,4 @@ def test_with_values_replaces_old_lines_and_keeps_others():
 
 def test_write_passed_needs_every_key(tmp_path):
     with pytest.raises(KeyError, match="FACTORY_REPO"):
-        write_passed(tmp_path / ".env", {"GH_TOKEN": "t"})
+        write_passed(tmp_path / ".env", {"OTHER": "x"})

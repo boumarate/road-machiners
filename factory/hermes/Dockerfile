@@ -25,6 +25,11 @@ cp /opt/factory/SOUL.md "$HERMES_HOME/SOUL.md"
 mkdir -p "$HERMES_HOME/scripts"
 cp /opt/factory/factory-incidents.sh "$HERMES_HOME/scripts/factory-incidents.sh"
 python3 "$HERMES_HOME/plugins/factory/allowlist.py"
+# Hermes never passes GH_TOKEN to its shell, since a model provider uses that name. So gh saves the login in the Hermes home, and git asks gh.
+printf '%s\n' "$GH_TOKEN" | env -u GH_TOKEN gh auth login --with-token
+env -u GH_TOKEN gh auth setup-git
+git config --global user.name "ROAM Factory Hermes"
+git config --global user.email "hermes@roam.invalid"
 # The incident watch wakes Hermes when the list of open incidents changes. SOUL.md holds what to do, so the job itself never changes.
 if ! hermes cron list --all | grep -q factory-incidents; then
   hermes cron create "every 1m" "The list of open factory incidents changed. The monitor diff shows how. Follow the Incidents section of your instructions. If the change is only an incident going away, respond with [SILENT]." \
