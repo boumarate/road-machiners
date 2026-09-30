@@ -2,8 +2,6 @@
 
 import type { Faction, StateKindId } from '../sim/types';
 import { START_KITS } from './start';
-import { RULES } from './rules';
-import { TERRAIN } from './terrain';
 
 // NPCs begin with the player's upkeep budget. Their fuel is capped by their chassis.
 export const NPC_RESOURCES = {
@@ -12,7 +10,7 @@ export const NPC_RESOURCES = {
   supplies: START_KITS.standard.supplies,
 };
 
-export type TraitId = 'trader' | 'scavenger' | 'raider' | 'scumbag' | 'coward' | 'lawman' | 'courier' | 'roamer' | 'supplier' | 'guard' | 'merc' | 'brave';
+export type TraitId = 'trader' | 'scavenger' | 'raider' | 'scumbag' | 'coward' | 'lawman' | 'courier' | 'roamer' | 'vulture' | 'supplier' | 'guard' | 'merc' | 'brave';
 
 export type Weighted<T> = { value: T; weight: number };
 export type CargoRoll = { good: string; count: number };
@@ -70,6 +68,13 @@ const LIGHT_GUNS: Weighted<string>[] = [
   { value: "flamer", weight: 1 },
   { value: "longRifle", weight: 1 },
   { value: "slugCannon", weight: 1 },
+];
+
+// Long-range guns for drivers who keep their distance.
+const LONG_GUNS: Weighted<string>[] = [
+  { value: "longRifle", weight: 3 },
+  { value: "slugCannon", weight: 2 },
+  { value: "battleRifle", weight: 1 },
 ];
 
 // Shared wear rolls for spawned kit. Raiders run rougher rigs than traders, who keep theirs closer to new.
@@ -504,6 +509,57 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     targets: { guns: [1.05, 1.7], armor: [0.3, 0.6] },
     spares: null,
   },
+  // A vulture picks its way along lonely roads with a long gun, plates and cargo packs, and never rolls without a
+  // cargo part. Its guns all reach 15 tiles or more, so it shoots from beyond most drivers' range.
+  vulture: {
+    budget: 7500,
+    levels: [{ value: "poor", weight: 1 }, { value: "light", weight: 3 }, { value: "standard", weight: 3 }, { value: "heavy", weight: 1 }],
+    chassis: [
+      { value: "scout", weight: 4 },
+      { value: "van", weight: 4 },
+      { value: "jeep", weight: 2 },
+      { value: "hauler", weight: 2 },
+      { value: "longbed", weight: 1 },
+    ],
+    engine: [
+      { value: "stockEngine", weight: 5 },
+      { value: "flatFour", weight: 4 },
+      { value: "workhorseDiesel", weight: 3 },
+    ],
+    weapon: [
+      { value: "longRifle", weight: 6 },
+      { value: "slugCannon", weight: 3 },
+      { value: "battleRifle", weight: 2 },
+      { value: "recoilless", weight: 1 },
+      { value: "amRifle", weight: 1 },
+      { value: "sniperCannon", weight: 0.3 },
+    ],
+    extraGun: LONG_GUNS,
+    minGuns: 1,
+    gunFill: 0.4,
+    armor: [
+      { value: "plates", weight: 4 },
+      { value: "scrapPanels", weight: 4 },
+      { value: "cage", weight: 2 },
+    ],
+    cargoPart: [
+      { value: "panniers", weight: 5 },
+      { value: "rack", weight: 3 },
+      { value: "flatbed", weight: 2 },
+      { value: "lightFrame", weight: 1 },
+      { value: "trailerBox", weight: 1 },
+    ],
+    goods: [
+      { value: null, weight: 2 },
+      { value: { good: "scrap", count: 3 }, weight: 6 },
+      { value: { good: "parts", count: 1 }, weight: 2 },
+      { value: { good: "tools", count: 1 }, weight: 2 },
+      { value: { good: "batteries", count: 1 }, weight: 2 },
+    ],
+    wear: WEAR_SCAVENGER,
+    targets: { guns: [1.2, 2.0], armor: [0.35, 0.6] },
+    spares: null,
+  },
   // A convoy is a big truck that always carries a cargo part, since it hauls for a living. Its guard does the
   // fighting, so its own gun stays light.
   convoy: {
@@ -641,6 +697,8 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
 // convoy guards are always brave. A convoy or its guard can be a scumbag, which makes it bold and quick to retaliate,
 // but its trait still forbids robbing. Lawmen roll no extras, since they keep the peace.
 const NEUTRAL_EXTRAS: NpcTemplate['extraTraits'] = [{ trait: 'scumbag', chance: 0.25 }, { trait: 'coward', chance: 0.25 }, { trait: 'brave', chance: 0.15 }];
+// Most vultures run from a fight, and a few are scumbags who rob a weak truck.
+const VULTURE_EXTRAS: NpcTemplate['extraTraits'] = [{ trait: 'coward', chance: 0.6 }, { trait: 'scumbag', chance: 0.35 }, { trait: 'brave', chance: 0.1 }];
 const RAIDER_EXTRAS: NpcTemplate['extraTraits'] = [{ trait: 'brave', chance: 0.15 }];
 const GUARD_EXTRAS: NpcTemplate['extraTraits'] = [{ trait: 'scumbag', chance: 0.25 }];
 
@@ -742,6 +800,18 @@ export const NPCS: Record<string, NpcTemplate> = {
     interval: 30,
     spawn: { kind: "town" },
   },
+  vulture: {
+    id: 'vulture', name: 'Vulture', faction: 'vultures', traits: ['vulture'],
+    extraTraits: VULTURE_EXTRAS,
+    loadout: LOADOUTS.vulture,
+    aggroRange: 0,
+    preferredRange: 0,
+    fightStyle: 'hold',
+    // Same count and refill as couriers and roamers.
+    cap: 3,
+    interval: 30,
+    spawn: { kind: "town" },
+  },
   convoy: {
     id: 'convoy', name: 'Supply convoy', faction: 'convoys', traits: ['supplier'], extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.convoy,
@@ -793,6 +863,7 @@ export const SPAWN = {
     "noseArmy",
     "courier",
     "roamer",
+    "vulture",
     "convoy",
     "merc",
     "merc",
@@ -835,7 +906,7 @@ export type DecisionOptions = {
   mugging: 'demand' | 'attack'; // the driver sets out to fight the player: radio for the cargo first, or just open fire
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
   // The goal stack is empty. Escort joins a leader that no escort guards yet.
-  idle: 'trade' | 'scavenge' | 'raid' | 'wait' | 'patrol' | 'travel' | 'explore' | 'haul' | 'escort';
+  idle: 'trade' | 'scavenge' | 'raid' | 'prowl' | 'wait' | 'patrol' | 'travel' | 'explore' | 'haul' | 'escort';
   escortSeen: 'keep' | 'hire'; // a free merc comes in sight while the driver travels to a site
   hireOffered: 'take' | 'decline'; // a driver asks this merc to escort it for a fee
 };
@@ -886,9 +957,9 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   mugging: { demand: 3, attack: 2 },
   // After an interruption a driver goes back to its work 9 times in 10.
   resume: { resume: 9, new: 1 },
-  // Anyone collects salvage in sight. Trading, raiding, patrols, trips, exploring, hauls and escorts more than
+  // Anyone collects salvage in sight. Trading, raiding, prowling, patrols, trips, exploring, hauls and escorts more than
   // rarely need a trait. Waiting is the small fallback.
-  idle: { trade: 0, scavenge: 1, raid: 0, wait: 0.1, patrol: 0, travel: 0, explore: 0, haul: 0, escort: 0 },
+  idle: { trade: 0, scavenge: 1, raid: 0, prowl: 0, wait: 0.1, patrol: 0, travel: 0, explore: 0, haul: 0, escort: 0 },
   // Hiring a merc more than rarely needs a trait.
   escortSeen: { keep: 1, hire: 0 },
   // Three mercs in four take a job they are offered. A weak merc mostly declines.
@@ -1087,6 +1158,14 @@ export const TRAITS: Record<TraitId, Trait> = {
     towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: { idle: { explore: { add: 10 }, trade: { add: 3 }, scavenge: { add: 2 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 3 } }, escortSeen: { hire: { add: 0.2 } } },
   },
+  // Vultures prowl lonely roads and hunting grounds: an idle vulture prowls four times in five and scavenges a site
+  // about one time in six. Prowl 10 and scavenge 2 against a base of 1 keep other options at the minimum. A vulture
+  // stops for 20 in 21 wrecks, piles and knocked-out trucks it passes, and rarely tows. Retaliate 0.5 against forgive
+  // 4 makes it a bit touchier than most.
+  vulture: {
+    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
+    weights: { idle: { prowl: { add: 10 }, scavenge: { add: 2 } }, salvageSeen: { loot: { add: 20 } }, crashed: { retaliate: { add: 0.5 } } },
+  },
   // Supply convoys haul fuel drums from the Pump Station and water from the oases to the towns. An idle convoy
   // hauls nearly always, and stops for salvage only at about the minimum chance. Like traders, convoys avoid
   // fights and leave them to their guard, and mostly pay when threatened. A convoy never robs.
@@ -1128,171 +1207,4 @@ export const TRAITS: Record<TraitId, Trait> = {
   },
 };
 
-export const NPC_BEHAVIOR = {
-  // Turns a driver may go without progress before it gives up its top goal. Progress is a new tile, a job turn or a
-  // new top goal. A crawling truck changes tile every turn, and every timed deal lapses in 60 turns or less, so 100
-  // turns without progress is always a bug. See watchStalls() in src/sim/npc-activities.ts.
-  stallTurns: 100,
-  // Tiles a stalled driver out of the player's sight may jump to get clear of whatever holds it. 20 tiles is about
-  // six turns of driving, enough to leave a pad, a pocket between props or a jam of trucks, and well inside the
-  // 80 tiles of gray vision, so the driver stays in the same area.
-  stallJump: 20,
-  // Escort fee per tile of straight distance from the client to its destination. Bowl and Nose lie about 520 tiles
-  // apart. A trader load of about 8 units earns about 50 a unit there, so about 400. 0.15 a tile makes that escort
-  // cost about 78, a fifth of the load's profit.
-  escortFeePerTile: 0.15,
-  // Decline weight times this when the merc is weak. A decline weight of 1 against take 3 then wins about 7 to 1.
-  weakDecline: 20,
-  // A leader waits while an escort lags farther than this many tiles behind. A truck cruises about 3.4 tiles a
-  // turn on a road, so 12 tiles is three to four turns of driving, still well inside sight.
-  escortWaitGap: 12,
-  // Tiles from a town gate a patrol drives out to: the gate guns' range plus four sight radii, about 90 tiles. A
-  // patrol covers the roads well past the guns, about a sixth of the way to the other town.
-  patrolRadius: RULES.guards.range + TERRAIN.vision.radius * 4,
-  // Tiles along a road between two patrol stops. Close enough that stops spread over every approach.
-  patrolSpacing: 4,
-  // Tiles a follower keeps to the side of its leader past both radii: the yield distance plus one, so it rides
-  // outside the collision check of src/sim/ai.ts.
-  followGap: RULES.yieldDistance + 1,
-  // A driver whose cab, whole truck or own health is at 30% is weak. Recovery to half prevents fight/flee oscillation.
-  fleeCondition: 0.3,
-  // Fight driving; see src/sim/ai.ts. A fighter scores `angles` points around its target's next spot. Each
-  // point gets arcWeight × the share of its gun damage that bears from there, minus threatWeight × the share of the
-  // target's gun damage that bears on it and gets past the armor on the side it shows each gun, minus rangeWeight × how far off its range the point is as a share of it,
-  // minus travelWeight × the drive past one turn at top speed as a share of that speed. A circling fighter adds
-  // circleWeight × how far ahead around the target the point lies, as a share of a quarter turn, and never drives
-  // slower than circlePace tiles a turn. Every fighter subtracts rammedWeight × the ram value of the target's ram at
-  // that point, and one that rams readily adds ramWeight × the ram value of its own ram from there. A fighter rolls
-  // fightWhim every whimTurns turns.
-  fight: { angles: 16, arcWeight: 2, threatWeight: 2, rangeWeight: 1, travelWeight: 1, circleWeight: 1, rammedWeight: 2, ramWeight: 2, circlePace: 3, whimTurns: 4 },
-  // One driver in three the player knocks out holds a grudge. See the revenge state.
-  revengeChance: 0.33,
-  recoverCondition: 0.5,
-  // An enemy is a threat when its perceived danger beats the driver's own times this and its boldness.
-  threatRatio: 1,
-  // A sighting misjudges a truck's danger by up to a quarter either way, rolled once per sighting. Damage shows,
-  // but only roughly.
-  dangerSpread: 0.25,
-  // Flee weight times this against a threat, and again when the cab or driver is at the flee condition.
-  // 20 makes an outgunned raider run about two times in three, and an outgunned scavenger nearly always.
-  threatFlee: 20,
-  weakFlee: 20,
-  // Damage taken last turn, as a share of cab max HP, that adds the base weight to flee when attacked.
-  hurtFullFlee: 0.1,
-  // A shot that did no damage gives flee this much of its base weight when attacked.
-  missFlee: 0.5,
-  // Fight and fight back times this when the hostile's local group looks no stronger than the driver's own. A
-  // driver busy with work gets it only when attacked, so it defends but does not start fights.
-  manageableFight: 5,
-  // Keep times this when a driver busy with work and not weak sees or hears a hostile that is not aimed at it or
-  // at a nearby faction mate. A scavenger at work then keeps on about 99 times in 100 beside an equal hostile, and
-  // about 94 times in 100 beside one it judges a threat.
-  keepWork: 400,
-  // Turns a noticed subject stays remembered after it was last perceived. A heard engine drops out for a turn or
-  // two when the truck slows or crosses behind the listener, and 3 turns bridges that without a fresh roll.
-  noticeMemory: 3,
-  // Turns a fighter hunts a target it lost from sight, counted from the last turn it saw it or picked up its sound
-  // or dust. A truck cruises about 3.4 tiles a turn on a road, so 6 turns carry the hunter about 20 tiles, one sight
-  // radius past the last point. A player who goes quiet behind a hill gets away, and a noisy one stays hunted.
-  fightSearchTurns: 6,
-  // Investigate weight times this when the cab or a driving part is at or below the recover condition. A raider's
-  // investigate weight of 12 drops to 0.12, so a crippled raider closes in on a contact 1 to 4 times in 100.
-  crippledInvestigate: 0.01,
-  // A ram is worth its expected net damage: what the crash model says it takes off the target minus what it takes off
-  // the rammer, each part counted by partWeight, times the chance it connects. It competes with the rammer's guns over
-  // the same turns, at gunWeight per point of gun damage that gets past the armor. The ram's share of the two is the
-  // ram value, from 0 to 1. A ram that nets nothing, or leaves the rammer below the flee condition, is worth 0.
-  ram: {
-    // Value of one hit point lost, by the part that loses it. The cab, wheels, engine and guns decide a fight. Armor
-    // and ram bars exist to be hit.
-    partWeight: { cab: 4, wheel: 2, transmission: 2, tank: 1, engine: 3, weapon: 3, armor: 0.25, scanner: 1, store: 1, cargo: 1 },
-    gunWeight: 1,
-    // Ram weight is the ram value times this, so a ram worth as much as the guns, a value of 0.5, weighs 0.15 times the
-    // base weight and is chosen about 1 time in 2. Against an equal truck this gives a ram in about 1 fight in 8 without
-    // a ram bar and 1 in 3 with one.
-    valueScale: 0.3,
-    // Ram weight when the ram is worth nothing. A ram weight of 9 drops to 0.009, about 1%.
-    riskyRam: 0.001,
-    // The chance a ram connects is 1 / (1 + sway), where sway is the sideways distance the target can open before the
-    // impact, as a share of the width of the path. The rammer closes at its impact speed, so each tile of gap costs
-    // 1 / impact turns. The target can move out at its speed times (dodge + how far its heading is off the ram line, as a
-    // sine). A parked or stranded target never moves, so it is hit for sure. A truck at 6 tiles a turn, 12 tiles off, 
-    // crossing the line, has a sway of about 5 and connects about 1 time in 6.
-    dodge: 0.3,
-  },
-  // Salvage in sight weighs 10 times a known site out of sight.
-  visibleSalvage: 10,
-  // A robber mostly picks targets weaker than itself, away from town guards. Rob weight times this when the
-  // target looks as strong as the robber times its boldness or stronger. A scumbag's rob weight of 0.5 drops to
-  // 0.0075, so it robs at about 2%, not 34%.
-  robStronger: 0.015,
-  // Rob weight times this when the robber or target is within guard range of a town gate. Same drop as above.
-  robNearGuards: 0.015,
-  // Fight weight at a new hostile times this near town guards. A raider's fight weight of 50 against manageable
-  // prey drops to 0.05, about 3%. Guards never lower fight back.
-  fightNearGuards: 0.001,
-  // Tow weight falls when the stranded truck can crawl to a town gate. At limp speed, about 1 tile a turn, 15
-  // tiles is a crawl of 15 turns, under two hours of the day. Within it, a tow weight of 9 drops to 0.18 against
-  // keep 1, so about one passing driver in six offers. From there the factor rises in a straight line to 1 at 60
-  // tiles, a crawl of most of a morning.
-  towNearTown: { factor: 0.02, crawl: 15, far: 60 },
-  // Retaliate weight times this after a crash with a faction mate. Four in five raiders then forgive a mate.
-  mateRetaliate: 0.1,
-  // Truce weight times this when the foe's local group is a threat. A trader's truce weight of 2.5 rises to 12.5
-  // against keep 8, so about three hurt turns in five bring an offer.
-  threatTruce: 5,
-  // Beg weight times this when the driver is weak. A weight of 0.1 rises to 4 against keep 8.
-  weakBeg: 40,
-  // Accept weight times this when the pleading foe's group is a threat or the answering driver is weak.
-  threatAccept: 5,
-  // Refuse weight times this when the driver is robbing the pleading foe and neither faces a threat nor is weak.
-  // A raider hunting a truck with loot counts as robbing it. A scumbag's 2 to 1 for accept becomes 2 to 20, so a
-  // confident robber takes a truce about one time in ten. A raider's 2 to 3 becomes 2 to 60, about one in twenty.
-  robberRefuse: 20,
-  // Truce weight times this when a hurt driver is not weak and its foe is no threat, so it is winning. A trader's
-  // truce weight of 2.5 drops to 0.025 against keep 8, and every driver then offers at about the 1% floor.
-  winningTruce: 0.01,
-  // Comply weight times this when the player's local group is a threat. It then beats fight back and flee by far.
-  threatComply: 20,
-};
-
-export const NPC_UPKEEP = {
-  repairParts: 2, // two field patches, kept out of sale cargo
-  shadeSearchRadius: 6, // a short local detour, rather than a journey while damaged
-  // A driver heads for fuel once its tank holds less than this many times the fuel it thinks the way to its
-  // nearest pump takes. It judges the straight line at the heat where it stands, so a winding road, a hotter noon
-  // or a detour after it turns back can drain the tank on the way.
-  fuelReserve: 1.5,
-  // Each driver misjudges by its own fixed share, up to this much either way. A careless trader runs dry now
-  // and then, and a careful one never does.
-  fuelSense: 0.35,
-  lowSupplies: RULES.lowFuelThreshold,
-  // Reserve one full tank and supply load before buying trade cargo.
-  reserveLoads: 1,
-  // A driver sells fuel and supplies to the player only above this share of its caps.
-  tradeReserve: 0.5,
-};
-
-// Raiders look for prey on lonely road stretches and at the pads of salvage sites, where scavengers stop.
-export const HUNT = {
-  roadSpacing: 60, // tiles along a road between two hunting points: three sight radii, so views do not overlap
-  // Tiles from any site edge to a road hunting point: two sight radii. Prey there has left a town or site
-  // behind and is alone on the road.
-  siteDistance: 40,
-};
-
-// Name pools for NPC drivers. Each driver gets one first name and one surname at spawn.
-export const FIRST_NAMES: readonly string[] = [
-  'Abe', 'Ada', 'Anya', 'Arlo', 'Bea', 'Bo', 'Boris', 'Cal', 'Cass', 'Clem', 'Dace', 'Dmitri', 'Dora', 'Earl',
-  'Edda', 'Elias', 'Faye', 'Fenn', 'Gus', 'Hank', 'Hester', 'Ida', 'Igor', 'Ivy', 'Jed', 'Jonah', 'Juno', 'Kat',
-  'Lev', 'Lorna', 'Lupe', 'Mack', 'Mae', 'Mira', 'Nell', 'Nico', 'Oleg', 'Opal', 'Pike', 'Pru', 'Quill', 'Raya',
-  'Rook', 'Ruth', 'Sal', 'Sasha', 'Silas', 'Tam', 'Tess', 'Ugo', 'Vera', 'Vic', 'Wade', 'Wren', 'Yuri', 'Zeke',
-  'Zoya',
-];
-
-export const SURNAMES: readonly string[] = [
-  'Ash', 'Baines', 'Barrow', 'Boyle', 'Brandt', 'Cobb', 'Crane', 'Culver', 'Dawes', 'Drummond', 'Dust', 'Fisk',
-  'Flint', 'Gage', 'Garza', 'Grell', 'Harrow', 'Hatch', 'Holt', 'Irons', 'Jarvis', 'Kane', 'Kessler', 'Kovac',
-  'Lark', 'Lowry', 'Marsh', 'Mercer', 'Morozov', 'Nash', 'Oakes', 'Orlov', 'Pell', 'Quarry', 'Radek', 'Reyes',
-  'Rusk', 'Salt', 'Sokol', 'Stroud', 'Tallow', 'Thorne', 'Tulloch', 'Vance', 'Volkov', 'Wick', 'Yates', 'Zane',
-];
+export { FIRST_NAMES, HUNT, NPC_BEHAVIOR, NPC_UPKEEP, SURNAMES } from './npc-behavior';

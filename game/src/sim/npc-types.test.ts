@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { GOOD_SOURCES } from '../data/market';
+import { partDef } from '../data/parts';
 import { MIN_CHANCE, NPC_BEHAVIOR, NPCS, SPAWN, TRAITS, type TraitId } from '../data/npcs';
+import { RULES } from '../data/rules';
 import { REGION } from '../data/region';
 import { chassisDef } from '../data/chassis';
 import { makePart } from './factory';
-import { freeCells, goodsCount } from './grid';
+import { freeCells, goodsCount, mountedParts } from './grid';
 import { addGoods } from './inventory';
-import { optionChances, optionWeights } from './npc-decisions';
+import { huntingGrounds, optionChances, optionWeights } from './npc-decisions';
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { siteGates, sitePads } from './sites';
 import { spawnInitial, spawnNpcs } from './spawn';
@@ -240,5 +242,67 @@ describe('spawns of the new templates', () => {
     spawnNpcs(w);
     expect(w.vehicles.filter((v) => v.brain?.templateId === 'convoy')).toHaveLength(1);
     expect(w.vehicles.filter((v) => v.brain?.templateId === 'convoyGuard')).toHaveLength(1);
+  });
+});
+
+describe('vultures', () => {
+  it('always carry a cargo part and only long-range guns', () => {
+    let seen = 0;
+    for (let seed = 1; seed <= 15; seed++) {
+      const x = emptyWorld({ x: 300, y: 300 });
+      x.rngState = seed;
+      spawnInitial(x);
+      for (const v of x.vehicles.filter((n) => n.brain?.templateId === 'vulture')) {
+        seen++;
+        const defs = mountedParts(v).map((p) => partDef(p.defId));
+        expect(defs.some((d) => d.kind === 'cargo')).toBe(true);
+        for (const d of defs) if (d.kind === 'weapon') expect(d.range).toBeGreaterThanOrEqual(15);
+      }
+    }
+    expect(seen).toBeGreaterThan(10);
+  }, 60_000);
+
+  it('stop for a wreck they pass nearly every time', () => {
+    const w = emptyWorld({ x: 300, y: 300 });
+    const npc = createNpc(w, 'vulture', ['vulture'], 'scout', ['longRifle', 'stockEngine'], { x: 30, y: 30 });
+    npc.brain!.goals = [{ kind: 'prowl', targetId: null, destination: { x: 200, y: 200 }, phase: 'travel', reason: 'test prowl' }];
+    w.salvage = [{ id: 'wreck-test', pos: { x: 34, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [makePart(w, 'plates', 0)] }];
+    const chances = optionChances(optionWeights(w, npc, 'salvageSeen', 'wreck-test', null));
+    expect(chances.loot).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('prowl more often than anything else and drive to hunting grounds away from them', () => {
+    const w = emptyWorld({ x: 300, y: 300 });
+    const start = huntingGrounds()[0];
+    const npc = createNpc(w, 'vulture', ['vulture'], 'scout', ['longRifle', 'stockEngine'], { ...start });
+    const chances = optionChances(optionWeights(w, npc, 'idle', null, null));
+    expect(Object.entries(chances).sort((a, b) => b[1] - a[1])[0][0]).toBe('prowl');
+    forceOption('idle', 'prowl');
+    const goals = idleGoals(w, npc.id, 20).filter((g) => g.kind === 'prowl');
+    expect(goals.length).toBe(20);
+    for (const goal of goals) {
+      expect(huntingGrounds().some((p) => p.x === goal.destination!.x && p.y === goal.destination!.y)).toBe(true);
+      expect(dist(goal.destination!, start)).toBeGreaterThan(RULES.arriveRadius * 2);
+      expect(goal.reason).toBe('prowl the roads for wrecks');
+    }
+  });
+
+  it('leave prowling to the minimum chance for other drivers, and finish a prowl at the point', () => {
+    const w = emptyWorld({ x: 300, y: 300 });
+    const other = createNpc(w, 'scavenger', ['scavenger'], 'scout', ['mg', 'stockEngine'], sitePads(siteById('bowl'))[0]);
+    expect(optionChances(optionWeights(w, other, 'idle', null, null)).prowl).toBeCloseTo(MIN_CHANCE, 2);
+    const point = huntingGrounds()[0];
+    const npc = createNpc(w, 'vulture', ['vulture'], 'scout', ['longRifle', 'stockEngine'], { ...point });
+    npc.brain!.goals = [{ kind: 'prowl', targetId: null, destination: { ...point }, phase: 'travel', reason: 'test prowl' }];
+    npc.speed = 0;
+    resolveNpcActivities(w);
+    expect(topGoal(npc)).toBeNull();
+  });
+
+  it('cannot prowl without fuel', () => {
+    const w = emptyWorld({ x: 300, y: 300 });
+    const npc = createNpc(w, 'vulture', ['vulture'], 'scout', ['longRifle', 'stockEngine'], { ...huntingGrounds()[0] });
+    npc.resources!.fuel = 0;
+    expect(optionChances(optionWeights(w, npc, 'idle', null, null)).prowl).toBeUndefined();
   });
 });

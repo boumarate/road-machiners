@@ -12,7 +12,7 @@ import type { PerkId } from "../data/skills";
 
 export type PatchDeal = DecisionOptions["patchDeal"];
 
-export type Faction = "player" | "raiders" | "traders" | "scavengers" | "bowl" | "nose" | "couriers" | "roamers" | "convoys" | "mercs";
+export type Faction = "player" | "raiders" | "traders" | "scavengers" | "bowl" | "nose" | "couriers" | "roamers" | "vultures" | "convoys" | "mercs";
 export type SkillId = "driving" | "perception" | "machining" | "toughness" | "social";
 export type XpSource =
   | "roughTiles" | "ram" | "escape"
@@ -161,7 +161,7 @@ export type DriverResources = {
 
 export type NpcActivity = {
   kind:
-    | 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot' | 'repair' | 'patch'
+    | 'scavenge' | 'prowl' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot' | 'repair' | 'patch'
     | 'meet' | 'retreat' | 'patrol' | 'travel' | 'explore' | 'haul' | 'follow';
   targetId: string | null;
   destination: Vec | null;

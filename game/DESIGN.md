@@ -195,6 +195,7 @@ A driver never stands still for good. It waits for a parked truck ahead only whi
 NPCs spawn with equipment sampled from weighted tables for their role: a chassis, a fitting engine and weapon, then optional cargo parts, guns, armor and goods. A driver's gear level sets a chance, from 0 for poor to 80% for loaded, that each free deck spot gets another gun. So a loaded enemy sometimes drives a fortress, and the guns slow it. It respects mount space, rated mass and an equipment budget separate from the driver's wallet. Rare equipment has a lower weight. The same world seed and actions produce the same equipment. There is no separate loot roll on defeat.
 
 - Scavengers collect salvage and sell cargo. A scavenger on a trip stops for three in four wrecks it passes, then mostly goes back to its trip.
+- Vultures prowl lonely roads and hunting grounds, and stop for nearly every wreck, pile or knocked-out truck they pass. They sell the loot, with long-range guns, armor and cargo packs on their trucks.
 - Traders buy profitable cargo, keep money for upkeep and flee from threats. A trader rolls its run from every shop pair, weighted by profit over trip length. Near runs win most rolls, so traders spread over all shops instead of all taking the one best run.
 - Raiders search hunting grounds, fight, collect wreck cargo, and sell it in towns. They buy fuel, supplies and repairs at their nearest camp, and flee to a camp or a town. A camp buys no cargo, so a raider without money sells its cargo in town first. Hunting grounds are lonely road stretches far from any site and the pads of salvage sites.
 - Each NPC pays for fuel, supplies and repairs from its own wallet.
@@ -221,6 +222,7 @@ Every NPC carries a set of traits instead of one class. Each trait adds activiti
 - Coward flees more often and fights back less.
 - Brave almost never runs, pleads or gives up its cargo.
 - Lawman patrols the roads out to about a sixth of the way to the other town and fights raiders on sight. It attacks whoever fires the first shot at a neutral NPC or starts robbing one, the player included.
+- Vulture prowls the hunting roads for wrecks and knocked-out trucks, and rarely helps anyone. Most vultures are cowards and some are scumbags.
 - Courier travels between towns and locations, and almost never stops for salvage.
 - Roamer mostly explores random places, off road too, and trades and scavenges when it finds a chance.
 - Supplier hauls fuel drums from the Pump Station and water from the oases to the towns.
@@ -291,7 +293,7 @@ Fuel and supplies limit range. Fuel burns per tile by chassis, times heat. Below
 - Goods: parts, scrap metal, salt, meds, grain, textiles, machine tools, batteries, electronics, fuel drums and water. Bowl and Nose trade every good. Each stall trades a few. No shop makes fuel drums or water. Supply convoys load them for free at the Pump Station and the oases, and towns price them by the distance to those sources.
 - Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, other destinations and two raider camps. The destinations include two canyon crossings and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. Towns lie on the roads, and other locations sit beside them on short spurs, so through traffic passes by. The player starts off the road out of Bowl, facing it, with the road in grey vision ahead. It is out of sight of every site and knows none, so the first step is to reach the road and ask a passing driver the way. See [landmark visuals](VISUAL_DESIGN.md).
 - Enemies: raider outriders and gunwagons with sampled chassis and equipment.
-- Neutrals: trader caravans, scavengers, couriers, roamers, mercs, and supply convoys with their guards. Shooting one makes it and its nearby mates hostile, and lawmen who see it join in. They spawn outside the gate of a town or location, never close to the player. Every new game starts the same roster, spread evenly over the sites by the world seed. Two traders start at the Bowl gate nearest the player, so drivers soon pass on the road ahead of the player.
+- Neutrals: trader caravans, scavengers, couriers, roamers, vultures, mercs, and supply convoys with their guards. Shooting one makes it and its nearby mates hostile, and lawmen who see it join in. They spawn outside the gate of a town or location, never close to the player. Every new game starts the same roster, spread evenly over the sites by the world seed. Two traders start at the Bowl gate nearest the player, so drivers soon pass on the road ahead of the player.
 - Lawmen: the Bowl Farmers and the Nose Army, heavily armored patrol cars in their town's colors. Each spawns only at its own town.
 
 ## Escorts
