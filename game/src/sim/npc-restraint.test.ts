@@ -81,7 +81,7 @@ describe('NPC restraint', () => {
   it('mostly attacks an isolated manageable target', () => {
     const { world, npc } = createNpc('buggy');
     const prey = addVehicle(world, 'traders', 'scout', [], { x: 33, y: 30 });
-    addGoods(world, prey, 'scrap', 1);
+    addGoods(world, prey, 'electronics', 3);
     const fought = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);
       assignAutoOrders(x);
