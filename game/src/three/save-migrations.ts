@@ -7,9 +7,8 @@ export type SavedJson = Record<string, unknown>;
 // Bump for a change old saves cannot follow, like a new map, and empty MIGRATIONS with it. Players start a new game.
 export const SAVE_MAJOR = 2;
 
-// MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
-// or data code, and a committed step is never edited.
-// The scout's grid gained a column at INSERT_AT, and its cab and transmission moved right. Cargo rows lie below the chassis rows.
+// Step 1 to 2: the scout's grid gained a column at INSERT_AT, and its cab and transmission moved right. Cargo rows lie
+// below the chassis rows. The cab and transmission are fixed core parts that players never move, so a match by id and cell is safe.
 const SCOUT = 'scout';
 const INSERT_AT = 4;
 const CHASSIS_ROWS = 8;
@@ -41,6 +40,8 @@ function shiftScout(vehicle: SavedJson): SavedJson {
   return { ...vehicle, items, job: { ...job, moves, pickup } };
 }
 
+// MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
+// or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   // 0 to 1: the player gets townPatched, as a new game does.
   (world) => ({ ...world, player: { ...(world.player as SavedJson), townPatched: false } }),
