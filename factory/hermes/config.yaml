@@ -27,8 +27,16 @@ plugins:
 # The file toolset also holds write and patch. Hermes has no read-only file toolset.
 platform_toolsets:
   telegram:
+    - terminal
     - file
     - skills
     - memory
+    - session_search
+    - factory
+  # The incident watch job runs with no chat. It resolves incidents with the same tools.
+  cron:
+    - terminal
+    - file
+    - skills
     - session_search
     - factory

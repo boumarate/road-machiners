@@ -14,35 +14,36 @@ services:
     restart: unless-stopped
     environment:
       HERMES_HOME: /opt/data
+      # Hermes runs as the factory user, so the files it edits keep their owner.
+      HERMES_UID: ${FACTORY_UID:?set FACTORY_UID}
+      HERMES_GID: ${FACTORY_UID:?set FACTORY_UID}
+      # The bot account's token. gh and git read it, so Hermes can act on the repo and the board.
+      GH_TOKEN: ${GH_TOKEN:?set GH_TOKEN}
+      FACTORY_REPO: ${FACTORY_REPO:?set FACTORY_REPO}
       HERMES_WRITE_SAFE_ROOT: /opt/data
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN}
-      FACTORY_COMMITTEE_DIR: /factory/committee
+      FACTORY_COMMITTEE_DIR: /factory/home/committee
       FACTORY_COMMITTEE_BOOTSTRAP: ${FACTORY_COMMITTEE_BOOTSTRAP:?set FACTORY_COMMITTEE_BOOTSTRAP}
       FACTORY_COMMITTEE_BOOTSTRAP_GITHUB: ${FACTORY_COMMITTEE_BOOTSTRAP_GITHUB:?set FACTORY_COMMITTEE_BOOTSTRAP_GITHUB}
       FACTORY_COMMITTEE_CHAT: ${FACTORY_COMMITTEE_CHAT:?set FACTORY_COMMITTEE_CHAT}
       # The committee chat is Hermes's home channel, so it does not ask for one.
       TELEGRAM_HOME_CHANNEL: ${FACTORY_COMMITTEE_CHAT:?set FACTORY_COMMITTEE_CHAT}
-      FACTORY_INBOX: /factory/inbox
-      FACTORY_STATE_DIR: /factory/state
+      FACTORY_INBOX: /factory/home/inbox
+      FACTORY_STATE_DIR: /factory/home/state
     volumes:
       - ${FACTORY_HERMES_DIR:-${FACTORY_HOME:?set FACTORY_HOME}/hermes}:/opt/data
       - ./plugin:/opt/data/plugins/factory:ro
-      - ${FACTORY_HOME:?set FACTORY_HOME}/inbox:/factory/inbox
-      - ${FACTORY_HOME:?set FACTORY_HOME}/state:/factory/state:ro
-      # Read-only material Hermes explains to the committee. SOUL.md names these paths.
-      - ${FACTORY_HOME:?set FACTORY_HOME}/logs:/factory/logs:ro
-      # Only the README and prompts, so no env file under factory/ can reach Hermes.
-      - ../README.md:/factory/code/README.md:ro
-      - ../prompts:/factory/code/prompts:ro
-      - ${FACTORY_HOME:?set FACTORY_HOME}/committee:/factory/committee
+      # Hermes manages the factory: it reads and edits the whole factory home and reads the factory code. SOUL.md names these paths.
+      - ${FACTORY_HOME:?set FACTORY_HOME}:/factory/home
+      - ../..:/factory/code:ro
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - NET_RAW
       - NET_ADMIN
     cpus: 2
-    # Hermes idles near 300 MB. The cap leaves room for the testing gate on a 4 GB server.
-    mem_limit: 1536m
+    # Hermes idles near 300 MB. The cap leaves room for the testing gate.
+    mem_limit: 2g
     pids_limit: 256
     healthcheck:
       test:

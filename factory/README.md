@@ -24,14 +24,16 @@ Every tick, after intake, the factory deletes each folder in the web root except
 
 The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public-driven jobs in any 24 hours. Triage, design, implementation, testing and the release cut count. Approve, change and ad hoc jobs do not. The first time the cap blocks work, the committee chat gets one notice with the count and the time the next slot frees.
 
-A failed or timed-out stage labels its issue `factory-stuck` and posts once to the committee chat. A stuck release step labels the tracking issue. Remove the label to let the factory try again.
+A failed or timed-out stage labels its issue `factory-stuck` and posts once to the committee chat. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
+
+Hermes manages the factory. A watch job wakes it when an issue gets stuck or the tick crashes. It reads the logs, the state and the chat, then fixes the incident or asks the committee. It has a shell with `gh`, `git` and `jq` as the bot account, and it can edit the factory home. While it edits state, it pauses the factory with the file `$FACTORY_HOME/paused`, and every tick skips.
 
 ## Parts
 
 - `src/` holds the Node CLI. `npm run factory -- tick` is the entry point. Run `npm ci` in `factory/` first. A timer runs it.
 - `prompts/` holds the prompt of each agent stage.
 - `docker/` holds the agent image with Blender and ffmpeg. Agents get their work clone, `CLAUDE_CODE_OAUTH_TOKEN` and `ELEVENLABS_API_KEY` with `SFX_MAX_GENERATIONS`, so they can generate sounds.
-- `hermes/` holds the Hermes compose file, its config template, its identity in `SOUL.md` and the plugin that queues committee replies into `$FACTORY_HOME/inbox` and edits the committee file.
+- `hermes/` holds the Hermes compose file, its config template, its identity in `SOUL.md`, the incident watch script and the plugin that queues committee replies into `$FACTORY_HOME/inbox` and edits the committee file.
 - `infra/` deploys the server with pyinfra. See [infra/README.md](infra/README.md).
 - `mac/` runs the factory on a Mac. See [mac/README.md](mac/README.md).
 

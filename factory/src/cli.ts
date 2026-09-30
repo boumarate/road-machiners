@@ -3,6 +3,7 @@ import { realContext } from './context';
 import { drainInbox } from './inbox';
 import { intake } from './intake';
 import { runJob } from './job';
+import { pausedReason } from './pause';
 import { tick } from './tick';
 import { guardTick } from './tick-guard';
 import type { JobStage } from './types';
@@ -15,6 +16,8 @@ async function main(args: string[]): Promise<void> {
   const codeDir = process.cwd();
   const [command, stage, issue] = args;
   if (command === 'tick') {
+    const paused = pausedReason(ctx.cfg.home);
+    if (paused !== null) return ctx.log('tick', null, `paused: ${paused}`);
     return guardTick(ctx, async () => {
       await drainInbox(ctx);
       await tick(ctx, codeDir);
