@@ -11,8 +11,9 @@ import { playerVehicle, vehicleById } from './damage';
 import { talkOf } from './dialogue';
 import { isMeeting, supplyRoom, transfer, truckSupplyForSale, type Supply } from './economy';
 import { vehicleValue } from './market';
-import { inDanger, meetGoal, react } from './npc-activities';
+import { fuelReserveFor, inDanger, meetGoal, react } from './npc-activities';
 import { bodyCondition } from './npc-decisions';
+import { corePart } from './grid';
 import { practice } from './progress';
 import { getResources } from './resources';
 import { addState, aidData, endState, stateOf } from './states';
@@ -52,10 +53,16 @@ function amountsBy(pick: (kind: Supply) => number): AidAmounts {
 }
 
 // What a low driver asks the player for: whole units of each low supply up to AID.fillShare of its cap, capped by
-// what the player holds.
+// what the player holds. Fuel is also capped by the driver's reserve for the way to a pump, and a driver with a holed
+// tank asks for none, since it would leak away.
 export function wantedAid(world: World, npc: Vehicle): AidAmounts {
   const held = getResources(world, npc);
-  const want = (kind: Supply) => Math.max(0, Math.floor(capOf(npc, kind) * AID.fillShare - held[kind]));
+  const target = (kind: Supply) => {
+    const share = capOf(npc, kind) * AID.fillShare;
+    if (kind !== 'fuel') return share;
+    return corePart(npc, 'tank')?.hp === 0 ? 0 : Math.min(share, Math.max(1, Math.ceil(fuelReserveFor(world, npc))));
+  };
+  const want = (kind: Supply) => Math.max(0, Math.floor(target(kind) - held[kind]));
   return amountsBy((kind) => (isLowOn(world, npc, kind) ? Math.min(want(kind), Math.floor(world.player[kind])) : 0));
 }
 

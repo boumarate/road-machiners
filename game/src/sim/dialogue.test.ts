@@ -781,7 +781,7 @@ describe('fuel and supply aid', () => {
 
   it('a driver low on fuel names what it wants and its price, and Deal agrees a paid gift at that price', () => {
     const { w, npc } = aidWorld();
-    npc.resources!.fuel = fuelCap(npc) * 0.1;
+    npc.resources!.fuel = 0;
     const wanted = wantedAid(w, npc);
     let next = callVehicle(w, npc.id);
     next = chooseOption(next, optionIndex(next, offerText));
@@ -795,7 +795,7 @@ describe('fuel and supply aid', () => {
 
   it('No charge agrees a free gift', () => {
     const { w, npc } = aidWorld();
-    npc.resources!.fuel = fuelCap(npc) * 0.1;
+    npc.resources!.fuel = 0;
     let next = callVehicle(w, npc.id);
     next = chooseOption(next, optionIndex(next, offerText));
     next = chooseOption(next, optionIndex(next, 'No charge.'));
