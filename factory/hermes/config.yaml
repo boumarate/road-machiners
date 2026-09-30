@@ -13,6 +13,8 @@ compression:
   codex_gpt55_autoraise_notice: false
 
 display:
+  # A message sent while Hermes works waits for the next turn, instead of cutting the running task off. /stop still interrupts.
+  busy_input_mode: queue
   platforms:
     telegram:
       tool_progress: "off"
