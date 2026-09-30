@@ -903,7 +903,7 @@ export type DecisionOptions = {
   // leave.
   strandedFoe: 'offer' | 'spare';
   surrenderOffered: 'accept' | 'refuse'; // a stranded NPC is offered a way out by the foe that beat it
-  threatened: 'comply' | 'fightBack' | 'flee'; // the player demands the driver's cargo
+  threatened: 'comply' | 'fightBack' | 'flee'; // a driver demands the cargo, or a claimant warns the driver off its pile
   mugging: 'demand' | 'attack'; // the driver sets out to fight the player: radio for the cargo first, or just open fire
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
   // The goal stack is empty. Escort joins a leader that no escort guards yet.

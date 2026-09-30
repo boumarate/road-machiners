@@ -6,7 +6,7 @@ import { isHostile, noteCollision } from './combat';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, raiseCalls } from './dialogue';
 import { addGoods } from './inventory';
-import { pushGoal, thinkNpc, topGoal } from './npc-activities';
+import { pushGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { visibleSalvage } from './npc-decisions';
 import { makePeace, plead, yieldTo } from './parley';
 import { hasCargo } from './salvage';
@@ -446,5 +446,58 @@ describe('pile claims', () => {
     expect(visibleSalvage(w, other)).toContain(pile);
     pile.pile!.claim!.warned.push(other.id);
     expect(visibleSalvage(w, other)).not.toContain(pile);
+  });
+});
+
+describe('warning off a trespasser', () => {
+  function trespass(armed = true) {
+    const w = quietWorld();
+    const claimant = npcAt(w, 'scavengers', ['raider'], 30);
+    const victim = addVehicle(w, 'scavengers', 'scout', ['mg'], { x: 40, y: 34 });
+    victim.brain = npcBrain('trader', victim.pos, ['raider']);
+    addGoods(w, victim, 'scrap', 2);
+    yieldTo(w, victim, claimant);
+    if (!armed) claimant.items = claimant.items.filter((item) => item.kind !== 'part' || !/mg/.test(item.part.defId));
+    const pile = w.salvage.find((s) => s.pile)!;
+    const trespasser = npcAt(w, 'scavengers', ['scavenger'], pile.pos.x + 1, pile.pos.y);
+    pushGoal(w, trespasser, { kind: 'loot', targetId: pile.id, destination: { ...pile.pos }, phase: 'travel', reason: 'test' });
+    refreshVision(w);
+    return { w, claimant, trespasser, pile };
+  }
+
+  it('comply: the trespasser backs off and starts no search', () => {
+    const { w, trespasser, pile } = trespass();
+    forceOption('threatened', 'comply');
+    resolveNpcActivities(w);
+    expect(pile.pile!.claim!.warned).toContain(trespasser.id);
+    expect(trespasser.job).toBeNull();
+    expect(trespasser.brain!.goals.some((g) => g.kind === 'loot')).toBe(false);
+  });
+
+  it('fightBack: both feud and fight, and nobody searches', () => {
+    const { w, claimant, trespasser } = trespass();
+    forceOption('threatened', 'fightBack');
+    resolveNpcActivities(w);
+    expect(stateOf(w, 'feud', trespasser.id, claimant.id)).not.toBeNull();
+    expect(stateOf(w, 'feud', claimant.id, trespasser.id)).not.toBeNull();
+    expect(topGoal(claimant)).toMatchObject({ kind: 'fight', reason: 'defend its claimed loot' });
+    expect(topGoal(trespasser)?.kind).toBe('fight');
+    expect(trespasser.job).toBeNull();
+  });
+
+  it('a claimant that cannot see the trespasser lets it search', () => {
+    const { w, claimant, trespasser } = trespass();
+    claimant.pos = { x: 5, y: 5 };
+    refreshVision(w);
+    forceOption('threatened', 'comply');
+    resolveNpcActivities(w);
+    expect(trespasser.job?.kind).toBe('search');
+  });
+
+  it('an unarmed claimant flees a refusal', () => {
+    const { w, claimant } = trespass(false);
+    forceOption('threatened', 'fightBack');
+    resolveNpcActivities(w);
+    expect(topGoal(claimant)).toMatchObject({ kind: 'flee', reason: 'defend its claimed loot' });
   });
 });

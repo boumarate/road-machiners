@@ -118,7 +118,7 @@ export function bodyCondition(vehicle: Vehicle): number {
 }
 
 // Damage times rounds summed over working guns.
-function firepower(world: World, vehicle: Vehicle): number {
+export function firepower(world: World, vehicle: Vehicle): number {
   return vehicleStats(world, vehicle).weapons.filter((weapon) => weapon.part.hp > 0).reduce((sum, weapon) => sum + weapon.def.round.damage * weapon.def.rounds, 0);
 }
 

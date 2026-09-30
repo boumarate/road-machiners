@@ -11,15 +11,16 @@ import { partSellPrice } from './economy';
 import { corePart, isMounted } from './grid';
 import { applyRefitLayout } from './inventory';
 import { creditBounty } from './market';
-import { defyThreat, pushGoal, topGoal } from './npc-activities';
-import { decide, perceiveDanger, visibleHostiles, wantsLoot } from './npc-decisions';
+import { defyThreat, finishGoal, pushGoal, topGoal } from './npc-activities';
+import { decide, firepower, perceiveDanger, visibleHostiles, wantsLoot } from './npc-decisions';
 import { SPARE_LINE } from '../data/dialogue';
 import { vehicleHasPerk } from './progress';
-import { claimPile, createCargoSalvage, dumpOnPile, hasCargo, takeError } from './salvage';
+import { backedOff, claimantOf, claimPile, createCargoSalvage, dumpOnPile, hasCargo, takeError } from './salvage';
 import { isStranded } from './stats';
 import { addState, endState, pleaData, stateOf } from './states';
 import type { DecisionOptions } from '../data/npcs';
 import type { Aim, GridItem, Plea, SalvageStock, Vehicle, World } from './types';
+import { canVehicleSee } from './vision';
 import { dist } from './vec';
 
 export type ThreatAnswer = DecisionOptions['threatened'];
@@ -151,6 +152,30 @@ export function settleThreat(world: World, npc: Vehicle, answer: ThreatAnswer): 
   const me = playerVehicle(world);
   if (answer === 'comply') yieldTo(world, npc, me);
   else defyThreat(world, npc, me, answer);
+}
+
+// ---- Pile claims. A robber handed a pile claims it, so it warns other drivers off while it takes the loot.
+
+// The claimant fights a trespasser that refuses to back off, or runs when it has no firepower.
+export function defendClaim(world: World, claimant: Vehicle, trespasser: Vehicle): void {
+  defyThreat(world, claimant, trespasser, firepower(world, claimant) > 0 ? 'fightBack' : 'flee', 'defend its claimed loot');
+}
+
+// An NPC about to search a claimed pile that its claimant sees answers the warning. True when it does not search.
+export function warnedOff(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
+  const claimant = claimantOf(world, stock);
+  if (!claimant || claimant.id === vehicle.id || !canVehicleSee(world, claimant, vehicle.pos)) return false;
+  if (!backedOff(stock, vehicle.id)) {
+    const answer = decide(world, vehicle, 'threatened', claimant.id, perceiveDanger(world, vehicle, claimant));
+    if (answer === 'fightBack') {
+      defyThreat(world, vehicle, claimant, 'fightBack', 'take the claimed loot');
+      defendClaim(world, claimant, vehicle);
+      return true;
+    }
+    stock.pile!.claim!.warned.push(vehicle.id);
+  }
+  finishGoal(world, vehicle, 'the loot is claimed');
+  return true;
 }
 
 // ---- Stripping a stranded player. A robber alone with a stranded player offers to strip the truck instead of wrecking
