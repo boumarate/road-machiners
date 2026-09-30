@@ -1,6 +1,6 @@
 // Game settings. Change these values to configure a new game and playback.
 
-// The version from package.json, set at build time in vite.config.ts and vitest.config.ts. Saves load only in the same version.
+// The version from the save format and git, worked out by src/version.ts at build time in vite.config.ts and vitest.config.ts.
 declare const __GAME_VERSION__: string;
 export const GAME_VERSION = __GAME_VERSION__;
 
