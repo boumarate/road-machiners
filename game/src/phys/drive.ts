@@ -699,6 +699,11 @@ export function restFrame(w: World, v: Vehicle): VehicleFrame {
   return { pos: { x: v.pos.x * S, y: rideHeight(w, v), z: v.pos.y * S }, rot: q, acc: { x: 0, y: 0, z: 0 }, wheels };
 }
 
+// Frames for a vehicle that jumped this turn, with no trail to follow: it stands at its sim pose all turn.
+export function restFrames(w: World, v: Vehicle): VehicleFrame[] {
+  return Array.from({ length: TURN_STEPS }, () => restFrame(w, v));
+}
+
 // Frames for a vehicle that moved without physics: rest poses along its trail, one per physics step,
 // ending on its sim pose. Far vehicles get these so the view moves them smoothly, like driven ones.
 export function trailFrames(w: World, v: Vehicle): VehicleFrame[] {

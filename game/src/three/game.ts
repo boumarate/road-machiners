@@ -30,7 +30,7 @@ import { shopAt } from "../sim/market";
 import { isStranded, maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder, parkedVehicles, throttleFor } from "../sim/steering";
 import { route } from "../sim/path";
-import type { ShotRound, Vehicle, World } from "../sim/types";
+import type { Vehicle, World } from "../sim/types";
 import { grayRadius, playerSees, tileOf, visibleTiles } from "../sim/vision";
 import { dist, type Vec } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
@@ -51,7 +51,8 @@ import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D, TruckFx } from "./render/fx";
-import { blastRadiusOf, planVolley, projectileOf, roundAims, towardFrom, type Muzzle } from "./render/projectiles";
+import { towardFrom } from "./render/projectiles";
+import { playVolley } from "./volley";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { PathView } from "./render/path";
@@ -71,9 +72,9 @@ import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
 import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
-import { clearGame, hasSave, saveInTown, saveWorld, writeSave } from "./save";
+import { reportError } from "./crash";
+import { clearGame, hasSave, SAVE_HELD_NOTE, SaveHold, saveInTown, saveWorld, turnFailedNote, writeSave } from "./save";
 import { GameMenu } from "../ui/game-menu";
-import { roundLabel } from "../ui/format";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
 import { CombatScore, CombatWatch, computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
@@ -278,7 +279,7 @@ export class Game {
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
     this.menu = new GameMenu({
-      save: () => writeSave(window.localStorage, this.world),
+      save: () => this.saveNow(),
       hasSave: () => hasSave(window.localStorage),
       clearGame: () => clearGame(window.localStorage),
       isBusy: () => this.anim !== null,
@@ -298,7 +299,7 @@ export class Game {
   private uiHost(): UiHost {
     return {
       world: () => this.displayWorld(),
-      apply: (next) => { this.apply(next); saveInTown(window.localStorage, next); },
+      apply: (next) => { this.apply(next); if (!this.saves.held) saveInTown(window.localStorage, next); },
       selectedWeapon: () => this.selected,
       selectWeapon: (id) => { if (this.anim) return; this.selected = id; this.refreshUi(); },
       endTurn: () => this.travel.stopAuto(this.world) || this.endTurn(),
@@ -606,10 +607,43 @@ export class Game {
     this.travel.updateWorld(this.world, danger);
   }
 
+  private readonly saves = new SaveHold();
+
+  holdSaves(): void {
+    this.saves.noteError();
+  }
+
+  private saveNow(): void {
+    if (this.saves.held) return this.hud.note(this.world, SAVE_HELD_NOTE, "bad");
+    writeSave(window.localStorage, this.world);
+  }
+
+  // A turn that throws does not play. The world stays as it was and the next Space or turn press tries again.
+  private failTurn(err: unknown): void {
+    this.travel.abandon(this.world);
+    this.saves.noteError();
+    this.hud.note(this.world, turnFailedNote(err), "bad");
+    reportError(err);
+    this.refreshUi();
+  }
+
+  // Begins the ready turn, if there is one. A turn that throws is failed and not begun.
+  private tryBeginTurn(now: number, wasPlaying: boolean): "began" | "none" | "failed" {
+    try {
+      const prepared = this.anim ? null : this.travel.takeReady(this.world, this.drive, now);
+      if (prepared) this.beginTurn(prepared, now, this.travel.getRemainder(wasPlaying));
+      return prepared ? "began" : "none";
+    } catch (err) {
+      this.failTurn(err);
+      return "failed";
+    }
+  }
+
   private beginTurn(prepared: PreparedTurn, now: number, elapsed: number): void {
     const { world, playback, towed } = this.travel.beginPlayback(this.world, prepared, now, elapsed);
     this.world = world;
     this.anim = playback;
+    this.saves.beginTurn();
     this.live = {
       visible: new Set(this.world.player.visible),
       explored: playback.before.player.explored.slice(),
@@ -668,7 +702,8 @@ export class Game {
     this.anim = null;
     this.phase = null;
     this.idleSince = performance.now();
-    saveWorld(window.localStorage, this.world, CONFIG.saveTurns);
+    this.saves.finishTurn();
+    if (!this.saves.held) saveWorld(window.localStorage, this.world, CONFIG.saveTurns);
     const pending = this.pending;
     this.pending = null;
     if (pending) this.runRescue(pending);
@@ -780,6 +815,7 @@ export class Game {
   private playShotFx(): void {
     const w = this.world;
     const rows = new Map<string, number>();
+    const host = { world: w, fx: this.fx, sound: this.sound, eventPoint: (id: string) => this.eventPoint(id) };
     for (const e of w.events) {
       if (e.t === "shot") {
         const a = this.eventPoint(e.shooter);
@@ -789,7 +825,7 @@ export class Game {
         const gun = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
         if (!gun) throw new Error(`Shot from ${e.shooter} names no mounted weapon ${e.weapon}`);
         const view = viewOf(this.views, e.shooter);
-        const landMs = this.playVolley(a, () => view.muzzle(e.weapon), b, e.rounds, gun.defId, e.target, rows);
+        const landMs = playVolley(host, a, () => view.muzzle(e.weapon), b, e.rounds, gun.defId, e.target, rows);
         this.sound.accents([e], w.player.vehicleId, () => landMs);
       }
       if (e.t === "guardShot") {
@@ -797,7 +833,7 @@ export class Game {
         if (!b) continue;
         const g = groundPoint(this.world.terrain, e.from);
         const a = { x: g.x, y: g.y + (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile, z: g.z };
-        const landMs = this.playVolley(a, () => towardFrom(a, b), b, e.rounds, "guard", e.target, rows);
+        const landMs = playVolley(host, a, () => towardFrom(a, b), b, e.rounds, "guard", e.target, rows);
         this.sound.accents([e], w.player.vehicleId, () => landMs);
       }
       if (e.t === "collision") {
@@ -806,41 +842,6 @@ export class Game {
         if (p) this.sound.at("crash", p, 0);
       }
     }
-  }
-
-  // Plays one volley's bolts from the muzzle and sounds from a to b. Each round that damages parts shows its
-  // damage over the target as it lands.
-  private playVolley(
-    a: V3,
-    muzzle: () => Muzzle,
-    b: V3,
-    rounds: ShotRound[],
-    weapon: string,
-    targetId: string,
-    rows: Map<string, number>,
-  ): number {
-    // Every round lands within the shot time, before the results show.
-    const spec = projectileOf(weapon);
-    const ground = (p: V3) => groundPoint(this.world.terrain, toMap(p)).y;
-    const plans = planVolley(spec, a, roundAims(b, targetId, rounds, (id) => this.eventPoint(id)), CONFIG.combatShotMs, ground);
-    plans.forEach((plan, k) => {
-      this.fx.shot(spec, muzzle, plan, blastRadiusOf(weapon));
-      this.sound.at(spec.look === "tracer" ? "mg-fire" : "cannon-fire", a, plan.delayMs);
-      this.sound.at(plan.struck ? "hit-metal" : "miss", plan.land, plan.delayMs + plan.flightMs);
-      const r = rounds[k];
-      const struck = r.struck === null ? [] : [{ vehicle: r.struck, hits: r.hits }];
-      for (const dealt of [...struck, ...r.blast]) this.damageLabel(dealt.vehicle, roundLabel(this.world, dealt.vehicle, dealt.hits, r.crit), rows, plan.delayMs + plan.flightMs);
-    });
-    return Math.min(...plans.map((plan) => plan.delayMs + plan.flightMs)); // when the first round lands
-  }
-
-  // Damage text over a truck that shows, stacked in rows per truck.
-  private damageLabel(vehicleId: string, label: string | null, rows: Map<string, number>, atMs: number): void {
-    const p = this.eventPoint(vehicleId);
-    if (!label || !p) return;
-    const row = rows.get(vehicleId) ?? 0;
-    rows.set(vehicleId, row + 1);
-    this.fx.label(p, label, PAL.damageText, row, atMs, CONFIG.combatReadMs);
   }
 
   // The path preview chains physics turns from the current state, so it shows what will happen.
@@ -907,9 +908,9 @@ export class Game {
     let step = this.animStep(now, speed);
     this.updateLiveVision();
     this.updateTravel();
-    const prepared = this.anim ? null : this.travel.takeReady(this.world, this.drive, now);
-    if (prepared) {
-      this.beginTurn(prepared, now, this.travel.getRemainder(wasPlaying));
+    const began = this.tryBeginTurn(now, wasPlaying);
+    if (began === "failed") return { step, speed };
+    if (began === "began") {
       step = this.animStep(now, speed);
       this.updateTravel();
     }
