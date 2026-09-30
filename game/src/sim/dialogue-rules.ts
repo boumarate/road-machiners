@@ -16,7 +16,7 @@ import { hasCargo, hasSalvage } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
 import { decide, npcProfile, wantsLoot } from './npc-decisions';
 import { aidData, stateOf, towData } from './states';
-import { agreeAid, aidPrice, canSpareFor, hasAid, isLow, refuseAid, spareAid, wantedAid, type AidAmounts } from './aid';
+import { agreeAid, aidPrice, canSpareFor, hasAid, isLow, playerAid, refuseAid, spareAid, wantedAid, type AidAmounts } from './aid';
 import { buyPrice, sellPrice, startTrade, tradeWith, transfer } from './economy';
 import { acceptOffer, canTowNpc, hitchNpc, npcTowTerms, playerTow, playerTowing, refuseOffer, releaseNpc, strandedPlayerAt } from './tow';
 import type { Call, CallVar, CallVars, NpcState, Plea, SalvageStock, TopicOutcome, Vehicle, World } from './types';
@@ -181,7 +181,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   // Low on fuel or supplies, and the player holds some of what it lacks.
   npcLow: (world, npc) => hasAid(wantedAid(world, npc)),
   playerLow: (world) => isLow(world, playerVehicle(world)),
-  noAid: (world, npc) => stateOf(world, 'aid', npc.id, world.player.vehicleId) === null,
+  noAid: (world) => playerAid(world) === null,
   aidGiven: (_world, _npc, vars) => answerOf(vars) === 'give',
   aidRefused: (_world, _npc, vars) => answerOf(vars) === 'refuse',
   offersAid: (world, npc) => pendingAid(world, npc) !== null,
