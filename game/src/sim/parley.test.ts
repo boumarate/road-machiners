@@ -131,6 +131,17 @@ describe('NPC pleas to NPCs', () => {
     feud(w, a, b);
     plead(w, a, b, 'truce');
     expect(isHostile(w, a, b)).toBe(true);
+    expect(stateOf(w, 'plea', a.id, b.id)).not.toBeNull();
+  });
+
+  it('an accepted plea leaves no wait, so a driver whose truce breaks can plead again', () => {
+    forceOption('truceOffered', 'accept');
+    const w = quietWorld();
+    const a = npcAt(w, 'traders', ['trader'], 34);
+    const b = npcAt(w, 'raiders', ['raider'], 40);
+    feud(w, a, b);
+    plead(w, a, b, 'truce');
+    expect(stateOf(w, 'plea', a.id, b.id)).toBeNull();
   });
 
   it('spared mercy costs the beggar its cargo, and the winner goes to take it', () => {
@@ -156,7 +167,7 @@ describe('NPC pleas to NPCs', () => {
     a.brain!.hurt = 5;
     a.lastHitBy = b.id;
     thinkNpc(w, a);
-    expect(stateOf(w, 'plea', a.id, b.id)).not.toBeNull();
+    expect(w.events).toContainEqual({ t: 'plea', from: a.id, to: b.id, plea: 'truce', accepted: true });
     expect(isHostile(w, a, b)).toBe(false);
   });
 
@@ -205,6 +216,7 @@ describe('NPC pleas to the player', () => {
     expect(start.player.call).toMatchObject({ with: npc.id, topic: 'truceOffer' });
     const w = pick(start, 'Agreed. Guns down.');
     expect(isHostile(w, w.vehicles.find((v) => v.id === npc.id)!, playerVehicle(w))).toBe(false);
+    expect(stateOf(w, 'plea', npc.id, w.player.vehicleId)).toBeNull();
   });
 
   it('a plea call ends when the plea runs out later in the same turn, so no answer throws', () => {
