@@ -34,7 +34,7 @@ export function isLowOn(world: World, v: Vehicle, kind: Supply): boolean {
   return getResources(world, v)[kind] <= capOf(v, kind) * RULES.lowFuelThreshold;
 }
 
-function isLow(world: World, v: Vehicle): boolean {
+export function isLow(world: World, v: Vehicle): boolean {
   return SUPPLIES.some((kind) => isLowOn(world, v, kind));
 }
 
@@ -148,9 +148,9 @@ function moveSupply(world: World, giver: Vehicle, receiver: Vehicle, kind: Suppl
 
 // ---- The unprompted offer.
 
-// A driver that answers tow requests, out of danger and not under attack, may help.
+// A driver that takes up the unprompted offer, out of danger and not under attack, may help.
 function mayHelp(npc: Vehicle): boolean {
-  return !inDanger(npc) && !underAttack(npc) && talkOf(npc).topics.includes('askTow');
+  return !inDanger(npc) && !underAttack(npc) && talkOf(npc).topics.includes('aidOffer');
 }
 
 // A poor player low on fuel or supplies, out of combat.
