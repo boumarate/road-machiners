@@ -14,7 +14,7 @@ export function saveKey(scope: string): string {
 
 const SAVE_KEY = saveKey(__SAVE_SCOPE__);
 
-// A stored save the game cannot load. The crash screen offers to delete it and start over.
+// A stored save the game cannot load. Boot offers to migrate it to a new world or to start over.
 export class SaveError extends Error {}
 
 export function clearSave(storage: Storage): void {
@@ -32,6 +32,28 @@ export function hasSave(storage: Storage): boolean {
   return storage.getItem(SAVE_KEY) !== null;
 }
 
+function parsedSave(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new SaveError('Game save is unreadable');
+  }
+}
+
+// The stored save as parsed JSON, or undefined when there is none or it does not parse. For the rescue.
+export function storedSave(storage: Storage): unknown {
+  const raw = storage.getItem(SAVE_KEY);
+  return raw === null ? undefined : parsedOrUndefined(raw);
+}
+
+function parsedOrUndefined(raw: string): unknown {
+  try {
+    return parsedSave(raw);
+  } catch {
+    return undefined;
+  }
+}
+
 // Saves leave out the terrain and the baked props, which come from the map file the save names by hash. Broken props are saved whole. The 600-tile terrain alone is
 // about 10 MB of JSON, past the browser's local storage quota. Old saves migrate to the current format on load.
 
@@ -39,7 +61,7 @@ export function hasSave(storage: Storage): boolean {
 export function loadWorld(storage: Storage, map: BakedMap): World | null {
   const raw = storage.getItem(SAVE_KEY);
   if (raw === null) return null;
-  const world = savedWorld(JSON.parse(raw));
+  const world = savedWorld(parsedSave(raw));
   if (world.mapHash !== map.hash) throw new SaveError(`Game save was made on map ${world.mapHash}, not on the current map ${map.hash}`);
   const explored: unknown = world.player.explored;
   if (!Array.isArray(explored) || explored.length !== world.size * world.size) throw new SaveError('Invalid saved explored tiles');

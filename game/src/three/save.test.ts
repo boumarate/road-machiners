@@ -259,4 +259,10 @@ describe('saveKey', () => {
   it('adds the scope to the key', () => {
     expect(saveKey('factory')).toBe('roam.save.factory');
   });
+
+  it('throws a SaveError for a save that does not parse', () => {
+    const storage = makeStorage();
+    storage.setItem('roam.save', '{"format":');
+    expect(() => loadWorld(storage, TEST_MAP)).toThrow(SaveError);
+  });
 });
