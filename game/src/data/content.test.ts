@@ -252,10 +252,29 @@ describe("part weight by tier", () => {
   const perUnit = (def: PartDef): number => (def.kind === "cargo" ? def.mass / def.extraRows : def.mass / (def.w * def.h));
   const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
 
-  it.each(["armor", "weapon", "engine", "cargo"])("%s parts weigh less on average at each higher tier", (kind) => {
-    const byTier = [1, 2, 3].map((tier) => mean(Object.values(PARTS).filter((p) => p.kind === kind && p.tier === tier).map(perUnit)));
+  // Armor compares within its job: rams against rams, other armor against other armor.
+  const isRam = (p: PartDef): boolean => p.kind === "armor" && p.look === "ram";
+  const meanAt = (defs: PartDef[], tier: number): number => mean(defs.filter((p) => p.tier === tier).map(perUnit));
+
+  it.each(["weapon", "engine", "cargo"])("%s parts weigh less on average at each higher tier", (kind) => {
+    const byTier = [1, 2, 3].map((tier) => meanAt(Object.values(PARTS).filter((p) => p.kind === kind), tier));
     expect(byTier[1]).toBeLessThan(byTier[0]);
     expect(byTier[2]).toBeLessThan(byTier[1]);
+  });
+
+  it("armor parts weigh less on average at each higher tier within their job", () => {
+    const armor = Object.values(PARTS).filter((p) => p.kind === "armor");
+    const plates = armor.filter((p) => !isRam(p));
+    const rams = armor.filter(isRam);
+    expect(meanAt(plates, 2)).toBeLessThan(meanAt(plates, 1));
+    expect(meanAt(rams, 3)).toBeLessThan(meanAt(rams, 2));
+  });
+
+  it("every ram outweighs every other armor part per cell", () => {
+    const armor = Object.values(PARTS).filter((p) => p.kind === "armor");
+    const lightestRam = Math.min(...armor.filter(isRam).map(perUnit));
+    const heaviestOther = Math.max(...armor.filter((p) => !isRam(p)).map(perUnit));
+    expect(lightestRam).toBeGreaterThan(heaviestOther);
   });
 });
 

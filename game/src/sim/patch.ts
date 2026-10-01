@@ -78,6 +78,18 @@ function partsPayer(deal: PatchDeal, roles: Roles): Vehicle {
   return deal === 'ownParts' ? roles.client : roles.patcher;
 }
 
+// The parts a truck owes to open patch deals as their payer. Auto patch leaves them alone.
+export function promisedParts(world: World, v: Vehicle): number {
+  let total = 0;
+  for (const s of world.states) {
+    if (s.kind !== 'patch' || !partiesPresent(world, s)) continue;
+    const roles = { patcher: vehicleById(world, s.holder), client: vehicleById(world, s.other) };
+    const data = patchData(s);
+    if (partsPayer(data.deal, roles) === v) total += data.parts;
+  }
+  return total;
+}
+
 // The player may pay into debt. An NPC must hold the money.
 function canPay(world: World, v: Vehicle, amount: number): boolean {
   return v.id === world.player.vehicleId || getResources(world, v).money >= amount;
@@ -176,6 +188,11 @@ export function settlePatch(world: World, s: NpcState): void {
   if (s.holder === world.player.vehicleId) practice(world, 'patch', 1, null, s.other);
   if (s.holder === world.player.vehicleId) practice(world, 'deal', 1, null, s.other);
   if (s.other === world.player.vehicleId) practice(world, 'deal', 1, null, s.holder);
+}
+
+// A patch that broke, for lack of parts or pay or under attack, ends with no exchange.
+export function breakPatch(world: World, s: NpcState): void {
+  world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'broken' });
 }
 
 // A patch nobody worked on for its whole timer lapses for free.

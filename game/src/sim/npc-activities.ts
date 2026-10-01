@@ -18,8 +18,8 @@ import { cancelJob } from './jobs';
 import { isFree } from './spawn';
 import { route } from './path';
 import {
-  tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
-  huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
+  tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolSite, travelSitesAway,
+  huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
   lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
@@ -290,21 +290,21 @@ function scavengeGoal(world: World, vehicle: Vehicle): NpcActivity {
 
 type IdleGoal = (world: World, vehicle: Vehicle) => NpcActivity;
 
-// A raid or a prowl drives to a hunting ground. A prowl looks for wrecks, and passed salvage is looted through salvageSeen.
-function huntingGoal(kind: 'raid' | 'prowl', reason: string): IdleGoal {
+// A raid drives to a ground of the raider's camp, a prowl to any hunting ground. A prowl looks for wrecks, and passed salvage is looted through salvageSeen.
+function huntingGoal(kind: 'raid' | 'prowl', reason: string, grounds: (vehicle: Vehicle) => Vec[]): IdleGoal {
   return (world, vehicle) => {
-    const places = huntingGroundsAway(vehicle);
+    const places = grounds(vehicle);
     if (places.length === 0) throw new Error(`${vehicle.id} chose to ${kind} with no hunting ground away`);
     return createActivity(kind, null, { ...places[randInt(world, 0, places.length - 1)] }, reason);
   };
 }
 
-// A patrol drives to a road point near the town it guards.
+// A patrol drives to a road point near the town or camp it guards.
 function patrolGoal(world: World, vehicle: Vehicle): NpcActivity {
-  const town = patrolTown(vehicle);
-  const points = patrolPoints(town);
-  if (points.length === 0) throw new Error(`${vehicle.id} chose to patrol ${town.id} with no road near it`);
-  return createActivity('patrol', town.id, { ...points[randInt(world, 0, points.length - 1)] }, 'patrol the roads near town');
+  const site = patrolSite(vehicle);
+  const points = patrolPoints(site);
+  if (points.length === 0) throw new Error(`${vehicle.id} chose to patrol ${site.id} with no road near it`);
+  return createActivity('patrol', site.id, { ...points[randInt(world, 0, points.length - 1)] }, `patrol the roads near ${'kind' in site && site.kind === 'camp' ? 'camp' : 'town'}`);
 }
 
 function travelGoal(world: World, vehicle: Vehicle): NpcActivity {
@@ -335,8 +335,8 @@ function haulGoal(world: World, vehicle: Vehicle): NpcActivity {
 const IDLE_GOALS: Record<Exclude<DecisionOptions['idle'], 'wait'>, IdleGoal> = {
   trade: tradeGoal,
   scavenge: scavengeGoal,
-  raid: huntingGoal('raid', 'look for prey at known hunting grounds'),
-  prowl: huntingGoal('prowl', 'prowl the roads for wrecks'),
+  raid: huntingGoal('raid', 'look for prey at known hunting grounds', raiderGroundsAway),
+  prowl: huntingGoal('prowl', 'prowl the roads for wrecks', huntingGroundsAway),
   patrol: patrolGoal,
   travel: travelGoal,
   explore: exploreGoal,

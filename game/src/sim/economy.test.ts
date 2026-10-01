@@ -10,6 +10,7 @@ import { REGION } from "../data/region";
 import { RULES } from "../data/rules";
 import { CONDITION } from "../data/wear";
 import {
+  basicsRepairCost,
   buyChassis,
   buyGood,
   buyStockPart,
@@ -20,6 +21,8 @@ import {
   partRepairCost,
   partTradePrice,
   repairAll,
+  repairBasics,
+  repairCost,
   repairPart,
   sellGood,
   sellPrice,
@@ -208,6 +211,56 @@ describe("garage", () => {
     expect(corePart(r.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
     expect(mountedParts(r.vehicles[0])[0].hp).toBeGreaterThan(0);
     expect(r.player.money).toBeLessThan(1000);
+  });
+
+  it("repairs only the built-in parts with repair basics, for the shown price", () => {
+    const w = startAtBowl();
+    const gun = mountedParts(w.vehicles[0])[0];
+    corePart(w.vehicles[0], "cab").hp = 10;
+    gun.hp = 1;
+    const price = basicsRepairCost(w);
+
+    const r = repairBasics(w);
+
+    expect(corePart(r.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
+    expect(mountedParts(r.vehicles[0])[0].hp).toBe(1);
+    expect(mountedParts(r.vehicles[0])[0].wear).toBe(gun.wear);
+    expect(r.player.money).toBe(w.player.money - price);
+  });
+
+  it("prices repair all as repair basics plus the other parts", () => {
+    const w = startAtBowl();
+    const gun = mountedParts(w.vehicles[0])[0];
+    corePart(w.vehicles[0], "cab").hp = 10;
+    gun.hp = 1;
+
+    expect(basicsRepairCost(w)).toBeGreaterThan(0);
+    expect(repairCost(w) - basicsRepairCost(w)).toBe(partRepairCost(w, gun));
+  });
+
+  it("refuses repair basics away from a garage or without the money", () => {
+    const away = emptyWorld({ x: 30, y: 30 });
+    corePart(away.vehicles[0], "cab").hp = 10;
+    expect(() => repairBasics(away)).toThrow();
+
+    const broke = startAtBowl();
+    corePart(broke.vehicles[0], "cab").hp = 10;
+    broke.player.money = 0;
+    const before = JSON.stringify(broke);
+    expect(() => repairBasics(broke)).toThrow();
+    expect(JSON.stringify(broke)).toBe(before);
+  });
+
+  it("skips a junk built-in part in repair basics without the Rebuild perk and rebuilds it with", () => {
+    const w = startAtBowl();
+    const cab = corePart(w.vehicles[0], "cab");
+    cab.hp = 0;
+    cab.wear = CONDITION.maxWear + 1;
+    expect(corePart(repairBasics(w).vehicles[0], "cab").hp).toBe(0);
+
+    w.player.perks = ["rebuild"];
+    expect(corePart(repairBasics(w).vehicles[0], "cab")).toMatchObject({ rebuilt: true });
+    expect(corePart(repairBasics(w).vehicles[0], "cab").hp).toBeGreaterThan(0);
   });
 
   it("refuses to rebuild a junk part and leaves it out of repair all", () => {

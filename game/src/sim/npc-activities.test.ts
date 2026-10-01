@@ -433,6 +433,7 @@ describe('NPC activities', () => {
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 220, y: 300 }); // 40 tiles: heard, but the contact circle is wider than the reaction limit
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     forceOption('contactHeard', 'investigate');
+    forceOption('idle', 'raid');
     planNpcOrders(w);
     expect(contactsOf(w, raider, Infinity).some((c) => c.vehicleId === player.id)).toBe(true);
     expect(topGoal(raider)?.kind).toBe('raid');

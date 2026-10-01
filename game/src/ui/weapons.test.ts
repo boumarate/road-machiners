@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { hitOdds } from "../sim/combat";
 import { playerVehicle } from "../sim/damage";
-import { mountedParts } from "../sim/grid";
+import { corePart, mountedParts } from "../sim/grid";
 import type { Vehicle } from "../sim/types";
 import { addState } from "../sim/states";
 import { vehicleStats } from "../sim/stats";
@@ -161,6 +161,7 @@ describe("vehicle marks", () => {
       radio: false,
       job: null,
       out: false,
+      gaveUp: false,
     });
   });
 
@@ -201,7 +202,9 @@ describe("vehicle marks", () => {
     const { world, target } = createDuel();
     target.brain = npcBrain("scavenger", target.pos, ["scavenger"]);
     target.defeat = { phase: "out", turns: 0, unseen: 0, foes: [] };
-    expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: true, radio: false });
+    expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: true, gaveUp: true, radio: false });
+    corePart(target, "cab").hp = 0;
+    expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: true, gaveUp: false });
     target.defeat.phase = "retreat";
     expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: false, radio: true });
   });
