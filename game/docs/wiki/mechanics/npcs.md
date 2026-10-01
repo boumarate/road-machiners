@@ -1,0 +1,78 @@
+# NPCs
+
+NPC activities, traits, decisions, states and escorts. The principles behind them are in [DESIGN.md](../../DESIGN.md).
+
+## NPC activities
+
+NPC behavior has three layers. Traits are permanent and set the chances of choices. A goal stack keeps long-term work under interruptions like fights, flight, service and repairs. The driver usually resumes that work once an interruption ends. Decision points pick reactions by weighted chance when a new hostile, contact, attack, prey, stranded truck or passed wreck appears. Traits give fixed knowledge of towns, salvage sites and hunting grounds. Each NPC remembers the subjects it already decided on and the attackers still in sight. There is no live shared intelligence. The hover panel shows what a seen driver is doing and why, under its name. It also shows every state the driver holds toward the player, like feuds, grudges, revenge and deals, with the turns left. The full log debug flag logs each goal change and its reason. Messages name an NPC by its profession and driver name, like Roamer Silas Kane.
+
+A driver never stands still for good. It waits for a parked truck ahead only while that truck is about to drive. A point it cannot reach, like one another truck covers, counts as reached once it gets as close as it can. A driver that still stays put for a while with its goal out of reach drives to a random free spot nearby and tries again.
+
+NPCs spawn with equipment sampled from weighted tables for their role: a chassis, a fitting engine and weapon, then optional cargo parts, guns, armor and goods. A driver's gear level sets a chance, from 0 for poor to 80% for loaded, that each free deck spot gets another gun. So a loaded enemy sometimes drives a fortress, and the guns slow it. It respects mount space, rated mass and an equipment budget separate from the driver's wallet. Rare equipment has a lower weight. Raiders never roll the poor level. The same world seed and actions produce the same equipment. There is no separate loot roll on defeat.
+
+- Scavengers collect salvage and sell cargo. A scavenger on a trip stops for three in four wrecks it passes, then mostly goes back to its trip.
+- Vultures prowl lonely roads and hunting grounds, and stop for nearly every wreck, pile or knocked-out truck they pass. They sell the loot, with long-range guns, armor and cargo packs on their trucks.
+- Traders buy profitable cargo, keep money for upkeep and flee from threats. A trader rolls its run from every shop pair, weighted by profit over trip length. Near runs win most rolls, so traders spread over all shops instead of all taking the one best run.
+- Raiders search the hunting grounds nearer their own camp, never ones a Bowl Farmer or Nose Army patrol could see from its farthest stop. Between raids they patrol the roads around their camp. They fight, collect wreck cargo, and sell it at their camps and the Salvage Yard. They buy fuel, supplies and repairs at their nearest camp, and flee to a camp or a town. A camp is a fence: it buys any good and spare part at the road price, half the value, keeps no stock and sells the cargo before it repairs. The Salvage Yard pays more but buys only scrap, parts and tools, so a raider with other goods goes on to a camp. Hunting grounds are lonely road stretches far from any site and the pads of salvage sites.
+- Each NPC pays for fuel, supplies and repairs from its own wallet.
+- An NPC heads for fuel when its tank drops below a reserve for the way to its nearest pump. A pump is a town or a stall that sells fuel. It judges that way as a straight line at the heat where it stands. Each driver misjudges by its own fixed share, traders keep a smaller reserve and cowards a larger one. A winding road, a hotter noon or a fight on the way can drain the tank before the pump, so some drivers run dry and wait for a tow.
+
+Idle drivers mostly fight manageable hostiles and flee stronger ones. A healthy driver busy with work mostly keeps on when a hostile appears that is not aimed at it or a nearby faction mate. A shot at a driver or a nearby faction mate, hit or miss, prompts a decision to fight back, flee or rarely keep on. Damaged NPCs react to visible hostiles before starting repairs. A driver counts as weak when its cab or its truck as a whole is badly broken, or when it cannot drive. One broken wheel is not enough. A weak driver mostly flees or begs. A driver judges force by the target's nearby visible group against its own nearby visible group.
+
+Scavenging is a timed search. The truck parks at a stock and searches for turns in proportion to what the stock holds, with a progress bar. A finished search opens the stock beside the truck's grid, and the player drags in what they want. What they leave stays at the site for later. NPC scavengers take everything that fits.
+
+Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. The whole map holds loot worth well under the upgrade ladder. Each day a site regains a small share of a fresh roll, up to its table's highs, so an emptied site takes about two weeks to fill. Destroyed NPCs leave a wreck with the same kind of stock. One truck at a time searches a wreck or a pile, and any other truck waits or leaves, while a site stays open to everyone. Their mounted parts join it at the HP they had, and their built-in parts turn into parts good worth a share of the chassis value. A looted road wreck goes after a few days, and a new road wreck appears elsewhere on a road. Both happen beyond the player's gray vision, so the road wreck count stays the same.
+
+Handed-over cargo and dumped items go on a ground pile. Drops close together join one pile. A pile disappears when empty or after two days. Any collector can take from it. A pile handed to an NPC is that NPC's claim until it has taken it, gives up or 60 turns pass. The claimant warns others off. An NPC that backs off leaves it alone. A refusal, or a take in the claimant's sight, starts a fight.
+
+Shops have unlimited money. Goods prices move with trade, and part stock is finite. Initial NPC resources and the oasis are explicit sources. There are no offscreen catch-up grants.
+
+## NPC traits and states
+
+Every NPC carries a set of traits instead of one class. Each trait adds activities and shifts chances. A scavenger with the scumbag trait still scavenges, and it also robs. Traits roll at spawn: every scavenger scavenges, and some are also scumbags or cowards. One neutral driver in four is a scumbag and one in four a coward, whatever its kind. One neutral driver or raider in seven is brave, unless it is a coward. Lawmen and convoy guards are always brave. Lawmen roll no other traits. Traits stay hidden, so the player learns a driver is a scumbag only when it starts acting like one. The Perception perk Read the driver shows traits in the hover panel.
+
+- Scavenger collects salvage and helps stranded trucks.
+- Trader buys and sells between towns, rarely starts a fight, and sometimes fights back.
+- Raider hunts at the hunting grounds of its own camp, patrols around that camp, investigates distant engines and knows the raider camps.
+- Scumbag robs trucks that carry a valuable load and look weaker than it.
+- Coward flees more often and fights back less.
+- Brave almost never runs, pleads or gives up its cargo.
+- Lawman patrols the roads out to about a sixth of the way to the other town and fights raiders on sight. It attacks whoever fires the first shot at a neutral NPC or starts robbing one, the player included.
+- Vulture prowls the hunting roads for wrecks and knocked-out trucks, and rarely helps anyone. Most vultures are cowards and some are scumbags.
+- Courier travels between towns and locations, and almost never stops for salvage.
+- Roamer mostly explores random places, off road too, and trades and scavenges when it finds a chance.
+- Supplier hauls fuel drums from the Pump Station and water from the oases to the towns.
+- Guard follows a supply convoy and protects it.
+- Merc waits at a town for hire, then escorts its client.
+
+A chance is 0 only when an option is physically impossible or a trait forbids it. A driver with no working gun cannot fight, and a truck with no loot cannot be robbed. Supply convoys, convoy guards and lawmen never rob. A driver following a leader never robs, but its leader can. A cheap load is robbed only rarely: cargo value counts goods and spare parts, not mounted gear. Anything a driver can do keeps at least a 1% chance. So an ordinary scavenger robs about once in a hundred chances, and a trader sometimes starts a fight.
+
+Drivers judge each other by danger: the firepower of working guns times the current toughness of the cab, chassis and armor. A tank looks more dangerous than a scout, and a half-beaten tank looks about half as dangerous. Danger counts nearby visible faction mates on each side. A driver misjudges another truck's danger by up to a quarter each time it first sees it. A scumbag robs a truck whose danger looks below its own times its boldness. Scumbags and brave drivers are bold, and cowards are timid. A stronger target, or one near a town gate, is robbed only rarely.
+
+A robbery is an attack. The winner loots the knocked-out truck or the wreck the loser left. A robber whose target escapes backs off that target for a while.
+
+In a fight, each chance to ram the target is a decision. The driver weighs the ram against its guns by expected damage. The ram counts the damage it forecasts on the target minus the damage it costs the driver, weighted by part: the cab, wheels, engine and guns count most, and armor and ram bars least. It also counts the chance the ram connects, which falls with distance and with a target that moves across the line. A ram that costs the driver more than it deals is rare, and traders almost never ram. A fighter with a ram bar picks fight spots that line its nose up at the target. Trucks of similar weight ram when the forecast pays.
+
+A shot at another vehicle is an attack, hit or miss. The victim and its nearby faction mates that see it start a feud with the attacker. A damaging crash between hostile trucks is an attack too.
+
+A damaging crash between trucks at peace is most likely an accident. Each damaged NPC decides once whether to forgive it or retaliate. Most drivers forgive. Raiders and scumbags retaliate more often, and a crash with a faction mate is nearly always forgiven. A retaliating driver starts a feud as if it was attacked. Contact with the truck on a tow rope counts for nothing.
+
+A driver hurt by a hostile may plead with it. It asks for a truce, or it begs for mercy when it is weak. Traders and cowards plead most, and raiders seldom. The other side decides whether to accept. A robber or raider after the other truck's cargo seldom pleads or accepts, unless it is weak or outgunned. It also rarely robs a truck it holds a truce with. A truce ends the feuds between both sides and their nearby faction mates. Mercy is a truce the beggar pays for with its cargo, which it drops for the winner to take. A driver rarely pleads with the same foe again soon after a refusal. A granted plea leaves no such wait, so a driver whose truce breaks can plead again at once.
+
+A driver keeps its word. A trade meeting, a patch, a tow, a tow on its way and an escort are deals. The two sides of a deal never rob each other. The driver that made the deal starts nothing of its own until the deal ends: it robs no one, tows no one else, loots nothing and hires no one. A driver holding a pile claim starts nothing new either until its claim ends. It still reacts to hostiles, contacts and attacks. A driver in combat calls off its patch, trade and aid deals and drops a tow. A deal kept to its end leaves both drivers backed off from each other for a while. A driver attacked by its deal partner fights back or flees as usual, and it also wants revenge on that truck.
+
+States are timed relations between two trucks. Each ends as expired, fulfilled or broken, and each ending can start other states.
+
+- A feud makes both trucks hostile. Sight or shots between them keep it going. It expires after some turns without either, and a failed robber then backs off.
+- A tow runs from the offer to arrival in town, where the fee is paid. It breaks for free when the player refuses, unhitches or drives away from an offer, or when the tower meets danger or the trucks turn hostile.
+- A tower the player turned down rarely offers again.
+- A tower that dropped a tow for danger comes back with the same deal.
+- Only one driver answers a stranded player at a time. Near a town gate, fewer drivers offer a tow.
+
+## Escorts
+
+One truck can follow another as its escort. The follower rides beside its leader's tail at the leader's pace, and resumes following after any fight or tow. The leader waits for an escort that falls behind while following. It does not wait for an escort busy with a fight or a service stop, which catches up after. It treats shots at the leader as shots at itself, so it fights back or flees as it would for itself. It tows a stranded leader to the usual tow site.
+
+A trader, courier or roamer on its way to a site may hire a free merc it sees. The fee grows with the distance to the destination, and the client must afford it above its upkeep reserve. The merc accepts or refuses, and a hurt merc refuses more often. The client pays once, when it reaches the destination. An escort ends unpaid when either truck is gone, knocked out or turns hostile.
+
+Each supply convoy spawns with a guard that escorts it for free. A guard whose convoy is gone joins another unguarded convoy, or drives between the towns until it finds one.

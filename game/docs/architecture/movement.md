@@ -1,0 +1,17 @@
+# Movement, routes and travel
+
+- `src/sim/ai.ts` issues NPC orders each turn and decides what NPCs drive around and when they stop for other trucks. They route around parked trucks and the path of a moving truck on a collision course. They stop only when that path blocks the way. A parked truck ahead makes them wait only while it holds a move order, since its order is what it will do. Far NPCs skip the moving-truck check, since far travel stops short of any truck. A stop order in either movement layer arrives at the route's end, which is the closest point the planner reaches, and a goal to a point ends when its move arrives. `noteStuck()` is the catch-all: an NPC that stays put for `RULES.unstick.turns` turns with its goal point out of reach drives to a random free spot nearby.
+- `src/sim/steering.ts` holds the shared driving rules, the throttle zones and `clickOrder()`, which turns a click into an order.
+- `src/phys/` runs vehicle movement in Rapier. `endTurn(world, physicsMove(...))` plugs it into the turn pipeline in place of the sim's 2D movement. A turn restores the physics world from a snapshot and simulates one second, so the path preview runs the same physics as the turn. Physics numbers live in `src/data/physics.ts`.
+- `src/sim/path.ts` plans routes and caches them. `src/sim/nav/` holds the grids and the search. Grids are built once per terrain and vehicle radius, and `warmRoutes` builds them in the worker and on the main thread right after boot. Wrecks and parked vehicles are stamped per query. Long routes search a coarse corridor first. Each NPC driver scales route cost by its own smooth noise field, so drivers between the same points take different ways. Each NPC keeps its own spot on the pad it uses, so drivers do not stack.
+- NPCs farther than sight radius plus `PERF.liveMargin` from the player have no physics body. `src/sim/far.ts` moves them along stored routes. They never crash or ram, but they stop short of any other vehicle, so two trucks never share a point.
+
+## Player travel
+
+`src/three/travel.ts` owns automatic order advancement and held-Space state. A click sets a drive-through order. A click on its point switches it between drive-through and stop-at, and Shift-click sets stop-at. A click on a site stops at its nearest pad. `src/three/render/path.ts` draws the order point with an icon for its kind, also while turns play.
+
+Space starts automatic travel outside combat. Its `TurnPreparation` prepares a turn in the dedicated worker entry point in `src/phys/turn.ts` while the current turn plays. The worker uses the same turn pipeline and portable physics snapshots. At boot it runs one warm-up turn and drops it, so the first real turn finds its grids, compiled code and routes ready. `game.ts` commits a prepared turn only after playback finishes and while advancement is still requested. Replanning invalidates stale results. Travel pauses on Space, danger, arrival, panels and focus loss. While turns run on their own, the turn button reads Auto and a click stops them like Space. Travel state is not saved.
+
+## Camera
+
+`src/three/render/camera.ts` owns the view. `TruckFollow` decides when it follows the truck. A pan stops following until F, the recenter button, danger in sight, or the truck driving out of view. The view moves only while a turn plays. In auto mode it leads toward the order point.

@@ -27,7 +27,12 @@ import { STATE_KINDS } from '../sim/states';
 export type Cell = string | number | boolean | null | readonly unknown[] | object;
 export type WikiTable = { id: string; headers: string[]; rows: () => Cell[][] };
 
-export const PAGES: readonly string[] = ['README.md', 'items.md', 'combat.md', 'economy.md', 'npcs.md', 'skills.md', 'assets.md'];
+const MECHANICS = ['character', 'truck', 'turns', 'defeat', 'detection', 'world', 'npcs', 'social', 'economy', 'content'];
+
+export const PAGES: readonly string[] = [
+  'README.md', 'items.md', 'combat.md', 'economy.md', 'npcs.md', 'skills.md', 'assets.md',
+  ...MECHANICS.map((name) => `mechanics/${name}.md`),
+];
 
 const NUMBERS_ID = 'numbers';
 const BLOCK = /<!-- wiki:([\w-]+) -->\n?[\s\S]*?<!-- \/wiki:\1 -->/g;

@@ -1,6 +1,6 @@
 # Assets
 
-Models and sound cues. The map from chassis and part ids to models is `src/render/partLooks.ts`, and the cue list is `src/data/sounds.ts`. Adding a model is described in [CLAUDE.md](../../CLAUDE.md), and sound in `docs/sound.md`.
+Models and sound cues. The map from chassis and part ids to models is `src/render/partLooks.ts`, and the cue list is `src/data/sounds.ts`. Adding a model is described in [Art pipeline](../art.md), and sound in `docs/sound.md`.
 
 ## Models
 

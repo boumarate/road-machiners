@@ -1,0 +1,44 @@
+# Defeat and recovery
+
+Knockouts, looting, stranding, tows, the beacon, healing, death and saves. The principles behind them are in [DESIGN.md](../../DESIGN.md).
+
+Losing a fight does not end the game, in Kenshi style. A loss starts a new story on real turns the player watches. There are no fade screens.
+
+A broken cab knocks the player out while health is above 0. A cab below half may do so earlier, but not while health is 75 or more. The truck keeps everything it carries, with no pile. Money, fuel and supplies stay. Feuds against the player end, and the knocked-out truck is nobody's foe.
+
+While knocked out, turns run on their own and the player gives no orders. Looters strip the truck by the same rules as a knocked-out NPC truck, below. The player comes to when the trucks that fought it no longer see it, or after 30 turns. Broken built-in parts that are not junk are patched to a quarter of their HP.
+
+A broken cab knocks an NPC out too, and so may a cab below half, which never kills. One in twenty dies at once instead, and its truck becomes a wreck. Health at 0 also kills an NPC. A knocked-out truck keeps everything it carries, with no pile. A truck parked beside it loots it on a second grid beside its own. Goods and spare parts move at once. An installed part takes a field refit to remove, and built-in parts stay. NPC looters follow the same rules. Only one truck at a time loots a wreck, a pile or a knocked-out truck: while one works it, no other truck starts on it, and a player parked beside an unworked wreck claims it. Salvage sites stay shared. Passing drivers stop for a knocked-out truck as often as for a wreck. The job bar names the part being worked on. A driver that gives up to the player's demand lies the same way, with no grudge, and its truck is looted by the same rules.
+
+A knocked-out NPC is nobody's foe. No gun aims at it on its own, and knockout clears every order aimed at it. The player can still target it by hand, and any damaging shot finishes it into a wreck. Feuds against it end.
+
+A knocked-out NPC comes to once the trucks that attacked it no longer see it, or after 30 turns. Broken built-in parts that are not junk are patched to a quarter of their HP. It then retreats to its nearest own camp, else its nearest known town. It drives or crawls there, and towers can tow it. After a quarter of a day beyond the player's gray vision it appears at a free home pad instead. At home it gets fresh gear for its type on the same chassis and returns to its work.
+One in three NPCs the player knocks out holds a grudge for 10 days. Every hostile choice about the player gets more likely: fighting, robbing, ramming, closing in, refusing a truce and finishing a beggar. The grudge ends when that driver knocks the player out or the player hands it cargo.
+
+Raiders ignore a truck with nothing to take. A truck has loot when it holds goods, spare parts or mounted parts beyond the built-in ones. A raider attacks a truck with little cargo only rarely, and more often as its goods and spare parts are worth more. A feud or a grudge ignores cargo, and a feud still makes a raider fight a stripped truck.
+
+A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded. It can still travel automatically to an order point.
+
+A stranded NPC never gives up. It heads for a town, or a camp of its own for a raider, even with no money. A broke driver sells its cargo first. A broke driver that can still drive keeps working. A stranded NPC parked at any town, or for a raider only at a camp of its own, however it got there, buys the service it can pay for. A stranded raider in a town crawls on to its camp. If it is still stranded, it gets fresh gear for its type on the same chassis, as after a knockout. It keeps its money.
+
+Traders and scavengers help a stranded player. Raiders never do. One that sees the truck may drive over, if it is not hostile and not in danger. No driver sets out while the player is in combat, see [Turns, driving and combat](turns.md). It parks beside the truck and radios a tow offer to the nearest town it knows. A driver that arrives during a fight waits beside the truck and makes its offer once the fight ends. The fee is a base price plus a price per tile of the route. The player accepts, refuses or hangs up. A stranded player can also radio a passing trader or scavenger and ask for a tow. A player with an empty tank but working parts can radio a passing driver and ask for a little fuel or supplies, see Aid in [Social](social.md).
+
+A towed truck hangs behind its tower and follows its path. The tower drives slower than its top speed. Turns run on their own while towed. The player can unhitch at any time for free. On arrival in town the tower takes the fee. Money can go below zero, and the HUD shows it as debt. A player in debt cannot buy anything, and sales pay the debt off.
+
+A player who opens a town with E for the first time on a visit gets the engine, transmission, wheels, tank and cab raised free to 15% of their max HP, if they are below it. Leaving the town ends the visit. A junk part stays junk.
+
+A stranded player at a town whose money plus everything the town would buy cannot pay for the fix gets patched with scrap. Mounted parts count as things to sell. The engine, transmission, wheels and tank rise to 40% of their max HP. A junk engine goes back to its last wear step first. An empty tank gets 40% of its room in fuel. A truck with no engine gets nothing.
+
+A stranded player can switch on an emergency beacon. Every vehicle within 250 tiles hears it, through hills. Traders and scavengers come as if they saw the truck, and one of them answers. Raiders hear it too, so a stripped truck calls safely and a truck with cargo draws raiders. Turns run on their own while the beacon calls and no offer is open. The beacon switches off when the truck can drive again or gets towed.
+
+Space stops turns that run on their own, while knocked out, towed or on the beacon. The next Space starts them again.
+
+NPCs tow each other by the same decision. A stranded driver waits once a tower is on its way. It takes the tow at once and pays what it can on arrival. A raider goes to its nearest camp, and any other driver to its nearest known town. Raiders tow only raiders, and only raiders or the player tow a raider. NPCs find stranded drivers only by sight.
+
+The player can radio a stranded NPC in reach and offer a tow to the place it names. The NPC offers what it can pay. The player can take the fee or tow for free. A free tow gives Social XP on arrival, as much as earning the waived fee in trade profit.
+
+Health at 0 kills the player. The death screen offers Load save and New game. A dead world is never saved. The game keeps three manual save slots, an Autosave every 20 turns and in town, and a Day start autosave at the start of each game day. Load lists them all, newest first, and New game deletes only the autosaves. A save that no longer loads, like one from an older map, offers Migrate save, which keeps skills, perks, money, truck, parts and cargo and moves the truck to a town, or New game. Cab damage costs health at a quarter of its amount, so a lost fight costs about 30 health.
+
+A parked driver with supplies heals each turn, five times as fast in a town. Healing spends extra supplies. Starving takes health down to 30 and no lower, so only cab damage can kill. Only a fight or a crash can knock the driver out.
+
+Losing a truck is one natural way to change trucks.

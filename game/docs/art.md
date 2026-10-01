@@ -1,0 +1,43 @@
+# Art pipeline
+
+Static props, obstacles, landmarks and truck parts are low-poly Blender models. Settlement houses, ruins, water and some hull sections are built from Three.js shapes in code. Models placed many times, like rocks and orchard trees, are drawn as instanced meshes. The ground is one painted canvas texture over the whole map, and a shader draws roads and pads on it. Pebbles and scrub are instanced 3D models from `src/three/render/scatter.ts`.
+
+Some models come from Blender scripts in `tools/blender/`. Blender is installed with `brew install --cask blender`. Each script writes a `.glb` into `public/models/`, and both are committed. Rebuild one with `blender --background --python tools/blender/<name>.py -- public/models/<name>.glb tmp/<name>.png`. The second path is an optional preview render from the game camera angle.
+
+## Adding a model
+
+1. Copy `tools/blender/wreck.py` as the template. It shows the script shape: a `COLORS` table, a `build(kit)` function and a `main()`.
+2. Build from `Kit.box()` and `Kit.cylinder()` in `tools/blender/kit.py`. `tools/blender/shapes.py` adds struts, tapered cylinders, ladders and wall patches. Add shared helpers to those files and one-model helpers to the model's script.
+3. Work in meters with Z up and the front facing +X. Keep the origin at the model's ground point.
+4. Size the model to a reference radius or footprint from the sim, and state it in the docstring. The game scales it from there.
+5. Take colors from `src/render/palette.ts` and name the palette key in a comment. Blender cannot read the palette, so keep both in sync.
+6. Keep the low-poly style: few vertices per cylinder, flat shading, and small seeded `dent_by` values for worn metal.
+7. Fix the seed, so a rebuild gives the same file.
+8. Render the preview and look at it before wiring the model into the game.
+9. Add the name to `NAMES` in `src/three/render/models.ts`. Use `model('<name>')` in a view, or `instancedModel()` for many copies. Boot fails if the file is missing.
+10. Take an in-game screenshot with a Playwright script in `tmp/`, and run `npm run playtest`. The user confirms small visual details.
+
+`models.ts` loads every model at boot. It swaps the glTF materials for flat Lambert, so models match the procedural meshes.
+
+## Trucks
+
+Each truck is one base model per chassis plus shared kit parts on its inventory grid. The grid is a logical layout for balance: slots, armor lanes and what shields what. It holds no meters, and the inventory draws it with square cells. The model owns everything physical: the collider, the wheel positions, the engine spot and the surfaces parts stand on. One projection in `src/sim/body.ts` links them, and nothing else converts between cells and meters.
+
+- `cellCenter()` and `cellRect()` stretch the inner cells evenly over the model's footprint and put the armor ring cells on its outer faces, so a side plate is skin that adds no width.
+- `restOn()` picks where a part rests: on the surface that keeps the most of its footprint, shrinking the drawn part away from anything taller, like a bed wall, so it cuts no more than 5 cm into the model and stands on at least half its footprint. A part on a clean slope, like a raked window or a sloped hood, tilts to lie on it. A good or loose part that fits nowhere would float, so it is not drawn. `restOn()` never throws: over air, like an armor row where the model is narrower than the grid, it returns a perched rest, and a test places every part shape on every cell, ring included. Guns stand on posts and always show. A test checks every chassis, cell and part size and reports how many perch.
+- `engineAnchor()` is the model's hood hole, where a mounted engine is drawn wherever its `E` cells lie. Engines show in the hood hole on every chassis.
+- A chassis's `showsCores` flag says whether the view draws its transmission and fuel tank. It is true for the junk-built trucks where parts stick out (scout, courier, wagon), and there the two parts must stand on a low surface, never a cab roof. It is false for the others, whose bodies cover the parts, so they count in the grid but are not drawn.
+- A grid may have more rows or columns than its model, since the projection stretches it over the model, and every chassis but the scout keeps a free 2x2 block of deck cells. The cab, transmission and engine bay keep clear of the wheel columns, the transmission covers the middle column or columns, and a cab is a 1x2 open seat or a 3x2 closed cab, either way round. So a grid change for balance never changes the look or the driving.
+- Loose tests in `src/sim/body.test.ts` keep the grid roughly true to the model: the `E` cells lie in the half of the truck with the hood hole, each wheel cell in its corner, and every inner cell over the model. Cells may be about half to a full-size cell.
+- `npm run models:shapes` turns each `base_*` model into collision boxes and a top surface height map in `src/data/truck-shapes.json`, and a test fails when a shape is stale. `bodyOf()` returns those boxes, cut at the chassis bottom and at `PHYSICS.truckRoof`, and takes `half` from their bounds. Wheel positions and the engine anchor are per-model data in `PHYSICS.bodies`.
+- The base, `tools/blender/base_<chassis>.py`, has its origin at the collider center, so the drawn truck hits where it is drawn. Each base copies a real vehicle in the stylized style of `base_scout.py`: big flat panels and few strong color blocks, readable at the default zoom. `tools/blender/parts_common_base.py` holds the shared style and checks. `src/render/partLooks.ts` maps each chassis to its base.
+
+## Part models
+
+- Build a part for its rotation-0 footprint: w cells across in Blender Y and h cells along in Blender X, with the nose at +X. Truck right is Blender -Y. The origin is the footprint center on the deck top.
+- The view turns a part for rotation 1 and stretches it to the turned footprint. So keep parts boxy.
+- Build armor as a front-edge row with its outer face at +X. The view turns it to the side its cells lie on. A mounted side plate is drawn thin on the model's outer face, and rams replace the bumper.
+- Items stand on their row surface. An engine on its mount cells shows through a cutout in the base. A weapon below the base's highest row surface stands on a riser post, so its turret clears the cab.
+- A material named `paint` takes the faction color, and `trim` on a base takes the faction's second color. Other materials keep their colors.
+- `src/render/partLooks.ts` maps each part and good id to its model. A part with no model stops the build.
+- Weapons are assembled from a mount, a receiver, a barrel and an optional extra. They join at sockets made with `Kit.socket()`: `head` on mounts, and `muzzle` and `extra` on receivers. Each weapon def has a pool per slot in `WEAPON_POOLS`, and the part id picks from it. Boot fails when a pool model lacks a socket.

@@ -4,7 +4,7 @@ ROAM is a turn-based wasteland truck RPG in 3D. The factory in this repo turns v
 
 ## Layout
 
-- `game/` holds the game. Start with `game/CLAUDE.md` and `game/DESIGN.md`.
+- `game/` holds the game. Start with `game/CLAUDE.md` and `game/docs/DESIGN.md`.
 - `factory/` holds the factory. Start with `factory/README.md`.
 - `quality/` holds the pre-commit quality gate. See `quality/README.md`.
 
