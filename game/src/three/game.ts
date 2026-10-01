@@ -460,7 +460,7 @@ export class Game {
     });
     window.addEventListener("keydown", (e) => {
       if (this.isEditingControl() || this.death.isShown()) return;
-      if (e.code === "Space") {
+      if (e.code === "Space" && !this.modalOpen()) {
         e.preventDefault();
         if (!e.repeat) this.pressTurn();
       }
