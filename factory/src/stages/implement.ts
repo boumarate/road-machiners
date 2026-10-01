@@ -7,11 +7,10 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, clone);
   const home = agentHome(clone, GAME_DIR);
   resetOutputs(home);
-  const before = await ctx.repo.headHash(BRANCH(issue));
   await runAgent(ctx, issue, 'implement', ctx.cfg.buildModel, fillPrompt('implement', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
   throwIfNeedsCommittee(home);
-  await ctx.repo.fetchFromWork(clone, BRANCH(issue));
-  if ((await ctx.repo.headHash(BRANCH(issue))) === before) throw new Error('The implementation stage made no new commits');
+  const head = await ctx.repo.fetchFromWork(clone, BRANCH(issue));
+  if (await ctx.repo.isMerged(head, BRANCH(issue))) throw new Error('The implementation stage made no new commits');
   await guardAndPush(ctx, issue, base);
   await ctx.github.move(issue, 'Testing');
 }

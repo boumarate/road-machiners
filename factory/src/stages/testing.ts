@@ -3,7 +3,7 @@ import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
 import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type InlineButton } from '../types';
-import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, syncBase, throwIfNeedsCommittee, workDir } from './common';
+import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir } from './common';
 
 // Each step logs its start time, so the log shows where the time goes.
 // The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
@@ -88,7 +88,7 @@ function queueMerge(ctx: Ctx, issue: number, by: string): void {
 // so the committee plays what approve will merge, and conflicts reach the agent here instead of failing approve.
 // Returns the base commit it merged.
 async function mergeBase(ctx: Ctx, issue: number, base: string, home: string): Promise<string> {
-  await syncBase(ctx, base);
+  await ctx.repo.fetch();
   const { commit, conflicts } = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
   if (conflicts.length > 0) writeFileSync(`${home}/${OUT_DIR}/merge-conflicts.md`, `${conflicts.map((file) => `- ${file}`).join('\n')}\n`);
   return commit;

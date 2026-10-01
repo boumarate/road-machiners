@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { deployDev } from '../deploy';
 import { must } from '../exec';
 import { updateState } from '../state';
-import { GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type ReleaseState } from '../types';
+import { GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type MergeStep, type ReleaseState } from '../types';
 import { agentLog } from './common';
 import { candidateDir, changeLines, openReleaseTasks, releaseFeatures, releaseLog, requireRelease } from './release-common';
 
@@ -29,13 +29,12 @@ async function requireShippable(ctx: Ctx, issue: number, by: string | null): Pro
 
 // The release merges into main with no conflict once it holds all of main. The cut and hotfixes keep it so, but factory
 // work lands on main directly. A game change on main was never in the played candidate, so Ship stops on it. Anything
-// else merges into the release first, so a conflict stops Ship before anything public happens.
-async function takeMain(ctx: Ctx, branch: string): Promise<void> {
-  if (await ctx.repo.isMerged('main', branch)) return;
+// else merges into the release first. Returns that merge, or nothing when the release holds main already.
+async function takeMain(ctx: Ctx, branch: string): Promise<MergeStep[]> {
+  if (await ctx.repo.isMerged('main', branch)) return [];
   const unplayed = (await ctx.repo.changedFiles(branch, 'main')).filter((file) => file.startsWith(`${GAME_DIR}/`));
   if (unplayed.length > 0) throw new Error(`main changed ${unplayed.length} game files that ${branch} lacks, like ${unplayed[0]}, so the candidate was not played with them. Merge main into ${branch} and build a new candidate.`);
-  await ctx.repo.merge('main', branch, `Merge main into ${branch} before the ship`);
-  await ctx.repo.push(branch);
+  return [{ branch: 'main', into: branch, message: `Merge main into ${branch} before the ship` }];
 }
 
 // Builds main in a fresh clone inside the container, so build code never runs next to the butler key.
@@ -59,16 +58,16 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   const screenshot = join(clone, 'screenshot.png');
   const notesPath = join(clone, 'release.md');
   if (!existsSync(screenshot) || !existsSync(notesPath)) throw new Error('The candidate screenshot or notes are gone from its work clone, so the public post cannot be made.');
-  await ctx.repo.sync(release.branch);
+  await ctx.repo.fetch();
   const features = await releaseFeatures(ctx, release);
   // A changelog that does not match the release fails here, before anything public happens.
   const changelog = changeLines(readFileSync(notesPath, 'utf8'), features).join('\n');
-  await takeMain(ctx, release.branch);
-  await ctx.repo.merge(release.branch, 'main', `Release ${release.day}`);
-  await ctx.repo.push('main');
-  // A conflict in dev fails here, before anything public happens.
-  await ctx.repo.merge('main', 'dev', `Merge main into dev after release ${release.day}`);
-  await ctx.repo.push('dev');
+  // One atomic push moves the release, main and dev, so a conflict or a rejected push fails here with nothing changed.
+  await ctx.repo.merge([
+    ...(await takeMain(ctx, release.branch)),
+    { branch: release.branch, into: 'main', message: `Release ${release.day}` },
+    { branch: 'main', into: 'dev', message: `Merge main into dev after release ${release.day}` },
+  ]);
   await publish(ctx, keys, 'ship');
   const channel = ctx.cfg.publicChannel;
   await ctx.telegram.sendPhoto(channel, screenshot, `ROAM release ${release.day}`);

@@ -31,7 +31,7 @@ describe('change', () => {
     f.ctx.container.agent = async (run) => { dirs.push(run.dir); await agent(run); };
     await change(f.ctx, 4);
     expect(dirs).toEqual(['factory']);
-    expect(f.calls).toContain('push factory-change/4');
+    expect(f.calls).toContain('push work-head factory-change/4');
     expect(f.calls).toContain('pr factory-change/4 dev Post daily');
     expect(readState(f.ctx.statePath).pendingChanges).toEqual([]);
     expect(readFileSync(join(ROOT, 'work/change-4/factory/.factory/request.md'), 'utf8')).toContain('ann');

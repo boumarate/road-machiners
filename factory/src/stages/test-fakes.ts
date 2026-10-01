@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { agentHome } from './common';
-import type { AgentRun, Card, Ctx, FactoryConfig, InlineButton } from '../types';
+import type { AgentRun, Card, Ctx, FactoryConfig, InlineButton, MergeStep } from '../types';
 
 // Each test file loads its own copy of this module, so each file gets its own folder and parallel files never collide.
 export const ROOT = resolve(`tmp/factory-periodic-test/${randomUUID()}`);
@@ -51,11 +51,14 @@ export function fake(): Fake {
     },
     repo: {
       path: join(ROOT, 'repo'),
-      sync: async (...extra: string[]) => note(['sync', ...extra].join(' ')),
+      fetch: async () => note('fetch'),
       prepareWorkClone: async (branch: string, _base: string, dir: string) => { note(`prepare ${branch}`); mkdirSync(dir, { recursive: true }); },
-      fetchFromWork: async () => note('fetch'),
-      push: async (branch: string) => note(`push ${branch}`),
-      merge: async (branch: string, into: string) => note(`merge ${branch} ${into}`),
+      fetchFromWork: async () => { note('fetchFromWork'); return 'work-head'; },
+      push: async (commit: string, branch: string) => note(`push ${commit} ${branch}`),
+      merge: async (steps: MergeStep[]) => {
+        for (const step of steps) note(`merge ${step.branch} ${step.into}`);
+        note(`push ${steps.map((step) => step.into).join(' ')}`);
+      },
       mergeLog: async () => f.changelog,
       diff: async () => f.diff,
       hasNewCommits: async () => true,

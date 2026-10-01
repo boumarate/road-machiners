@@ -16,7 +16,7 @@ describe('runJob', () => {
     const posts: string[] = [];
     const ctx = {
       cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c' } as FactoryConfig, statePath, now: () => new Date(), log: () => undefined,
-      repo: { sync: async () => { throw new Error('offline'); } },
+      repo: { fetch: async () => { throw new Error('offline'); } },
       telegram: { sendMessage: async (_c: string, text: string) => { posts.push(text); return 1; } },
       github: {},
     } as unknown as Ctx;
@@ -55,7 +55,7 @@ describe('runJob', () => {
     const fail = async () => { throw new Error('offline'); };
     const ctx = {
       cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c' } as FactoryConfig, statePath, now: () => new Date('2026-01-10T12:00:00Z'), log: () => undefined,
-      repo: { sync: fail },
+      repo: { fetch: fail },
       telegram: { sendMessage: async () => { events.push('report'); return 1; } },
       github: { issue: fail, cards: fail, addLabel: async () => { events.push('label'); }, comment: async (n: number, body: string) => { events.push(`comment ${n} ${body}`); } },
     } as unknown as Ctx;
