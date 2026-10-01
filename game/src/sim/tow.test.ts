@@ -55,10 +55,10 @@ const find = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
 const feeOf = (w: World) => towData(playerTow(w)!).fee;
 
 // Runs turns until the tower makes its offer, which it then calls in by radio.
-function offered(s: Setup): World {
+function offered(s: Setup, topic: 'tow' | 'towFree' = 'tow'): World {
   const r = runUntil(s.w, 30, (w) => playerTow(w) !== null);
   expect(playerTow(r.w)).not.toBeNull();
-  expect(r.w.player.call).toMatchObject({ with: playerTow(r.w)!.holder, topic: 'tow' });
+  expect(r.w.player.call).toMatchObject({ with: playerTow(r.w)!.holder, topic });
   return r.w;
 }
 
@@ -473,6 +473,69 @@ describe('tow deals', () => {
     expect(again.holder).toBe(deal.holder);
     expect(towData(again)).toEqual({ kind: 'tow', site: deal.site, fee: deal.fee, waived: 0, hitched: false });
     expect(stateOf(r.w, 'towPromise', deal.holder, r.w.player.vehicleId)).toBeNull();
+  });
+});
+
+describe('free tow for a broke player', () => {
+  const broke = (money: number): Setup => {
+    const s = stranded();
+    s.w.player.money = money;
+    forceOption('strandedSeen', 'tow');
+    return s;
+  };
+
+  it('offers a free tow to a player with no money, and arrival takes nothing', () => {
+    const s = broke(0);
+    let w = offered(s, 'towFree');
+    expect(feeOf(w)).toBe(0);
+    expect(w.events).toContainEqual(expect.objectContaining({ t: 'towOffer', fee: 0 }));
+    expect(w.events.some((e) => e.t === 'say' && /No charge/.test(e.text))).toBe(true);
+    const traderMoney = getResources(w, find(w, s.trader.id)).money;
+    w = acceptTow(w);
+    const r = runUntil(w, 150, (x) => playerTow(x) === null);
+    expect(r.events.filter((e) => e.t === 'towDone')).toEqual([{ t: 'towDone', by: s.trader.id, client: r.w.player.vehicleId, fee: 0 }]);
+    expect(r.w.player.money).toBe(0);
+    expect(getResources(r.w, find(r.w, s.trader.id)).money).toBe(traderMoney);
+  });
+
+  it('offers a player in debt a free tow', () => {
+    const w = offered(broke(-50), 'towFree');
+    expect(feeOf(w)).toBe(0);
+    expect(w.player.money).toBe(-50);
+  });
+
+  it('charges a funded player the route fee under the tow topic', () => {
+    const w = offered(broke(500));
+    expect(feeOf(w)).toBeGreaterThan(0);
+  });
+
+  it('keeps a free tow free when it is dropped for danger and offered again', () => {
+    const s = broke(0);
+    let w = acceptTow(offered(s, 'towFree'));
+    for (let i = 0; i < 3; i++) w = endTurn(w, testDrive);
+    dropTow(w, playerTow(w)!, 'danger');
+    w.player.money = 500;
+    w.rngState = rngStateWhere((roll) => roll > 0.4 && roll < 0.6);
+    thinkNpc(w, find(w, s.trader.id));
+    const r = runUntil(w, 30, (x) => playerTow(x) !== null);
+    expect(towData(playerTow(r.w)!).fee).toBe(0);
+  });
+
+  it('gives a paid promise free to a player who is broke when it is offered again', () => {
+    const s = broke(500);
+    let w = acceptTow(offered(s));
+    for (let i = 0; i < 3; i++) w = endTurn(w, testDrive);
+    dropTow(w, playerTow(w)!, 'danger');
+    expect(stateOf(w, 'towPromise', s.trader.id, w.player.vehicleId)).not.toBeNull();
+    w.player.money = 0;
+    w.rngState = rngStateWhere((roll) => roll > 0.4 && roll < 0.6);
+    thinkNpc(w, find(w, s.trader.id));
+    const r = runUntil(w, 30, (x) => playerTow(x) !== null);
+    expect(towData(playerTow(r.w)!).fee).toBe(0);
+  });
+
+  it('never names a paid fee of 0, even at the top social level', () => {
+    expect(TOW.base * (1 - SKILL_EFFECTS.social.towFee * (XP_TO_REACH.length - 1))).toBeGreaterThan(1);
   });
 });
 
