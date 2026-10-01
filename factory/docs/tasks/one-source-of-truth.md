@@ -85,5 +85,5 @@ Out of scope: game stages, the queue model, and how releases and approvals decid
 - `cd infra && uv run pytest` passes.
 - Manual try, positive: push a factory commit to `main` while a job runs. The update waits, then deploys it within one timer period after the job ends. `deployed` names the commit, and the tick runs on it.
 - Manual try, positive: approve a card. The merge appears on GitHub `dev`, and the host clone has no local `dev` branch.
-- Manual try, negative: edit a file in `/opt/factory/code` by hand. The next update refuses and leaves a `failures` entry, and Hermes posts about it. The edit is still there.
+- Manual try, negative: edit a file in `/opt/factory/code` by hand. The next update refuses and leaves `update-failed`, and Hermes posts about it. The edit is still there.
 - Manual try, negative: make the `main` push fail during a Ship, for example with a temporary branch protection. Ship fails before anything public happens. A retry after the protection is lifted ships cleanly, with no repair by hand.
