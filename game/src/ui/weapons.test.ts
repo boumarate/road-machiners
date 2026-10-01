@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { hitOdds } from "../sim/combat";
 import { playerVehicle } from "../sim/damage";
-import { mountedParts } from "../sim/grid";
+import { corePart, mountedParts } from "../sim/grid";
 import type { Vehicle } from "../sim/types";
 import { addState } from "../sim/states";
 import { vehicleStats } from "../sim/stats";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { refreshVision } from "../sim/vision";
-import { HoverHold, aimAtPart, aimMarks, aimName, ammoCells, canForceReload, getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
+import type { UiHost } from "./host";
+import { HoverHold, WeaponPanel, aimAtPart, aimMarks, aimName, ammoCells, canForceReload, getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
 
 function createDuel() {
   const world = emptyWorld();
@@ -161,6 +162,7 @@ describe("vehicle marks", () => {
       radio: false,
       job: null,
       out: false,
+      gaveUp: false,
     });
   });
 
@@ -201,7 +203,9 @@ describe("vehicle marks", () => {
     const { world, target } = createDuel();
     target.brain = npcBrain("scavenger", target.pos, ["scavenger"]);
     target.defeat = { phase: "out", turns: 0, unseen: 0, foes: [] };
-    expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: true, radio: false });
+    expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: true, gaveUp: true, radio: false });
+    corePart(target, "cab").hp = 0;
+    expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: true, gaveUp: false });
     target.defeat.phase = "retreat";
     expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: false, radio: true });
   });
@@ -314,5 +318,96 @@ describe("hover hold", () => {
     const { seen, hold } = setup();
     hold.move(null, null);
     expect(seen).toEqual([null]);
+  });
+});
+
+class FakeNode {
+  className = "";
+  style: Record<string, string> = {};
+  children: (FakeNode | string)[] = [];
+  listeners = new Map<string, ((e: unknown) => void)[]>();
+  constructor(readonly tag: string) {}
+  append(...c: (FakeNode | string)[]) { this.children.push(...c); }
+  replaceChildren(...c: (FakeNode | string)[]) { this.children = c; }
+  setAttribute() {}
+  addEventListener(type: string, fn: (e: unknown) => void) { this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]); }
+  removeEventListener(type: string, fn: (e: unknown) => void) { this.listeners.set(type, (this.listeners.get(type) ?? []).filter((f) => f !== fn)); }
+  text(): string { return this.children.map((c) => (typeof c === "string" ? c : c.text())).join(""); }
+  find(pred: (n: FakeNode) => boolean): FakeNode | undefined {
+    if (pred(this)) return this;
+    for (const c of this.children) if (typeof c !== "string") { const f = c.find(pred); if (f) return f; }
+    return undefined;
+  }
+  fire(type: string, e: unknown = {}) { for (const f of this.listeners.get(type) ?? []) f(e); }
+}
+
+describe("weapon panel keys and the turn button", () => {
+  const ui = new FakeNode("div");
+  const win = new FakeNode("window");
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  function build(auto = false) {
+    ui.children = [];
+    win.listeners.clear();
+    vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t), getElementById: () => ui });
+    vi.stubGlobal("window", win);
+    const { world, gun } = createDuel();
+    const host = {
+      world: () => world,
+      apply: vi.fn(),
+      selectedWeapon: vi.fn<() => string | null>(() => null),
+      selectWeapon: vi.fn(),
+      pressTurn: vi.fn(),
+      releaseTurn: vi.fn(),
+      runKey: vi.fn(),
+      autoTravel: () => auto,
+      getTurnPhase: () => null,
+    } satisfies UiHost;
+    const panel = new WeaponPanel(host);
+    panel.render();
+    const panels = (ui.children as FakeNode[]).map((n) => n);
+    return { panel, host, gun, button: (text: string) => panels.map((n) => n.find((b) => b.tag === "button" && (text === "Auto" ? b.text() === text : b.text().includes(text)))).find(Boolean)! };
+  }
+
+  it("selectIndex picks a weapon, picks all again on repeat, and ignores a missing index", () => {
+    const { panel, host, gun } = build();
+    panel.selectIndex(0);
+    expect(host.selectWeapon).toHaveBeenLastCalledWith(gun.part.id);
+    host.selectedWeapon.mockReturnValue(gun.part.id);
+    panel.selectIndex(0);
+    expect(host.selectWeapon).toHaveBeenLastCalledWith(null);
+    host.selectWeapon.mockClear();
+    panel.selectIndex(9);
+    expect(host.selectWeapon).not.toHaveBeenCalled();
+  });
+
+  it("the Q, X and All buttons run their keys", () => {
+    const { host, button } = build();
+    for (const [text, code] of [["Hide [X]", "KeyX"], ["All [0]", "Digit0"]] as const) {
+      button(text).fire("click");
+      expect(host.runKey).toHaveBeenLastCalledWith(code);
+    }
+  });
+
+  it("the turn button presses on pointerdown and releases on pointerup of that press", () => {
+    const { host, button } = build();
+    button("Space").fire("pointerdown", { button: 2 });
+    expect(host.pressTurn).not.toHaveBeenCalled();
+    button("Space").fire("pointerdown", { button: 0 });
+    expect(host.pressTurn).toHaveBeenCalledTimes(1);
+    expect(host.releaseTurn).not.toHaveBeenCalled();
+    win.fire("pointerup");
+    expect(host.releaseTurn).toHaveBeenCalledTimes(1);
+    win.fire("pointerup");
+    expect(host.releaseTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("the Auto look presses the same way", () => {
+    const { host, button } = build(true);
+    button("Auto").fire("pointerdown", { button: 0 });
+    expect(host.pressTurn).toHaveBeenCalledTimes(1);
+    win.fire("pointercancel");
+    expect(host.releaseTurn).toHaveBeenCalledTimes(1);
   });
 });

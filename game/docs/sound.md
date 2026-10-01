@@ -15,8 +15,9 @@ Sound tells the player what happens without making them read the log: where a sh
 Four buses feed the master: `ui`, `sfx`, `ambient` and `music`. Each has a player-set volume and a low-pass filter. The `sfx` bus also runs through a compressor and a short open-air reverb, so sounds from different sources sit in one place.
 
 - World sounds, like guns, hits and crashes, play where they happen. Pan follows the screen position, and level halves at `MIX.halfGainMeters` from the camera focus. They use the same points as the visual effects, so fog of war silences what the player cannot see.
-- Each turn plays at most one result sting, the most important one: defeat, level-up, discovery, money or arrival.
+- Each turn plays at most one result sting, the most important one: defeat, level-up, discovery or money.
 - The engine is one recorded loop per chassis. Its pitch and level follow speed over the turn, so speeding up revs and braking drops. Continuous sounds are always bent loops like this, never short clips per state.
+- A hard slowdown adds the air brake where the truck is. Passing or reaching an order point makes no sound of its own.
 - Wind rises near dust storms.
 - Calm music plays out of combat. After each fight it comes back as a new random track.
 - Between turns, once no turn has played for `MIX.music.pauseDelayMs`, the music bus is muffled a little. The delay keeps the gaps between automatic turns clear.
@@ -33,7 +34,7 @@ Combat music is built live from a base loop and short accents, so each fight sou
 
 How it plays:
 
-1. A hostile in sight starts a battle. One random base loop plays, drums or bass, from its first beat. It stops a few turns after the last hostile leaves sight.
+1. The player entering combat, as the HUD combat readout shows it, starts a battle. A hostile that only sits or drives by in sight does not. One random base loop plays, drums or bass, from its first beat. It stops when that combat ends.
 2. Heat is a fading sum of event weights. It sets the base's level and muffle once per bar, so a quiet fight sounds low and dull and a hot one sounds full and open.
 3. Each event plays a stab: its accent, started early by the take's measured peak, so the loudest moment lands exactly when the shot lands or the crash happens.
 4. A short tail of the same accent may follow on the beat grid, from the half-beat nearest the event. Calm tails are the stab alone. Hot tails add one hit.
@@ -46,7 +47,7 @@ Randomness only changes how a sound plays: which take, which rhythm variant, a r
 
 Volley accents are timed from the volley's own plan, when the first round lands. Crash accents are known at turn start, so their peak lands on the impact at the end of movement.
 
-To hear a fight without looking for one, open the console with the backquote key and type `battle`. It spawns a random hostile raider near the truck. `__ROAM__.sound.log` in dev lists recent cues and what the score did with each accent, like `accent-hit skipped heat1.2`.
+To hear a fight without looking for one, open the console with the backquote key and type `battle`. It spawns a random hostile raider near the truck. The score starts once the raider closes in or fires. `__ROAM__.sound.log` in dev lists recent cues and what the score did with each accent, like `accent-hit skipped heat1.2`.
 
 ## Adding a sound
 

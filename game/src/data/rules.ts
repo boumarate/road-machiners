@@ -21,7 +21,7 @@ export const RULES = {
   // smallest vehicle radius.
   stranded: { turns: 3, step: 0.25 },
   // A player click within throttle reach and less than `cone` degrees off straight behind backs the truck up.
-  // Any other point behind turns the truck around nose first. A stuck NPC backs out `distance` tiles.
+  // Any other point behind turns the truck around nose first. A truck blocked in front, or a stuck NPC, backs out `distance` tiles.
   reverse: { cone: 20, distance: 1 },
   arriveRadius: 0.5, // a stop order clears inside this distance
   // Throttle zones ahead of the truck. They span `reach` tiles, split into brake, hold and accelerate

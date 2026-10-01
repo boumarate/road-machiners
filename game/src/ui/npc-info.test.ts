@@ -28,8 +28,18 @@ it('shows a knocked-out NPC as knocked out instead of its last goal', () => {
   const npc = addVehicle(w, 'raiders', 'buggy', [], { x: 32, y: 30 });
   npc.brain = { ...npcBrain('buggy', npc.pos, ['raider']), goals: [{ kind: 'fight', targetId: w.player.vehicleId, destination: null, phase: 'act', reason: 'rob cargo' }] };
   npc.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+  corePart(npc, 'cab').hp = 0;
   refreshVision(w);
   expect(formatNpcActivity(w, npc)).toBe('Knocked out');
+});
+
+it('shows an NPC that lies out with a working cab as having given up', () => {
+  const w = emptyWorld();
+  const npc = addVehicle(w, 'raiders', 'buggy', [], { x: 32, y: 30 });
+  npc.brain = npcBrain('buggy', npc.pos, ['raider']);
+  npc.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+  refreshVision(w);
+  expect(formatNpcActivity(w, npc)).toBe('Gave up');
 });
 
 it('shows a seen NPC goal and its reason, and logs goal changes only with the full log flag', () => {
@@ -125,6 +135,47 @@ it('lists every state toward the player, with turns left', () => {
   addState(w, 'truce', npc.id, me.id, { kind: 'none' }).turnsLeft = 3;
   addState(w, 'feud', npc.id, other.id, { kind: 'feud', robbery: false });
   expect(formatNpcStates(w, npc)).toEqual(['Feud with you, 7 turns', 'You turned down its tow', `Wants revenge on you, ${STATE_TURNS.revenge} turns`, 'Truce with you, 3 turns']);
+});
+
+it('shows one In combat line for combat held by the NPC toward the player', () => {
+  const w = emptyWorld();
+  const me = playerVehicle(w);
+  const npc = addVehicle(w, 'raiders', 'buggy', [], { x: 32, y: 30 });
+  addState(w, 'combat', npc.id, me.id, { kind: 'none' }).turnsLeft = STATE_TURNS.combat;
+  expect(formatNpcStates(w, npc)).toEqual([`In combat, ${STATE_TURNS.combat} turns`]);
+});
+
+it('shows In combat when only the player holds the combat state', () => {
+  const w = emptyWorld();
+  const me = playerVehicle(w);
+  const npc = addVehicle(w, 'raiders', 'buggy', [], { x: 32, y: 30 });
+  addState(w, 'combat', me.id, npc.id, { kind: 'none' }).turnsLeft = 4;
+  expect(formatNpcStates(w, npc)).toEqual(['In combat, 4 turns']);
+});
+
+it('merges combat in both directions into one line with the most turns left', () => {
+  const w = emptyWorld();
+  const me = playerVehicle(w);
+  const npc = addVehicle(w, 'raiders', 'buggy', [], { x: 32, y: 30 });
+  addState(w, 'combat', npc.id, me.id, { kind: 'none' }).turnsLeft = 3;
+  addState(w, 'combat', me.id, npc.id, { kind: 'none' }).turnsLeft = 8;
+  expect(formatNpcStates(w, npc)).toEqual(['In combat, 8 turns']);
+});
+
+it('ignores combat between the NPC and a third truck', () => {
+  const w = emptyWorld();
+  const npc = addVehicle(w, 'raiders', 'buggy', [], { x: 32, y: 30 });
+  const other = addVehicle(w, 'traders', 'hauler', [], { x: 40, y: 40 });
+  addState(w, 'combat', npc.id, other.id, { kind: 'none' });
+  expect(formatNpcStates(w, npc)).toEqual([]);
+});
+
+it('reads In combat, 1 turn at one turn left', () => {
+  const w = emptyWorld();
+  const me = playerVehicle(w);
+  const npc = addVehicle(w, 'raiders', 'buggy', [], { x: 32, y: 30 });
+  addState(w, 'combat', npc.id, me.id, { kind: 'none' }).turnsLeft = 1;
+  expect(formatNpcStates(w, npc)).toEqual(['In combat, 1 turn']);
 });
 
 it('tells a tow offer from a running tow', () => {

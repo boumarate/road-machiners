@@ -354,7 +354,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     tier: 2,
     w: 3,
     h: 1,
-    mass: 255,
+    mass: 480,
     armor: 20,
     tall: false,
     blastArmor: 8,
@@ -439,7 +439,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     tier: 3,
     w: 3,
     h: 1,
-    mass: 180,
+    mass: 420,
     armor: 25,
     tall: false,
     blastArmor: 12,
@@ -635,35 +635,18 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     holds: "supplies",
     amount: 10, // half the base supplies
   },
-  // Each chassis has one cab. It fills the cells where its base model draws the cab or the driver's seat. A closed
-  // cab is tall, so guns cannot fire across it. An open seat is not.
-  // An open seat, a hull hatch or a roll cage: the buggy, the gunwagon, the carrier and the jeep.
+  // Each chassis has one cab. A closed cab is tall, so guns cannot fire across it. An open seat is not.
+  // The open seat of the buggy, courier, jeep and gunwagon.
   cab: {
-    id: "cab", kind: "core", name: "Driver seat", hp: 120, base: 80, tier: 1, w: 1, h: 1, mass: 80, armor: 3, tall: false, role: "cab",
+    id: "cab", kind: "core", name: "Driver seat", hp: 120, base: 80, tier: 1, w: 1, h: 2, mass: 80, armor: 3, tall: false, role: "cab",
   },
-  // The courier's one-seat cabin and the bus driver's seat.
-  cabNarrow: {
-    id: "cabNarrow", kind: "core", name: "Cabin", hp: 120, base: 80, tier: 1, w: 1, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
-  },
-  // The van's front seats, one row across.
-  cabRow: {
-    id: "cabRow", kind: "core", name: "Cab", hp: 120, base: 80, tier: 1, w: 3, h: 1, mass: 80, armor: 3, tall: true, role: "cab",
-  },
-  // The scout's regular cab and the loader's cab.
+  // The closed cab of every regular chassis.
   cabPickup: {
     id: "cabPickup", kind: "core", name: "Cab", hp: 120, base: 80, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
   },
   // The convertible's closed hardtop cabin.
   cabHardtop: {
     id: "cabHardtop", kind: "core", name: "Hardtop cab", hp: 120, base: 80, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
-  },
-  // The hauler's cab-over, beside the engine it sits on.
-  cabOver: {
-    id: "cabOver", kind: "core", name: "Cab", hp: 120, base: 80, tier: 1, w: 2, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
-  },
-  // The full-width cab of the longbed and the tractor.
-  cabWide: {
-    id: "cabWide", kind: "core", name: "Cab", hp: 120, base: 80, tier: 1, w: 5, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
   },
   transmission: {
     id: "transmission", kind: "core", name: "Transmission", hp: 40, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 3, tall: false, role: "transmission",

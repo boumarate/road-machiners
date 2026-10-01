@@ -15,7 +15,7 @@ import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist } from './vec';
-import { endTurn } from './world';
+import { endTurn, update } from './world';
 import { gunFor } from './factory';
 
 function duel(targetPos = { x: 33, y: 30 }) {
@@ -207,7 +207,7 @@ function range(d: number, heading: number, speed = 0) {
 function aimTest(gunId: string, chassisId: string, heading: number, d = 1.2) {
   const w = emptyWorld();
   const old = w.vehicles[0];
-  const me = addVehicle(w, 'player', 'scout', [gunId, 'stockEngine'], old.pos, 0);
+  const me = addVehicle(w, 'player', 'wagon', [gunId, 'stockEngine'], old.pos, 0);
   me.id = old.id;
   const target = addVehicle(w, 'scavengers', chassisId, ['stockEngine'], { x: old.pos.x + d, y: old.pos.y }, heading);
   w.vehicles = [me, target];
@@ -480,6 +480,39 @@ describe('rounds', () => {
       if (miss?.blast.some((b) => b.vehicle === t.id)) splashed = true;
     }
     expect(splashed).toBe(true);
+  });
+});
+
+describe('aims at lost parts', () => {
+  function aimedAtEngine() {
+    const { w, me, buggy, mg } = duel();
+    const engine = mountedParts(buggy, 'engine')[0];
+    order(me, mg.part.id, buggy.id, engine.id);
+    return { w, me, buggy, mg, engine };
+  }
+
+  it('turns the order into a body shot when a turn removes the part', () => {
+    const { w, buggy, mg, engine } = aimedAtEngine();
+    buggy.items = buggy.items.filter((it) => it.kind !== 'part' || it.part.id !== engine.id);
+    const next = endTurn(w, testDrive);
+    expect(next.vehicles[0].weaponOrders[mg.part.id]).toMatchObject({ targetId: buggy.id, aim: 'body' });
+  });
+
+  it('settles the order after any command', () => {
+    const { w, me, buggy, mg, engine } = aimedAtEngine();
+    const next = update(w, (d) => {
+      const b = d.vehicles.find((v) => v.id === buggy.id)!;
+      b.items = b.items.filter((it) => it.kind !== 'part' || it.part.id !== engine.id);
+    });
+    expect(next.vehicles[0].weaponOrders[mg.part.id]).toEqual({ targetId: buggy.id, aim: 'body' });
+    expect(me.weaponOrders[mg.part.id].aim).toBe(engine.id);
+  });
+
+  it('drops an order whose target is gone', () => {
+    const { w, mg, buggy } = aimedAtEngine();
+    w.vehicles = w.vehicles.filter((v) => v.id !== buggy.id);
+    const next = update(w, () => {});
+    expect(next.vehicles[0].weaponOrders[mg.part.id]).toBeUndefined();
   });
 });
 

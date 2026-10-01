@@ -14,7 +14,7 @@ import { inShade, sunAt } from './sun';
 import { straightClear } from './path';
 import { vehicleStats } from './stats';
 import { cloneWorld, endTurn } from './world';
-import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, testDrive  } from './testkit';
 import { siteGates, sitePads } from './sites';
 import type { NpcActivity, Vehicle, World } from './types';
 
@@ -81,7 +81,7 @@ describe('NPC restraint', () => {
   it('mostly attacks an isolated manageable target', () => {
     const { world, npc } = createNpc('buggy');
     const prey = addVehicle(world, 'traders', 'scout', [], { x: 33, y: 30 });
-    addGoods(world, prey, 'scrap', 1);
+    addGoods(world, prey, 'electronics', 3);
     const fought = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);
       assignAutoOrders(x);
@@ -254,9 +254,13 @@ describe('NPC field repairs', () => {
     expect(actor.brain!.goals.map((g) => g.kind)).toEqual(['repair', 'flee']);
     expect(actor.order?.kind).toBe('stopAt');
     expect(goodsCount(actor).parts).toBe(2);
-    // A hostile in sight cancels the repair, parked or not.
-    if (pinned) expect(actor.speed).toBe(0);
-    else expect(actor.speed).toBeGreaterThan(0);
+    // A hostile that only passes by does not stop the repair, so a parked truck keeps at it and a moving one loses it.
+    if (pinned) {
+      expect(actor.speed).toBe(0);
+      expect(actor.job?.kind).toBe('repair');
+      return;
+    }
+    expect(actor.speed).toBeGreaterThan(0);
     expect(actor.job).toBeNull();
     expect(next.events.some((event) => event.t === 'job' && event.vehicle === actor.id && event.outcome === 'cancelled')).toBe(true);
   });

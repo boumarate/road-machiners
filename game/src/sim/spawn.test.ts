@@ -4,8 +4,8 @@ import { REGION } from '../data/region';
 import { START_KITS } from '../data/start';
 import { playerVehicle } from './damage';
 import { siteGates, sitePads } from './sites';
-import { spawnNpcs } from './spawn';
-import { emptyWorld, testDrive } from './testkit';
+import { npcName, spawnNpcs } from './spawn';
+import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import { dist } from './vec';
 import { endTurn, newWorld } from './world';
 import { TEST_MAP } from '../test/map';
@@ -71,5 +71,27 @@ describe('NPC spawns', () => {
       for (const v of spawned) expect(dist(v.pos, playerVehicle(w).pos)).toBeGreaterThanOrEqual(SPAWN.minPlayerDist);
       w.vehicles = w.vehicles.filter((v) => !v.brain);
     }
+  });
+});
+
+describe('npcName', () => {
+  function npcOf(templateId: string, driver: string) {
+    const v = addVehicle(emptyWorld(), 'roamers', 'buggy', ['mg', 'stockEngine'], { x: 5, y: 5 });
+    v.brain = { ...npcBrain(templateId, v.pos, []), driver };
+    return v;
+  }
+
+  it('reads profession and driver name', () => {
+    expect(npcName(npcOf('trader', 'Silas Kane'))).toBe('Trader Silas Kane');
+    expect(npcName(npcOf('roamer', 'Ada Voss'))).toBe('Roamer Ada Voss');
+  });
+
+  it('reads the vehicle name without a brain', () => {
+    const v = addVehicle(emptyWorld(), 'roamers', 'buggy', ['mg', 'stockEngine'], { x: 5, y: 5 });
+    expect(npcName(v)).toBe(v.name);
+  });
+
+  it('throws for an unknown template', () => {
+    expect(() => npcName(npcOf('nope', 'Silas Kane'))).toThrow('Unknown NPC template nope');
   });
 });

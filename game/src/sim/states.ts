@@ -3,16 +3,19 @@
 // of each kind toward each other party.
 
 import { STATE_TURNS } from '../data/npcs';
+import { aidWork, checkAid, refreshAid, settleAid } from './aid';
 import { vehicleById } from './damage';
 import { newId } from './factory';
 import { lootRobbed } from './npc-activities';
-import { checkPatch, isPatching, lapsePatch, patchWork, settlePatch } from './patch';
+import { checkPatch, isPatching, breakPatch, lapsePatch, patchWork, settlePatch } from './patch';
 import { practice } from './progress';
 import { checkEscort, checkPlayerTow, payEscort } from './tow';
 import { checkTrade, isMeeting } from './economy';
+import { isHostile } from './combat';
 import { getResources } from './resources';
 import type { Job, NpcState, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
 import { canVehicleSee } from './vision';
+import { npcName } from './spawn';
 
 export type WorkLeft = { turnsLeft: number; total: number };
 export type Work = WorkLeft & ({ from: 'job'; job: Job } | { from: 'state'; state: NpcState });
@@ -85,7 +88,7 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   patch: {
     refresh: isPatching,
     check: checkPatch,
-    hooks: { fulfilled: settlePatch, expired: lapsePatch },
+    hooks: { fulfilled: settlePatch, expired: lapsePatch, broken: breakPatch },
     work: patchWork,
     binds: true,
   },
@@ -101,7 +104,23 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   // The holder took unintended damage from the other party's fire. src/sim/combat.ts sums it and turns it into an
   // attack past a threshold.
   strayFire: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
+  // The holder and the player deal in fuel and supply aid. See src/sim/aid.ts. An agreed deal waits for the player's
+  // [E], then both trucks stay parked for its handover work, and the fulfilled hook moves everything once. Combat or
+  // a feud breaks it. Parked in reach keeps an agreed deal alive, and a pending offer still lapses unanswered.
+  aid: { refresh: refreshAid, check: checkAid, hooks: { fulfilled: settleAid }, work: aidWork, binds: true },
+  // The holder is the aggressor and the other party its target. It starts with a hostile act, like a shot or a ram, or
+  // with the holder hunting the other on a fight goal in sight. src/sim/combat.ts refreshes it. Both trucks count as in
+  // combat while it lasts. It breaks once the two are no longer hostile to each other.
+  combat: { refresh: never, check: checkCombat, hooks: {}, work: noWork, binds: false },
 };
+
+// A missing party is left to the missing-party rule.
+function checkCombat(w: World, s: NpcState): StateEnding | null {
+  const holder = w.vehicles.find((v) => v.id === s.holder);
+  const other = w.vehicles.find((v) => v.id === s.other);
+  if (!holder || !other) return null;
+  return isHostile(w, holder, other) || isHostile(w, other, holder) ? null : 'broken';
+}
 
 // A missing holder is left to the missing-party rule.
 function answerDropped(w: World, s: NpcState): boolean {
@@ -120,7 +139,7 @@ function turnsOf(kind: StateKindId): number | null {
 }
 
 // The data kind each state kind carries.
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea', trade: 'none', revenge: 'none', escort: 'escort', strayFire: 'strayFire' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea', trade: 'none', revenge: 'none', escort: 'escort', strayFire: 'strayFire', aid: 'aid', combat: 'none' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);
@@ -226,6 +245,11 @@ export function towData(s: NpcState): Extract<StateData, { kind: 'tow' }> {
   return s.data;
 }
 
+export function aidData(s: NpcState): Extract<StateData, { kind: 'aid' }> {
+  if (s.data.kind !== 'aid') throw new Error(`State ${s.id} holds no aid`);
+  return s.data;
+}
+
 export function strayData(s: NpcState): Extract<StateData, { kind: 'strayFire' }> {
   if (s.data.kind !== 'strayFire') throw new Error(`State ${s.id} holds no stray fire`);
   return s.data;
@@ -243,7 +267,7 @@ function payTow(w: World, s: NpcState): void {
   if (towed.brain) forgetClient(tower, s.other);
   towed.speed = 0;
   towed.order = null;
-  if (s.holder === w.player.vehicleId) w.events.push({ t: 'money', amount: tow.fee, reason: `towing ${towed.name}` });
+  if (s.holder === w.player.vehicleId) w.events.push({ t: 'money', amount: tow.fee, reason: `towing ${npcName(towed)}` });
   if (s.holder === w.player.vehicleId && tow.waived > 0) practice(w, 'freeTow', tow.waived, null, s.other);
   else w.events.push({ t: 'towDone', by: s.holder, client: s.other, fee: tow.fee });
 }

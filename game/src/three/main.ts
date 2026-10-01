@@ -19,11 +19,14 @@ import type { World } from '../sim/types';
 import { newWorld } from '../sim/world';
 import { DebugConsole, Noclip } from '../ui/console';
 import { uiRoot } from '../ui/dom';
+import { chooseSaveFate, showCarryReport } from '../ui/save-screen';
 import { mountPerfPanel } from '../ui/perf-panel';
 import { SoundSettings } from '../ui/sound';
-import { installCrashScreen, keepRunningOnErrors } from './crash';
+import { installCrashScreen, keepRunningOnErrors, onEveryError } from './crash';
 import { Game } from './game';
-import { loadWorld } from './save';
+import { clearGame, loadWorld, SAVE_KEY, SaveError, storedSave, writeSave } from './save';
+import { newestSlot, takeBootRequest, type SlotId } from './save-slots';
+import { rescueSave } from './save-rescue';
 import { loadModels } from './render/models';
 import { groundTexture } from './render/terrain';
 
@@ -40,13 +43,58 @@ async function fetchMap(): Promise<BakedMap> {
   return decodeMap(new Uint8Array(await response.arrayBuffer()));
 }
 
+// The world the boot request names, else the newest save, else a new one. A save that cannot load goes to the player:
+// migrate it or start over.
+async function bootWorld(): Promise<World> {
+  const request = takeBootRequest(window.sessionStorage, SAVE_KEY);
+  if (request === 'new') return freshRun();
+  const slot = request ?? newestSlot(window.localStorage, SAVE_KEY, CONFIG.saveSlots);
+  return slot === null ? newGameSaved() : bootSlot(slot);
+}
+
+async function bootSlot(slot: SlotId): Promise<World> {
+  try {
+    return loadWorld(window.localStorage, slot, map) ?? newGameSaved();
+  } catch (err) {
+    if (!(err instanceof SaveError)) throw err;
+    return rescuedOrNew(err, slot);
+  }
+}
+
+// A new run clears the old one's autosaves and tips. Its first save comes at once, so a reload before the next
+// autosave does not load an older run's save.
+function freshRun(): World {
+  clearGame(window.localStorage);
+  return newGameSaved();
+}
+
+function newGameSaved(): World {
+  const world = newGame();
+  writeSave(window.localStorage, 'auto', world, Date.now());
+  return world;
+}
+
+async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<World> {
+  const stored = storedSave(window.localStorage, slot);
+  const canMigrate = typeof stored === 'object' && stored !== null && !Array.isArray(stored);
+  if ((await chooseSaveFate(error.message, canMigrate)) === 'new') return freshRun();
+  const rescued = rescueSave(window.localStorage, slot, map, startKit(CONFIG.startKit), freshSeed, Date.now());
+  if (!rescued) throw new Error('The save became unreadable while migrating');
+  await showCarryReport(rescued.report);
+  return rescued.world;
+}
+
+function newGame(): World {
+  return newWorld(CONFIG.seed ?? freshSeed(), startKit(CONFIG.startKit), map);
+}
+
 installCrashScreen();
 const mixer = new Mixer(MIX);
 mixer.unlockOn(window);
 const loading = Promise.all([initPhysics(), loadModels(), loadBank(mixer.ctx, SOUNDS)]);
 const map = await fetchMap();
 // The world and its ground build while physics, models and sounds load, since those wait mostly on the network and decoders.
-const world = loadWorld(window.localStorage, map) ?? newWorld(CONFIG.seed ?? freshSeed(), startKit(CONFIG.startKit), map);
+const world = await bootWorld();
 groundTexture(world);
 const [, , bank] = await loading;
 const soundSettings = new SoundSettings(mixer, window.localStorage);
@@ -55,6 +103,7 @@ const game = new Game(world, element('game'), overlay, new SoundPlayer(mixer, ba
 const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game.follow.keyPan.setSpeed(factor) };
 const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
 keepRunningOnErrors((text) => debugConsole.error(text));
+onEveryError(() => game.holdSaves());
 performance.mark('roam:ready');
 setTimeout(() => warmAfterBoot(routeRadii(game.state)));
 if (import.meta.env.DEV) {

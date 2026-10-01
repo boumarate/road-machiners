@@ -54,7 +54,7 @@ describe('NPC equipment generation', () => {
       }
     }
     for (const [role, variants] of Object.entries(seen)) expect(variants.size, role).toBeGreaterThanOrEqual(5);
-  }, 60_000); // 40 full spawns, each trying every engine and gun pair of every template
+  }, 180_000); // 40 full spawns, each trying every engine and gun pair of every template
 
   it.each(Object.values(NPCS))('fits $id equipment and cargo within its budget and rated mass', (template) => {
     for (let seed = 1; seed <= 32; seed++) {
@@ -374,5 +374,40 @@ describe('NPC loadout tables', () => {
         }
       }
     }
+  });
+});
+
+describe('raider gear levels', () => {
+  it('never roll the poor level', () => {
+    for (const template of Object.values(NPCS).filter((t) => t.traits.includes('raider'))) {
+      expect(template.loadout.levels.map((l) => l.value), template.id).not.toContain('poor');
+    }
+  });
+});
+
+describe('armed choice cache', () => {
+  const rolled = (id: string, seed: number, level: GearLevel) => {
+    const w = emptyWorld();
+    w.rngState = seed;
+    const loadout = generateNpcLoadout(w, NPCS[id], null, level);
+    return { loadout, rngState: w.rngState, marketRng: w.marketRng, nextId: w.nextId };
+  };
+
+  it('gives the same loadout for the same inputs in any call order', () => {
+    const first = rolled('gunwagon', 3, 'loaded');
+    rolled('trader', 5, 'poor');
+    expect(rolled('gunwagon', 3, 'loaded')).toEqual(first);
+  });
+
+  it('reads the pools and minimum of a table edited in place', () => {
+    const template: NpcTemplate = structuredClone(NPCS.gunwagon);
+    const roll = () => generateNpcLoadout(emptyWorld(), template, null, 'poor');
+    const guns = () => roll().parts.filter((p) => partDef(p.defId).kind === 'weapon').map((p) => p.defId);
+    expect(guns().length).toBe(template.loadout.minGuns);
+    template.loadout.weapon = [{ value: 'mg', weight: 1 }];
+    template.loadout.extraGun = [{ value: 'mg', weight: 1 }];
+    expect(guns()).toEqual(Array(template.loadout.minGuns).fill('mg'));
+    template.loadout.minGuns = 1;
+    expect(guns()).toEqual(['mg']);
   });
 });

@@ -7,17 +7,18 @@ import type { DecisionOptions, TraitId } from './npcs';
 
 type PatchDeal = DecisionOptions['patchDeal'];
 
-export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest' | 'demand' | 'surrender' | 'giveUp' | 'trade' | 'truce' | 'mercy' | 'rob' | 'truceOffer' | 'mercyPlea' | 'offerTow' | 'releaseTow' | 'offerPatch' | 'marketNews' | 'rumor' | 'buyTruce';
+export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest' | 'demand' | 'surrender' | 'giveUp' | 'claim' | 'trade' | 'truce' | 'mercy' | 'rob' | 'warnOff' | 'truceOffer' | 'mercyPlea' | 'offerTow' | 'releaseTow' | 'offerPatch' | 'marketNews' | 'rumor' | 'buyTruce' | 'offerAid' | 'askAid' | 'aidOffer' | 'yieldDemand';
 export type ConditionId =
-  | 'knowsTown' | 'offersTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'hasDeal' | 'noDeal' | 'demandsCargo' | 'demandsSurrender' | 'demandsGiveUp'
+  | 'knowsTown' | 'offersTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'npcOffRope' | 'hasDeal' | 'noDeal' | 'demandsCargo' | 'demandsSurrender' | 'demandsGiveUp' | 'guardsClaim'
   | 'atOdds' | 'atPeace' | 'noPlayerPlea' | 'npcHasCargo' | 'offersTruce' | 'begsMercy'
-  | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'canTowNpc' | 'towedByPlayer' | 'noTrade' | 'npcCalm'
-  | 'knowsLastTown' | 'hearsRumor' | 'rumorOfSite' | 'rumorOfWreck' | 'canPayTruce';
+  | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'claimsPlayerLoot' | 'holdsOn' | 'canTowNpc' | 'towedByPlayer' | 'noTrade' | 'npcCalm'
+  | 'knowsLastTown' | 'hearsRumor' | 'rumorOfSite' | 'rumorOfWreck' | 'canPayTruce'
+  | 'npcLow' | 'playerLow' | 'noAid' | 'aidGiven' | 'aidRefused' | 'offersAid' | 'npcBeaten' | 'notOfferedYield';
 export type EffectId =
-  | 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch' | 'handOver' | 'surrender' | 'giveUp'
-  | 'acceptPlea' | 'refusePlea' | 'settlePlea' | 'withdrawPlea' | 'settleThreat' | 'hitchNpc' | 'hitchNpcFree' | 'releaseNpc' | 'startTrade'
-  | 'revealRumor' | 'payTruce';
-export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'npcTowTerms' | 'lastTownPrices' | 'nearestRumor' | 'trucePrice';
+  | 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch' | 'handOver' | 'surrender' | 'giveUp' | 'backOffClaim' | 'defyClaim'
+  | 'acceptPlea' | 'refusePlea' | 'settlePlea' | 'withdrawPlea' | 'settleThreat' | 'settleWarning' | 'hitchNpc' | 'hitchNpcFree' | 'releaseNpc' | 'startTrade'
+  | 'revealRumor' | 'payTruce' | 'giveAidPaid' | 'giveAidFree' | 'takeAid' | 'acceptAidOffer' | 'refuseAidOffer' | 'yieldToPlayer' | 'askStandDown' | 'standDownPlea';
+export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'warnAnswer' | 'npcTowTerms' | 'lastTownPrices' | 'nearestRumor' | 'trucePrice' | 'aidWanted' | 'aidAnswer' | 'aidOffered' | 'yieldAnswer';
 
 // `go` is a node of the same topic, the hub of topics, or the end of the call.
 export type DialogueOption = { text: string; when: ConditionId[]; effects: EffectId[]; go: string };
@@ -114,8 +115,8 @@ export const TOPICS: Record<TopicId, Topic> = {
       look: {
         line: 'Let me hear what broke.',
         options: [
-          { text: 'Engine or gearbox. What would it take?', when: ['hasDeal'], effects: [], go: 'terms' },
-          { text: 'Engine or gearbox. Can you do anything?', when: ['noDeal'], effects: [], go: 'cannot' },
+          { text: 'Engine, gearbox or tank. What would it take?', when: ['hasDeal'], effects: [], go: 'terms' },
+          { text: 'Engine, gearbox or tank. Can you do anything?', when: ['noDeal'], effects: [], go: 'cannot' },
         ],
       },
       terms: {
@@ -131,18 +132,18 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A driver stranded by a broken engine or gearbox asks the player once for a patch.
+  // A driver stranded by a broken engine, gearbox or tank asks the player once for a patch.
   patchRequest: {
     id: 'patchRequest',
     once: true,
     ask: null,
-    raise: { when: ['npcNeedsPatch', 'npcCalm', 'atPeace'], priority: 1, duringFeud: false, duringCombat: false },
+    raise: { when: ['npcNeedsPatch', 'npcOffRope', 'npcCalm', 'atPeace'], priority: 1, duringFeud: false, duringCombat: false },
     prepare: 'patchTerms',
     hangUp: ['settleRefused'],
     start: 'ask',
     nodes: {
       ask: {
-        line: 'My engine is dead out here. Can you patch me up?',
+        line: 'My truck is dead out here. Can you patch me up?',
         options: [
           { text: 'What are you offering?', when: ['hasDeal'], effects: [], go: 'terms' },
           { text: 'I cannot help, sorry.', when: ['noDeal'], effects: ['settleRefused'], go: END },
@@ -217,6 +218,26 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
+  // A driver that claimed a handed-over pile warns the parked player off it, once. Rolling on or hanging up puts the
+  // player on the pile's backed-off list. Refusing starts a fight. See the pile claims in src/sim/parley.ts.
+  claim: {
+    id: 'claim',
+    once: false,
+    ask: null,
+    raise: { when: ['guardsClaim'], priority: 4, duringFeud: false, duringCombat: false },
+    prepare: null,
+    hangUp: ['backOffClaim'],
+    start: 'warn',
+    nodes: {
+      warn: {
+        line: 'This is mine.',
+        options: [
+          { text: 'Rolling on.', when: [], effects: ['backOffClaim'], go: END },
+          { text: 'Finders keepers.', when: [], effects: ['defyClaim'], go: END },
+        ],
+      },
+    },
+  },
   // Both trucks pull over side by side, and E opens the trade screen once both are parked. See src/sim/economy.ts.
   trade: {
     id: 'trade',
@@ -279,6 +300,29 @@ export const TOPICS: Record<TopicId, Topic> = {
       refused: { line: 'No deals.', options: [{ text: 'Then come and get me.', when: [], effects: [], go: END }] },
     },
   },
+  // The player demands a badly broken foe give up. The driver answers once while it keeps the player in sight, like
+  // a stranded NPC offered a way out. One that agrees gives up where it stands, and the player strips its truck like a
+  // knocked-out one.
+  yieldDemand: {
+    id: 'yieldDemand',
+    once: false,
+    ask: { text: 'Your truck is finished. Stand down and let me strip it, and you live.', when: ['atOdds', 'npcBeaten', 'notOfferedYield'], duringFeud: true },
+    raise: null,
+    prepare: 'yieldAnswer',
+    hangUp: [],
+    start: 'hear',
+    nodes: {
+      hear: {
+        line: 'You want to pick my truck clean?',
+        options: [
+          { text: 'Your call. Last chance.', when: ['accepts'], effects: [], go: 'agreed' },
+          { text: 'Your call. Last chance.', when: ['refuses'], effects: [], go: 'refused' },
+        ],
+      },
+      agreed: { line: 'All right. I am done. Take what you want.', options: [{ text: 'Sit tight.', when: [], effects: ['yieldToPlayer'], go: END }] },
+      refused: { line: 'Not while I can still pull a trigger.', options: [{ text: 'Then we finish this.', when: [], effects: ['settleRefused'], go: END }] },
+    },
+  },
   // The player demands the cargo of a driver at peace, once. It gives the cargo up, fights or runs.
   rob: {
     id: 'rob',
@@ -302,6 +346,30 @@ export const TOPICS: Record<TopicId, Topic> = {
       flee: { line: 'Not today!', options: [{ text: 'Run, then.', when: [], effects: [], go: END }] },
     },
   },
+  // The player tells a driver at peace that loots the player's wreck to back off, once. It backs off, keeps looting
+  // or fights.
+  warnOff: {
+    id: 'warnOff',
+    once: true,
+    ask: { text: 'This wreck is mine. Back off.', when: ['atPeace', 'claimsPlayerLoot'], duringFeud: false },
+    raise: null,
+    prepare: 'warnAnswer',
+    hangUp: ['settleRefused'],
+    start: 'hear',
+    nodes: {
+      hear: {
+        line: 'Says who?',
+        options: [
+          { text: 'You heard me. Leave it.', when: ['complies'], effects: ['settleWarning'], go: 'comply' },
+          { text: 'You heard me. Leave it.', when: ['holdsOn'], effects: ['settleWarning'], go: 'refuse' },
+          { text: 'You heard me. Leave it.', when: ['resists'], effects: ['settleWarning'], go: 'fightBack' },
+        ],
+      },
+      comply: { line: "Fine. It's yours.", options: [{ text: 'Good.', when: [], effects: [], go: END }] },
+      refuse: { line: 'Find your own wreck.', options: [{ text: 'We will see.', when: [], effects: [], go: END }] },
+      fightBack: { line: 'Over my dead body.', options: [{ text: 'Have it your way.', when: [], effects: [], go: END }] },
+    },
+  },
   // A foe hurt in a fight with the player asks for a truce.
   truceOffer: {
     id: 'truceOffer',
@@ -321,7 +389,8 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A beaten foe gives up. Sparing it leaves its cargo on the ground for the player.
+  // A beaten foe gives up. Sparing it leaves its cargo on the ground for the player. The player can instead demand that
+  // it stand down and be stripped, which it answers like the yieldDemand topic.
   mercyPlea: {
     id: 'mercyPlea',
     once: false,
@@ -335,8 +404,24 @@ export const TOPICS: Record<TopicId, Topic> = {
         line: 'Stop shooting! I give up. Take what I carry and let me go.',
         options: [
           { text: 'Dump your cargo and drive off.', when: [], effects: ['acceptPlea'], go: END },
+          { text: 'Stand down and let me strip your truck.', when: ['notOfferedYield'], effects: ['askStandDown'], go: 'strip' },
           { text: 'No mercy.', when: [], effects: ['refusePlea'], go: END },
         ],
+      },
+      strip: {
+        line: 'You want to pick my truck clean?',
+        options: [
+          { text: 'Your call. Last chance.', when: ['accepts'], effects: [], go: 'stripAgreed' },
+          { text: 'Your call. Last chance.', when: ['refuses'], effects: [], go: 'stripRefused' },
+        ],
+      },
+      stripAgreed: {
+        line: 'All right. I am done. Take what you want.',
+        options: [{ text: 'Sit tight.', when: [], effects: ['standDownPlea'], go: END }],
+      },
+      stripRefused: {
+        line: 'Not while I can still pull a trigger.',
+        options: [{ text: 'Then we finish this.', when: [], effects: ['refusePlea'], go: END }],
       },
     },
   },
@@ -373,11 +458,11 @@ export const TOPICS: Record<TopicId, Topic> = {
       released: { line: 'Fine. Thanks for the pull.', options: [{ text: 'Over and out.', when: [], effects: ['releaseNpc'], go: END }] },
     },
   },
-  // The player offers to patch a driver stranded by a broken engine or gearbox.
+  // The player offers to patch a driver stranded by a broken engine, gearbox or tank.
   offerPatch: {
     id: 'offerPatch',
     once: false,
-    ask: { text: 'Your truck looks dead. Want me to patch it?', when: ['npcNeedsPatch', 'atPeace'], duringFeud: false },
+    ask: { text: 'Your truck looks dead. Want me to patch it?', when: ['npcNeedsPatch', 'npcOffRope', 'atPeace'], duringFeud: false },
     raise: null,
     prepare: 'patchTerms',
     hangUp: [],
@@ -471,6 +556,70 @@ export const TOPICS: Record<TopicId, Topic> = {
       paid: { line: 'Money is in. Guns down.', options: [{ text: 'Over and out.', when: [], effects: [], go: END }] },
     },
   },
+  // The player offers a driver low on fuel or supplies some of its own, for what the driver can pay or for free. The
+  // two trucks meet side by side before anything moves. See src/sim/aid.ts.
+  offerAid: {
+    id: 'offerAid',
+    once: false,
+    ask: { text: 'Running low? I can spare some.', when: ['noAid', 'atPeace', 'npcCalm', 'npcLow', 'npcOffRope'], duringFeud: false },
+    raise: null,
+    prepare: 'aidWanted',
+    hangUp: [],
+    start: 'terms',
+    nodes: {
+      terms: {
+        line: 'I could use {aid}. I can pay {price}.',
+        options: [
+          { text: 'Deal.', when: [], effects: ['giveAidPaid'], go: END },
+          { text: 'No charge.', when: [], effects: ['giveAidFree'], go: END },
+          { text: 'Not now. Something else.', when: [], effects: [], go: HUB },
+        ],
+      },
+    },
+  },
+  // A player low on fuel or supplies asks a driver for a little, once. The answer is rolled when the topic opens.
+  askAid: {
+    id: 'askAid',
+    once: true,
+    ask: { text: 'I am running dry. Can you spare some?', when: ['noAid', 'atPeace', 'npcCalm', 'playerLow'], duringFeud: false },
+    raise: null,
+    prepare: 'aidAnswer',
+    hangUp: ['settleRefused'],
+    start: 'check',
+    nodes: {
+      check: {
+        line: 'Let me check my tanks.',
+        options: [
+          { text: 'Whatever you can spare.', when: ['aidGiven'], effects: [], go: 'give' },
+          { text: 'Whatever you can spare.', when: ['aidRefused'], effects: ['settleRefused'], go: 'refuse' },
+        ],
+      },
+      give: {
+        line: 'I can spare {aid}. Stay put, I am coming.',
+        options: [{ text: 'Thanks. I will wait.', when: [], effects: ['takeAid', 'settleDone'], go: END }],
+      },
+      refuse: { line: 'Sorry. Cannot spare any.', options: [{ text: 'Understood.', when: [], effects: [], go: HUB }] },
+    },
+  },
+  // A driver that saw a poor player low on fuel or supplies offers some, free. Not answering lets the offer expire.
+  aidOffer: {
+    id: 'aidOffer',
+    once: false,
+    ask: null,
+    raise: { when: ['offersAid'], priority: 1, duringFeud: false, duringCombat: false },
+    prepare: 'aidOffered',
+    hangUp: ['refuseAidOffer'],
+    start: 'offer',
+    nodes: {
+      offer: {
+        line: 'You look dry. I can spare {aid}, no charge.',
+        options: [
+          { text: 'Thanks. I will wait.', when: [], effects: ['acceptAidOffer'], go: END },
+          { text: 'No thanks.', when: [], effects: ['refuseAidOffer'], go: END },
+        ],
+      },
+    },
+  },
 };
 
 // Patch terms in the NPC's words. `npcPatches` when the NPC does the work, `playerPatches` when it asks the player
@@ -505,20 +654,22 @@ export type TraitTalk = { voice: Voice | null; topics: TopicId[] };
 // Tiles a horn carries. It is about as loud as an engine at limp speed, so it reaches a little past sight.
 export const HONK_RANGE = DETECT.sound.limp;
 
-// Every driver can be asked for peace, robbed, towed and patched, and can plead for peace.
-const PARLEY: TopicId[] = ['surrender', 'giveUp', 'truce', 'mercy', 'buyTruce', 'rob', 'truceOffer', 'mercyPlea', 'offerTow', 'releaseTow', 'offerPatch'];
+// Every driver can be asked for peace, robbed, warned off a wreck, towed, patched and given fuel or supplies, and can
+// plead for peace.
+const PARLEY: TopicId[] = ['surrender', 'giveUp', 'claim', 'truce', 'mercy', 'yieldDemand', 'buyTruce', 'rob', 'warnOff', 'truceOffer', 'mercyPlea', 'offerTow', 'releaseTow', 'offerPatch', 'offerAid'];
 
 export const TRAIT_TALK: Record<TraitId, TraitTalk> = {
-  trader: { voice: { greeting: 'Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tow', 'askTow', 'patch', 'patchRequest', 'trade', ...PARLEY] },
-  scavenger: { voice: { greeting: 'Yeah? Make it quick.', repeatLine: 'I told you already.', refusal: 'Get off my channel.', honksBack: true }, topics: ['directions', 'rumor', 'tow', 'askTow', 'patch', 'patchRequest', 'trade', ...PARLEY] },
+  trader: { voice: { greeting: 'Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tow', 'askTow', 'askAid', 'aidOffer', 'patch', 'patchRequest', 'trade', ...PARLEY] },
+  scavenger: { voice: { greeting: 'Yeah? Make it quick.', repeatLine: 'I told you already.', refusal: 'Get off my channel.', honksBack: true }, topics: ['directions', 'rumor', 'tow', 'askTow', 'askAid', 'aidOffer', 'patch', 'patchRequest', 'trade', ...PARLEY] },
   raider: { voice: { greeting: 'Get lost.', repeatLine: 'Get lost.', refusal: 'Heh. No.', honksBack: false }, topics: ['demand', ...PARLEY] },
   scumbag: { voice: null, topics: ['demand', ...PARLEY] },
   coward: { voice: null, topics: PARLEY },
   brave: { voice: null, topics: PARLEY },
-  lawman: { voice: { greeting: 'Speak up.', repeatLine: 'Heard you the first time.', refusal: 'Clear the channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow', ...PARLEY] },
-  courier: { voice: { greeting: 'Make it short.', repeatLine: 'Said that already.', refusal: 'No time. Out.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tow', 'askTow', 'trade', ...PARLEY] },
-  roamer: { voice: { greeting: 'What do you want?', repeatLine: 'Old news, friend.', refusal: 'Not talking.', honksBack: true }, topics: ['directions', 'rumor', 'tow', 'askTow', 'patch', 'patchRequest', 'trade', ...PARLEY] },
-  supplier: { voice: { greeting: 'Listening.', repeatLine: 'We covered that.', refusal: 'Keep off this channel.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tow', 'askTow', 'trade', ...PARLEY] },
+  lawman: { voice: { greeting: 'Speak up.', repeatLine: 'Heard you the first time.', refusal: 'Clear the channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'askAid', 'aidOffer', ...PARLEY] },
+  courier: { voice: { greeting: 'Make it short.', repeatLine: 'Said that already.', refusal: 'No time. Out.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tow', 'askTow', 'askAid', 'aidOffer', 'trade', ...PARLEY] },
+  roamer: { voice: { greeting: 'What do you want?', repeatLine: 'Old news, friend.', refusal: 'Not talking.', honksBack: true }, topics: ['directions', 'rumor', 'tow', 'askTow', 'askAid', 'aidOffer', 'patch', 'patchRequest', 'trade', ...PARLEY] },
+  vulture: { voice: { greeting: 'Keep it short.', repeatLine: 'Already said.', refusal: 'Nothing for you.', honksBack: false }, topics: ['directions', 'rumor', 'tow', 'patchRequest', 'trade', ...PARLEY] },
+  supplier: { voice: { greeting: 'Listening.', repeatLine: 'We covered that.', refusal: 'Keep off this channel.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tow', 'askTow', 'askAid', 'aidOffer', 'trade', ...PARLEY] },
   guard: { voice: { greeting: 'State your business.', repeatLine: 'Heard you.', refusal: 'Move along.', honksBack: false }, topics: ['directions', ...PARLEY] },
   merc: { voice: { greeting: 'Talk.', repeatLine: 'You said that.', refusal: 'Not interested.', honksBack: false }, topics: ['directions', ...PARLEY] },
 };

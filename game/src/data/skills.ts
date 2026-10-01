@@ -88,6 +88,9 @@ export const XP_SOURCES: Record<XpSource, XpSourceDef> = {
   // Per money unit of tow fee the player waives, paid on arrival. The profit weight, so kindness teaches as much as
   // earning that money would. Target: the towed driver.
   freeTow: { skill: 'social', weight: 0.8, scaled: false, repeat: 0.5 },
+  // Per money unit of fuel and supplies the player gives free, at the town supply price, paid when they change hands.
+  // The profit weight, like freeTow. Target: the driver who got them.
+  aid: { skill: 'social', weight: 0.8, scaled: false, repeat: 0.5 },
 };
 
 export const XP_RULES = {

@@ -1,12 +1,15 @@
 import {
   captureDrive,
   restoreDrive,
+  type DriveSnapshot,
+  restFrames,
   trailFrames,
   type Drive,
   type TurnResult,
 } from "../phys/drive";
 import type { PreparedTurn, TurnRequest, TurnResponse } from "../phys/turn";
 import { mergePerf } from "../perf";
+import { reportError } from "./crash";
 import { playerVehicle } from "../sim/damage";
 import type { GameEvent, World } from "../sim/types";
 import { dist, type Vec } from "../sim/vec";
@@ -22,6 +25,8 @@ export type LiveVision = {
 
 export type Playback = {
   result: TurnResult;
+  // The worker's snapshot that `result.next` was restored from, which the next turn starts from.
+  nextSnapshot: DriveSnapshot;
   before: World;
   lastTick: number | null;
   elapsed: number;
@@ -69,10 +74,12 @@ export function overshoots(world: World, next: Pick<World, "events" | "vehicles"
 }
 
 // A truck on a rope has no physics frames. Its tower placed it along its trail after the physics step. A truck let
-// off the rope at the end of the turn, like on arrival in town, rode the rope during the step too.
+// off the rope at the end of the turn, like on arrival in town, rode the rope during the step too. One that
+// jumped this turn, like a retreating truck sent home, has no trail and stands at its new pose.
 export function addRopeFrames(before: World, after: World, frames: TurnResult["frames"]): void {
   for (const v of after.vehicles) {
-    if (isOnRope(after, v.id) || (!frames[v.id] && isOnRope(before, v.id))) frames[v.id] = trailFrames(after, v);
+    if (!isOnRope(after, v.id) && (frames[v.id] || !isOnRope(before, v.id))) continue;
+    frames[v.id] = v.trail.length < 2 ? restFrames(after, v) : trailFrames(after, v);
   }
 }
 
@@ -114,9 +121,7 @@ export class Travel {
   }
 
   // Returns whether to play one turn now.
-  handleSpace(event: KeyboardEvent, playing: boolean, world: World): boolean {
-    event.preventDefault();
-    if (event.repeat) return false;
+  pressTurn(playing: boolean, world: World): boolean {
     if (autoRuns(world)) {
       this.toggleAutoHalt();
       return false;
@@ -126,14 +131,14 @@ export class Travel {
     return this.press(performance.now(), playing, follow);
   }
 
-  // Space stops the turns that run on their own while the player is stranded, and the next Space restarts them.
+  // A turn press stops the turns that run on their own while the player is stranded, and the next press restarts them.
   // Holding the restarting press fast-forwards, as in travel.
   private toggleAutoHalt(): void {
     this.autoHalted = !this.autoHalted;
     if (!this.autoHalted) this.pressedAt = performance.now();
   }
 
-  // Whether turns run on their own now. A stop lasts until Space or until the stranded spell ends.
+  // Whether turns run on their own now. A stop lasts until a turn press or until the stranded spell ends.
   autoAllowed(world: World): boolean {
     if (!autoRuns(world)) this.autoHalted = false;
     return autoRuns(world) && !this.autoHalted;
@@ -150,6 +155,12 @@ export class Travel {
     if (autoRuns(world)) this.autoHalted = true;
     this.pause();
     return true;
+  }
+
+  // A failed turn stops every automatic turn, so the same turn is not retried each frame.
+  abandon(world: World): void {
+    this.stopAuto(world);
+    this.pause();
   }
 
   release(): void {
@@ -220,7 +231,7 @@ export class Travel {
 
   prepareNext(world: World, playback: Playback | null, now: number): void {
     if (playback && (this.shouldAdvance(now) || this.onRope(world)))
-      this.turns.prepare(world, playback.result.next);
+      this.turns.prepareFrom(world, playback.nextSnapshot);
   }
 
   beginPlayback(
@@ -230,15 +241,15 @@ export class Travel {
     elapsed: number,
   ): { world: World; playback: Playback; towed: boolean } {
     const world = { ...prepared.world, terrain: before.terrain };
-    const result: TurnResult = {
-      ...prepared.result,
-      next: restoreDrive(prepared.result.next),
-    };
+    // Frames first: a throw here must not leave a restored Rapier world behind.
+    addRopeFrames(before, world, prepared.result.frames);
+    const nextSnapshot = prepared.result.next;
+    const result: TurnResult = { ...prepared.result, next: restoreDrive(nextSnapshot) };
     if (!playerCanAct(world)) this.pause();
     const towed = isTowed(before) || isTowed(world);
-    addRopeFrames(before, world, result.frames);
     const playback: Playback = {
       result,
+      nextSnapshot,
       before,
       lastTick: now,
       elapsed,
@@ -253,9 +264,9 @@ export class Travel {
     return this.isFast(now) ? fastSpeed : 1;
   }
 
-  advanceClock(playback: Playback, now: number, speed: number): number {
+  advanceClock(playback: Playback, now: number, speed: number, maxFrameMs: number): number {
     if (playback.lastTick !== null)
-      playback.elapsed += (now - playback.lastTick) * speed;
+      playback.elapsed += Math.min(now - playback.lastTick, maxFrameMs) * speed;
     playback.lastTick = now;
     return playback.elapsed;
   }
@@ -277,6 +288,7 @@ export class TurnPreparation {
     id: number;
     before: World;
     ready: PreparedTurn | null;
+    failure: string | null;
   } | null = null;
 
   private createWorker(): Worker {
@@ -285,35 +297,44 @@ export class TurnPreparation {
     });
     worker.onmessage = (event: MessageEvent<TurnResponse>) => {
       const response = event.data;
-      if ("error" in response) throw new Error(response.error);
+      if ("error" in response) return this.fail(response.id, response.error);
       // A warm-up turn is no player turn, so it keeps its own timer.
       mergePerf(response.id === this.warmId ? { "turn-warm": response.perf.turn } : response.perf);
       if (this.pending?.id === response.id) this.pending.ready = response.turn;
     };
-    worker.onerror = (event) => {
-      throw new Error(`Turn worker failed: ${event.message}`);
-    };
-    worker.onmessageerror = () => {
-      throw new Error("Could not read turn worker response");
-    };
+    worker.onerror = (event) => this.fail(null, `Turn worker failed: ${event.message}`);
+    worker.onmessageerror = () => this.fail(null, "Could not read turn worker response");
     return worker;
+  }
+
+  // A failure of the pending turn waits in it for take() to throw. A failure that belongs to no pending turn, like the
+  // warm-up's, goes to the error route. A worker event without a request id belongs to the pending turn.
+  private fail(id: number | null, message: string): void {
+    if (this.pending && (id === null || this.pending.id === id)) this.pending.failure = message;
+    else reportError(new Error(message));
   }
 
   // Runs the turn after `world` once and drops it. The worker then has its route grids built, its code compiled
   // and the routes of that turn cached before the player's first turn. No turn runs during a radio call or after death.
   warm(world: World, drive: Drive): void {
     if (world.player.call || world.player.state === "dead") return;
-    this.warmId = this.post(world, drive);
+    this.warmId = this.post(world, captureDrive(drive));
   }
 
   prepare(world: World, drive: Drive): void {
-    if (this.pending?.before === world) return;
-    this.pending = { id: this.post(world, drive), before: world, ready: null };
+    if (this.pending?.before !== world) this.prepareFrom(world, captureDrive(drive));
   }
 
-  private post(world: World, drive: Drive): number {
+  // Prepares the turn after `world` from a snapshot already in hand. It posts a copy, since a post transfers its
+  // buffer and the caller keeps the snapshot for a retry.
+  prepareFrom(world: World, saved: DriveSnapshot): void {
+    if (this.pending?.before === world) return;
+    const copy = { ...saved, snapshot: saved.snapshot.slice() };
+    this.pending = { id: this.post(world, copy), before: world, ready: null, failure: null };
+  }
+
+  private post(world: World, saved: DriveSnapshot): number {
     const { terrain, ...state } = world;
-    const saved = captureDrive(drive);
     const id = ++this.serial;
     // Terrain identity owns route caches, so keep one terrain instance in the worker.
     this.worker ??= this.createWorker();
@@ -330,10 +351,17 @@ export class TurnPreparation {
     return id;
   }
 
+  // The prepared turn after `world`, or null while it is not ready. It throws the worker's failure once and then
+  // forgets the turn, so the next prepare() asks again.
   take(world: World): PreparedTurn | null {
-    if (this.pending?.before !== world || !this.pending.ready) return null;
-    const result = this.pending.ready;
+    const pending = this.pending;
+    if (pending?.before !== world) return null;
+    if (pending.failure) {
+      this.pending = null;
+      throw new Error(pending.failure);
+    }
+    if (!pending.ready) return null;
     this.pending = null;
-    return result;
+    return pending.ready;
   }
 }

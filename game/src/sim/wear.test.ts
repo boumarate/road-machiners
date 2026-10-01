@@ -9,7 +9,7 @@ import { isStranded } from './stats';
 import { addState } from './states';
 import { tileAt } from './terrain';
 import type { PartInstance, Vehicle, World } from './types';
-import { applyWear, damagePart, isJunk, maxHp, rebuildJunk, restorePart, wornDef } from './wear';
+import { applyWear, carryHp, damagePart, isJunk, maxHp, rebuildJunk, restorePart, wornDef } from './wear';
 
 // Sets a vehicle's trail to a single straight segment of the given length, and its end-of-turn speed.
 function drive(v: Vehicle, len: number): void {
@@ -363,5 +363,15 @@ describe('rough ground practice', () => {
     drive(npc, 6);
     applyWear(w);
     expect(practiceOf(w, 'roughTiles')).toEqual([]);
+  });
+});
+
+describe('carryHp', () => {
+  it('clamps carried HP to the part range and keeps a working part alive', () => {
+    const mg = part('mg', 0);
+    carryHp(mg, 9999);
+    expect(mg.hp).toBe(maxHp(mg));
+    carryHp(mg, 0);
+    expect(mg.hp).toBe(1);
   });
 });

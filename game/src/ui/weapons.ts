@@ -1,7 +1,7 @@
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { fireBlock, gunOf, hitOdds, type FireBlock } from "../sim/combat";
-import { isKnockedOut } from "../sim/defeat";
+import { gaveUp, isKnockedOut } from "../sim/defeat";
 import { findPart, playerVehicle } from "../sim/damage";
 import { vehicleStats, type MountedWeapon } from "../sim/stats";
 import type { Aim, Vehicle, World } from "../sim/types";
@@ -34,7 +34,7 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
 export type WeaponMark = { slot: number; look: "mg" | "cannon"; status: string; ready: boolean };
 // Timed work a seen NPC does, with its progress from 0 to 1.
 export type JobMark = { label: string; progress: number };
-export type VehicleMark = { weapons: WeaponMark[]; radio: boolean; job: JobMark | null; out: boolean };
+export type VehicleMark = { weapons: WeaponMark[]; radio: boolean; job: JobMark | null; out: boolean; gaveUp: boolean };
 
 // Markers above vehicles, by vehicle id: each player weapon aimed at the vehicle with its status, the
 // radio key on the hovered truck when it can take a call, the job of each seen NPC, and each seen knocked-out NPC.
@@ -43,7 +43,7 @@ export function vehicleMarks(w: World, hovered: string | null): Map<string, Vehi
   const markOf = (id: string) => {
     const found = marks.get(id);
     if (found) return found;
-    const made: VehicleMark = { weapons: [], radio: false, job: null, out: false };
+    const made: VehicleMark = { weapons: [], radio: false, job: null, out: false, gaveUp: false };
     marks.set(id, made);
     return made;
   };
@@ -56,7 +56,10 @@ export function vehicleMarks(w: World, hovered: string | null): Map<string, Vehi
   for (const v of w.vehicles.filter((x) => x.brain && playerSees(w, x.pos))) {
     const job = seenNpcJob(w, v);
     if (job) markOf(v.id).job = job;
-    if (isKnockedOut(v)) markOf(v.id).out = true;
+    if (isKnockedOut(v)) {
+      markOf(v.id).out = true;
+      markOf(v.id).gaveUp = gaveUp(v);
+    }
   }
   return marks;
 }
@@ -182,7 +185,7 @@ export class WeaponPanel {
       { class: "weapon-head" },
       el("h3", {}, "Weapons"),
       this.expanded ? this.renderAllButton(locked) : null,
-      el("button", { class: "weapon-toggle", "aria-expanded": String(this.expanded), onclick: () => this.toggleVisible(), title: "Show or hide weapons [X]" }, this.expanded ? "Hide [X]" : "Show [X]"),
+      el("button", { class: "weapon-toggle", "aria-expanded": String(this.expanded), onclick: () => this.host.runKey("KeyX"), title: "Show or hide weapons [X]" }, this.expanded ? "Hide [X]" : "Show [X]"),
     );
     this.root.replaceChildren(head, ...(this.expanded ? [this.renderControls(w, locked)] : []));
     this.turn.replaceChildren(this.renderTurnButton(phase));
@@ -192,13 +195,26 @@ export class WeaponPanel {
   private renderTurnButton(phase: ReturnType<UiHost["getTurnPhase"]>): HTMLElement {
     if (this.host.autoTravel())
       return el('button', {
-        class: 'end-turn auto', title: 'Automatic travel. Space to stop.',
-        'aria-label': 'Stop automatic travel', onclick: () => this.host.endTurn(),
+        class: 'end-turn auto', title: 'Automatic travel. Space or click to stop.',
+        'aria-label': 'Stop automatic travel', onpointerdown: (e: Event) => this.pressTurn(e as PointerEvent),
       }, createIcon('turn'), el('span', {}, 'Auto'));
     return el('button', {
-      class: 'end-turn', disabled: phase !== null, title: 'End turn [Space]',
-      'aria-label': phase ? `${phase} in progress` : 'End turn', onclick: () => this.host.endTurn(),
+      class: 'end-turn', disabled: phase !== null, title: 'End turn [Space]. Hold to fast-forward.',
+      'aria-label': phase ? `${phase} in progress` : 'End turn', onpointerdown: (e: Event) => this.pressTurn(e as PointerEvent),
     }, createIcon('turn'), el('span', {}, phase ? `${phase}…` : 'Space'));
+  }
+
+  // Presses like Space keydown now and releases like Space keyup when this press ends, even if the button is redrawn.
+  private pressTurn(e: PointerEvent): void {
+    if (e.button !== 0) return;
+    this.host.pressTurn();
+    const release = (): void => {
+      window.removeEventListener('pointerup', release);
+      window.removeEventListener('pointercancel', release);
+      this.host.releaseTurn();
+    };
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
   }
 
   private renderAllButton(locked: boolean): HTMLElement {
@@ -210,7 +226,7 @@ export class WeaponPanel {
         "aria-pressed": String(all),
         disabled: locked,
         title: "Aim all weapons with the next click [0]",
-        onclick: () => this.selectWeapon(null),
+        onclick: () => this.host.runKey("Digit0"),
       },
       "All [0]",
     );
@@ -227,7 +243,7 @@ export class WeaponPanel {
         checked: w.player.autoFire,
         key: "Q",
         title: "Auto fire: guns shoot at hostiles on their own [Q]",
-        onclick: () => this.toggleAuto(),
+        onclick: () => this.host.runKey("KeyQ"),
       }),
       el(
         "div",
@@ -326,6 +342,15 @@ export class WeaponPanel {
   selectWeapon(id: string | null): void {
     if (this.host.getTurnPhase() !== null) return;
     this.host.selectWeapon(id);
+  }
+
+  // A digit key picks the weapon at that index, and picks all again when it is already selected.
+  selectIndex(i: number): void {
+    const w = this.host.world();
+    const all = vehicleStats(w, playerVehicle(w)).weapons;
+    if (i < 0 || i >= all.length) return;
+    const id = all[i].part.id;
+    this.selectWeapon(this.host.selectedWeapon() === id ? null : id);
   }
 
   toggleVisible(): void {

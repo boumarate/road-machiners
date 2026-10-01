@@ -8,20 +8,22 @@
 // can rob, mostly a weaker one away from guards.
 
 import { dealAvailable } from './patch';
+import { canSpareFor } from './aid';
 import { ECONOMY } from '../data/goods';
 import { GOOD_SOURCES, SHOPS, type ShopDef } from '../data/market';
 import {
-  DECISIONS, HUNT, MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
+  DECISIONS, HUNT, MIN_CHANCE, NPCS, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
   type DecisionId, type DecisionOptions, type Trait, type TraitId, type TraitWeights, type Weighted, type WeightChange,
 } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { isHostile } from './combat';
+import { huntsForLoot, inCombatWithOther, isHostile } from './combat';
 import { ramFactor, ramImpact } from './crash-contact';
 import { isKnockedOut } from './defeat';
 import { vehicleById } from './damage';
 import { contactsOf } from './detect';
 import { getTradePrice } from './economy';
+import { cargoValue } from './market';
 import { maxHp } from './wear';
 import { corePart, freeCells, hasLoot, mountedParts } from './grid';
 import { isTownGuarded } from './guards';
@@ -30,7 +32,7 @@ import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { skillEffect } from './progress';
 import { randRange } from './rng';
-import { canReachSalvage, canTakeAny, canTakeFromTruck, siteLootTable } from './salvage';
+import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable } from './salvage';
 import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { boundTo, givesWord, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
@@ -44,6 +46,7 @@ import { canVehicleSee } from './vision';
 export type NpcProfile = {
   towns: string[];
   bases: string[];
+  markets: string[];
   salvageSites: string[];
   supplySites: string[];
   travelSites: string[];
@@ -74,10 +77,11 @@ export function profileOf(traits: TraitId[]): NpcProfile {
     if (!Object.hasOwn(TRAITS, id)) throw new Error(`Unknown trait ${id}`);
     return TRAITS[id];
   });
-  const union = (key: 'towns' | 'bases' | 'salvageSites' | 'supplySites' | 'travelSites' | 'haulSites') => [...new Set(defs.flatMap((t) => t[key]))];
+  const union = (key: 'towns' | 'bases' | 'markets' | 'salvageSites' | 'supplySites' | 'travelSites' | 'haulSites') => [...new Set(defs.flatMap((t) => t[key]))];
   return {
     towns: union('towns'),
     bases: union('bases'),
+    markets: union('markets'),
     salvageSites: union('salvageSites'),
     supplySites: union('supplySites'),
     travelSites: union('travelSites'),
@@ -116,7 +120,7 @@ export function bodyCondition(vehicle: Vehicle): number {
 }
 
 // Damage times rounds summed over working guns.
-function firepower(world: World, vehicle: Vehicle): number {
+export function firepower(world: World, vehicle: Vehicle): number {
   return vehicleStats(world, vehicle).weapons.filter((weapon) => weapon.part.hp > 0).reduce((sum, weapon) => sum + weapon.def.round.damage * weapon.def.rounds, 0);
 }
 
@@ -240,13 +244,43 @@ export function visibleDowned(world: World, vehicle: Vehicle): Vehicle[] {
   return visible.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
 }
 
+// Loot another truck is looting is not the driver's to take. The claim is checked after sight, since it scans every truck.
 function seesDowned(world: World, vehicle: Vehicle, target: Vehicle): boolean {
   if (target.id === vehicle.id || !isKnockedOut(target) || !canVehicleSee(world, vehicle, target.pos)) return false;
-  return !inTowReach(vehicle, target) || canTakeFromTruck(vehicle, target);
+  return (!inTowReach(vehicle, target) || canTakeFromTruck(vehicle, target)) && lootTaken(world, vehicle, target.id) === null;
 }
 
 function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
-  return canVehicleSee(world, vehicle, stock.pos) && (!canReachSalvage(vehicle, stock) || canTakeAny(world, vehicle, stock));
+  if (backedOff(stock, vehicle.id) || !canVehicleSee(world, vehicle, stock.pos)) return false;
+  return (!canReachSalvage(vehicle, stock) || canTakeAny(world, vehicle, stock)) && lootTaken(world, vehicle, stock.id) === null;
+}
+
+// Why the driver may not start on the loot target: another truck is looting it. The rule blocks starts only, so a
+// job the driver already runs there keeps going. Null for no target, which nobody can claim.
+export function lootTaken(world: World, vehicle: Vehicle, targetId: string | null): string | null {
+  if (targetId === null || worksOnLoot(vehicle, targetId)) return null;
+  return lootBlocker(world, vehicle, targetId) ? 'someone else is looting it' : null;
+}
+
+// The driver's job works the target.
+export function worksOnLoot(vehicle: Vehicle, targetId: string): boolean {
+  return jobTarget(vehicle) === targetId;
+}
+
+// Why a loot goal on a stock ends. A driver learns a stock is empty only once it can reach it.
+export function stockLootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
+  const stock = world.salvage.find((s) => s.id === goal.targetId);
+  if (!stock) return 'the loot is gone';
+  if (!canReachSalvage(vehicle, stock)) return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
+  if (!hasSalvage(stock)) return 'nothing left to loot';
+  return canTakeAny(world, vehicle, stock) ? null : 'cargo cannot hold the loot';
+}
+
+// Why a loot goal on a truck ends. A knocked-out truck is loot until it wakes. A refit on it keeps going until it ends.
+export function truckLootInvalid(vehicle: Vehicle, truck: Vehicle): string | null {
+  if (!isKnockedOut(truck)) return 'the truck got away';
+  if (vehicle.job?.kind === 'refit' || !inTowReach(vehicle, truck)) return null;
+  return canTakeFromTruck(vehicle, truck) ? null : 'cargo cannot hold the loot';
 }
 
 // Known salvage sites other than the one the NPC stands at.
@@ -256,8 +290,8 @@ export function salvageSitesAway(vehicle: Vehicle) {
 
 let grounds: readonly Vec[] | null = null;
 
-// Where raiders look for prey: points every HUNT.roadSpacing tiles along the roads, kept only far from every
-// site, and the pads of every location with salvage. Built once from the region.
+// Where raiders look for prey and vultures prowl for wrecks: points every HUNT.roadSpacing tiles along the roads, kept
+// only far from every site, and the pads of every location with salvage. Built once from the region.
 export function huntingGrounds(): readonly Vec[] {
   if (grounds) return grounds;
   const sites = [...REGION.towns, ...REGION.locations];
@@ -290,25 +324,62 @@ export function huntingGroundsAway(vehicle: Vehicle): Vec[] {
   return huntingGrounds().filter((point) => dist(vehicle.pos, point) > RULES.arriveRadius * 2);
 }
 
+const raiderStops = new Map<string, readonly Vec[]>();
+
+// The towns where lawmen live: the `sites` spawn of every lawman template.
+export function lawmanTowns(): readonly Site[] {
+  const ids = new Set(Object.values(NPCS).filter((t) => t.traits.includes('lawman') && t.spawn.kind === 'sites').flatMap((t) => (t.spawn.kind === 'sites' ? t.spawn.ids : [])));
+  return [...ids].map(getKnownSite);
+}
+
+// The hunting grounds a camp's raiders raid: those nearer it than any other camp, and farther than HUNT.lawReach from
+// every gate of a lawman town. Built once per camp from the region.
+export function raiderGrounds(camp: Site): readonly Vec[] {
+  const cached = raiderStops.get(camp.id);
+  if (cached) return cached;
+  const camps = REGION.locations.filter((site) => site.kind === 'camp');
+  const nearestCamp = (p: Vec) => camps.reduce((best, c) => (dist(p, c.pos) < dist(p, best.pos) ? c : best));
+  const gates = lawmanTowns().flatMap((town) => siteGates(town));
+  const points = huntingGrounds().filter((p) => nearestCamp(p).id === camp.id && gates.every((gate) => dist(gate, p) > HUNT.lawReach));
+  raiderStops.set(camp.id, points);
+  return points;
+}
+
+// A raider's camp grounds it has not arrived at.
+export function raiderGroundsAway(vehicle: Vehicle): Vec[] {
+  return raiderGrounds(homeCamp(vehicle)).filter((point) => dist(vehicle.pos, point) > RULES.arriveRadius * 2);
+}
+
 // ---- Patrols, trips and hauls.
 
-// The known town nearest the driver's home, which its patrols circle.
-export function patrolTown(vehicle: Vehicle) {
+function nearestHome(vehicle: Vehicle, ids: readonly string[]): Site {
   const home = vehicle.brain!.home;
-  return npcProfile(vehicle).towns.map(getKnownSite).sort((a, b) => dist(home, a.pos) - dist(home, b.pos))[0];
+  return ids.map(getKnownSite).sort((a, b) => dist(home, a.pos) - dist(home, b.pos))[0];
+}
+
+// The camp nearest the driver's home among the bases its profile knows.
+export function homeCamp(vehicle: Vehicle): Site {
+  const { bases } = npcProfile(vehicle);
+  if (bases.length === 0) throw new Error(`${vehicle.id} knows no camp`);
+  return nearestHome(vehicle, bases);
+}
+
+// The site the driver's patrols circle: its camp when it has bases, else the known town nearest its home.
+export function patrolSite(vehicle: Vehicle): Site {
+  return npcProfile(vehicle).bases.length > 0 ? homeCamp(vehicle) : nearestHome(vehicle, npcProfile(vehicle).towns);
 }
 
 const patrolStops = new Map<string, readonly Vec[]>();
 
-// Where a patrol of a town drives: points every NPC_BEHAVIOR.patrolSpacing tiles along the roads, within
-// NPC_BEHAVIOR.patrolRadius of a town gate and outside every site. Built once per town from the region.
-export function patrolPoints(town: Site): readonly Vec[] {
-  const cached = patrolStops.get(town.id);
+// Where a patrol of a town or camp drives: points every NPC_BEHAVIOR.patrolSpacing tiles along the roads, within
+// NPC_BEHAVIOR.patrolRadius of a gate and outside every site. Built once per site from the region.
+export function patrolPoints(site: Site): readonly Vec[] {
+  const cached = patrolStops.get(site.id);
   if (cached) return cached;
-  const gates = siteGates(town);
+  const gates = siteGates(site);
   const near = (p: Vec) => gates.some((gate) => dist(gate, p) <= NPC_BEHAVIOR.patrolRadius);
   const points = REGION.roads.flatMap((road) => pointsAlong(road, NPC_BEHAVIOR.patrolSpacing)).filter((p) => near(p) && siteUnder(p) === null);
-  patrolStops.set(town.id, points);
+  patrolStops.set(site.id, points);
   return points;
 }
 
@@ -324,19 +395,12 @@ export function haulGoods(siteId: string): string[] {
   return goods;
 }
 
-// True while an NPC driver fights or flees a truck other than `otherId`. Such a driver takes no calls or offers
-// from that truck, and nobody but its foe starts a robbery, tow or hire with it.
-export function busyWithFight(vehicle: Vehicle, otherId: string): boolean {
-  const top = vehicle.brain ? topGoal(vehicle) : null;
-  return (top?.kind === 'fight' || top?.kind === 'flee') && top.targetId !== otherId;
-}
-
 // ---- Robbery.
 
-// A robber can rob a truck it sees, that is fair game, that is not busy fighting another, and that is robbable.
+// A robber can rob a truck it sees, that is fair game, that is not in combat with another, and that is robbable.
 // Cheap checks run before the sight line.
 export function canRob(w: World, robber: Vehicle, target: Vehicle): boolean {
-  if (robber.id === target.id || !isRobbable(w, target) || busyWithFight(target, robber.id)) return false;
+  if (robber.id === target.id || !isRobbable(w, target) || inCombatWithOther(w, target, robber.id)) return false;
   return isFairGame(w, robber, target) && canVehicleSee(w, robber, target.pos);
 }
 
@@ -354,6 +418,13 @@ function isRobbable(w: World, target: Vehicle): boolean {
 type Availability = (world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null) => boolean;
 
 const always = (): boolean => true;
+
+// A driver gives the player fuel or supplies only from stock above its trade reserve, and only while no aid deal with
+// the player is open.
+function canSpareSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  if (subjectOf(world, decision, subject).id !== world.player.vehicleId) throw new Error(`${decision} gives aid only to the player`);
+  return canSpareFor(world, vehicle);
+}
 
 // A client hires a free merc it sees while on a trip, with the fee above its upkeep reserve.
 function canHireSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
@@ -427,13 +498,19 @@ function canLootSubject(world: World, vehicle: Vehicle, decision: DecisionId, su
   return truck !== undefined && seesDowned(world, vehicle, truck);
 }
 
-// Only raiders are hostile to trucks with loot, so only they have prey to hunt.
+// Only raiders are hostile to trucks with loot, so only they have prey to hunt, on the grounds of their own camp.
 function canRaid(_world: World, vehicle: Vehicle): boolean {
-  return vehicle.faction === 'raiders' && huntingGroundsAway(vehicle).length > 0;
+  return vehicle.faction === 'raiders' && raiderGroundsAway(vehicle).length > 0;
 }
 
+// Any driver that can drive can prowl to a hunting ground. Only vultures weigh it above the minimum.
+function canProwl(world: World, vehicle: Vehicle): boolean {
+  return canDrive(world, vehicle) && huntingGroundsAway(vehicle).length > 0;
+}
+
+// Lawmen patrol their town and raiders their camp, where they have road to drive.
 function canPatrol(_world: World, vehicle: Vehicle): boolean {
-  return hasTrait(vehicle, 'lawman') && patrolPoints(patrolTown(vehicle)).length > 0;
+  return (hasTrait(vehicle, 'lawman') || hasTrait(vehicle, 'raider')) && patrolPoints(patrolSite(vehicle)).length > 0;
 }
 
 function canTravel(_world: World, vehicle: Vehicle): boolean {
@@ -466,6 +543,7 @@ const AVAILABLE: Record<OptionName, Availability> = {
   trade: canTrade,
   scavenge: canScavenge,
   raid: canRaid,
+  prowl: canProwl,
   loot: canLootSubject,
   wait: always,
   patrol: canPatrol,
@@ -494,6 +572,8 @@ const AVAILABLE: Record<OptionName, Availability> = {
   hire: canHireSubject,
   take: canTakeSubject,
   decline: always,
+  give: canSpareSubject,
+  aid: canSpareSubject,
 };
 
 // ---- Situation factors, one per option. Each returns a number above 0.
@@ -537,14 +617,29 @@ function fleeFactor(world: World, vehicle: Vehicle, decision: DecisionId, subjec
   return factor(world, vehicle, decision, subject, danger);
 }
 
+type AppealCurve = { poor: number; rich: number; poorMul: number };
+
+// The factor for a cargo worth `value`: poorMul at or below poor, 1 at or above rich, geometric between.
+export function lootAppeal(value: number, curve: AppealCurve): number {
+  if (value <= curve.poor) return curve.poorMul;
+  if (value >= curve.rich) return 1;
+  return curve.poorMul ** (1 - (value - curve.poor) / (curve.rich - curve.poor));
+}
+
+// A grudge is about the driver, not the load, so a driver with revenge on the target ignores its cargo.
+function appealOf(world: World, vehicle: Vehicle, target: Vehicle, curve: AppealCurve): number {
+  return stateOf(world, 'revenge', vehicle.id, target.id) ? 1 : lootAppeal(cargoValue(target), curve);
+}
+
 // A robber mostly picks a target that looks weaker than itself times its boldness, away from town guards. Each
-// failed judgment scales rob down. Before the sighting's danger roll, `danger` is null and only guards count. The
+// failed judgment scales rob down, and so does a cheap cargo. Before the sighting's danger roll, `danger` is null and only guards count. The
 // player's social skill makes the player truck look more dangerous.
 function robFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
   const target = subjectOf(world, decision, subject);
   const seen = danger === null ? null : danger * (1 + skillEffect(world, target, 'social', 'robberyDanger'));
   const stronger = seen !== null && seen >= ownDanger(world, vehicle) * npcProfile(vehicle).boldness;
-  return (stronger ? NPC_BEHAVIOR.robStronger : 1) * guardFactor(vehicle, target, NPC_BEHAVIOR.robNearGuards);
+  const appeal = appealOf(world, vehicle, target, NPC_BEHAVIOR.lootAppeal.rob);
+  return (stronger ? NPC_BEHAVIOR.robStronger : 1) * appeal * guardFactor(vehicle, target, NPC_BEHAVIOR.robNearGuards);
 }
 
 // Guard caution: starting a fight or a robbery near a town gate is rare. It never lowers fighting back. Lawmen
@@ -554,11 +649,14 @@ function guardFactor(vehicle: Vehicle, subject: Vehicle, nearGuards: number): nu
   return isTownGuarded(vehicle.pos) || isTownGuarded(subject.pos) ? nearGuards : 1;
 }
 
-// A driver free of work mostly takes on a manageable group it sees, away from guards.
+// A driver free of work mostly takes on a manageable group it sees, away from guards. A raider there for the
+// loot attacks a cheap cargo rarely.
 function fightFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
   const target = subjectOf(world, decision, subject);
   const eager = !isBusy(vehicle) && danger !== null && isManageable(world, vehicle, danger);
-  return (eager ? NPC_BEHAVIOR.manageableFight : 1) * guardFactor(vehicle, target, NPC_BEHAVIOR.fightNearGuards);
+  const lootOnly = decision === 'hostileSeen' && huntsForLoot(world, vehicle, target);
+  const appeal = lootOnly ? appealOf(world, vehicle, target, NPC_BEHAVIOR.lootAppeal.raid) : 1;
+  return (eager ? NPC_BEHAVIOR.manageableFight : 1) * appeal * guardFactor(vehicle, target, NPC_BEHAVIOR.fightNearGuards);
 }
 
 // An attacked driver mostly defends against a manageable group, busy or not.
@@ -674,6 +772,7 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   trade: neutral,
   scavenge: scavengeFactor,
   raid: neutral,
+  prowl: neutral,
   loot: neutral,
   wait: neutral,
   patrol: neutral,
@@ -700,6 +799,8 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   hire: neutral,
   take: neutral,
   decline: (world, vehicle) => declineFactor(world, vehicle),
+  give: neutral,
+  aid: neutral,
 };
 
 // ---- Weights and the roll.
@@ -786,6 +887,7 @@ const DECISION_KINDS: Record<DecisionId, 'venture' | 'response'> = {
   truceOffered: 'response',
   mercyBegged: 'response',
   threatened: 'response',
+  warnedOff: 'response',
   mugging: 'response',
   strandedFoe: 'response',
   surrenderOffered: 'response',
@@ -793,11 +895,16 @@ const DECISION_KINDS: Record<DecisionId, 'venture' | 'response'> = {
   idle: 'venture',
   escortSeen: 'venture',
   hireOffered: 'response',
+  aidAsked: 'response',
+  needySeen: 'venture',
 };
 
-// A driver that gave its word starts no venture until the deal ends, except about the truck it gave it to.
+// A driver holding a pile claim starts no venture until the claim ends. A driver that gave its word starts none
+// until the deal ends, except about the truck it gave it to.
 export function keepsWord(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
-  if (DECISION_KINDS[decision] !== 'venture' || !givesWord(world, vehicle.id)) return false;
+  if (DECISION_KINDS[decision] !== 'venture') return false;
+  if (holdsClaim(world, vehicle.id)) return true;
+  if (!givesWord(world, vehicle.id)) return false;
   return subject === null || !boundTo(world, vehicle.id, subject);
 }
 

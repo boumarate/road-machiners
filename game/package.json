@@ -1,6 +1,5 @@
 {
   "name": "roam",
-  "version": "1.0.0",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -21,6 +20,7 @@
     "map:bake": "vite-node scripts/map-bake.mjs",
     "models:shapes": "node scripts/prop-shapes.mjs && node scripts/truck-shapes.mjs",
     "save:shape": "vite-node scripts/save-shape.mjs",
+    "wiki": "vite-node scripts/wiki.mjs",
     "itch": "node scripts/itch-publish.mjs"
   },
   "license": "ISC",

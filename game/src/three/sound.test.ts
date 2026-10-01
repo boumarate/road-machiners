@@ -15,13 +15,13 @@ describe("stingOf", () => {
     ];
     expect(stingOf(events, "p")).toBe("level-up");
   });
-  it("ignores spending and other drivers' arrivals", () => {
+  it("ignores spending and arrivals", () => {
     const events: GameEvent[] = [
       { t: "money", amount: -5, reason: "fuel" },
       { t: "arrived", vehicle: "npc1" },
     ];
     expect(stingOf(events, "p")).toBeNull();
-    expect(stingOf([{ t: "arrived", vehicle: "p" }], "p")).toBe("air-brake");
+    expect(stingOf([{ t: "arrived", vehicle: "p" }], "p")).toBeNull();
   });
   it("plays the defeat cue on a knockout", () => {
     expect(stingOf([{ t: "skillUp", skill: "driving", level: 2 }, { t: "knockout" }], "p")).toBe("defeat");
@@ -29,23 +29,27 @@ describe("stingOf", () => {
 });
 
 describe("loopLevels", () => {
-  const calm = { stormTiles: 100, turnsSinceDanger: Infinity, paused: false };
+  const calm = { stormTiles: 100, inCombat: false, paused: false };
   it("raises wind near storms", () => {
     expect(loopLevels(calm, MIX).windGain).toBe(MIX.wind.baseGain);
     expect(loopLevels({ ...calm, stormTiles: 0 }, MIX).windGain).toBe(MIX.wind.stormGain);
   });
-  it("switches music to combat while in danger", () => {
-    const l = loopLevels({ ...calm, turnsSinceDanger: 0 }, MIX);
-    expect([l.calmGain, l.combatGain]).toEqual([0, 1]);
+  it("switches music to combat while in combat", () => {
+    const fight = loopLevels({ ...calm, inCombat: true }, MIX);
+    expect([fight.calmGain, fight.combatGain]).toEqual([0, 1]);
+    const peace = loopLevels({ ...calm, inCombat: false }, MIX);
+    expect([peace.calmGain, peace.combatGain]).toEqual([1, 0]);
   });
   it("muffles music during a pause between turns", () => {
     expect(loopLevels(calm, MIX).musicCutoffHz).toBe(MIX.music.openCutoffHz);
     expect(loopLevels({ ...calm, paused: true }, MIX).musicCutoffHz).toBe(MIX.music.pauseCutoffHz);
   });
-  it("holds combat music for a few turns after the last hostile leaves sight", () => {
-    const hold = MIX.music.holdTurns;
-    expect(loopLevels({ ...calm, turnsSinceDanger: hold }, MIX).combatGain).toBe(1);
-    expect(loopLevels({ ...calm, turnsSinceDanger: hold + 1 }, MIX).combatGain).toBe(0);
+  it("keeps the music choice when paused or near storms", () => {
+    for (const inCombat of [true, false]) {
+      const base = loopLevels({ ...calm, inCombat }, MIX);
+      const other = loopLevels({ ...calm, inCombat, paused: true, stormTiles: 0 }, MIX);
+      expect([other.calmGain, other.combatGain]).toEqual([base.calmGain, base.combatGain]);
+    }
   });
 });
 
@@ -179,12 +183,6 @@ describe("CombatWatch", () => {
     expect(watch.observe(1, ["a"]).sighted).toBe(false);
     watch.observe(2, []);
     expect(watch.observe(2, ["a"]).sighted).toBe(false);
-  });
-  it("counts turns since the last danger", () => {
-    const watch = new CombatWatch();
-    expect(watch.observe(1, []).turnsSinceDanger).toBe(Infinity);
-    watch.observe(2, ["a"]);
-    expect(watch.observe(5, []).turnsSinceDanger).toBe(3);
   });
 });
 

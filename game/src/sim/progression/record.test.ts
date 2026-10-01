@@ -11,7 +11,7 @@ const SHORT_RUN = 60;
 // handful of turns; it does not need thousands to surface. Short enough to keep this check cheap, long enough
 // to have run through several bot decisions.
 const DETERMINISM_RUN = 15;
-const RUN_TIMEOUT = 30_000; // one world turn takes about 40 ms and a new world about 400 ms
+const RUN_TIMEOUT = 120_000; // one world turn takes about 40 ms and a new world about 400 ms; the suite runs these beside other heavy files, which triples the time
 
 describe('record', () => {
   it('gives the same trace for the same seed and archetype', () => {
@@ -23,12 +23,14 @@ describe('record', () => {
     expect(second).toEqual(first);
   }, RUN_TIMEOUT);
 
-  it('replays to the XP the world gave through practice', () => {
+  it('replays to the XP the world gave through practice', async () => {
     const lines: TraceLine[] = [];
     let last: World | null = null;
     for (const step of recordTurns(1337, 'scavenger', SHORT_RUN)) {
       lines.push(...step.lines);
       last = step.world;
+      // A minute of turns without a yield would starve the worker's status messages to the runner.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     if (!last) throw new Error('The recording ran no turns');
     const world = last;

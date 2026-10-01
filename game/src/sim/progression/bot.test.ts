@@ -1,7 +1,6 @@
 import { PRESSURE_MAX } from '../../data/market';
 import type { World } from '../types';
 import { describe, expect, it } from 'vitest';
-import { huntingGrounds } from '../npc-decisions';
 import { REGION } from '../../data/region';
 import { playerVehicle } from '../damage';
 import { makePart } from '../factory';
@@ -9,8 +8,8 @@ import { goodsCount, mountedParts } from '../grid';
 import { addGoods, removeAllGoods } from '../inventory';
 import { nearestPad, nearestTown } from '../sites';
 import { isStranded } from '../stats';
-import { addVehicle, emptyWorld } from '../testkit';
-import { botOrders } from './bot';
+import { addVehicle, emptyWorld , startCombat } from '../testkit';
+import { botOrders, raiderHuntGrounds } from './bot';
 
 function town(id: string) {
   const found = REGION.towns.find((t) => t.id === id);
@@ -100,12 +99,12 @@ describe('botOrders', () => {
     return w;
   }
 
-  it('has a scavenger beside a wreck wait to search it while a hostile is in sight', () => {
+  it('has a scavenger beside a wreck wait to search it while in combat', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = playerVehicle(w);
     me.speed = 0;
     w.salvage.push({ id: 'wreck-beside', pos: { x: 31.5, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [] });
-    addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
+    startCombat(w, addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 }), me);
 
     const turn = botOrders(w, 'scavenger');
 
@@ -147,7 +146,7 @@ describe('botOrders', () => {
 
   // A parked raider can hold the exact point of a ground, so the stop order ends a little short of it.
   it('has a fighter whose stop ended near a hunting ground go on to the next one', () => {
-    const ground = huntingGrounds()[1];
+    const ground = raiderHuntGrounds()[1];
     const w = parkedAt('bowl');
     const me = playerVehicle(w);
     me.pos = { x: ground.x + 1.5, y: ground.y };
@@ -155,6 +154,6 @@ describe('botOrders', () => {
 
     const turn = botOrders(w, 'fighter');
 
-    expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: huntingGrounds()[2] });
+    expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: raiderHuntGrounds()[2] });
   });
 });

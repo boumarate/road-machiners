@@ -89,12 +89,13 @@ export const CONTRACTS = {
   warnTurns: Math.round(TIME.turnsPerDay / 12),
 
   haul: {
-    // The deadline is the estimated travel turns times this factor, so a normal detour, a stop for
-    // fuel or a fight does not expire the contract on its own.
-    durationFactor: 6,
-    // A tier wage is what salvage earns. A haul pays about three of them, so a contract beats
-    // scavenging along the same road.
-    rewardFactor: 3.2,
+    // The window is the estimated travel turns times this factor, counted from acceptance, so a
+    // normal detour, a stop for fuel or a fight does not expire the contract on its own.
+    durationFactor: 8,
+    // A tier wage is what salvage earns. The estimate counts one way, so a haul pays 2.5 wages per
+    // turn of the round trip: it beats scavenging even when the truck returns empty, and pays for
+    // the cargo cells and the failure risk.
+    rewardFactor: 5,
     // On top of the wage, the client pays a small cut of the hauled goods' value, since carrying
     // something worth money is worth more to the client than empty road time.
     valueShare: 0.05,
@@ -104,11 +105,20 @@ export const CONTRACTS = {
     penaltyShare: 1,
     // Social XP per money of the reward, all of which pays for the trip.
     xpPerEffort: 0.1,
+    // A rush haul is a standard haul with a short window and a premium.
+    rush: {
+      // Share of rolled hauls that are rush jobs.
+      chance: 0.25,
+      // The rush window is the estimated travel turns times this factor: tight, but a truck driving straight there makes it.
+      durationFactor: 1.5,
+      // Multiplier on the standard reward.
+      premium: 1.75,
+    },
   },
 
   fetch: {
     // A fetch has no fixed travel: the part can come from a garage or the field. The window is a
-    // flat turn range that stands in for the effort of finding one, and sets the deadline.
+    // flat turn range that stands in for the effort of finding one, and sets the window from acceptance.
     durationTurns: [300, 800] as [number, number],
     // The reward is the part's own pristine buy price plus this search fee: turns of effort spent
     // finding a part of a named type, in any condition, at the fetch's own tier wage.
@@ -122,7 +132,7 @@ export const CONTRACTS = {
 
   bounty: {
     // Long enough that a raider's own patrol or camp turns do not expire the contract before the
-    // player can reach and fight it. The window only sets the deadline: it does not change the pay.
+    // player can reach and fight it. The window counts from acceptance and does not change the pay.
     durationTurns: [400, 1000] as [number, number],
     // Share of the target's own total worth, chassis plus every part, paid for the kill. A fifth of
     // its worth pays for the risk of the fight without outpricing the wreck's own salvage.
@@ -340,3 +350,8 @@ export const HARNESS = {
   searchRate: 2,
 };
 
+
+// Every shop, which is the two towns and the stalls: where a driver with no camps sells.
+export const TOWN_MARKETS = Object.keys(SHOPS);
+// The stalls alone, where a driver with no towns sells.
+export const STALL_MARKETS = Object.values(SHOPS).filter((s) => s.kind === 'stall').map((s) => s.id);

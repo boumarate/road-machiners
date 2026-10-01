@@ -1,9 +1,12 @@
 import { GAME_VERSION } from "../config";
+import { playerAid, readyAid } from "../sim/aid";
+import { aidData } from "../sim/states";
+import { aidGoods } from "./format";
 import { tradePartner, tradeReady } from "../sim/economy";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { maxHp } from "../sim/wear";
-import { playerVehicle } from "../sim/damage";
+import { playerVehicle, vehicleById } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
 import { baseGrid, corePart, mountedParts, mountedItems, itemSize, MOUNT_CELLS } from "../sim/grid";
 import { fuelCap, hasWorkingEngine, isStranded, isWorking, vehicleStats } from "../sim/stats";
@@ -23,9 +26,11 @@ import type { ContextAction } from './hud';
 import { SHOPS } from '../data/market';
 import { canUseSite, locationAt } from '../sim/sites';
 import { shopAt } from '../sim/market';
-import { canUseOasis, downedHere, downedNear, emptySalvageNear, salvageHere, salvageNear } from '../sim/locations';
+import { canUseOasis, downedHere, downedNear, emptySalvageNear, lootBlockerHere, salvageHere, salvageNear } from '../sim/locations';
 import { playerCanAct } from '../sim/world';
-import { inCombat, isBusy } from '../sim/jobs';
+import { combatTurnsLeft } from '../sim/combat';
+import { isBusy } from '../sim/jobs';
+import { npcName } from '../sim/spawn';
 
 // The shop in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
 function shopNear(world: World): { id: string; name: string } | null {
@@ -37,14 +42,23 @@ function shopNear(world: World): { id: string; name: string } | null {
 
 export function getContextAction(world: World, playing: boolean): ContextAction | null {
   if (playing || !playerCanAct(world)) return null;
-  // A trade the player arranged wins over the place once both trucks are parked side by side.
-  const trade = getTradeAction(world);
-  return trade?.ready ? trade : (getPlaceAction(world) ?? trade);
+  // An aid handover or a trade the player arranged wins over the place once both trucks are parked side by side.
+  const deals = [getAidAction(world), getTradeAction(world)].filter((d) => d !== null);
+  return deals.find((d) => d.ready) ?? getPlaceAction(world) ?? deals[0] ?? null;
+}
+
+// An agreed aid deal the player has not started yet.
+function getAidAction(world: World): ContextAction | null {
+  const s = playerAid(world);
+  if (!s || !aidData(s).agreed || aidData(s).started) return null;
+  const npc = npcName(vehicleById(world, s.holder));
+  const label = aidData(s).giver === "player" ? `Give ${aidGoods(s)} to ${npc}` : `Take ${aidGoods(s)} from ${npc}`;
+  return { label, ready: readyAid(world) !== null };
 }
 
 function getTradeAction(world: World): ContextAction | null {
   const partner = tradePartner(world);
-  return partner && { label: `Trade with ${partner.name}`, ready: tradeReady(world) !== null };
+  return partner && { label: `Trade with ${npcName(partner)}`, ready: tradeReady(world) !== null };
 }
 
 function getPlaceAction(world: World): ContextAction | null {
@@ -52,7 +66,7 @@ function getPlaceAction(world: World): ContextAction | null {
   if (shop) return { label: `Enter ${shop.name}`, ready: shopAt(world) === shop.id };
   // A knocked-out truck stays open to looting while a removal from it runs.
   const downed = downedNear(world);
-  if (downed) return { label: `Loot ${downed.name}`, ready: downedHere(world) !== null };
+  if (downed) return { label: `Loot ${npcName(downed)}`, ready: downedHere(world) !== null };
   if (isBusy(playerVehicle(world))) return null;
   return getSiteAction(world);
 }
@@ -69,11 +83,14 @@ function getSiteAction(world: World): ContextAction | null {
   return getStockAction(world, stock);
 }
 
-// A search needs no hostile in sight. Looting a searched stock does not.
+// A search needs no combat. Looting a searched stock does not. Neither starts while another truck loots it.
 function getStockAction(world: World, stock: SalvageStock): ContextAction {
-  if (world.player.scavenged.includes(stock.id)) return { label: `Loot ${getSalvageName(stock)}`, ready: salvageHere(world) !== null };
-  const combat = inCombat(world, playerVehicle(world));
-  return { label: `Search ${getSalvageName(stock)}`, ready: !combat && salvageHere(world) !== null, combat };
+  const searched = world.player.scavenged.includes(stock.id);
+  const blocker = lootBlockerHere(world);
+  if (blocker) return { label: `${searched ? 'Loot' : 'Search'} ${getSalvageName(stock)}`, ready: false, hint: `${blocker.name} is looting it` };
+  if (searched) return { label: `Loot ${getSalvageName(stock)}`, ready: salvageHere(world) !== null };
+  const combat = combatTurnsLeft(world, playerVehicle(world)) ?? undefined;
+  return { label: `Search ${getSalvageName(stock)}`, ready: combat === undefined && salvageHere(world) !== null, combat };
 }
 
 function getSalvageName(stock: SalvageStock): string {

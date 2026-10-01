@@ -5,7 +5,7 @@ import { STRIP } from '../data/salvage';
 import { CONDITION, REPAIR } from '../data/wear';
 import { damagePart, partValue } from './wear';
 import { makePart } from './factory';
-import { addVehicle, emptyWorld, practiceOf } from './testkit';
+import { addVehicle, emptyWorld, practiceOf , startCombat } from './testkit';
 import { corePart, goodsCount, gridOf, mountedParts } from './grid';
 import { addGoods, moveItem, removeGoods, stowPart } from './inventory';
 import { advanceJobs, cancelRefit, startAutoRepair, startJob, startRepair, startStrip, startWeld } from './jobs';
@@ -185,6 +185,62 @@ describe('repair without parts', () => {
     advanceJobs(next);
     expect(truck.job).toBeNull();
     expect(next.events.some((e) => e.t === 'job' && e.outcome === 'cancelled')).toBe(true);
+  });
+});
+
+describe('auto patch and promised parts', () => {
+  // A damaged, parked player holding exactly `held` parts, and an NPC client a patch deal can name.
+  function setup(held: number, deal: 'paid' | 'ownParts', playerIsPatcher: boolean) {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    me.speed = 0;
+    mountedParts(me).find((p) => partDef(p.defId).kind === 'engine')!.hp = 1;
+    removeGoods(me, 'parts', goodsCount(me).parts ?? 0);
+    addGoods(w, me, 'parts', held);
+    const other = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 5, y: 0 }, 0);
+    const [holder, client] = playerIsPatcher ? [me, other] : [other, me];
+    const data = { kind: 'patch' as const, deal, parts: 2, price: 10, work: 4, workLeft: 4 };
+    return { w, me, add: () => addState(w, 'patch', holder.id, client.id, data) };
+  }
+
+  it('starts no job when every part is promised to a deal', () => {
+    const { w, me, add } = setup(2, 'paid', true);
+    add();
+    startAutoRepair(w);
+    expect(me.job).toBeNull();
+  });
+
+  it('spends only the parts above the promise', () => {
+    const { w, me, add } = setup(3, 'paid', true);
+    add();
+    startAutoRepair(w);
+    expect(me.job).not.toBeNull();
+    for (let i = 0; i < 100 && me.job; i++) advanceJobs(w);
+    expect(goodsCount(me).parts).toBe(2);
+  });
+
+  it('cancels a running job when a deal promises its parts', () => {
+    const { w, me, add } = setup(2, 'paid', true);
+    startAutoRepair(w);
+    expect(me.job).not.toBeNull();
+    add();
+    advanceJobs(w);
+    expect(me.job).toBeNull();
+    expect(goodsCount(me).parts).toBe(2);
+  });
+
+  it('keeps the parts a stranded player promises as the client of an own-parts deal', () => {
+    const { w, me, add } = setup(2, 'ownParts', false);
+    add();
+    startAutoRepair(w);
+    expect(me.job).toBeNull();
+  });
+
+  it('ignores a deal whose payer is the other truck', () => {
+    const { w, me, add } = setup(2, 'ownParts', true);
+    add();
+    startAutoRepair(w);
+    expect(me.job).not.toBeNull();
   });
 });
 
@@ -404,8 +460,8 @@ describe('field job practice', () => {
 });
 
 describe('jobs in combat', () => {
-  // A player with a damaged part, spare parts, and a feuding raider parked in sight.
-  function underFire() {
+  // A player with a damaged part, spare parts, and a raider parked in sight that shoots at it unless told not to.
+  function underFire(attacking = true) {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = w.vehicles[0];
     me.speed = 0;
@@ -414,21 +470,29 @@ describe('jobs in combat', () => {
     addGoods(w, me, 'parts', 20);
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 35, y: 30 });
     addState(w, 'feud', raider.id, me.id, { kind: 'feud', robbery: false });
+    if (attacking) startCombat(w, raider, me);
     return { w, me, cage, raider };
   }
 
-  it('starts no job with a hostile in sight', () => {
+  it('starts no job in combat', () => {
     const { w, me, cage } = underFire();
-    expect(() => startRepair(w, cage.id)).toThrow(/hostile in sight/);
+    expect(() => startRepair(w, cage.id)).toThrow(/in combat/);
     startAutoRepair(w);
     expect(me.job).toBeNull();
   });
 
-  it('cancels a running job once a hostile comes in sight', () => {
-    const { w, me, cage, raider } = underFire();
+  it('starts a job beside a hostile in sight that has not attacked', () => {
+    const { w, me, cage } = underFire(false);
+    expect(startRepair(w, cage.id).vehicles[0].job).not.toBeNull();
+    expect(me.job).toBeNull();
+  });
+
+  it('cancels a running job once combat starts', () => {
+    const { w, me, cage, raider } = underFire(false);
     w.vehicles = w.vehicles.filter((v) => v.id !== raider.id);
     const next = startRepair(w, cage.id);
     next.vehicles.push(raider);
+    startCombat(next, raider, next.vehicles[0]);
     next.events = [];
     advanceJobs(next);
     expect(next.vehicles[0].job).toBeNull();

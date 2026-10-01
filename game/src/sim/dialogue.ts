@@ -4,14 +4,13 @@
 // src/data/dialogue.ts, and its logic in src/sim/dialogue-rules.ts.
 
 import { BUSY_LINE, END, HONK_RANGE, HUB, REFUSED, TOPICS, TRAIT_TALK, type DialogueOption, type Topic, type TopicId, type Voice } from '../data/dialogue';
-import { inFeud, isHostile } from './combat';
+import { inCombat, inCombatWithOther, inFeud, isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
 import { isKnockedOut } from './defeat';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
 import type { Call, CallVars, Vehicle, World } from './types';
 import { dist } from './vec';
-import { inCombat } from './jobs';
-import { busyWithFight, npcTraits } from './npc-decisions';
+import { npcTraits } from './npc-decisions';
 import { practice } from './progress';
 import { canVehicleSee } from './vision';
 import { playerCommand, requireActivePlayer, update } from './world';
@@ -137,10 +136,10 @@ function refusalOf(world: World, npc: Vehicle): string | null {
   return null;
 }
 
-// A driver busy fighting or fleeing another truck that is not at odds with the player. A foe of the player is part
+// A driver in combat with another truck that is not at odds with the player. A foe of the player is part
 // of the player's fight, so it takes calls and raises its demands and pleas even while it targets another truck.
 function busyElsewhere(world: World, npc: Vehicle, me: Vehicle): boolean {
-  return busyWithFight(npc, me.id) && !isHostile(world, npc, me);
+  return inCombatWithOther(world, npc, me.id) && !isHostile(world, npc, me);
 }
 
 // The player's reply goes to the log only on a call the driver took.
@@ -263,6 +262,6 @@ function practiceHonk(world: World, me: Vehicle, npc: Vehicle): void {
 
 function answering(world: World, me: Vehicle): Vehicle[] {
   return world.vehicles
-    .filter((v) => v.brain && !isKnockedOut(v) && dist(v.pos, me.pos) <= HONK_RANGE && talkOf(v).honksBack && !busyWithFight(v, me.id) && !isHostile(world, v, me))
+    .filter((v) => v.brain && !isKnockedOut(v) && dist(v.pos, me.pos) <= HONK_RANGE && talkOf(v).honksBack && !inCombatWithOther(world, v, me.id) && !isHostile(world, v, me))
     .sort((a, b) => dist(a.pos, me.pos) - dist(b.pos, me.pos));
 }

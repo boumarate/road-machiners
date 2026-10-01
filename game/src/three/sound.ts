@@ -28,7 +28,6 @@ const STINGS: {
   { cue: "level-up", match: (e) => e.t === "skillUp" },
   { cue: "discover", match: (e) => e.t === "discover" },
   { cue: "money", match: (e) => e.t === "money" && e.amount > 0 },
-  { cue: "air-brake", match: (e, id) => e.t === "arrived" && e.vehicle === id },
 ];
 
 export function stingOf(events: GameEvent[], playerId: string): CueId | null {
@@ -163,12 +162,11 @@ function plainAccent(struck: boolean, mine: boolean): AccentCue | null {
   return struck ? "accent-struck" : null;
 }
 
-export type CombatSigns = { sighted: boolean; turnsSinceDanger: number };
+export type CombatSigns = { sighted: boolean };
 
-// Remembers the last turn each hostile was in sight, and the last turn of danger.
+// Remembers the last turn each hostile was in sight.
 export class CombatWatch {
   private seen = new Map<string, number>();
-  private lastDanger = -Infinity;
 
   // sighted is true when a hostile in sight now was out of sight for a whole turn. Sight flickers from frame
   // to frame while a turn plays, so a gap inside one turn does not count.
@@ -176,8 +174,7 @@ export class CombatWatch {
     const sighted = hostiles.some((id) => (this.seen.get(id) ?? -Infinity) < turn - 1);
     for (const [id, last] of this.seen) if (last < turn - 1) this.seen.delete(id);
     for (const id of hostiles) this.seen.set(id, turn);
-    if (hostiles.length > 0) this.lastDanger = turn;
-    return { sighted, turnsSinceDanger: turn - this.lastDanger };
+    return { sighted };
   }
 }
 
@@ -239,8 +236,8 @@ export class SoundDirector {
   }
 }
 
-// What the loops respond to each frame. The turn counts are Infinity when it never happened.
-export type LoopState = { stormTiles: number; turnsSinceDanger: number; paused: boolean };
+// What the loops respond to each frame.
+export type LoopState = { stormTiles: number; inCombat: boolean; paused: boolean };
 
 export type LoopLevels = {
   windGain: number;
@@ -253,11 +250,10 @@ export type LoopLevels = {
 export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
   const w = mix.wind;
   const near = Math.max(0, 1 - s.stormTiles / w.stormReachTiles);
-  const danger = s.turnsSinceDanger <= mix.music.holdTurns;
   return {
     windGain: w.baseGain + (w.stormGain - w.baseGain) * near,
-    calmGain: danger ? 0 : 1,
-    combatGain: danger ? 1 : 0,
+    calmGain: s.inCombat ? 0 : 1,
+    combatGain: s.inCombat ? 1 : 0,
     musicCutoffHz: s.paused ? mix.music.pauseCutoffHz : mix.music.openCutoffHz,
     paused: s.paused,
   };

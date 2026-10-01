@@ -22,6 +22,7 @@ import {
   type VehicleFrame,
 } from "../phys/frames";
 import { applyTurn, type PreparedTurn } from "../phys/turn";
+import { readyAid, startAid } from "../sim/aid";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { mountedParts } from "../sim/grid";
 import { applySiteAction, canLoot, salvageHere } from "../sim/locations";
@@ -30,11 +31,12 @@ import { shopAt } from "../sim/market";
 import { isStranded, maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder, parkedVehicles, throttleFor } from "../sim/steering";
 import { route } from "../sim/path";
-import type { ShotRound, Vehicle, World } from "../sim/types";
+import type { Vehicle, World } from "../sim/types";
 import { grayRadius, playerSees, tileOf, visibleTiles } from "../sim/vision";
 import { dist, type Vec } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
 import { isTowed, setBeacon, unhitch } from "../sim/tow";
+import { inCombat } from "../sim/combat";
 import { cloneWorld, hostileToPlayer, playerCanAct, setMoveOrder } from "../sim/world";
 import { TruckControls } from "./truck-controls";
 import { PAL } from "../render/palette";
@@ -43,7 +45,7 @@ import { timed } from "../perf";
 import { CharacterScreen } from "../ui/character";
 import { HitCard } from "../ui/hitCard";
 import type { UiHost } from "../ui/host";
-import { COMBAT_BLOCKED, Hud } from "../ui/hud";
+import { combatBlocked, Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import { TownScreen, TruckTradeScreen } from "../ui/town";
 import { aimAtPart, HoverHold, toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
@@ -51,7 +53,8 @@ import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D, TruckFx } from "./render/fx";
-import { blastRadiusOf, planVolley, projectileOf, roundAims, towardFrom, type Muzzle } from "./render/projectiles";
+import { towardFrom } from "./render/projectiles";
+import { playVolley } from "./volley";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { PathView } from "./render/path";
@@ -71,9 +74,10 @@ import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
 import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
-import { clearGame, hasSave, saveInTown, saveWorld, writeSave } from "./save";
+import { reportError } from "./crash";
+import type { SlotId } from "./save-slots";
+import { SAVE_HELD_NOTE, SaveHold, saveInTown, saveStore, saveWorld, turnFailedNote } from "./save";
 import { GameMenu } from "../ui/game-menu";
-import { roundLabel } from "../ui/format";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
 import { CombatScore, CombatWatch, computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
@@ -118,6 +122,8 @@ export class Game {
   private readonly fog: FogView;
   private readonly lastSeen = new Map<string, number>(); // vehicle id to the turn the player last saw it
   private readonly shade: ShadeView;
+  // A turn step changed what the UI shows. advanceTurn refreshes it once at its end.
+  private uiStale = false;
   private readonly weather: WeatherView;
   private readonly labels: Labels;
   private readonly zones = new ZonesView();
@@ -253,12 +259,12 @@ export class Game {
     this.character = new CharacterScreen(host);
     this.inventory = new InventoryScreen(host);
     this.hud = new Hud({
-      openInventory: () => this.toggleScreen(this.inventory),
-      openCharacter: () => this.toggleScreen(this.character),
-      toggleManual: this.whenIdle(() => this.controls.toggleManual()),
-      toggleAutoRepair: this.whenIdle(() => this.controls.toggleAutoRepair()),
-      toggleOverdrive: this.whenIdle(() => this.controls.toggleOverdrive()),
-      douseEngine: this.whenIdle(() => this.controls.douseEngine()),
+      openInventory: () => this.runKey("KeyI"),
+      openCharacter: () => this.runKey("KeyC"),
+      toggleManual: () => this.runKey("KeyR"),
+      toggleAutoRepair: () => this.runKey("KeyP"),
+      toggleOverdrive: () => this.runKey("KeyO"),
+      douseEngine: () => this.runKey("KeyG"),
       unhitch: () =>
         this.rescueCommand((w) =>
           w.player.state === "active" && isTowed(w) ? unhitch(w) : null,
@@ -272,21 +278,15 @@ export class Game {
       isBusy: () => this.anim !== null,
       autoTravel: () => this.travel.isAuto(this.world),
       dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
-      recenter: () => this.follow.recenter(),
+      recenter: () => this.runKey("KeyF"),
       aimPart: (vehicleId, partId) => this.anim === null && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
-    this.menu = new GameMenu({
-      save: () => writeSave(window.localStorage, this.world),
-      hasSave: () => hasSave(window.localStorage),
-      clearGame: () => clearGame(window.localStorage),
-      isBusy: () => this.anim !== null,
-    });
-    this.death = new DeathScreen({
-      hasSave: () => hasSave(window.localStorage),
-      clearGame: () => clearGame(window.localStorage),
-    });
+    const saves = saveStore(window.localStorage, window.sessionStorage, () => this.world, CONFIG.saveSlots);
+    const guarded = { ...saves, save: (slot: SlotId) => this.saveNow(() => saves.save(slot)) };
+    this.menu = new GameMenu(guarded, () => this.anim !== null);
+    this.death = new DeathScreen(saves);
 
     this.bindInput();
     window.addEventListener("resize", () => this.resize());
@@ -298,10 +298,12 @@ export class Game {
   private uiHost(): UiHost {
     return {
       world: () => this.displayWorld(),
-      apply: (next) => { this.apply(next); saveInTown(window.localStorage, next); },
+      apply: (next) => { this.apply(next); if (!this.saves.held) saveInTown(window.localStorage, next, Date.now()); },
       selectedWeapon: () => this.selected,
-      selectWeapon: (id) => { if (this.anim) return; this.selected = id; this.refreshUi(); },
-      endTurn: () => this.travel.stopAuto(this.world) || this.endTurn(),
+      selectWeapon: (id) => { if (this.anim || this.modalOpen()) return; this.selected = id; this.refreshUi(); },
+      pressTurn: () => this.pressTurn(),
+      releaseTurn: () => this.releaseTurn(),
+      runKey: (code) => this.runKey(code),
       autoTravel: () => this.travel.isAuto(this.world),
       getTurnPhase: () => this.phase,
     };
@@ -340,7 +342,7 @@ export class Game {
   }
 
   private modalOpen(): boolean {
-    return this.town.isOpen() || this.trade.isOpen() || this.character.isOpen() || this.inventory.isOpen() || this.world.player.call !== null;
+    return this.town.isOpen() || this.trade.isOpen() || this.character.isOpen() || this.inventory.isOpen() || this.world.player.call !== null || this.menu.isPanelOpen();
   }
 
   // Until a turn's shots land, the panels show the world as it was when the turn began.
@@ -349,6 +351,7 @@ export class Game {
   }
 
   private refreshUi(): void {
+    this.uiStale = false;
     this.menu.refresh();
     const me = playerVehicle(this.world);
     if (
@@ -375,7 +378,7 @@ export class Game {
     this.hud.renderAction(
       getContextAction(this.world, this.anim !== null),
       this.displayWorld(),
-      () => this.useContext(),
+      () => this.runKey("KeyE"),
     );
     this.refreshInfo();
     this.refreshTargetMarkers();
@@ -383,15 +386,17 @@ export class Game {
 
   private useContext(): void {
     if (this.anim || !playerCanAct(this.world)) return;
+    const aid = readyAid(this.world);
+    if (aid) { this.apply(startAid(this.world, aid.holder)); this.hud.pushEvents(this.world); return; }
     if (this.trade.openIfReady()) return;
     return shopAt(this.world) ? this.town.open() : this.useSite();
   }
 
-  // A search that a hostile in sight blocks says so in the log.
+  // A search that combat blocks says so in the log, with the turns left.
   private noteCombatBlock(): boolean {
-    if (!getContextAction(this.world, false)?.combat) return false;
-    this.hud.note(this.world, COMBAT_BLOCKED, "bad");
-    return true;
+    const turns = getContextAction(this.world, false)?.combat;
+    if (turns !== undefined) this.hud.note(this.world, combatBlocked(turns), "bad");
+    return turns !== undefined;
   }
 
   private useSite(): void {
@@ -447,7 +452,7 @@ export class Game {
     });
     canvas.addEventListener("wheel", (e) => this.rig.zoomBy(e.deltaY), { passive: true });
     window.addEventListener("keyup", (e) => {
-      if (e.code === "Space") this.travel.release();
+      if (e.code === "Space") this.releaseTurn();
     });
     window.addEventListener("blur", () => this.travel.pause());
     document.addEventListener("visibilitychange", () => {
@@ -455,16 +460,29 @@ export class Game {
     });
     window.addEventListener("keydown", (e) => {
       if (this.isEditingControl() || this.death.isShown()) return;
-      const modal = this.modalOpen();
-      const playing = this.travel.isPlaying(this.anim);
-      if (e.code === "Space") {
-        if (!modal && this.travel.handleSpace(e, playing, this.world)) this.endTurn();
+      if (e.code === "Space" && !this.modalOpen()) {
+        e.preventDefault();
+        if (!e.repeat) this.pressTurn();
       }
-      const key = this.keys[e.code];
-      if (key && !(key.noModal && modal) && !(key.idle && playing)) key.run();
-      const digit = ["Digit1", "Digit2", "Digit3", "Digit4"].indexOf(e.code);
-      if (digit >= 0) this.selectWeaponIndex(digit);
+      this.runKey(e.code);
     });
+  }
+
+  // Plays a turn when a press asks for one. Space and the turn button both come here.
+  private pressTurn(): void {
+    if (this.death.isShown() || this.modalOpen()) return;
+    if (this.travel.pressTurn(this.travel.isPlaying(this.anim), this.world)) this.endTurn();
+  }
+
+  private releaseTurn(): void {
+    this.travel.release();
+  }
+
+  // Runs a key's action under its gates. The key and its HUD button both come here.
+  private runKey(code: string): void {
+    const key = this.keys[code];
+    if (!key || (key.noModal && this.modalOpen()) || (key.idle && this.travel.isPlaying(this.anim))) return;
+    key.run();
   }
 
   // Single-key actions. noModal keys wait for panels and calls to close, idle keys wait for the turn to finish playing.
@@ -474,6 +492,7 @@ export class Game {
     KeyQ: { run: () => this.weapons.toggleAuto(), noModal: true },
     KeyX: { run: () => this.weapons.toggleVisible(), noModal: true },
     Digit0: { run: () => this.weapons.selectWeapon(null), noModal: true },
+    ...Object.fromEntries([0, 1, 2, 3].map((i) => [`Digit${i + 1}`, { run: () => this.weapons.selectIndex(i), noModal: true as const, idle: true as const }])),
     KeyE: { run: () => this.useContext(), noModal: true },
     KeyR: { run: () => this.controls.toggleManual(), noModal: true, idle: true },
     KeyP: { run: () => this.controls.toggleAutoRepair(), noModal: true, idle: true },
@@ -493,20 +512,6 @@ export class Game {
     if (this.anim) return;
     this.closeScreens(screen);
     screen.toggle();
-  }
-
-  // A HUD button action that waits for the turn to finish playing and for panels and calls to close.
-  private whenIdle(run: () => void): () => void {
-    return () => void (!this.anim && !this.modalOpen() && run());
-  }
-
-  private selectWeaponIndex(i: number): void {
-    if (this.anim || this.modalOpen()) return;
-    const all = vehicleStats(this.world, playerVehicle(this.world)).weapons;
-    if (i >= all.length) return;
-    this.weapons.selectWeapon(
-      this.selected === all[i].part.id ? null : all[i].part.id,
-    );
   }
 
   private onLeftClick(e: MouseEvent): void {
@@ -606,10 +611,45 @@ export class Game {
     this.travel.updateWorld(this.world, danger);
   }
 
+  private readonly saves = new SaveHold();
+
+  holdSaves(): void {
+    this.saves.noteError();
+  }
+
+  private saveNow(write: () => void): void {
+    if (this.saves.held) return this.hud.note(this.world, SAVE_HELD_NOTE, "bad");
+    write();
+  }
+
+  // A turn that throws does not play. The world stays as it was and the next Space or turn press tries again.
+  private failTurn(err: unknown): void {
+    this.travel.abandon(this.world);
+    this.saves.noteError();
+    this.hud.note(this.world, turnFailedNote(err), "bad");
+    reportError(err);
+    this.refreshUi();
+  }
+
+  // Begins the ready turn, if there is one. A turn that throws is failed and not begun.
+  private tryBeginTurn(now: number, wasPlaying: boolean): "began" | "none" | "failed" {
+    try {
+      const prepared = this.anim ? null : this.travel.takeReady(this.world, this.drive, now);
+      if (prepared) this.beginTurn(prepared, now, this.travel.getRemainder(wasPlaying));
+      return prepared ? "began" : "none";
+    } catch (err) {
+      this.failTurn(err);
+      return "failed";
+    }
+  }
+
   private beginTurn(prepared: PreparedTurn, now: number, elapsed: number): void {
     const { world, playback, towed } = this.travel.beginPlayback(this.world, prepared, now, elapsed);
     this.world = world;
+    // The score must follow this turn's combat before its crash accents arrive.
+    this.updateLoops();
     this.anim = playback;
+    this.saves.beginTurn();
     this.live = {
       visible: new Set(this.world.player.visible),
       explored: playback.before.player.explored.slice(),
@@ -628,7 +668,7 @@ export class Game {
     if (!towed) this.playDriveSound(playback.result);
     this.phase = "Moving";
     this.path.clear();
-    this.refreshUi();
+    this.uiStale = true;
   }
 
   // Movement is over: adopt the physics state, fire the volley.
@@ -661,19 +701,22 @@ export class Game {
     // A finished search opens the loot beside the truck's grid.
     const searched = this.world.events.find((e) => e.t === "searched");
     if (searched) this.inventory.openLoot(searched.stock);
-    this.refreshUi();
+    this.uiStale = true;
   }
 
   private finishPlayback(): void {
     this.anim = null;
     this.phase = null;
     this.idleSince = performance.now();
-    saveWorld(window.localStorage, this.world, CONFIG.saveTurns);
+    this.saves.finishTurn();
+    if (!this.saves.held) saveWorld(window.localStorage, this.world, CONFIG.saveTurns, Date.now());
     const pending = this.pending;
     this.pending = null;
     if (pending) this.runRescue(pending);
     this.hud.flushHorn();
-    this.refreshUi();
+    // Queued here, since refreshUi skips the shade once the next turn has begun.
+    this.shade.update(this.world);
+    this.uiStale = true;
   }
 
   // Tow and beacon buttons stay live while turns run on their own. A press during playback waits for its end.
@@ -734,7 +777,7 @@ export class Game {
     const f = this.frames[me.id];
     const at = f ? toMap(f.pos) : me.pos;
     const signs = this.combatWatch.observe(this.world.turn, this.world.vehicles.filter((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v)).map((v) => v.id));
-    this.loops.update({ stormTiles: this.weather.stormTilesFrom(at.x, at.y), ...signs, paused: !this.anim && performance.now() - this.idleSince > MIX.music.pauseDelayMs });
+    this.loops.update({ stormTiles: this.weather.stormTilesFrom(at.x, at.y), inCombat: inCombat(this.world, me), paused: !this.anim && performance.now() - this.idleSince > MIX.music.pauseDelayMs });
     if (signs.sighted) this.sound.accent("accent-sighted", 0);
   }
 
@@ -780,6 +823,7 @@ export class Game {
   private playShotFx(): void {
     const w = this.world;
     const rows = new Map<string, number>();
+    const host = { world: w, fx: this.fx, sound: this.sound, eventPoint: (id: string) => this.eventPoint(id) };
     for (const e of w.events) {
       if (e.t === "shot") {
         const a = this.eventPoint(e.shooter);
@@ -789,7 +833,7 @@ export class Game {
         const gun = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
         if (!gun) throw new Error(`Shot from ${e.shooter} names no mounted weapon ${e.weapon}`);
         const view = viewOf(this.views, e.shooter);
-        const landMs = this.playVolley(a, () => view.muzzle(e.weapon), b, e.rounds, gun.defId, e.target, rows);
+        const landMs = playVolley(host, a, () => view.muzzle(e.weapon), b, e.rounds, gun.defId, e.target, rows);
         this.sound.accents([e], w.player.vehicleId, () => landMs);
       }
       if (e.t === "guardShot") {
@@ -797,7 +841,7 @@ export class Game {
         if (!b) continue;
         const g = groundPoint(this.world.terrain, e.from);
         const a = { x: g.x, y: g.y + (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile, z: g.z };
-        const landMs = this.playVolley(a, () => towardFrom(a, b), b, e.rounds, "guard", e.target, rows);
+        const landMs = playVolley(host, a, () => towardFrom(a, b), b, e.rounds, "guard", e.target, rows);
         this.sound.accents([e], w.player.vehicleId, () => landMs);
       }
       if (e.t === "collision") {
@@ -806,41 +850,6 @@ export class Game {
         if (p) this.sound.at("crash", p, 0);
       }
     }
-  }
-
-  // Plays one volley's bolts from the muzzle and sounds from a to b. Each round that damages parts shows its
-  // damage over the target as it lands.
-  private playVolley(
-    a: V3,
-    muzzle: () => Muzzle,
-    b: V3,
-    rounds: ShotRound[],
-    weapon: string,
-    targetId: string,
-    rows: Map<string, number>,
-  ): number {
-    // Every round lands within the shot time, before the results show.
-    const spec = projectileOf(weapon);
-    const ground = (p: V3) => groundPoint(this.world.terrain, toMap(p)).y;
-    const plans = planVolley(spec, a, roundAims(b, targetId, rounds, (id) => this.eventPoint(id)), CONFIG.combatShotMs, ground);
-    plans.forEach((plan, k) => {
-      this.fx.shot(spec, muzzle, plan, blastRadiusOf(weapon));
-      this.sound.at(spec.look === "tracer" ? "mg-fire" : "cannon-fire", a, plan.delayMs);
-      this.sound.at(plan.struck ? "hit-metal" : "miss", plan.land, plan.delayMs + plan.flightMs);
-      const r = rounds[k];
-      const struck = r.struck === null ? [] : [{ vehicle: r.struck, hits: r.hits }];
-      for (const dealt of [...struck, ...r.blast]) this.damageLabel(dealt.vehicle, roundLabel(this.world, dealt.vehicle, dealt.hits, r.crit), rows, plan.delayMs + plan.flightMs);
-    });
-    return Math.min(...plans.map((plan) => plan.delayMs + plan.flightMs)); // when the first round lands
-  }
-
-  // Damage text over a truck that shows, stacked in rows per truck.
-  private damageLabel(vehicleId: string, label: string | null, rows: Map<string, number>, atMs: number): void {
-    const p = this.eventPoint(vehicleId);
-    if (!label || !p) return;
-    const row = rows.get(vehicleId) ?? 0;
-    rows.set(vehicleId, row + 1);
-    this.fx.label(p, label, PAL.damageText, row, atMs, CONFIG.combatReadMs);
   }
 
   // The path preview chains physics turns from the current state, so it shows what will happen.
@@ -899,6 +908,11 @@ export class Game {
     this.path.set(turns, first, course, !v.direct);
   }
 
+  // One refresh for everything this frame changed, so a frame that ends a turn and begins the next refreshes once.
+  private flushUi(): void {
+    if (this.uiStale) this.refreshUi();
+  }
+
   private advanceTurn(now: number): { step: number | null; speed: number } {
     if (this.modalOpen() || this.isEditingControl() || document.hidden)
       this.travel.pause();
@@ -907,13 +921,14 @@ export class Game {
     let step = this.animStep(now, speed);
     this.updateLiveVision();
     this.updateTravel();
-    const prepared = this.anim ? null : this.travel.takeReady(this.world, this.drive, now);
-    if (prepared) {
-      this.beginTurn(prepared, now, this.travel.getRemainder(wasPlaying));
+    const began = this.tryBeginTurn(now, wasPlaying);
+    if (began === "failed") return { step, speed };
+    if (began === "began") {
       step = this.animStep(now, speed);
       this.updateTravel();
     }
     this.travel.prepareNext(this.world, this.anim, now);
+    this.flushUi();
     return { step, speed };
   }
 
@@ -927,7 +942,11 @@ export class Game {
   private frame(now: number): void {
     const dt = now - this.last;
     this.last = now;
-    const { step, speed } = this.advanceTurn(now);
+    const { step, speed } = timed("turn-frame", () => {
+      const turn = this.advanceTurn(now);
+      this.shade.advance();
+      return turn;
+    });
     // The first frame's rAF time can come before the performance.now() the clock started from.
     this.syncVehicles(step, Math.max(0, dt) / 1000);
     this.obstacles.play(this.anim, step, this.world, this.frames, Math.max(0, dt) / 1000);
@@ -948,11 +967,8 @@ export class Game {
     // At dawn lamps switch off one by one, so the night lights stay until the last one is off.
     this.nightLights.update(!sunAt(this.world.turn) || lit.some((v) => v.on), truck, lit);
     const at = playerVehicle(this.world).pos;
-    this.stormTint.style.display = this.world.weather.some(
-      (e) => e.kind === "storm" && dist(at, e.pos) <= e.radius,
-    )
-      ? ""
-      : "none";
+    const stormy = this.world.weather.some((e) => e.kind === "storm" && dist(at, e.pos) <= e.radius);
+    this.stormTint.style.display = stormy ? "" : "none";
     this.fx.tick(dt * speed);
     this.playPanelSounds();
     this.updateLoops();
@@ -976,11 +992,7 @@ export class Game {
     live.from = at;
     live.visible = visibleTiles(this.world, at);
     for (const t of live.visible) live.explored[t] = 1;
-    const player = {
-      ...this.world.player,
-      visible: [...live.visible].sort((a, b) => a - b),
-      explored: live.explored,
-    };
+    const player = { ...this.world.player, visible: [...live.visible].sort((a, b) => a - b), explored: live.explored };
     timed("fog", () => this.fog.update({ ...this.world, player }));
   }
 
@@ -996,7 +1008,7 @@ export class Game {
   private animStep(now: number, speed: number): number | null {
     const a = this.anim;
     if (!a) return null;
-    const elapsed = this.travel.advanceClock(a, now, speed);
+    const elapsed = this.travel.advanceClock(a, now, speed, CONFIG.playbackFrameMs);
     if (elapsed < MOVE_MS)
       return Math.floor((elapsed / 1000) * PHYSICS.stepsPerSecond);
     if (!a.moved) this.finishMovement(a);

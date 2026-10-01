@@ -1,6 +1,7 @@
 // Armor rules on a stepped outline: the nose and the tail are narrower than the middle, so the corner cells do not exist.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
+import { PARTS } from '../data/parts';
 import TRUCK_SHAPES from '../data/truck-shapes.json';
 import { blastLanes, cabShield, lanePoint, openSides, walkLane } from './armor';
 import { makePart } from './factory';
@@ -24,7 +25,7 @@ const STEPPED = {
   id: 'stepped',
   layout: ['  F  ', ' FDF ', 'LXXXR', 'LXXXR', 'LXDXR', 'LXDXR', ' BDB ', '  B  '],
   core: [
-    { defId: 'cabNarrow', x: 2, y: 2 },
+    { defId: 'cabTall', x: 2, y: 2 },
     { defId: 'wheel', x: 1, y: 2 },
     { defId: 'wheel', x: 3, y: 2 },
     { defId: 'wheel', x: 1, y: 4 },
@@ -34,8 +35,8 @@ const STEPPED = {
 
 // The stepped truck has no model of its own, so it borrows the scout's collision boxes.
 const SHAPES = TRUCK_SHAPES as Record<string, unknown>;
-beforeAll(() => { CHASSIS.stepped = STEPPED; SHAPES.base_stepped = TRUCK_SHAPES.base_scout; });
-afterAll(() => { delete CHASSIS.stepped; delete SHAPES.base_stepped; });
+beforeAll(() => { CHASSIS.stepped = STEPPED; SHAPES.base_stepped = TRUCK_SHAPES.base_scout; PARTS.cabTall = { ...PARTS.cab, id: 'cabTall', tall: true }; });
+afterAll(() => { delete CHASSIS.stepped; delete SHAPES.base_stepped; delete PARTS.cabTall; });
 
 let nextItem = 0;
 

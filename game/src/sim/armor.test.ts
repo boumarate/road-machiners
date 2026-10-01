@@ -252,12 +252,12 @@ describe('blast armor', () => {
   });
 });
 
-// The scout's cab fills rows 3 and 4, and its deck pair at (4,1) and (4,2) lies beside the engine.
-// The van's cab fills row 3, and a deck row lies behind it.
-function truckWith(w: World, chassisId: string, parts: { defId: string; x: number; y: number }[]): Vehicle {
+// The longbed's cab fills columns 3 to 5 of rows 3 and 4, with a deck row behind it and a deck pair at (5,1) and (5,2)
+// beside the engine. The courier's open seat fills (2,5) and (3,5), with deck cells behind it.
+function truckWith(w: World, chassisId: string, parts: { defId: string; x: number; y: number; rot?: 0 | 1 }[]): Vehicle {
   const v = addVehicle(w, 'player', chassisId, ['stockEngine'], { x: 40, y: 40 });
   for (const [i, p] of parts.entries()) {
-    v.items.push({ id: `i-test-${i}`, x: p.x, y: p.y, rot: 0, kind: 'part', part: makePart(w, p.defId, 0) });
+    v.items.push({ id: `i-test-${i}`, x: p.x, y: p.y, rot: p.rot ?? 0, kind: 'part', part: makePart(w, p.defId, 0) });
   }
   return v;
 }
@@ -269,13 +269,13 @@ function itemOf(v: Vehicle, defId: string): GridItem {
 describe('open sides', () => {
   it('a gun in the bed cannot fire forward across the cab', () => {
     const w = emptyWorld();
-    const v = truckWith(w, 'van', [{ defId: 'mg', x: 2, y: 5 }]);
+    const v = truckWith(w, 'longbed', [{ defId: 'mg', x: 3, y: 5 }]);
     expect(openSides(v, itemOf(v, 'mg'))).toEqual(['rear', 'left', 'right']);
   });
 
   it('a gun beside the hood fires forward but not back across the cab', () => {
     const w = emptyWorld();
-    const v = truckWith(w, 'longbed', [{ defId: 'mg', x: 2, y: 1 }]);
+    const v = truckWith(w, 'longbed', [{ defId: 'mg', x: 5, y: 1 }]);
     expect(openSides(v, itemOf(v, 'mg'))).toEqual(['front', 'left', 'right']);
   });
 
@@ -295,21 +295,21 @@ describe('open sides', () => {
 
   it('an open seat blocks nothing', () => {
     const w = emptyWorld();
-    const v = truckWith(w, 'carrier', [{ defId: 'mg', x: 5, y: 5 }]);
+    const v = truckWith(w, 'courier', [{ defId: 'mg', x: 2, y: 6 }]);
     expect(openSides(v, itemOf(v, 'mg'))).toContain('front');
   });
 
-  it('a gun behind the convertible hardtop cab cannot fire forward across it', () => {
+  it('a gun beside the convertible hardtop cab fires to every side, since the cab lies in the next lane', () => {
     const w = emptyWorld();
-    const v = truckWith(w, 'convertible', [{ defId: 'mg', x: 3, y: 5 }]);
-    expect(openSides(v, itemOf(v, 'mg'))).toEqual(['rear', 'left', 'right']);
+    const v = truckWith(w, 'convertible', [{ defId: 'mg', x: 4, y: 6 }]);
+    expect(openSides(v, itemOf(v, 'mg'))).toEqual(['front', 'rear', 'left', 'right']);
   });
 });
 
 describe('firing past tall parts', () => {
   it('reports a target ahead of a gun behind the cab as blocked', () => {
     const w = emptyWorld();
-    const me = truckWith(w, 'van', [{ defId: 'mg', x: 2, y: 5 }]);
+    const me = truckWith(w, 'longbed', [{ defId: 'mg', x: 3, y: 5 }]);
     const ahead = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 45, y: 40 });
     const gun = vehicleStats(w, me).weapons[0];
     expect(inArc(me, gun, ahead)).toBe(false);
@@ -318,7 +318,7 @@ describe('firing past tall parts', () => {
 
   it('lets the same gun fire at a target on its open flank', () => {
     const w = emptyWorld();
-    const me = truckWith(w, 'van', [{ defId: 'mg', x: 2, y: 5 }]);
+    const me = truckWith(w, 'longbed', [{ defId: 'mg', x: 3, y: 5 }]);
     const beside = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 40, y: 45 });
     const gun = vehicleStats(w, me).weapons[0];
     expect(inArc(me, gun, beside)).toBe(true);
@@ -354,29 +354,29 @@ describe('fire spans', () => {
 describe('side blockers', () => {
   it('names the cab as what blocks a bed gun in front', () => {
     const w = emptyWorld();
-    const v = truckWith(w, 'van', [{ defId: 'mg', x: 2, y: 5 }]);
+    const v = truckWith(w, 'longbed', [{ defId: 'mg', x: 3, y: 5 }]);
     const blockers = sideBlockers(v, itemOf(v, 'mg'));
     expect(Object.keys(blockers)).toEqual(['front']);
-    expect(blockers.front?.kind === 'part' && blockers.front.part.defId).toBe('cabRow');
+    expect(blockers.front?.kind === 'part' && blockers.front.part.defId).toBe('cabPickup');
   });
 });
 
 describe('gun layout', () => {
   // A machine gun's 360 degree arc reaches every side. Score = covered sides * (4 * guns + 1) + open reached sides summed.
   it('scores one bed gun behind the cab by its three open sides', () => {
-    const v = truckWith(emptyWorld(), 'van', [{ defId: 'mg', x: 2, y: 5 }]);
+    const v = truckWith(emptyWorld(), 'longbed', [{ defId: 'mg', x: 3, y: 5 }]);
     expect(gunLayoutScore(v)).toBe(3 * 5 + 3);
   });
 
   it('scores two guns with the rear blocked by three covered sides and six open sides', () => {
-    const parts = [{ defId: 'mg', x: 2, y: 5 }, { defId: 'mg', x: 2, y: 3 }, { defId: 'trailerBox', x: 2, y: 7 }];
+    const parts = [{ defId: 'mg', x: 2, y: 5 }, { defId: 'mg', x: 2, y: 4 }, { defId: 'trailerBox', x: 2, y: 7 }];
     const v = truckWith(emptyWorld(), 'hauler', parts);
     expect(gunLayoutScore(v)).toBe(3 * 9 + 6);
   });
 
   it('a front-arc gun in the bed behind a tall cab cannot fire, and one clear of it can', () => {
     const w = emptyWorld();
-    expect(everyGunFires(truckWith(w, 'van', [{ defId: 'shotgun', x: 2, y: 5 }]))).toBe(false);
+    expect(everyGunFires(truckWith(w, 'longbed', [{ defId: 'shotgun', x: 3, y: 5, rot: 1 }]))).toBe(false);
     expect(everyGunFires(truckWith(w, 'longbed', [{ defId: 'shotgun', x: 2, y: 1 }]))).toBe(true);
   });
 

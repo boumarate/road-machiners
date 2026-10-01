@@ -1,5 +1,5 @@
 {
- "format": "2.1",
+ "format": "2.6",
  "shape": {
   "broken": [],
   "dustClouds": [],
@@ -36,9 +36,7 @@
    },
    "discovered": [],
    "engineHeat": "number",
-   "explored": [
-    "number"
-   ],
+   "explored": "string",
    "fuel": "number",
    "fullLog": "boolean",
    "god": "boolean",
@@ -70,6 +68,7 @@
     "number"
    ],
    "xpBySource": {
+    "aid": "number",
     "call": "number",
     "contact": "number",
     "contract": "number",
@@ -264,7 +263,8 @@
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -272,10 +272,12 @@
       "id": "string",
       "kind": "string",
       "reward": "number",
+      "rush": "boolean",
       "shop": "string",
       "tier": "number",
       "to": "string",
-      "units": "number"
+      "units": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -285,7 +287,8 @@
       "shop": "string",
       "targetName": "string",
       "template": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      }
     ],
     "pressure": {
@@ -331,7 +334,8 @@
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -339,10 +343,12 @@
       "id": "string",
       "kind": "string",
       "reward": "number",
+      "rush": "boolean",
       "shop": "string",
       "tier": "number",
       "to": "string",
-      "units": "number"
+      "units": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -352,7 +358,8 @@
       "shop": "string",
       "targetName": "string",
       "template": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      }
     ],
     "pressure": {
@@ -390,7 +397,8 @@
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -398,10 +406,12 @@
       "id": "string",
       "kind": "string",
       "reward": "number",
+      "rush": "boolean",
       "shop": "string",
       "tier": "number",
       "to": "string",
-      "units": "number"
+      "units": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -411,7 +421,8 @@
       "shop": "string",
       "targetName": "string",
       "template": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      }
     ],
     "pressure": {
@@ -457,7 +468,8 @@
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -465,10 +477,12 @@
       "id": "string",
       "kind": "string",
       "reward": "number",
+      "rush": "boolean",
       "shop": "string",
       "tier": "number",
       "to": "string",
-      "units": "number"
+      "units": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -478,7 +492,8 @@
       "shop": "string",
       "targetName": "string",
       "template": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      }
     ],
     "pressure": {
@@ -516,7 +531,8 @@
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -524,10 +540,12 @@
       "id": "string",
       "kind": "string",
       "reward": "number",
+      "rush": "boolean",
       "shop": "string",
       "tier": "number",
       "to": "string",
-      "units": "number"
+      "units": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -537,7 +555,8 @@
       "shop": "string",
       "targetName": "string",
       "template": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      }
     ],
     "pressure": {
@@ -679,80 +698,6 @@
       "x": "number",
       "y": "number"
      },
-     {
-      "id": "string",
-      "kind": "string",
-      "part": {
-       "defId": "string",
-       "gun": {
-        "ammo": "number",
-        "cooldown": "number",
-        "reloadWork": "number"
-       },
-       "hp": "number",
-       "id": "string",
-       "wear": "number"
-      },
-      "rot": "number",
-      "x": "number",
-      "y": "number"
-     },
-     {
-      "id": "string",
-      "kind": "string",
-      "part": {
-       "defId": "string",
-       "hp": "number",
-       "id": "string",
-       "wear": "number"
-      },
-      "rot": "number",
-      "x": "number",
-      "y": "number"
-     }
-    ],
-    "job": "null",
-    "lastHitBy": "null",
-    "name": "string",
-    "order": "null",
-    "pos": {
-     "x": "number",
-     "y": "number"
-    },
-    "resources": {
-     "fuel": "number",
-     "health": "number",
-     "money": "number",
-     "supplies": "number"
-    },
-    "speed": "number",
-    "trail": [],
-    "weaponOrders": {}
-   },
-   {
-    "brain": {
-     "attackers": {},
-     "driver": "string",
-     "goal": "null",
-     "goals": [],
-     "home": {
-      "x": "number",
-      "y": "number"
-     },
-     "hurt": "number",
-     "noticed": {},
-     "stepIndex": "number",
-     "templateId": "string",
-     "traits": [
-      "string"
-     ]
-    },
-    "chassisId": "string",
-    "direct": "boolean",
-    "faction": "string",
-    "heading": "number",
-    "id": "string",
-    "items": [
      {
       "id": "string",
       "kind": "string",

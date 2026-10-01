@@ -1,4 +1,4 @@
-import { HUNT, MIN_CHANCE, NPC_BEHAVIOR } from '../data/npcs';
+import { HUNT, MIN_CHANCE, NPCS, NPC_BEHAVIOR, TRAITS } from '../data/npcs';
 import { partDef, type PartDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { describe, expect, it, onTestFinished } from 'vitest';
@@ -6,20 +6,22 @@ import { TERRAIN } from '../data/terrain';
 import { corePart, coreParts, mountedParts } from './grid';
 import { maxHp } from './wear';
 import { addGoods } from './inventory';
-import { decide, huntingGrounds, isWeak, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
+import { decide, huntingGrounds, isWeak, lawmanTowns, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
 import { siteLootTable } from './salvage';
-import { sitePads } from './sites';
+import { siteGates, sitePads } from './sites';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
 import { addState, endState, stateOf } from './states';
+import { playerVehicle } from './damage';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls } from './testkit';
 import type { TraitId } from '../data/npcs';
 import type { Faction, Vehicle, World } from './types';
 import { dist, polylineDist, type Vec } from './vec';
+import { fuelCap } from './stats';
 import { refreshVision } from './vision';
 import { cloneWorld } from './world';
 
 function addNpc(w: World, faction: Faction, templateId: string, traits: TraitId[], pos: Vec, parts = ['mg', 'stockEngine']): Vehicle {
-  const v = addVehicle(w, faction, 'scout', parts, pos);
+  const v = addVehicle(w, faction, 'wagon', parts, pos);
   v.brain = npcBrain(templateId, pos, traits);
   return v;
 }
@@ -102,7 +104,7 @@ describe('decision weights', () => {
     const w = emptyWorld({ x: 80, y: 80 });
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 }, ['mg', 'stockEngine']);
     const weak = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
-    const strong = addVehicle(w, 'raiders', 'scout', ['autocannon'], { x: 14, y: 12 });
+    const strong = addVehicle(w, 'raiders', 'wagon', ['autocannon'], { x: 14, y: 12 });
     const calm = optionWeights(w, npc, 'hostileSeen', weak.id, vehicleDanger(w, weak)).flee!;
     expect(optionWeights(w, npc, 'hostileSeen', strong.id, vehicleDanger(w, strong)).flee).toBeGreaterThan(calm);
     corePart(npc, 'cab').hp = 1;
@@ -198,6 +200,44 @@ describe('decision weights', () => {
     expect(thinkNpc(w, trader)).toMatchObject({ kind: 'tow', targetId: me });
     expect(stateOf(w, 'turnedDown', trader.id, me)).toBeNull();
     expect(thinkNpc(w, trader)).toMatchObject({ kind: 'tow', targetId: me });
+  });
+});
+
+describe('aid decisions', () => {
+  // A driver with the given traits and full tanks beside a player low on fuel, so it can spare some.
+  function aidChances(traits: TraitId[], decision: 'aidAsked' | 'needySeen'): Record<string, number> {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = addNpc(w, 'traders', 'trader', traits, { x: 36, y: 30 });
+    npc.resources!.fuel = fuelCap(npc);
+    w.player.fuel = 1;
+    return optionChances(optionWeights(w, npc, decision, w.player.vehicleId, null)) as Record<string, number>;
+  }
+
+  const HELPERS: TraitId[][] = [['trader'], ['scavenger'], ['roamer']];
+
+  it('a trader, scavenger or roamer offers aid unprompted about 3% of the time, others at the floor', () => {
+    for (const traits of HELPERS) {
+      const aid = aidChances(traits, 'needySeen').aid;
+      expect(aid).toBeGreaterThan(0.025);
+      expect(aid).toBeLessThan(0.035);
+    }
+    expect(aidChances(['lawman'], 'needySeen').aid).toBeCloseTo(MIN_CHANCE);
+  });
+
+  it('a trader, scavenger or roamer gives when asked about twice as often as others', () => {
+    const plain = aidChances(['lawman'], 'aidAsked').give;
+    expect(plain).toBeCloseTo(MIN_CHANCE + (1 - 2 * MIN_CHANCE) * (1 / 10));
+    for (const traits of HELPERS) expect(aidChances(traits, 'aidAsked').give).toBeCloseTo(MIN_CHANCE + (1 - 2 * MIN_CHANCE) * (2 / 11));
+  });
+
+  it('keeps every aid option at MIN_CHANCE or more', () => {
+    for (const traits of [...HELPERS, ['lawman'], ['courier'], ['supplier'], ['raider']] as TraitId[][]) {
+      for (const decision of ['aidAsked', 'needySeen'] as const) {
+        const chances = Object.values(aidChances(traits, decision));
+        expect(chances).toHaveLength(2);
+        for (const chance of chances) expect(chance).toBeGreaterThanOrEqual(MIN_CHANCE);
+      }
+    }
   });
 });
 
@@ -444,6 +484,11 @@ describe('robbery after a truce', () => {
 });
 
 describe('hunting grounds', () => {
+  it('belong to the camps every raider template knows, so a raider camp owns its grounds', () => {
+    const camps = REGION.locations.filter((l) => l.kind === 'camp').map((l) => l.id).sort();
+    for (const t of Object.values(NPCS).filter((t) => t.traits.includes('raider'))) expect([...TRAITS.raider.bases].sort(), t.id).toEqual(camps);
+  });
+
   const grounds = huntingGrounds();
   const lootPads = REGION.locations.filter((l) => l.kind !== 'camp' && siteLootTable(l)).flatMap((l) => sitePads(l));
   const isPad = (p: Vec) => lootPads.some((pad) => dist(p, pad) < 0.01);
@@ -460,6 +505,33 @@ describe('hunting grounds', () => {
     for (const p of grounds.filter(onRoad)) for (const site of sites) expect(dist(p, site.pos) - site.radius).toBeGreaterThanOrEqual(HUNT.siteDistance);
     const guarded = [...REGION.towns, ...REGION.locations.filter((l) => l.kind === 'camp')];
     for (const p of grounds) for (const site of guarded) expect(dist(p, site.pos)).toBeGreaterThan(site.radius + REGION.sites.pad.length);
+  });
+});
+
+describe('raider grounds', () => {
+  const camps = REGION.locations.filter((l) => l.kind === 'camp');
+  const scrapjaw = camps.find((c) => c.id === 'scrapjaw')!;
+  const kiln = camps.find((c) => c.id === 'kiln')!;
+  const lawGates = () => lawmanTowns().flatMap((town) => siteGates(town));
+
+  it('are hunting grounds outside lawman reach, for each camp', () => {
+    expect(lawmanTowns().map((t) => t.id).sort()).toEqual(['bowl', 'nose']);
+    for (const camp of [scrapjaw, kiln]) {
+      expect(raiderGrounds(camp).length).toBeGreaterThanOrEqual(2); // Scrapjaw keeps 2 on the current map
+      for (const p of raiderGrounds(camp)) {
+        expect(huntingGrounds()).toContainEqual(p);
+        for (const gate of lawGates()) expect(dist(gate, p)).toBeGreaterThan(HUNT.lawReach);
+      }
+    }
+  });
+
+  it('belong to the nearest camp alone', () => {
+    for (const [camp, other] of [[scrapjaw, kiln], [kiln, scrapjaw]]) {
+      for (const p of raiderGrounds(camp)) {
+        expect(dist(p, camp.pos)).toBeLessThanOrEqual(dist(p, other.pos));
+        expect(raiderGrounds(other)).not.toContainEqual(p);
+      }
+    }
   });
 });
 
@@ -493,5 +565,50 @@ describe('a driver that gave its word', () => {
     forceOption('hostileSeen', 'fight');
     thinkNpc(w, npc);
     expect(topGoal(npc)).toMatchObject({ kind: 'fight', targetId: raider.id });
+  });
+});
+
+describe('warn-off decisions', () => {
+  // The chances of a driver with the given traits answering the player's warning off its wreck. The player's danger
+  // is its real value, so only the traits differ between calls.
+  function warnChances(traits: TraitId[], parts = ['mg', 'stockEngine']): Record<string, number> {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = addNpc(w, 'scavengers', 'scavenger', traits, { x: 36, y: 30 }, parts);
+    return optionChances(optionWeights(w, npc, 'warnedOff', w.player.vehicleId, vehicleDanger(w, playerVehicle(w)))) as Record<string, number>;
+  }
+
+  const plain = () => warnChances(['scavenger']);
+
+  it('a raider or lawman fights back more and backs off less than a plain driver', () => {
+    for (const traits of [['raider'], ['lawman']] as TraitId[][]) {
+      expect(warnChances(traits).fightBack).toBeGreaterThan(plain().fightBack);
+      expect(warnChances(traits).comply).toBeLessThan(plain().comply);
+    }
+  });
+
+  it('a coward or trader backs off more and a trader fights back less than a plain driver', () => {
+    for (const traits of [['coward'], ['trader']] as TraitId[][]) expect(warnChances(traits).comply).toBeGreaterThan(plain().comply);
+    expect(warnChances(['trader']).fightBack).toBeLessThan(plain().fightBack);
+  });
+
+  it('a driver with revenge on the player fights back more', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 36, y: 30 });
+    const danger = vehicleDanger(w, playerVehicle(w));
+    const calm = optionWeights(w, npc, 'warnedOff', w.player.vehicleId, danger).fightBack!;
+    addState(w, 'revenge', npc.id, w.player.vehicleId, { kind: 'none' });
+    expect(optionWeights(w, npc, 'warnedOff', w.player.vehicleId, danger).fightBack).toBeGreaterThan(calm);
+  });
+
+  it('keeps every option at MIN_CHANCE or more for every trait', () => {
+    for (const trait of Object.keys(TRAITS) as TraitId[]) {
+      const chances = warnChances([trait]);
+      expect(Object.keys(chances).sort(), trait).toEqual(['comply', 'fightBack', 'refuse']);
+      for (const chance of Object.values(chances)) expect(chance, trait).toBeGreaterThanOrEqual(MIN_CHANCE);
+    }
+  });
+
+  it('never fights back without a working gun, and can always back off or refuse', () => {
+    expect(Object.keys(warnChances(['raider'], ['stockEngine'])).sort()).toEqual(['comply', 'refuse']);
   });
 });
