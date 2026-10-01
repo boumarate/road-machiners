@@ -1,4 +1,4 @@
-// The player's truck switches: manual driving, auto patch, engine overdrive and dousing the engine.
+// The player's truck switches (manual driving, auto patch, overdrive, dousing the engine) and the E-key context action.
 
 import { readyAid, startAid } from "../sim/aid";
 import { playerVehicle } from "../sim/damage";
