@@ -496,6 +496,16 @@ describe('answering a stranded truck', () => {
     expect(claimOf(w, tower.id)).toBeDefined();
   });
 
+  it('the claim clock holds while the tower cannot see its client, as on a beacon answer', () => {
+    const { w: start, tower } = blocked();
+    let w = start;
+    w.player.beacon = true;
+    const me = find(w, w.player.vehicleId).pos;
+    const far = { x: me.x + 40, y: me.y };
+    for (let i = 0; i < 30; i++) w = pin(w, far, tower.id);
+    expect(claimOf(w, tower.id)).toBeDefined();
+  });
+
   it('a tower that reaches its client on the turn its claim lapses ends the job without hitching', () => {
     const s = stranded();
     const client = find(s.w, s.w.player.vehicleId);
