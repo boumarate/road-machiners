@@ -174,7 +174,7 @@ Faction squads roam the map. Places are discovered by exploring. Towns and locat
 
 Each town gate has a guard gun. Each turn it shoots the nearest vehicle in its range that fired at anyone but a raider, whatever its own faction. Raiders also trade in towns, so guards judge by action. A town gate is therefore a safe place to run to.
 
-Raiders have two camps, Scrapjaw Camp in the north and Kiln Camp in the south. A dirt track leads to each camp gate. Raiders spawn outside a camp gate. Each camp gate gun shoots the nearest non-raider in its range every turn, whether or not that vehicle fired. The player cannot use camp services.
+Raiders have two camps, Scrapjaw Camp in the north and Kiln Camp in the south. A dirt track leads to each camp gate. Raiders spawn outside a camp gate and patrol the roads around their own camp between raids. Each camp gate gun shoots the nearest non-raider in its range every turn, whether or not that vehicle fired. The player cannot use camp services.
 
 ## Sun, time and weather
 
@@ -192,12 +192,12 @@ NPC behavior has three layers. Traits are permanent and set the chances of choic
 
 A driver never stands still for good. It waits for a parked truck ahead only while that truck is about to drive. A point it cannot reach, like one another truck covers, counts as reached once it gets as close as it can. A driver that still stays put for a while with its goal out of reach drives to a random free spot nearby and tries again.
 
-NPCs spawn with equipment sampled from weighted tables for their role: a chassis, a fitting engine and weapon, then optional cargo parts, guns, armor and goods. A driver's gear level sets a chance, from 0 for poor to 80% for loaded, that each free deck spot gets another gun. So a loaded enemy sometimes drives a fortress, and the guns slow it. It respects mount space, rated mass and an equipment budget separate from the driver's wallet. Rare equipment has a lower weight. The same world seed and actions produce the same equipment. There is no separate loot roll on defeat.
+NPCs spawn with equipment sampled from weighted tables for their role: a chassis, a fitting engine and weapon, then optional cargo parts, guns, armor and goods. A driver's gear level sets a chance, from 0 for poor to 80% for loaded, that each free deck spot gets another gun. So a loaded enemy sometimes drives a fortress, and the guns slow it. It respects mount space, rated mass and an equipment budget separate from the driver's wallet. Rare equipment has a lower weight. Raiders never roll the poor level. The same world seed and actions produce the same equipment. There is no separate loot roll on defeat.
 
 - Scavengers collect salvage and sell cargo. A scavenger on a trip stops for three in four wrecks it passes, then mostly goes back to its trip.
 - Vultures prowl lonely roads and hunting grounds, and stop for nearly every wreck, pile or knocked-out truck they pass. They sell the loot, with long-range guns, armor and cargo packs on their trucks.
 - Traders buy profitable cargo, keep money for upkeep and flee from threats. A trader rolls its run from every shop pair, weighted by profit over trip length. Near runs win most rolls, so traders spread over all shops instead of all taking the one best run.
-- Raiders search hunting grounds, fight, collect wreck cargo, and sell it in towns. They buy fuel, supplies and repairs at their nearest camp, and flee to a camp or a town. A camp buys no cargo, so a raider without money sells its cargo in town first. Hunting grounds are lonely road stretches far from any site and the pads of salvage sites.
+- Raiders search the hunting grounds nearer their own camp, never ones a Bowl Farmer or Nose Army patrol could see from its farthest stop. Between raids they patrol the roads around their camp. They fight, collect wreck cargo, and sell it in towns. They buy fuel, supplies and repairs at their nearest camp, and flee to a camp or a town. A camp buys no cargo, so a raider without money sells its cargo in town first. Hunting grounds are lonely road stretches far from any site and the pads of salvage sites.
 - Each NPC pays for fuel, supplies and repairs from its own wallet.
 - An NPC heads for fuel when its tank drops below a reserve for the way to its nearest pump. A pump is a town or a stall that sells fuel. It judges that way as a straight line at the heat where it stands. Each driver misjudges by its own fixed share, traders keep a smaller reserve and cowards a larger one. A winding road, a hotter noon or a fight on the way can drain the tank before the pump, so some drivers run dry and wait for a tow.
 
@@ -217,7 +217,7 @@ Every NPC carries a set of traits instead of one class. Each trait adds activiti
 
 - Scavenger collects salvage and helps stranded trucks.
 - Trader buys and sells between towns, rarely starts a fight, and sometimes fights back.
-- Raider hunts at hunting grounds, investigates distant engines and knows the raider camps.
+- Raider hunts at the hunting grounds of its own camp, patrols around that camp, investigates distant engines and knows the raider camps.
 - Scumbag robs trucks that carry a valuable load and look weaker than it.
 - Coward flees more often and fights back less.
 - Brave almost never runs, pleads or gives up its cargo.
