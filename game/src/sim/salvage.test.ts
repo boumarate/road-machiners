@@ -13,7 +13,7 @@ import { BREAKABLE, RULES } from '../data/rules';
 import { takeAllLoot, takeLoot, takeStores, canScavenge, scavenge } from './locations';
 import {
   breakProp, canTakeAny, claimPile, claimantOf, clearPiles, collectSalvage, createCargoSalvage, hasSalvage, initializeSalvage, isLootTarget, isRoadWreck, lootBlockedError, lootBlocker,
-  lootClaimedBy, looterOf, renewSalvage, salvageInRange, salvageUnits, siteLootTable,
+  isSiteStock, lootClaimedBy, looterOf, renewSalvage, salvageInRange, salvageUnits, siteLootTable,
 } from './salvage';
 import { knockOutNpc } from './defeat';
 import { SHOPS } from '../data/market';
@@ -23,6 +23,7 @@ import { dist, type Vec } from './vec';
 import { maxHp } from './wear';
 import { grayRadius } from './vision';
 import { sitePads } from './sites';
+import { isLootSpot, spotTable, territoryOfStock } from './territory';
 import { freeCells } from './grid';
 import { endTurn } from './world';
 import { TEST_MAP } from '../test/map';
@@ -711,4 +712,67 @@ describe('who loots a target', () => {
     expect(lootClaimedBy(w, first)).toBe(stock.id);
     expect(lootClaimedBy(w, second)).toBeNull();
   });
+});
+
+describe('territory loot spots', () => {
+  async function realWorld(): Promise<World> {
+    const { newWorld } = await import('./world');
+    const { startKit } = await import('../data/start');
+    return newWorld(1337, startKit('standard'), TEST_MAP);
+  }
+  const spotsOf = (w: World) => w.obstacles.filter(isLootSpot);
+
+  it('gives each spot exactly one stock with its id, and no stock without a spot', async () => {
+    const w = await realWorld();
+    const spots = spotsOf(w);
+    expect(spots.length).toBeGreaterThan(0);
+    for (const o of spots) expect(w.salvage.filter((s) => s.id === o.id), o.id).toHaveLength(1);
+    const ids = new Set(w.obstacles.map((o) => o.id));
+    for (const s of w.salvage.filter((entry) => territoryOfStock(entry))) expect(ids.has(s.id), s.id).toBe(true);
+    expect(w.salvage.some((s) => s.id === 'fallen-sun')).toBe(false);
+  }, 30_000);
+
+  it('rolls inner spots from the landmark table and outer spots from the hull scrap table', async () => {
+    const w = await realWorld();
+    for (const o of spotsOf(w)) {
+      const table = spotTable(o);
+      const stock = stockOf(w, o.id);
+      expect(table).toBe(o.kind === 'landmark' && o.look === 'coreWreck' ? SALVAGE.landmark : SALVAGE.hullScrap);
+      expect(stock.goods.parts).toBeGreaterThanOrEqual(table.parts[0]);
+      expect(stock.goods.parts).toBeLessThanOrEqual(table.parts[1]);
+      expect(stock.fuel).toBeLessThanOrEqual(table.fuel[1]);
+      expect(stock.radius).toBeCloseTo(propReach(o), 6);
+    }
+  }, 30_000);
+
+  it('refills an emptied spot over days and never past its table', async () => {
+    const w = await realWorld();
+    const o = spotsOf(w).find((spot) => spot.kind === 'landmark' && spot.look === 'coreWreck')!;
+    const stock = stockOf(w, o.id);
+    emptyStock(stock);
+    runDays(w, 1);
+    expect(stock.goods.scrap).toBeLessThan(SALVAGE.landmark.goods.scrap[1]);
+    runDays(w, 365);
+    expect(stock.goods.scrap).toBe(SALVAGE.landmark.goods.scrap[1]);
+    expect(stock.goods.parts).toBe(SALVAGE.landmark.parts[1]);
+    expect(stock.fuel).toBe(SALVAGE.landmark.fuel[1]);
+    expect(stockOf(w, o.id).parts.length).toBeLessThanOrEqual(1);
+  }, 30_000);
+
+  it('lets a parked player beside a spot search it, and not a moving one', async () => {
+    const w = await realWorld();
+    const o = spotsOf(w)[0];
+    const me = w.vehicles[0];
+    me.pos = { x: o.pos.x + propReach(o) + 1, y: o.pos.y };
+    me.speed = 0;
+    expect(canScavenge(w)).toBe(true);
+    me.speed = RULES.parkedSpeed + 1;
+    expect(canScavenge(w)).toBe(false);
+  }, 30_000);
+
+  it('leaves road wreck and site stock alone', async () => {
+    const w = await realWorld();
+    expect(w.salvage.filter((s) => isSiteStock(s)).length).toBeGreaterThan(0);
+    for (const o of spotsOf(w)) expect(isSiteStock(stockOf(w, o.id))).toBe(false);
+  }, 30_000);
 });

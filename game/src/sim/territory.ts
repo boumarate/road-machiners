@@ -35,13 +35,16 @@ export function spotTable(o: Obstacle): LootTable {
   return SALVAGE[rule.table];
 }
 
-export function territoryOfStock(world: World, stockId: string): TerritoryDef | null {
-  const o = world.obstacles.find((entry) => entry.id === stockId);
-  return o && isLootSpot(o) ? territoryAt(o.pos) : null;
+// The territory whose loot spot holds this stock. Ids of baked props are <kind>-<k>, so the id tells a spot's kind.
+export function territoryOfStock(stock: SalvageStock): TerritoryDef | null {
+  const t = territoryAt(stock.pos);
+  if (!t) return null;
+  const kind = stock.id.slice(0, stock.id.lastIndexOf('-'));
+  return TERRITORIES[t.id].spots.some((s) => s.look === kind) ? t : null;
 }
 
 export function territorySpots(world: World, id: string): SalvageStock[] {
-  return world.salvage.filter((stock) => territoryOfStock(world, stock.id)?.id === id);
+  return world.salvage.filter((stock) => territoryOfStock(stock)?.id === id);
 }
 
 // Where roads meet the territory's edge: the ends of its approach roads, in road order.
