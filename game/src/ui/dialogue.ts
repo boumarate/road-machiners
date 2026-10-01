@@ -12,7 +12,7 @@ import { callVehicle, chooseOption, currentOptions, hangUp, honk } from '../sim/
 import type { CallVar, CallVars, GameEvent, World } from '../sim/types';
 import { playerSees } from '../sim/vision';
 import { playerCanAct } from '../sim/world';
-import { el, panel } from './dom';
+import { el, isBrowserChord, panel } from './dom';
 import { fuelLiters, meters } from './units';
 import { npcName } from '../sim/spawn';
 
@@ -180,7 +180,7 @@ export class DialoguePanel {
   }
 
   private onKey(e: KeyboardEvent): void {
-    if (isTyping()) return;
+    if (isBrowserChord(e) || isTyping()) return;
     if (this.host.busy()) return this.onBusyKey(e);
     const handled = this.host.world().player.call ? this.onCallKey(e.code) : this.onFreeKey(e.code);
     if (handled) e.stopImmediatePropagation();

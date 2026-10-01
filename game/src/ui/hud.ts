@@ -4,7 +4,7 @@ import { DialoguePanel, type DialogueHost } from "./dialogue";
 import type { Vehicle, World } from "../sim/types";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
-import { el, panel, topLeft, topRight } from "./dom";
+import { el, isBrowserChord, panel, topLeft, topRight } from "./dom";
 import {
   contractDue,
   contractSummary,
@@ -131,7 +131,7 @@ export class Hud {
     this.recenter.append(el("button", { onclick: () => actions.recenter() }, "Center on truck (F)"));
     this.showCameraMode();
     window.addEventListener("keydown", (e) => {
-      if (e.code === "KeyV" && !document.activeElement?.matches("input, select, textarea")) this.toggleCameraMode();
+      if (e.code === "KeyV" && !isBrowserChord(e) && !document.activeElement?.matches("input, select, textarea")) this.toggleCameraMode();
     });
     this.log.replaceChildren(
       el("h3", {}, "Log"),
