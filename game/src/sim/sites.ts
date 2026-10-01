@@ -54,6 +54,7 @@ export function sitePads(site: Site): Vec[] {
 }
 
 export function nearestPad(site: Site, from: Vec): Vec {
+  if (isTerritory(site)) throw new Error(`Territory ${site.id} has no pads; use territoryEntries`);
   return sitePads(site).reduce((a, b) => (dist(from, a) <= dist(from, b) ? a : b));
 }
 

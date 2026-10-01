@@ -57,10 +57,10 @@ export function territoryEntries(t: TerritoryDef): Vec[] {
 }
 
 // Open points inside a territory where raiders and vultures wait for scavengers: its entries, and a ring through
-// the band of its outermost spots. The ring lies clear of the hazard.
+// the band of its outermost spots (the rule with the largest outer ring). The ring lies clear of the hazard.
 export function territoryGrounds(t: TerritoryDef): Vec[] {
   const spots = TERRITORIES[t.id].spots;
-  const [lo, hi] = spots[spots.length - 1].ring;
+  const [lo, hi] = spots.reduce((a, b) => (b.ring[1] > a.ring[1] ? b : a)).ring;
   const ring = Array.from({ length: GROUND_POINTS }, (_, i) => {
     const a = (i / GROUND_POINTS) * Math.PI * 2;
     const at = t.radius * (lo + hi) / 2;
@@ -82,6 +82,7 @@ export function hazardZones(): HazardZone[] {
 // Drivers know the fixed spots, and learn one is empty only once they can reach it.
 export function spotGoal(world: World, territoryId: string): NpcActivity {
   const spots = territorySpots(world, territoryId);
+  if (!spots.length) throw new Error(`Territory ${territoryId} has no baked loot spots`);
   const spot = spots[randInt(world, 0, spots.length - 1)];
   return { kind: 'scavenge', targetId: spot.id, destination: { ...spot.pos }, phase: 'travel', reason: 'search a loot spot' };
 }
