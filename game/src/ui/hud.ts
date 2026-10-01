@@ -348,6 +348,7 @@ export class Hud {
     const douse = el(
       "button",
       {
+        class: "instrument-button",
         disabled: busy || !canDouse(w),
         onclick: () => this.actions.douseEngine(),
         title: `Pour ${ENGINE_HEAT.douseSupplies} supplies of water over the engine to cool it [G]`,
@@ -362,6 +363,7 @@ export class Hud {
     return el(
       "button",
       {
+        class: "instrument-button",
         disabled: busy,
         onclick: () => this.actions.openCharacter(),
         title: perkOpen ? "Driver and skills: a perk is ready to pick [C]" : "Driver and skills [C]",
@@ -380,6 +382,20 @@ export class Hud {
     this.top.replaceChildren(
       this.condition.root,
       el(
+        "div",
+        {
+          class: "instrument-clock",
+          role: "timer",
+          title: "Day and time",
+          "aria-label": `Time: ${readout.clock}`,
+        },
+        el("small", {}, "TIME"),
+        el("span", { class: "clock-digits" }, readout.clock),
+      ),
+      el(
+        "div",
+        { class: "speedometer" },
+        el(
         "button",
         {
           class: "truck-instrument",
@@ -390,8 +406,9 @@ export class Hud {
         },
         createSpeedDial(Number(readout.speed), Number(readout.maxSpeed)),
         el("span", { class: "speed-value" }, readout.speed),
-        el("span", { class: "speed-unit" }, `km/h · max ${readout.maxSpeed}`),
         createIcon("truck"),
+      ),
+        el("span", { class: "speed-max", title: "Max speed" }, `max ${readout.maxSpeed}`),
       ),
       el(
         "div",
@@ -456,15 +473,6 @@ export class Hud {
         }),
         ...this.engineButtons(w, busy),
         this.characterButton(w, busy),
-        ...(readout.broken
-          ? [
-              el(
-                "span",
-                { class: "bad", role: "status" },
-                `! ${readout.broken} broken`,
-              ),
-            ]
-          : []),
       ),
     );
   }
