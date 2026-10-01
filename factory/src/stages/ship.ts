@@ -12,7 +12,7 @@ export type ItchKeys = { itchTarget: string; butlerKey: string };
 // Checked first, so a ship without them stops before it merges anything into main.
 export function itchKeys(ctx: Ctx): ItchKeys {
   const { itchTarget, butlerKey } = ctx.cfg;
-  if (!itchTarget || !butlerKey) throw new Error('A release needs ITCH_TARGET and BUTLER_API_KEY in factory/.env.');
+  if (!itchTarget || !butlerKey) throw new Error('A release needs ITCH_TARGET in factory/settings.env and BUTLER_API_KEY in factory/.env.');
   return { itchTarget, butlerKey };
 }
 

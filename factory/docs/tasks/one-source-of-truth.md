@@ -24,12 +24,12 @@ Game branches:
 
 Factory code and settings:
 
-- Plain settings, like `FACTORY_MAX_JOBS_PER_DAY`, the worker limits and the models, move to `factory/settings.env`, which is committed. Secrets stay in a server-only `secrets.env` that git never sees. The config loader reads both, and a key found in both files fails loudly.
+- Plain settings, like `FACTORY_MAX_JOBS_PER_DAY`, the worker limits and the models, move to `factory/settings.env`, which is committed. Secrets, committee ids and host paths stay in the server-only `factory/.env` that git never sees. It keeps its name, so `claude-run` and the compose files read it as before. The config loader reads both, and a key found in both files fails loudly.
 - `/opt/factory/code` becomes a git checkout of `main`, owned by the factory user. Nothing rsyncs into it.
 - A systemd timer runs `factory-update` every few minutes. When `origin/main` has moved past the deployed commit, the script pauses the factory and waits for `jobs` to empty. If jobs are still running, it tries again on the next run. Then it checks out the new commit and runs only the rebuilds the changed paths need: `npm ci`, the agent and proxy images, or Hermes. It records the commit and unpauses.
 - If the checkout has local edits, the update stops and records an incident for Hermes. It never overwrites a hand edit without a trace.
-- The pyinfra deploy shrinks to provisioning. It installs packages and units, writes `secrets.env`, makes the first clone and sets up Caddy. To roll out code, you push to `main`.
-- `/change` opens its pull request against `main`. You merge it on GitHub, and the update deploys it. Hermes stops editing factory code or settings on the server. It asks for every change through `/change`.
+- The pyinfra deploy shrinks to setup. It installs packages and units, pushes `.env` from the laptop's `infra/server.env`, makes the first clone, builds and sets up Caddy. It never sends code. To roll out code or settings, you merge to `main`. To roll out a secret, you edit `infra/server.env` and run the deploy.
+- `/change` opens its pull request against `main`. You merge it on GitHub, and the update deploys it. Hermes stops editing factory code or settings on the server. It queues every change with a new tool, `factory_queue_change`, which runs the same change job.
 
 Out of scope: game stages, the queue model, and how releases and approvals decide anything.
 
@@ -58,18 +58,18 @@ Out of scope: game stages, the queue model, and how releases and approvals decid
 - Tests:
   - `repo.test.ts` runs against a local bare repo standing in for GitHub. It covers a rejected push, a retry, an atomic multi-branch push, and an issue branch that ends up on the remote.
   - The stage fakes in `test-fakes.ts` swap `sync` for `fetch` and `land`.
-- Migration: on first run, delete the local `dev`, `main` and release branches of the host clone, after checking that none is ahead of `origin`. If one is ahead, stop.
+- Migration: every `fetch()` deletes all local branches of the host clone, so the first tick migrates it. Before the deploy, a check on the server found no local branch ahead of GitHub.
 
 ### Phase 2 — Settings in git, secrets on the server
 
-- Add `factory/settings.env` with every key of `infra/server.env` that is not a secret.
-- Cut `infra/server.env` down to the secrets, renamed `infra/secrets.env`.
-- `src/config.ts`: read `settings.env`, then `secrets.env`, and fail when a key appears in both. Update `.env.example` and `config.test.ts`.
-- `deploy.py` and `factory_infra`: write `secrets.env` and stop writing the old `.env`.
+- Add `factory/settings.env` with every key of `infra/server.env` that is not a secret, a committee id or a host path.
+- Cut `infra/server.env` down to the rest. It keeps its name and still becomes the server's `factory/.env`.
+- `src/config.ts`: read `settings.env` and `.env`, and fail when a key appears in both. Update `.env.example` and `config.test.ts`.
+- `factory_infra`: check both files together. The Hermes compose call and `mac/tick-loop.sh` read both.
 
 ### Phase 3 — The server updates itself from main
 
-- Add `factory/infra/files/factory-update.sh`. It fetches, compares with `$FACTORY_HOME/deployed`, and pauses with the reason `update`. It waits only for the current run. It refuses local edits, checks out the commit, runs the rebuilds by changed path, records the commit and unpauses. It writes its log to `logs/update.log`, and records a failure in the state's `failures`.
+- Add `factory/infra/files/factory-update.sh`. It fetches, compares with `$FACTORY_HOME/deployed`, and pauses with the reason `update`. It waits only for the current run. It refuses local edits, checks out the commit, runs the rebuilds by changed path, records the commit and unpauses. It writes its log to `logs/update.log`, and records a failure in `$FACTORY_HOME/update-failed`, since the state file belongs to the factory's locks. Deploy installs it outside the checkout, so a checkout never rewrites the running script.
 - Add `roam-factory-update.service` and `.timer` units. `deploy.py` installs them, stops rsyncing, and turns the existing rsynced dir into a clone once. That step keeps `node_modules`.
 - `factory-incidents.sh` prints an update failure.
 

@@ -1,4 +1,5 @@
 // The factory command line. Usage: npm run factory -- <tick | run <stage> <issue|-> | intake>
+import { readEnvFiles } from './config';
 import { realContext } from './context';
 import { drainInbox } from './inbox';
 import { intake } from './intake';
@@ -10,8 +11,13 @@ import type { JobStage } from './types';
 
 const JOB_STAGES: JobStage[] = ['triage', 'design', 'implement', 'testing', 'release', 'candidate', 'ship', 'remove', 'approve', 'change', 'adhoc', 'dev'];
 
+// The process env wins, like loadEnvFile, so a job keeps what its tick passed down.
+function loadEnv(): void {
+  for (const [key, value] of Object.entries(readEnvFiles('settings.env', '.env'))) process.env[key] ??= value;
+}
+
 async function main(args: string[]): Promise<void> {
-  process.loadEnvFile('.env');
+  loadEnv();
   const ctx = realContext(process.env);
   const codeDir = process.cwd();
   const [command, stage, issue] = args;

@@ -115,7 +115,7 @@ describe('ship', () => {
   it('stops before it merges anything when the itch keys are missing', async () => {
     const f = shippable();
     Object.assign(f.ctx.cfg, { itchTarget: null, butlerKey: null });
-    await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('ITCH_TARGET and BUTLER_API_KEY');
+    await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('ITCH_TARGET in factory/settings.env and BUTLER_API_KEY');
     expect(f.calls).toEqual([]);
   });
 
