@@ -11,6 +11,8 @@ telegram:
 # Keep Hermes's own notices out of the committee chat.
 compression:
   codex_gpt55_autoraise_notice: false
+  # Compress the context once the estimated prompt reaches this many tokens.
+  threshold_tokens: 100000
 
 display:
   # A message sent while Hermes works waits for the next turn, instead of cutting the running task off. /stop still interrupts.
