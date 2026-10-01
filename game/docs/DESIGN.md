@@ -34,7 +34,7 @@ The player's progression in the game is not simply accumulating more money, gear
 
 7. Player is not the main character
 
-The player is not a Chosen one, gets no plot armor or special treatment. It's down the player's wits to get the upper hand over the harsh world.
+The player is not a Chosen one, gets no plot armor or special treatment. It's down to the player's wits to get the upper hand over the harsh world. The game does not tell the player how to play or what is right. Being a raider, robbing other drivers or becoming the biggest scumbag in the wasteland are all valid paths if that's fun for the player.
 
 8. New World vs Old World contrasts
 
