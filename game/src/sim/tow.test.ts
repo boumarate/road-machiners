@@ -12,7 +12,7 @@ import { isStranded, vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere, testDrive , startCombat } from './testkit';
 import { hasLoot, mountedParts } from './grid';
 import { CONDITION } from '../data/wear';
-import { thinkNpc, topGoal } from './npc-activities';
+import { startTow, thinkNpc, topGoal } from './npc-activities';
 import { optionChances, optionWeights } from './npc-decisions';
 import { addState, endState, stateOf, towData } from './states';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp } from './dialogue';
@@ -427,6 +427,80 @@ describe('answering a stranded truck', () => {
     expect(again.holder).not.toBe(claim.holder);
     expect(towers.map((t) => t.id)).toContain(again.holder);
     expect(topGoal(find(next, again.holder))?.kind).toBe('tow');
+  });
+
+  // A tower in sight that startTow sends over. pin() holds it in place each turn, as a wall of trucks would.
+  function blocked(): { w: World; tower: Vehicle } {
+    const { w, trader } = stranded();
+    const client = find(w, w.player.vehicleId);
+    startTow(w, trader, client, { ...client.pos });
+    return { w, tower: trader };
+  }
+  const pin = (w: World, at: Vec, id: string): World => {
+    const next = endTurn(w, testDrive);
+    find(next, id).pos = { ...at };
+    find(next, id).speed = 0;
+    return next;
+  };
+  const claimOf = (w: World, holder: string) => w.states.find((st) => st.kind === 'answering' && st.holder === holder);
+
+  it('a tower that cannot get through gives up 20 turns after it has its client in sight, and drops its goal', () => {
+    const { tower, w: start } = blocked();
+    let w = start;
+    const at = { ...find(w, tower.id).pos };
+    const events: GameEvent[] = [];
+    for (let i = 1; i <= 19; i++) w = pin(w, at, tower.id);
+    expect(claimOf(w, tower.id)).toBeDefined();
+    for (let i = 0; i < 3; i++) {
+      w = pin(w, at, tower.id);
+      events.push(...w.events);
+    }
+    expect(claimOf(w, tower.id)).toBeUndefined();
+    expect(events.find((e) => e.t === 'towDropped')).toMatchObject({ by: tower.id, reason: 'blocked' });
+    expect(find(w, tower.id).brain!.goals.some((g) => g.kind === 'tow')).toBe(false);
+  });
+
+  it('after the claim lapses, another tower can claim the client and the lapsed one does not at once', () => {
+    const { w: start, tower } = blocked();
+    let w = start;
+    const at = { ...find(w, tower.id).pos };
+    const other = withTower(w, 'trader', 'traders', 'hauler', { x: 30, y: 42 });
+    for (let i = 0; i < 30 && claimOf(w, tower.id); i++) w = pin(w, at, tower.id);
+    expect(claimOf(w, tower.id)).toBeUndefined();
+    // The other tower drove off to its own work, so it comes back into sight.
+    find(w, other.id).pos = { x: 30, y: 42 };
+    refreshVision(w);
+    forceOption('strandedSeen', 'tow');
+    w.turn++;
+    thinkNpc(w, find(w, other.id));
+    expect(claimOf(w, other.id)).toBeDefined();
+    // The lapsed tower keeps the client noticed while it sees it, so it does not claim again.
+    forceOption('strandedSeen', 'tow');
+    w.turn++;
+    thinkNpc(w, find(w, tower.id));
+    expect(claimOf(w, tower.id)).toBeUndefined();
+  });
+
+  it('the claim clock holds while the client is in combat or out of sight', () => {
+    const { w: start, tower } = blocked();
+    let w = start;
+    const at = { ...find(w, tower.id).pos };
+    const foe = withTower(w, 'scavenger', 'scavengers', 'hauler', { x: 30, y: 12 });
+    const me = w.player.vehicleId;
+    for (let i = 0; i < 30; i++) {
+      w = pin(w, at, tower.id);
+      // Hold the fight, as shots would.
+      if (!stateOf(w, 'feud', foe.id, me)) addState(w, 'feud', foe.id, me, { kind: 'feud', robbery: false });
+      if (!stateOf(w, 'combat', foe.id, me)) startCombat(w, foe, find(w, me));
+    }
+    expect(claimOf(w, tower.id)).toBeDefined();
+  });
+
+  it('a hitched tow never lapses on a timer', () => {
+    const s = stranded();
+    const w = acceptTow(offered(s));
+    const r = runUntil(w, 30, (x) => playerTow(x) === null);
+    expect(r.events.some((e) => e.t === 'towDropped' && e.reason === 'blocked')).toBe(false);
   });
 
   it('a truck at a town gate gets the tow chosen far less often than 40 tiles out, and still above 0', () => {

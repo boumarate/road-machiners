@@ -423,6 +423,7 @@ const PLAYER_TOW_DROPPED: Record<Extract<GameEvent, { t: 'towDropped' }>['reason
   danger: (by) => `${by} drops the tow. There is danger.`,
   stranded: (by) => `${by} can no longer drive. The tow is off.`,
   gone: (by) => `${by} is gone. The tow is off.`,
+  blocked: (by) => `${by} cannot get through to you. The tow is off.`,
 };
 
 function playerTowDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped' }>['reason']): LogLine {

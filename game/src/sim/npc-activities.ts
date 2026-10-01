@@ -428,6 +428,7 @@ function towInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string |
   if (heldTow(world, vehicle)) return null;
   const client = world.vehicles.find((v) => v.id === goal.targetId);
   if (!client || stateOf(world, 'turnedDown', vehicle.id, client.id)) return 'the tow is off';
+  if (!stateOf(world, 'answering', vehicle.id, client.id)) return 'could not get through to the truck';
   return strandedAt(world, vehicle, client) ? null : 'the tow is off';
 }
 

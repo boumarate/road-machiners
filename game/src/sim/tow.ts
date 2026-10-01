@@ -8,6 +8,8 @@
 // An NPC client takes the tow at once, to its nearest own camp, else its nearest known town, for what it can pay.
 // The player can tow a stranded NPC the same way, for its fee or for free. The radio releases it.
 // Raiders tow only raiders, and only raiders or the player tow a raider.
+// A claim that has its client in sight and out of combat for 20 turns without hitching lapses, so another driver can
+// answer.
 // Escorts live here too, since an escort tows its stranded leader. An escort is an `escort` state its holder keeps
 // toward the leader it guards. It is fulfilled when the leader can use its destination site, and its hook pays the
 // fee once. It breaks when either party is gone, beaten or hostile to the other. The escort follows the leader and
@@ -346,6 +348,12 @@ function towFee(world: World, tower: Vehicle, client: Vehicle, site: Site): numb
 function refuse(world: World, tow: NpcState): void {
   addState(world, 'turnedDown', tow.holder, tow.other, { kind: 'none' });
   dropTow(world, tow, 'refused');
+}
+
+// A tower that had its client in sight for the claim's turns without hitching cannot get through. The claim only
+// lapses here. The tower's tow goal drops on its next turn, in towInvalid(), because it holds no claim any more.
+export function lapseClaim(world: World, claim: NpcState): void {
+  world.events.push({ t: 'towDropped', by: claim.holder, client: claim.other, reason: 'blocked' });
 }
 
 // Ends an offer or a tow for free. The state's broken hook brakes a released truck.
