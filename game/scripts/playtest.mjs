@@ -1,5 +1,6 @@
 // Boots the game in headless Chromium on the Metal GPU, plays turns, and fails on page errors, the crash screen,
 // a blank canvas or a low frame rate. Screenshots go to .playtest/.
+// It also fails on HUD panels whose single control does not fill the panel, so a click in the box's edge or corner is dead.
 // With --cpu, Chromium draws in software and the frame rate is printed but not checked.
 // Usage: npm run playtest -- [--url http://localhost:5173] [--turns 12, or 4 with --cpu] [--cpu]
 import { mkdirSync } from 'node:fs';
@@ -28,6 +29,34 @@ await page.goto(url);
 await page.waitForFunction(() => window.__ROAM__, null, { timeout: 30000 });
 await page.waitForTimeout(1000);
 await page.screenshot({ path: '.playtest/start.png' });
+
+// A HUD panel that is just one control must give it clicks across the whole box, corners included.
+const hitProblems = [];
+const findDeadCorners = () => {
+  const isOneControl = (panel, controls) => controls.length === 1 && controls[0].innerText.trim() === panel.innerText.trim();
+  const isShown = (panel, r) => r.width > 0 && r.height > 0 && panel.checkVisibility();
+  const cornerFailures = (panel, control) => {
+    const r = panel.getBoundingClientRect();
+    const corners = [[r.left + 1, r.top + 1], [r.right - 2, r.top + 1], [r.left + 1, r.bottom - 2], [r.right - 2, r.bottom - 2]];
+    return corners.flatMap(([x, y]) => {
+      const el = document.elementFromPoint(x, y);
+      if (el && control.contains(el)) return [];
+      return [`${panel.className} corner (${x},${y}) hits ${el ? `${el.tagName.toLowerCase()}.${el.className}` : 'nothing'}`];
+    });
+  };
+  const panels = [...document.querySelectorAll('#ui .panel')].filter((p) => isShown(p, p.getBoundingClientRect()));
+  const single = panels.map((p) => [p, p.querySelectorAll('button, summary, a[href], input, select')]).filter(([p, c]) => isOneControl(p, c));
+  return { failures: single.flatMap(([p, c]) => cornerFailures(p, c[0])), found: single.length };
+};
+const hit = await page.evaluate(findDeadCorners);
+hitProblems.push(...hit.failures);
+if (hit.found < 3) hitProblems.push(`found ${hit.found} one-control panels, expected at least 3`);
+const helpOpen = () => page.locator('.help details[open]').count();
+const helpBox = await page.locator('#ui .help').boundingBox();
+await page.mouse.click(helpBox.x + 2, helpBox.y + 2);
+if (!(await helpOpen())) hitProblems.push('help did not open from a click in its corner');
+await page.keyboard.press('Escape');
+if (await helpOpen()) hitProblems.push('help did not close on Escape');
 
 for (let i = 0; i < turns; i++) {
   await page.evaluate((i) => {
@@ -61,7 +90,7 @@ const blank = await page.evaluate(() => {
 });
 await browser.close();
 
-const problems = [...errors];
+const problems = [...errors, ...hitProblems];
 if (state.crashed) problems.push('crash screen shown');
 if (state.turn !== turns + 1) problems.push(`expected turn ${turns + 1}, got ${state.turn}`);
 if (blank) problems.push('no WebGL canvas');
