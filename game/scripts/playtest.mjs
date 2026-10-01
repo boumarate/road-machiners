@@ -45,12 +45,12 @@ const findDeadCorners = () => {
     });
   };
   const panels = [...document.querySelectorAll('#ui .panel')].filter((p) => isShown(p, p.getBoundingClientRect()));
-  const single = panels.map((p) => [p, p.querySelectorAll('button, summary, a[href], input, select')]).filter(([p, c]) => isOneControl(p, c));
+  const single = panels.map((p) => [p, [...p.querySelectorAll('button, summary, a[href], input, select')].filter((c) => c.checkVisibility())]).filter(([p, c]) => isOneControl(p, c));
   return { failures: single.flatMap(([p, c]) => cornerFailures(p, c[0])), found: single.length };
 };
 const hit = await page.evaluate(findDeadCorners);
 hitProblems.push(...hit.failures);
-if (hit.found < 3) hitProblems.push(`found ${hit.found} one-control panels, expected at least 3`);
+if (hit.found < 4) hitProblems.push(`found ${hit.found} one-control panels, expected at least 4`);
 const helpOpen = () => page.locator('.help details[open]').count();
 const helpBox = await page.locator('#ui .help').boundingBox();
 await page.mouse.click(helpBox.x + 2, helpBox.y + 2);
