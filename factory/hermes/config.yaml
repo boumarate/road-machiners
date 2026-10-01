@@ -21,6 +21,7 @@ display:
       interim_assistant_messages: false
       long_running_notifications: false
       streaming: false
+      memory_notifications: "off"
 
 # Hermes's shell and scripts get only the env keys named here. allowlist.py copies them into the Hermes .env.
 terminal:
