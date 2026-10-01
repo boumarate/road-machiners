@@ -5,7 +5,7 @@ import { must } from '../exec';
 import { updateState } from '../state';
 import { GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, RELEASE_TASK_LABEL, type Ctx, type ReleaseState } from '../types';
 import { agentLog } from './common';
-import { candidateDir, featureLine, releaseFeatures, releaseLog, requireRelease } from './release-common';
+import { candidateDir, changeLines, releaseFeatures, releaseLog, requireRelease } from './release-common';
 
 export type ItchKeys = { itchTarget: string; butlerKey: string };
 
@@ -50,6 +50,8 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   if (!existsSync(screenshot) || !existsSync(notesPath)) throw new Error('The candidate screenshot or notes are gone from its work clone, so the public post cannot be made.');
   await ctx.repo.sync(release.branch);
   const features = await releaseFeatures(ctx, release);
+  // A changelog that does not match the release fails here, before anything public happens.
+  const changelog = changeLines(readFileSync(notesPath, 'utf8'), features).join('\n');
   await ctx.repo.merge(release.branch, 'main', `Release ${release.day}`);
   await ctx.repo.push('main');
   // A conflict in dev fails here, before anything public happens.
@@ -58,7 +60,6 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   await publish(ctx, keys, 'ship');
   const channel = ctx.cfg.publicChannel;
   await ctx.telegram.sendPhoto(channel, screenshot, `ROAM release ${release.day}`);
-  const changelog = `${readFileSync(notesPath, 'utf8').trim()}\n\nChanges:\n${features.map((feature) => `- ${featureLine(feature)}`).join('\n')}`;
   await ctx.telegram.sendMessage(channel, changelog);
   // Only the factory pushes main, so main still holds the release merge here.
   await ctx.github.createRelease(`release-${release.day}`, 'main', `ROAM release ${release.day}`, changelog);

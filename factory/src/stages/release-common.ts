@@ -19,6 +19,23 @@ export function featureLine(feature: Feature): string {
   return `#${feature.issue} ${feature.title}`;
 }
 
+const CHANGE_LINE = /^- \[#(\d+)\] \S/;
+
+// The changelog the release agent wrote in release.md: one line "- [#N] what changed" per feature, nothing else.
+// It throws when a line has another shape or the lines do not name the features exactly.
+export function changeLines(notes: string, features: Feature[]): string[] {
+  const lines = notes.split('\n').map((line) => line.trim()).filter((line) => line !== '');
+  const issues = lines.map((line) => {
+    const match = CHANGE_LINE.exec(line);
+    if (!match) throw new Error(`release.md has a line that is not "- [#N] what changed": ${line}`);
+    return Number(match[1]);
+  });
+  const named = issues.map((n) => `#${n}`).sort().join(', ');
+  const wanted = features.map((feature) => `#${feature.issue}`).sort().join(', ');
+  if (named !== wanted) throw new Error(`release.md names ${named || 'nothing'}, but the release holds ${wanted || 'nothing'}`);
+  return lines;
+}
+
 export function requireRelease(ctx: Ctx): ReleaseState {
   const release = readState(ctx.statePath).release;
   if (release === null) throw new Error('No release is open');

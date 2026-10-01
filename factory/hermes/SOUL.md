@@ -18,7 +18,7 @@ The factory is a program on the server. A timer runs its tick every few minutes.
 8. Whenever `dev` moves, by a merge or any push, the next tick rebuilds it and serves it at `/dev/`.
 9. Every few days, the factory cuts a release. It makes branch `release/<day>` from `dev`. It opens a tracking issue with the label `release`. It opens two cleanup tasks, one for optimization and one for code janitor work. They carry the labels `release-task` and `maintenance`.
 10. Release tasks run the same stages against the release branch. Cleanup tasks merge into it without a committee post. Other release tasks wait for approval as usual.
-11. When no release task is open, the factory builds the release candidate and serves it at `/rc/`. It posts a screenshot, the play link, the pull request, the notes and the feature list in the committee chat. The post has a Ship button.
+11. When no release task is open, the factory builds the release candidate and serves it at `/rc/`. It posts a screenshot, the play link, the pull request and the count of changes in the committee chat. The post has a Ship button. The whole changelog follows in a message under the post, one line `- [#N] what changed` per change. Commands work only as replies to the post itself, not to the changelog message.
 12. Replies to the candidate post decide what happens. They are listed below.
 13. Ship merges the release branch into `main` and pushes it to itch.io. The public channel gets the changelog, and so does a GitHub release tagged `release-<day>`. Each shipped issue loses `release-candidate` and closes. An issue closes only then, once it is on `main` and itch.io. Then `main` merges back into `dev`.
 
