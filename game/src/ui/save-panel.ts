@@ -1,5 +1,5 @@
 // The Save and Load panels. Save lists the manual slots and writes the world into the one clicked. Load lists every
-// filled slot, newest first, and loads the one clicked. Both ask before they overwrite or drop progress.
+// filled slot, newest first, and loads the one clicked. Save writes at once. Load asks first, since it drops progress.
 
 import { clockOf } from "../sim/sun";
 import type { SlotId, SlotInfo } from "../three/save-slots";
@@ -49,7 +49,7 @@ export class SavePanel {
 
   openSave(): void {
     const infos = new Map(this.actions.list().map((info) => [info.slot, info]));
-    const rows = this.actions.manualSlots().map((slot) => this.row(slot, infos.get(slot) ?? null, () => this.saveInto(slot, infos.has(slot))));
+    const rows = this.actions.manualSlots().map((slot) => this.row(slot, infos.get(slot) ?? null, () => this.saveInto(slot)));
     this.show("Save", rows);
   }
 
@@ -58,8 +58,7 @@ export class SavePanel {
     this.show("Load", rows.length > 0 ? rows : [el("div", { class: "dim" }, "No saves yet")]);
   }
 
-  private saveInto(slot: SlotId, occupied: boolean): void {
-    if (occupied && !window.confirm(`Overwrite ${slotLabel(slot)}?`)) return;
+  private saveInto(slot: SlotId): void {
     this.actions.save(slot);
     this.openSave();
   }
