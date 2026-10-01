@@ -332,14 +332,14 @@ function hitch(world: World, tower: Vehicle, client: Vehicle): void {
   world.events.push({ t: 'towHitched', by: tower.id, client: client.id, site });
 }
 
-// The fee follows the route the tower would drive from the client to the site's nearest pad. The player's social
-// skill talks it down when the player is on either end of the rope.
+// The fee follows the route the tower would drive from the client to the site's nearest pad, up to TOW.maxFee. The
+// player's social skill talks it down, also on a capped fee, when the player is on either end of the rope.
 function towFee(world: World, tower: Vehicle, client: Vehicle, site: Site): number {
   const pad = nearestPad(site, client.pos);
   const length = routeLength(client.pos, route(world, client.pos, pad, vehicleStats(world, tower).radius, [], tower));
   const involved = isPlayer(world, tower) || isPlayer(world, client);
   const cut = involved ? 1 - skillEffect(world, playerVehicle(world), 'social', 'towFee') : 1;
-  return Math.round((TOW.base + TOW.perTile * length) * cut);
+  return Math.round(Math.min(TOW.maxFee, TOW.base + TOW.perTile * length) * cut);
 }
 
 // The player turned the tower down, so the tower rarely offers again.
