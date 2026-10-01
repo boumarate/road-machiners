@@ -604,6 +604,20 @@ export function shotDamage(e: { rounds: ShotRound[] }): Map<string, PartHit[]> {
   return out;
 }
 
+// Every part hit of this turn per truck, from shots, guard shots and collisions.
+export function turnPartHits(world: World): Map<string, PartHit[]> {
+  const out = new Map<string, PartHit[]>();
+  const add = (id: string, hits: PartHit[]) => { if (hits.length > 0) out.set(id, [...(out.get(id) ?? []), ...hits]); };
+  for (const e of world.events) {
+    if (e.t === "shot" || e.t === "guardShot") for (const [id, hits] of shotDamage(e)) add(id, hits);
+    else if (e.t === "collision") {
+      add(e.a, e.hitsA);
+      add(e.b, e.hitsB);
+    }
+  }
+  return out;
+}
+
 function vehicleById(world: World, id: string): Vehicle {
   const v = world.vehicles.find((x) => x.id === id);
   if (!v) throw new Error(`No vehicle ${id}`);
