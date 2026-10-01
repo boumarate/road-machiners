@@ -27,7 +27,7 @@ describe('candidate', () => {
     writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, removed: [6] } });
     f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': 'png' };
     await candidate(f.ctx, 11);
-    expect(f.calls.filter((call) => !call.startsWith('comment'))).toEqual(['sync release/2026-09-29', 'prepare release/2026-09-29', 'shell', 'agent', 'pr release/2026-09-29 main Release 2026-09-29', 'photo committee', 'message committee 42 - [#3] Trucks are faster.\n- [#5] The horn is louder.']);
+    expect(f.calls.filter((call) => !call.startsWith('comment'))).toEqual(['fetch', 'prepare release/2026-09-29', 'shell', 'agent', 'pr release/2026-09-29 main Release 2026-09-29', 'photo committee', 'message committee 42 - [#3] Trucks are faster.\n- [#5] The horn is louder.']);
     expect(deployed).toEqual(['rc', 'record 11 rc']);
     expect(f.calls.find((call) => call.startsWith('comment'))).toContain('- [#5] The horn is louder.');
     const photo = f.photos[0];

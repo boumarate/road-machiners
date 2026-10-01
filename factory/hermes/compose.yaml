@@ -1,6 +1,6 @@
 # Hermes for the factory chat bot. It runs the same on the Mac and on the server.
 # Paths come from env. FACTORY_HOME is the factory home. FACTORY_HERMES_DIR holds Hermes state and defaults to $FACTORY_HOME/hermes.
-# Run: docker compose -f factory/hermes/compose.yaml --env-file factory/.env up -d
+# Run: docker compose -f factory/hermes/compose.yaml --env-file factory/settings.env --env-file factory/.env up -d
 name: factory-hermes
 
 services:
