@@ -11,7 +11,7 @@ import { inCombat, isHostile } from './combat';
 import { patchGoal, startTow, topGoal } from './npc-activities';
 import { vehicleValue } from './market';
 import { hasPerk, practice } from './progress';
-import { answerPlea, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, answersWarning, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, lootsBesidePlayer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, settleWarning, standDownTo, surrenderTo, yieldTo, type ThreatAnswer, type WarnAnswer } from './parley';
+import { answerPlea, standDownBeggar, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, answersWarning, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, lootsBesidePlayer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, settleWarning, standDownTo, surrenderTo, yieldTo, type ThreatAnswer, type WarnAnswer } from './parley';
 import { hasCargo, hasSalvage } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
 import { decide, isWeak, npcProfile, wantsLoot } from './npc-decisions';
@@ -234,6 +234,12 @@ export const EFFECTS: Record<EffectId, Effect> = {
   yieldToPlayer: (world, npc, call) => {
     standDownTo(world, npc, playerVehicle(world));
     settle(world, npc, call, 'agreed');
+    practice(world, 'deal', 1, null, npc.id);
+  },
+  // The only effect that fills call values: the beggar's answer is rolled when the player asks, so taking the cargo never notes the offer.
+  askStandDown: (world, npc, call) => { call.vars = PREPARES.yieldAnswer(world, npc); },
+  standDownPlea: (world, npc) => {
+    standDownBeggar(world, npc);
     practice(world, 'deal', 1, null, npc.id);
   },
   giveUp: (world, npc, call) => {
