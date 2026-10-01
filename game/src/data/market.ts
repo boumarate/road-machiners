@@ -350,3 +350,8 @@ export const HARNESS = {
   searchRate: 2,
 };
 
+
+// Every shop, which is the two towns and the stalls: where a driver with no camps sells.
+export const TOWN_MARKETS = Object.keys(SHOPS);
+// The stalls alone, where a driver with no towns sells.
+export const STALL_MARKETS = Object.values(SHOPS).filter((s) => s.kind === 'stall').map((s) => s.id);

@@ -19,7 +19,7 @@ import { generateObstacles, obstacleReach } from './mapgen';
 import type { BakedMap } from './terrain';
 import { planNpcOrders } from './ai';
 import { applyGodMode } from './cheats';
-import { assignAutoOrders, dropMagazine, fireWeapons, isHostile, noteEngagements, resolveDestroyed } from './combat';
+import { assignAutoOrders, dropMagazine, fireWeapons, isHostile, noteEngagements, resolveDestroyed, settleAims } from './combat';
 import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
 import { fireGuards } from './guards';
@@ -197,6 +197,7 @@ export function update(world: World, fn: (draft: World) => void): World {
   draft.events = [];
   draft.removed = [];
   fn(draft);
+  settleAims(draft);
   return draft;
 }
 
@@ -276,6 +277,7 @@ export function endTurn(
     refreshVision(w);
     raiseCalls(w);
     assignAutoOrders(w);
+    settleAims(w);
     fireWeapons(w);
     fireGuards(w);
     consumeSupplies(w);

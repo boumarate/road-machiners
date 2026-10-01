@@ -884,10 +884,18 @@ export function resolveDestroyed(world: World): void {
     else if (fate === "knockedOut") knockOutNpc(world, v);
   }
   clearOldWrecks(world);
+  settleAims(world);
+}
+
+// Keeps every weapon order readable. An order whose target is gone ends. An aim at a part that left its target is a
+// body shot, since the truck the order chose is still there. Readers stay strict and throw on a missing part.
+export function settleAims(world: World): void {
   for (const v of world.vehicles) {
-    for (const [wid, order] of Object.entries(v.weaponOrders))
-      if (!world.vehicles.some((x) => x.id === order.targetId))
-        delete v.weaponOrders[wid];
+    for (const [wid, order] of Object.entries(v.weaponOrders)) {
+      const target = world.vehicles.find((x) => x.id === order.targetId);
+      if (!target) delete v.weaponOrders[wid];
+      else if (order.aim !== "body" && !mountedItems(target).some((it) => it.part.id === order.aim)) order.aim = "body";
+    }
   }
 }
 
