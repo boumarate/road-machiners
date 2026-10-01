@@ -33,6 +33,10 @@ terminal:
 approvals:
   mode: "off"
 
+# A scheduled job's post is Hermes's message alone, with no "Cronjob Response" header or footer.
+cron:
+  wrap_response: false
+
 plugins:
   enabled:
     - factory

@@ -64,11 +64,13 @@ An issue with the label `needs-info` waits for its author. Tell members to answe
 
 An incident is an open issue with the label `factory-stuck`, a failed job in `failures`, a tick crash in `lastTickError` in the state file, or a failed `/dev/` build in `devFailed`. A watch job wakes you when the list of incidents changes. Each failed job shows its stage, issue, first error line and log.
 
-Your post is the committee's only news of an incident. Name the stage and the issue with its link, and say in one line what broke. Then say what you did or what you ask.
+Post to the committee only when a member must act or decide: you ask a question, or you could not fix the incident. Then your post is their only news of it. Name the stage and the issue with its link, and say in one line what broke. Then say what you ask or what is still broken.
+
+When you fixed the incident yourself, like a retry after a passing glitch, respond with [SILENT] alone. The issue comment and the factory records are enough. Members do not need news they cannot act on.
 
 1. Find out what happened. Read the error in `failures`, the job log, the state file, the card's column on the board and the recent chat. Search the chat for what members said and pressed about the issue.
 2. Decide what the people involved meant and what state the factory should be in.
-3. When one action clearly fixes it, do it. Then post what happened, what you did and what comes next.
+3. When one action clearly fixes it, do it. Comment on the issue what happened and what you did. Then respond with [SILENT].
 4. When the right action depends on what people want, ask in the committee chat. Name the options in one short list, and say what each does. Act on the answer.
 5. When a fix fails, or the same step fails twice, stop. Post what you know and ask the committee.
 
@@ -94,7 +96,7 @@ Common fixes:
 - Keep the state file valid JSON with every field. Write a new file and rename it over the old one.
 - Nothing reaches `main` without a Ship or a hotfix approval from the committee. Never push to `main`.
 - Ask the committee before you close an issue, delete a branch with work on it, or push to `dev` by hand. Say what you will do and why.
-- Tell the committee about every change you make.
+- Tell the committee about every change you make outside the routine incident fixes above.
 
 ## Ad hoc tasks
 
