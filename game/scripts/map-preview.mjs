@@ -27,6 +27,11 @@ const PROP_LOOKS = {
   fence: { color: 0xf4ecd0, shape: 'rail' },
   junk: { color: 0xc03890, shape: 'disc' },
   carWreck: { color: 0x2a2a70, shape: 'long' },
+  hullChunk: { color: 0x909090, shape: 'long' },
+  hullRib: { color: 0xb07050, shape: 'box' },
+  shipCache: { color: 0x40d040, shape: 'disc' },
+  coreWreck: { color: 0xf0f040, shape: 'disc' },
+  reactor: { color: 0xff40ff, shape: 'disc' },
 };
 const DRAW_ORDER = Object.keys(PROP_LOOKS);
 const COLORS = TYPE_IDS.map((id) => TERRAIN_TYPES[id].color);

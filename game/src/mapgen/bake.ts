@@ -14,6 +14,7 @@ import { clearOfSites, onBridge } from '../sim/mapgen';
 import { dist, polylineDist, type Vec } from '../sim/vec';
 import { BUILT_DIRTY_WATER, BUILT_SCRUB, BUILT_TOXIC, newWorldLayer } from './newworld';
 import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer } from './oldworld';
+import { territoryLayer } from './territory';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
 
 export function bakeMap(seed: number): MapDraft {
@@ -22,6 +23,7 @@ export function bakeMap(seed: number): MapDraft {
   d = timed('finish', () => finishLayer(seed, d));
   d = timed('old world', () => oldWorldLayer(seed, d));
   d = timed('new world', () => newWorldLayer(seed, d));
+  d = timed('territories', () => territoryLayer(seed, d));
   d = timed('ground', () => groundLayer(seed, d));
   return timed('rocks', () => rockLayer(seed, d));
 }

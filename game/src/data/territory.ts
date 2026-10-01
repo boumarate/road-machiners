@@ -20,7 +20,8 @@ export type Hazard = {
 export type TerritoryRules = {
   debris: DebrisRule[];
   spots: SpotRule[];
-  spotGap: number; // tiles kept clear between two loot spots, and around the reactor's hazard
+  spotGap: number; // tiles between the centres of two loot spots
+  debrisGap: number; // tiles of open ground kept between debris and every loot spot, so a truck can park beside one
   reactor: { look: PropKind; radius: number } | null; // the prop at the centre
   hazard: Hazard | null;
 };
@@ -40,6 +41,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       { look: 'shipCache', count: 18, ring: [0.45, 0.95], radius: [0.6, 0.8], table: 'hullScrap' },
     ],
     spotGap: 6,
+    debrisGap: 3,
     reactor: { look: 'reactor', radius: 1 },
     hazard: {
       radius: 8,
