@@ -11,10 +11,10 @@ import { inCombat, isHostile } from './combat';
 import { patchGoal, startTow, topGoal } from './npc-activities';
 import { vehicleValue } from './market';
 import { hasPerk, practice } from './progress';
-import { answerPlea, backOffClaims, defyClaims, guardsClaim, answersPlea, answersThreat, answersWarning, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, lootsBesidePlayer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, settleWarning, surrenderTo, yieldTo, type ThreatAnswer, type WarnAnswer } from './parley';
+import { answerPlea, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, answersWarning, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, lootsBesidePlayer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, settleWarning, standDownTo, surrenderTo, yieldTo, type ThreatAnswer, type WarnAnswer } from './parley';
 import { hasCargo, hasSalvage } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
-import { decide, npcProfile, wantsLoot } from './npc-decisions';
+import { decide, isWeak, npcProfile, wantsLoot } from './npc-decisions';
 import { aidData, stateOf, towData } from './states';
 import { agreeAid, aidPrice, canSpareFor, hasAid, isLow, playerAid, refuseAid, spareAid, wantedAid, type AidAmounts } from './aid';
 import { buyPrice, sellPrice, startTrade, tradeWith, transfer } from './economy';
@@ -168,6 +168,9 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   demandsSurrender: (world, npc) => hasStrandedPrey(world, npc) && wantsLoot(world, npc, playerVehicle(world)) && hasStrippable(playerVehicle(world)),
   // The stranded player is alone with a driver that takes nothing: not a robber, or a robber with nothing to take.
   demandsGiveUp: (world, npc) => offersGiveUp(world, npc) && judgedWorthOffer(world, npc),
+  // The foe is badly broken, and has not yet answered the player's demand to give up.
+  npcBeaten: (world, npc) => isWeak(world, npc),
+  notOfferedYield: (world, npc) => !offeredSurrenderBy(world, npc, playerVehicle(world)),
   guardsClaim: (world, npc) => guardsClaim(world, npc),
   atOdds: (world, npc) => isHostile(world, npc, playerVehicle(world)),
   atPeace: (world, npc) => !isHostile(world, npc, playerVehicle(world)),
@@ -225,6 +228,11 @@ export const EFFECTS: Record<EffectId, Effect> = {
   },
   surrender: (world, npc, call) => {
     surrenderTo(world, playerVehicle(world), npc);
+    settle(world, npc, call, 'agreed');
+    practice(world, 'deal', 1, null, npc.id);
+  },
+  yieldToPlayer: (world, npc, call) => {
+    standDownTo(world, npc, playerVehicle(world));
     settle(world, npc, call, 'agreed');
     practice(world, 'deal', 1, null, npc.id);
   },
@@ -286,6 +294,7 @@ export const EFFECTS: Record<EffectId, Effect> = {
 export const PREPARES: Record<PrepareId, Prepare> = {
   truceAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'truce') ? 'yes' : 'no' } }),
   mercyAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'mercy') ? 'yes' : 'no' } }),
+  yieldAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersSurrender(world, npc, playerVehicle(world)) ? 'yes' : 'no' } }),
   threatAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersThreat(world, npc) } }),
   warnAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersWarning(world, npc) } }),
   npcTowTerms: (world, npc) => {

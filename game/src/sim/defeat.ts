@@ -93,9 +93,24 @@ export function isKnockedOut(v: Vehicle): boolean {
   return v.defeat?.phase === "out";
 }
 
-export function knockOutNpc(world: World, v: Vehicle): void {
-  v.defeat = { phase: "out", turns: 0, unseen: 0, foes: foesOf(world, v) };
+// A knocked-out driver whose cab still works gave up: a knockout always breaks the cab, and nothing repairs it while
+// the driver lies out.
+export function gaveUp(v: Vehicle): boolean {
+  return isKnockedOut(v) && corePart(v, "cab").hp > 0;
+}
+
+function layDown(world: World, v: Vehicle, foes: string[]): void {
+  v.defeat = { phase: "out", turns: 0, unseen: 0, foes };
   stopKnockedOut(world, v);
+}
+
+// A driver that gives up lies as if knocked out, with no knockout event, death or grudge.
+export function standDown(world: World, v: Vehicle, winnerId: string): void {
+  layDown(world, v, [...new Set([...foesOf(world, v), winnerId])]);
+}
+
+export function knockOutNpc(world: World, v: Vehicle): void {
+  layDown(world, v, foesOf(world, v));
   world.events.push({ t: "npcKnockout", vehicle: v.id, by: v.lastHitBy ?? "unknown" });
   if (v.lastHitBy === world.player.vehicleId && chance(world, NPC_BEHAVIOR.revengeChance))
     addState(world, "revenge", v.id, world.player.vehicleId, { kind: "none" });
