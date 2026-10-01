@@ -384,3 +384,30 @@ describe('raider gear levels', () => {
     }
   });
 });
+
+describe('armed choice cache', () => {
+  const rolled = (id: string, seed: number, level: GearLevel) => {
+    const w = emptyWorld();
+    w.rngState = seed;
+    const loadout = generateNpcLoadout(w, NPCS[id], null, level);
+    return { loadout, rngState: w.rngState, marketRng: w.marketRng, nextId: w.nextId };
+  };
+
+  it('gives the same loadout for the same inputs in any call order', () => {
+    const first = rolled('gunwagon', 3, 'loaded');
+    rolled('trader', 5, 'poor');
+    expect(rolled('gunwagon', 3, 'loaded')).toEqual(first);
+  });
+
+  it('reads the pools and minimum of a table edited in place', () => {
+    const template: NpcTemplate = structuredClone(NPCS.gunwagon);
+    const roll = () => generateNpcLoadout(emptyWorld(), template, null, 'poor');
+    const guns = () => roll().parts.filter((p) => partDef(p.defId).kind === 'weapon').map((p) => p.defId);
+    expect(guns().length).toBe(template.loadout.minGuns);
+    template.loadout.weapon = [{ value: 'mg', weight: 1 }];
+    template.loadout.extraGun = [{ value: 'mg', weight: 1 }];
+    expect(guns()).toEqual(Array(template.loadout.minGuns).fill('mg'));
+    template.loadout.minGuns = 1;
+    expect(guns()).toEqual(['mg']);
+  });
+});

@@ -4,7 +4,7 @@ import { GEAR_LEVELS, GEAR_LEVEL_IDS, MAX_GUN_SLOWDOWN, NPC_UPKEEP, type CargoRo
 import { partDef, type EngineDef, type PartKind } from '../data/parts';
 import { CONDITION } from '../data/wear';
 import { everyGunFires } from './armor';
-import { makePart, makeVehicle, type PartSpec } from './factory';
+import { makePart, makeVehicle, newId, type PartSpec } from './factory';
 import { baseGrid, cellKey, freeCells, gridOf, itemCells, mountedItems, type Cell } from './grid';
 import { addGoods, mountPart, stowPart } from './inventory';
 import { vehicleMass } from './mass';
@@ -146,6 +146,35 @@ function wearOf(rng: Rng, table: NpcLoadoutTable, level: Level): number {
   return Math.min(CONDITION.maxWear, Math.max(0, sampleWeighted(rng, table.wear) + level.wearShift));
 }
 
+// The choices depend only on data, so they are keyed by every input read, like gridCache in grid.ts. Cached vehicles
+// are never handed out, see withFreshIds().
+const armedChoiceCache = new Map<string, ArmedChoice[]>();
+
+function armedChoiceKey(table: NpcLoadoutTable, chassisId: string, budget: number): string {
+  const values = (pool: Weighted<string>[]) => pool.map((entry) => entry.value);
+  return JSON.stringify([chassisId, budget, table.minGuns, values(table.engine), values(table.weapon), values(table.extraGun)]);
+}
+
+function armedChoices(probe: World, template: NpcTemplate, chassisId: string, budget: number): ArmedChoice[] {
+  const key = armedChoiceKey(template.loadout, chassisId, budget);
+  let choices = armedChoiceCache.get(key);
+  if (!choices) {
+    // A copy of the probe keeps the build's ids off the real counter.
+    choices = buildArmedChoices({ ...probe }, template, chassisId, budget);
+    armedChoiceCache.set(key, choices);
+  }
+  return choices;
+}
+
+// A copy with new item and part ids, so one generation never shares ids and rollWear() never writes into the cache.
+function withFreshIds(world: World, v: Vehicle): Vehicle {
+  const items = v.items.map((item) => {
+    const fresh = { ...item, id: newId(world, 'i') };
+    return fresh.kind === 'part' ? { ...fresh, part: { ...fresh.part, id: newId(world, 'p') } } : fresh;
+  });
+  return { ...v, items };
+}
+
 function buildArmedChoices(world: World, template: NpcTemplate, chassisId: string, budget: number): ArmedChoice[] {
   const table = template.loadout;
   const bare = makeVehicle(world, { name: template.name, faction: template.faction, chassisId, parts: [], spares: [], cargo: {}, pos: { x: 0, y: 0 }, heading: 0, brain: null });
@@ -252,9 +281,9 @@ function chooseVehicle(probe: World, rng: Rng, template: NpcTemplate, chassisId:
   // and hauls. The level budget limits the extra guns and armor.
   const required = Math.max(budget, table.budget);
   const chassis = chassisId === null ? table.chassis : table.chassis.filter((entry) => entry.value === chassisId);
-  const chassisChoices = chassis.map((entry) => ({ value: buildArmedChoices(probe, template, entry.value, required), weight: entry.weight })).filter((entry) => entry.value.length > 0);
+  const chassisChoices = chassis.map((entry) => ({ value: armedChoices(probe, template, entry.value, required), weight: entry.weight })).filter((entry) => entry.value.length > 0);
   if (!chassisChoices.length) throw new Error(`No valid required NPC loadout for ${template.id}`);
-  let v = chooseRequiredParts(rng, table, sampleWeighted(rng, chassisChoices));
+  let v = withFreshIds(probe, chooseRequiredParts(rng, table, sampleWeighted(rng, chassisChoices)));
   v = chooseOptionalPart(probe, rng, v, required, table.cargoPart);
   v = addGuns(probe, rng, table, level, v, budget);
   return addArmor(probe, rng, table, level, v, budget);
