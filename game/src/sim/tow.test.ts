@@ -991,7 +991,30 @@ describe('a broke driver', () => {
     expect(thinkNpc(w, npc).kind).not.toBe('wait');
   });
 
-  it('stranded on a town pad gets a fresh loadout and can drive', () => {
+  it('dry on a town pad with working parts gets scrap fuel and keeps its loadout', () => {
+    const { w, npc } = broke(nearestPad(bowl, far));
+    const engine = mountedParts(npc, 'engine')[0];
+    getResources(w, npc).fuel = 0;
+    thinkNpc(w, npc);
+    expect(getResources(w, npc).fuel).toBeGreaterThan(0);
+    expect(mountedParts(npc, 'engine')[0].id).toBe(engine.id);
+    expect(isStranded(w, npc)).toBe(false);
+  });
+
+  it('a broke raider on a town pad gets no scrap fuel', () => {
+    const pad = nearestPad(bowl, far);
+    const w = emptyWorld(far);
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    const npc = addVehicle(w, 'raiders', 'scout', ['stockEngine'], { ...pad }, Math.PI);
+    npc.brain = npcBrain('buggy', pad, ['raider']);
+    getResources(w, npc).money = 0;
+    getResources(w, npc).fuel = 0;
+    thinkNpc(w, npc);
+    expect(getResources(w, npc).fuel).toBe(0);
+  });
+
+  // Scrap fuel does not fix an engine for an NPC, so a broken engine still gets the refit.
+  it('stranded on a town pad by a broken engine gets a fresh loadout and can drive', () => {
     const { w, npc } = broke(nearestPad(bowl, far));
     mountedParts(npc, 'engine')[0].hp = 0;
     getResources(w, npc).fuel = 0;

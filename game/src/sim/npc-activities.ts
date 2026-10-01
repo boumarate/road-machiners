@@ -9,7 +9,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
 import { callLawmen, inCombat, isHostile, startFeuds, turnPartHits } from './combat';
-import { affordableBuyCount, cargoSaleValue, sellAtCamp, sellVehicleCargo, serviceAtCamp, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
+import { affordableBuyCount, cargoSaleValue, sellAtCamp, sellVehicleCargo, serviceAtCamp, scrapFuel, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods, cargoRoom } from './inventory';
@@ -886,7 +886,14 @@ function serveStranded(world: World, vehicle: Vehicle, profile: NpcProfile): voi
   const site = servingSiteIds(profile).map(getKnownSite).find((s) => canUseSite(vehicle.pos, s));
   if (!site) return;
   serviceAt(world, vehicle, site);
+  scrapFuelIfBroke(world, vehicle, profile, site.id);
   if (isStranded(world, vehicle)) refitAtHome(world, vehicle);
+}
+
+// A driver still broke after buying what it can, on a site that serves it, gets scrap fuel to a share of its tank. A stall
+// is no serving site.
+function scrapFuelIfBroke(world: World, vehicle: Vehicle, profile: NpcProfile, siteId: string): void {
+  if (isBroke(world, vehicle) && servingSiteIds(profile).includes(siteId)) scrapFuel(world, vehicle);
 }
 
 // A defeated driver makes no decisions. It heads home, or waits for a tower on its way.
@@ -1202,6 +1209,7 @@ function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity):
   if (!site) return;
   noteTown(vehicle, site.id);
   serviceAt(world, vehicle, site);
+  scrapFuelIfBroke(world, vehicle, npcProfile(vehicle), site.id);
   finishGoal(world, vehicle, 'finished service');
 }
 
