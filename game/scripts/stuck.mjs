@@ -1,5 +1,6 @@
 // Runs the stuck soak (src/test/stuck-soak.ts) for each seed in its own process, writes tmp/stuck/seed-<n>.txt and
-// exits 1 on any stall or error.
+// exits 1 on any stall or error, and when more than half the NPCs are dry at once. Each seed reports the most NPCs dry at once
+// and the longest dry streak.
 // Usage: npm run stuck -- [--seeds 1-3] [--turns 1000]
 // About 50 ms a turn with the seeds in parallel. A stall shows 100 turns after its cause, so 1000 turns leave room for
 // most. Raise --turns for a deeper run.
