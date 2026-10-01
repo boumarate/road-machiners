@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { AgentRun, Ctx } from '../types';
 import { EMPTY_STATE, writeState } from '../state';
-import { agentHome, baseBranchFor, baseBranchOf, factoryPaths, fillPrompt, runAgent, syncBase } from './common';
+import { agentHome, baseBranchFor, baseBranchOf, factoryPaths, fillPrompt, runAgent } from './common';
 
 function agentCtx(labels: string[]): { ctx: Ctx; runs: AgentRun[]; logs: string[] } {
   const runs: AgentRun[] = [];
@@ -80,11 +80,7 @@ describe('base branch', () => {
     mkdirSync('tmp/factory-common-test', { recursive: true });
     writeState(statePath, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [] } });
   };
-  const ctxWith = (labels: string[], synced: string[] = []) => ({
-    statePath,
-    github: { issue: async () => ({ labels }) },
-    repo: { sync: async (...extra: string[]) => { synced.push(extra.join(',')); } },
-  }) as unknown as Ctx;
+  const ctxWith = (labels: string[]) => ({ statePath, github: { issue: async () => ({ labels }) } }) as unknown as Ctx;
 
   it('is dev for an ordinary card, whatever the state holds', async () => {
     withRelease();
@@ -108,12 +104,5 @@ describe('base branch', () => {
     writeState(statePath, structuredClone(EMPTY_STATE));
     expect(() => baseBranchFor(ctxWith([]), ['release-task'])).toThrow('needs an open release');
     await expect(baseBranchOf(ctxWith(['release-task']), 7)).rejects.toThrow('needs an open release');
-  });
-
-  it('syncs the release branch as an extra and nothing extra for dev', async () => {
-    const synced: string[] = [];
-    await syncBase(ctxWith([], synced), 'dev');
-    await syncBase(ctxWith([], synced), 'release/2026-09-29');
-    expect(synced).toEqual(['', 'release/2026-09-29']);
   });
 });
