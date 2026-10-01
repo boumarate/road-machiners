@@ -3,7 +3,9 @@ import { TIME } from '../../data/time';
 import { HAZE_FROM } from '../../data/wear';
 import { shadeCasters, sunAt, sunHeatAt } from '../../sim/sun';
 import { emptyWorld } from '../../sim/testkit';
-import { cornerLook } from './shade';
+import * as THREE from 'three';
+import type { TerrainChunk } from './terrain';
+import { cornerLook, ShadeView } from './shade';
 
 function turnFor(hour: number): number {
   return 1 + ((hour - TIME.startHour) * TIME.turnsPerDay) / 24;
@@ -65,5 +67,57 @@ describe('heat haze', () => {
     expect(casters.map((o) => o.id)).toContain('rock-edge');
     expect(cornerLook(w, corner.x, corner.y, sun, casters).haze).toBe(0);
     expect(cornerLook(w, corner.x, corner.y, sun, []).haze).toBeGreaterThan(0);
+  });
+});
+
+describe('shade patch over frames', () => {
+  const noon = (TIME.sunrise + TIME.sunset) / 2;
+  const worldAt = (turn: number) => {
+    const w = emptyWorld();
+    w.turn = turn;
+    return w;
+  };
+  const build = (w: ReturnType<typeof emptyWorld>) => {
+    const ground = [{ mesh: new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial()) }] as unknown as TerrainChunk[];
+    return new ShadeView(w, ground);
+  };
+  const dump = (v: ShadeView) => ({
+    pos: Array.from(v.mesh.geometry.getAttribute('position').array),
+    alpha: Array.from(v.mesh.geometry.getAttribute('alpha').array),
+    haze: Array.from((v as unknown as { hazeCells: Uint8Array }).hazeCells),
+  });
+  const FRAMES = Math.ceil(41 / 4);
+  const t1 = turnFor(noon);
+  const t2 = turnFor(noon - 2);
+  const t3 = turnFor(noon + 2);
+
+  it('keeps the old patch until the new one is complete', () => {
+    const view = build(worldAt(t1));
+    const before = dump(view);
+    view.update(worldAt(t2));
+    for (let i = 0; i < FRAMES - 1; i++) {
+      view.advance();
+      expect(dump(view)).toEqual(before);
+    }
+    view.advance();
+    expect(dump(view)).not.toEqual(before);
+  });
+
+  it('ends with the patch a synchronous compute gives', () => {
+    const view = build(worldAt(t1));
+    view.update(worldAt(t2));
+    for (let i = 0; i < FRAMES; i++) view.advance();
+    expect(dump(view)).toEqual(dump(build(worldAt(t2))));
+  });
+
+  it('finishes the running patch, then the latest queued world', () => {
+    const view = build(worldAt(t1));
+    view.update(worldAt(t2));
+    view.advance();
+    view.update(worldAt(t3));
+    for (let i = 0; i < FRAMES - 1; i++) view.advance();
+    expect(dump(view)).toEqual(dump(build(worldAt(t2))));
+    for (let i = 0; i < FRAMES; i++) view.advance();
+    expect(dump(view)).toEqual(dump(build(worldAt(t3))));
   });
 });

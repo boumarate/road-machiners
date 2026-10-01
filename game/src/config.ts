@@ -15,4 +15,6 @@ export const CONFIG = {
   autoTurnMs: 250,
   travelHoldMs: 250,
   travelFastSpeed: 4,
+  // A slow frame advances turn playback by at most this, so it stretches the turn instead of skipping the trucks ahead.
+  playbackFrameMs: 50,
 };

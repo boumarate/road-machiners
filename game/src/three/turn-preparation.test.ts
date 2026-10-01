@@ -7,6 +7,8 @@ import {
   type Drive,
 } from "../phys/drive";
 import type { PreparedTurn, TurnRequest, TurnResponse } from "../phys/turn";
+import { computeTurn } from "../phys/turn";
+import { restoreDrive } from "../phys/drive";
 import { emptyWorld } from "../sim/testkit";
 import { setMoveOrder } from "../sim/world";
 import type { World } from "../sim/types";
@@ -109,4 +111,39 @@ it("does not fail the pending turn when the warm-up fails", () => {
   worker.respond({ id: worker.requests[0].id, error: "warm failed" });
   expect(turns.take(world)).toBeNull();
   expect(reportError).toHaveBeenCalledOnce();
+});
+
+it("posts a copy of a snapshot in hand and leaves that snapshot attached", () => {
+  const turns = new TurnPreparation();
+  const saved = captureDrive(drive);
+  const bytes = saved.snapshot.slice();
+  const spy = vi.spyOn(drive.world, "takeSnapshot");
+  turns.prepareFrom(world, saved);
+  const posted = TestWorker.latest.requests[0].drive;
+  expect(posted.snapshot).toEqual(bytes);
+  expect(saved.snapshot.byteLength).toBe(bytes.byteLength);
+  expect(spy).not.toHaveBeenCalled();
+});
+
+it("prepares from a snapshot once per world", () => {
+  const turns = new TurnPreparation();
+  const saved = captureDrive(drive);
+  turns.prepareFrom(world, saved);
+  turns.prepareFrom(world, saved);
+  turns.prepare(world, drive);
+  expect(TestWorker.latest.requests).toHaveLength(1);
+});
+
+it("steps a turn the same from the worker's bytes as from a restored and re-captured world", () => {
+  const moving = setMoveOrder(world, { kind: "stopAt", dest: { x: 38, y: 31 } });
+  const { terrain, ...state } = moving;
+  const first = captureDrive(drive);
+  const restored = restoreDrive(first);
+  const again = captureDrive(restored);
+  const a = computeTurn({ world: state, drive: first }, terrain);
+  const b = computeTurn({ world: state, drive: again }, terrain);
+  restored.world.free();
+  const last = (t: typeof a) => t.world.vehicles.find((v) => v.id === world.player.vehicleId)!;
+  expect(last(b).pos).toEqual(last(a).pos);
+  expect(last(b).speed).toEqual(last(a).speed);
 });

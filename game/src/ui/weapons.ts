@@ -185,7 +185,7 @@ export class WeaponPanel {
       { class: "weapon-head" },
       el("h3", {}, "Weapons"),
       this.expanded ? this.renderAllButton(locked) : null,
-      el("button", { class: "weapon-toggle", "aria-expanded": String(this.expanded), onclick: () => this.toggleVisible(), title: "Show or hide weapons [X]" }, this.expanded ? "Hide [X]" : "Show [X]"),
+      el("button", { class: "weapon-toggle", "aria-expanded": String(this.expanded), onclick: () => this.host.runKey("KeyX"), title: "Show or hide weapons [X]" }, this.expanded ? "Hide [X]" : "Show [X]"),
     );
     this.root.replaceChildren(head, ...(this.expanded ? [this.renderControls(w, locked)] : []));
     this.turn.replaceChildren(this.renderTurnButton(phase));
@@ -195,13 +195,26 @@ export class WeaponPanel {
   private renderTurnButton(phase: ReturnType<UiHost["getTurnPhase"]>): HTMLElement {
     if (this.host.autoTravel())
       return el('button', {
-        class: 'end-turn auto', title: 'Automatic travel. Space to stop.',
-        'aria-label': 'Stop automatic travel', onclick: () => this.host.endTurn(),
+        class: 'end-turn auto', title: 'Automatic travel. Space or click to stop.',
+        'aria-label': 'Stop automatic travel', onpointerdown: (e: Event) => this.pressTurn(e as PointerEvent),
       }, createIcon('turn'), el('span', {}, 'Auto'));
     return el('button', {
-      class: 'end-turn', disabled: phase !== null, title: 'End turn [Space]',
-      'aria-label': phase ? `${phase} in progress` : 'End turn', onclick: () => this.host.endTurn(),
+      class: 'end-turn', disabled: phase !== null, title: 'End turn [Space]. Hold to fast-forward.',
+      'aria-label': phase ? `${phase} in progress` : 'End turn', onpointerdown: (e: Event) => this.pressTurn(e as PointerEvent),
     }, createIcon('turn'), el('span', {}, phase ? `${phase}…` : 'Space'));
+  }
+
+  // Presses like Space keydown now and releases like Space keyup when this press ends, even if the button is redrawn.
+  private pressTurn(e: PointerEvent): void {
+    if (e.button !== 0) return;
+    this.host.pressTurn();
+    const release = (): void => {
+      window.removeEventListener('pointerup', release);
+      window.removeEventListener('pointercancel', release);
+      this.host.releaseTurn();
+    };
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
   }
 
   private renderAllButton(locked: boolean): HTMLElement {
@@ -213,7 +226,7 @@ export class WeaponPanel {
         "aria-pressed": String(all),
         disabled: locked,
         title: "Aim all weapons with the next click [0]",
-        onclick: () => this.selectWeapon(null),
+        onclick: () => this.host.runKey("Digit0"),
       },
       "All [0]",
     );
@@ -230,7 +243,7 @@ export class WeaponPanel {
         checked: w.player.autoFire,
         key: "Q",
         title: "Auto fire: guns shoot at hostiles on their own [Q]",
-        onclick: () => this.toggleAuto(),
+        onclick: () => this.host.runKey("KeyQ"),
       }),
       el(
         "div",
@@ -329,6 +342,15 @@ export class WeaponPanel {
   selectWeapon(id: string | null): void {
     if (this.host.getTurnPhase() !== null) return;
     this.host.selectWeapon(id);
+  }
+
+  // A digit key picks the weapon at that index, and picks all again when it is already selected.
+  selectIndex(i: number): void {
+    const w = this.host.world();
+    const all = vehicleStats(w, playerVehicle(w)).weapons;
+    if (i < 0 || i >= all.length) return;
+    const id = all[i].part.id;
+    this.selectWeapon(this.host.selectedWeapon() === id ? null : id);
   }
 
   toggleVisible(): void {

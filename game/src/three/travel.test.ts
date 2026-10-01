@@ -94,23 +94,65 @@ describe("turn advancement", () => {
   });
 });
 
-describe("turns that run on their own", () => {
-  const space = (repeat = false) => ({ repeat, preventDefault: () => {} }) as KeyboardEvent;
+describe("playback clock", () => {
+  const playback = (elapsed = 0) => ({ elapsed, lastTick: null as number | null }) as Parameters<Travel["advanceClock"]>[0];
 
-  it("Space stops them, and the next Space restarts them", () => {
+  it("adds a normal frame in full, times the speed", () => {
+    const travel = new Travel(250);
+    const a = playback();
+    travel.advanceClock(a, 1000, 1, 50);
+    expect(travel.advanceClock(a, 1016, 1, 50)).toBe(16);
+    expect(travel.advanceClock(a, 1032, 4, 50)).toBe(16 + 64);
+  });
+
+  it("stretches the turn on a slow frame instead of skipping ahead", () => {
+    const travel = new Travel(250);
+    const a = playback();
+    travel.advanceClock(a, 1000, 1, 50);
+    expect(travel.advanceClock(a, 1400, 1, 50)).toBe(50);
+    expect(travel.advanceClock(a, 1800, 4, 50)).toBe(250);
+  });
+
+  it("keeps the carried elapsed time on the first call", () => {
+    const travel = new Travel(250);
+    const a = playback(120);
+    expect(travel.advanceClock(a, 5000, 1, 50)).toBe(120);
+  });
+});
+
+describe("turns that run on their own", () => {
+  it("a turn press stops them, and the next press restarts them", () => {
     const world = makeSafeWorld();
     world.player.state = "knockedOut";
     const travel = new Travel(250);
     expect(travel.autoAllowed(world)).toBe(true);
-    travel.handleSpace(space(), false, world);
+    travel.pressTurn(false, world);
     expect(travel.autoAllowed(world)).toBe(false);
-    travel.handleSpace(space(true), false, world);
-    expect(travel.autoAllowed(world)).toBe(false);
-    travel.handleSpace(space(), false, world);
+    travel.release();
+    travel.pressTurn(false, world);
     expect(travel.autoAllowed(world)).toBe(true);
   });
 
-  it("the turn button stops them as Space does", () => {
+  it("a press with a drive-through order starts travel, and a press while playing stops it", () => {
+    const world = setMoveOrder(makeSafeWorld(), { kind: "through", dest: { x: 40, y: 30 } });
+    const travel = new Travel(250);
+    expect(travel.pressTurn(false, world)).toBe(true);
+    expect(travel.isAuto(world)).toBe(true);
+    travel.release();
+    expect(travel.pressTurn(true, world)).toBe(false);
+    expect(travel.isAuto(world)).toBe(false);
+  });
+
+  it("holding a press fast-forwards until release", () => {
+    const world = setMoveOrder(makeSafeWorld(), { kind: "through", dest: { x: 40, y: 30 } });
+    const travel = new Travel(250);
+    travel.pressTurn(false, world);
+    expect(travel.isFast(performance.now() + 250)).toBe(true);
+    travel.release();
+    expect(travel.isFast(performance.now() + 250)).toBe(false);
+  });
+
+  it("stopAuto ends them for abandon", () => {
     const world = makeSafeWorld();
     world.player.state = "knockedOut";
     const travel = new Travel(250);
@@ -124,7 +166,7 @@ describe("turns that run on their own", () => {
     const world = makeSafeWorld();
     world.player.state = "knockedOut";
     const travel = new Travel(250);
-    travel.handleSpace(space(), false, world);
+    travel.pressTurn(false, world);
     world.player.state = "active";
     expect(travel.autoAllowed(world)).toBe(false);
     world.player.state = "knockedOut";
@@ -322,11 +364,11 @@ describe("turns on a tow rope", () => {
   function travelWithPrepared() {
     const prepare = vi.fn();
     const travel = new Travel(250);
-    Object.assign(travel, { turns: { prepare, take: () => null } });
+    Object.assign(travel, { turns: { prepareFrom: prepare, take: () => null } });
     return { travel, prepare };
   }
 
-  const playback = { result: { next: {} } } as unknown as Parameters<Travel["prepareNext"]>[1];
+  const playback = { result: { next: {} }, nextSnapshot: {} } as unknown as Parameters<Travel["prepareNext"]>[1];
 
   it("prepare the next turn during playback with no key held", () => {
     const { travel, prepare } = travelWithPrepared();
