@@ -78,7 +78,7 @@ import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
 import { CombatScore, CombatWatch, computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { SoundPlayer } from "../audio/player";
-import { uiRoot } from "../ui/dom";
+import { isBrowserChord, uiRoot } from "../ui/dom";
 import { Travel, type Playback, type LiveVision } from "./travel";
 
 const PLAN_TURNS = 3; // turns of path preview
@@ -197,7 +197,7 @@ export class Game {
     this.renderer.toneMappingExposure = 1.05;
     container.appendChild(this.renderer.domElement);
     this.rig = new CameraRig(container);
-    this.follow = new TruckFollow(this.rig, new KeyPan(() => this.isEditingControl()), this.renderer.domElement);
+    this.follow = new TruckFollow(this.rig, new KeyPan(this.ignoresKey), this.renderer.domElement);
 
     this.scene.background = new THREE.Color(PAL.bg);
     this.renderer.domElement.classList.add("view");
@@ -427,6 +427,8 @@ export class Game {
     this.markers.refresh(vehicleMarks(this.displayWorld(), this.hovered));
   }
 
+  private readonly ignoresKey = (e: KeyboardEvent): boolean => isBrowserChord(e) || this.isEditingControl();
+
   private isEditingControl(): boolean {
     return document.activeElement?.matches("input, select, textarea") ?? false;
   }
@@ -438,9 +440,7 @@ export class Game {
     canvas.addEventListener("pointerdown", (e) => {
       if (e.button === 0) this.onLeftClick(e);
     });
-    window.addEventListener("pointermove", (e) => {
-      if (e.target === canvas) this.onHover(e);
-    });
+    window.addEventListener("pointermove", (e) => e.target === canvas && this.onHover(e));
     canvas.addEventListener("wheel", (e) => this.rig.zoomBy(e.deltaY), { passive: true });
     window.addEventListener("keyup", (e) => {
       if (e.code === "Space") this.releaseTurn();
@@ -450,7 +450,7 @@ export class Game {
       if (document.hidden) this.travel.pause();
     });
     window.addEventListener("keydown", (e) => {
-      if (this.isEditingControl() || this.death.isShown()) return;
+      if (this.ignoresKey(e) || this.death.isShown()) return;
       if (e.code === "Space" && !this.modalOpen()) {
         e.preventDefault();
         if (!e.repeat) this.pressTurn();
