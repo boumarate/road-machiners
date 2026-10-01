@@ -186,14 +186,14 @@ function serviceReason(lowFuel: boolean, lowSupplies: boolean): string {
   return lowFuel ? 'low fuel' : lowSupplies ? 'low supplies' : 'needs repairs';
 }
 
-// Where a driver buys fuel. A raider fuels at its camps, any other driver in its towns or at a stall that sells fuel.
+// Where a driver buys fuel. A raider fuels at its camps, any other driver in its towns or at a service stall.
 function pumpsOf(vehicle: Vehicle, profile: NpcProfile): string[] {
   if (profile.bases.length > 0) return profile.bases;
   if (profile.towns.length === 0) throw new Error(`${vehicle.id} knows no pump`);
-  return [...profile.towns, ...FUEL_STALLS];
+  return [...profile.towns, ...SERVICE_STALLS];
 }
 
-const FUEL_STALLS: readonly string[] = Object.values(SHOPS).filter((s) => s.kind === 'stall' && s.supplies.includes('fuel')).map((s) => s.id);
+const SERVICE_STALLS: readonly string[] = Object.values(SHOPS).filter((s) => s.kind === 'stall' && s.supplies.includes('fuel')).map((s) => s.id);
 
 // The fuel a driver thinks the way to its nearest pump takes: the straight line at the heat where it stands.
 function fuelToPump(world: World, vehicle: Vehicle, profile: NpcProfile): number {
@@ -246,15 +246,15 @@ function brokeServiceGoal(world: World, vehicle: Vehicle, profile: NpcProfile, n
 }
 
 function serviceTrip(vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): NpcActivity {
-  const stop = chooseNearestSite(vehicle, serviceStops(vehicle, profile, need));
+  const stop = chooseNearestSite(vehicle, serviceStops(vehicle, profile));
   if (!stop) throw new Error(`${vehicle.id} knows no service stop`);
   return createSiteActivity('resupply', stop.id, need.reason);
 }
 
-// A raider is served at its camps. For anyone else only a town repairs, and fuel alone also comes from a fuel stall.
-function serviceStops(vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): string[] {
+// A raider is served at its camps. Anyone else is fuelled and repaired in a town or at a stall.
+function serviceStops(vehicle: Vehicle, profile: NpcProfile): string[] {
   if (profile.bases.length > 0) return profile.bases;
-  return need.damaged ? profile.towns : pumpsOf(vehicle, profile);
+  return pumpsOf(vehicle, profile);
 }
 
 // The market that pays most for the carried cargo, of the driver's markets. Nearest wins a tie.
@@ -1205,7 +1205,7 @@ function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity):
   finishGoal(world, vehicle, 'finished service');
 }
 
-// An oasis fills supplies, a camp serves raiders, a stall sells what it stocks and a town garage serves in full.
+// An oasis fills supplies, a camp serves raiders, a stall and a town garage serve in full.
 function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
   const kind = 'kind' in site ? site.kind : null;
   if (kind === 'oasis') getResources(world, vehicle).supplies = suppliesCap(vehicle);
