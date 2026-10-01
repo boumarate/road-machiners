@@ -38,7 +38,7 @@ import {
 import { makePart } from "./factory";
 import { maxHp, partValue } from "./wear";
 import { addGoods, spareParts } from "./inventory";
-import { applySiteAction, canScavenge, salvageNear, scavenge, useOasis } from "./locations";
+import { canScavenge, canUseOasis, salvageNear, scavenge, useOasis } from "./locations";
 import { consumeSupplies } from "./supplies";
 import { heatAt } from "./sun";
 import { sitePads, townAt, townNear } from "./sites";
@@ -566,11 +566,13 @@ describe("locations", () => {
     const w = emptyWorld({ ...sitePads(oasis)[0] });
     w.player.supplies = 1;
     w.vehicles[0].speed = RULES.parkedSpeed + 1;
-    expect(applySiteAction(w)).toBeNull();
+    expect(canUseOasis(w)).toBe(false);
+    expect(() => useOasis(w)).toThrow("Stop the truck first");
     expect(w.player.supplies).toBe(1);
     w.vehicles[0].speed = 0;
-    const after = applySiteAction(w);
-    expect(after?.player.supplies).toBe(RULES.baseSupplies);
+    expect(canUseOasis(w)).toBe(true);
+    const after = useOasis(w);
+    expect(after.player.supplies).toBe(RULES.baseSupplies);
     expect(after?.events).toContainEqual({ t: "info", text: `Filled supplies at ${oasis.name}` });
   });
 
@@ -582,11 +584,11 @@ describe("locations", () => {
   it("convoy starts a timed search, and a second search cannot start while it runs", () => {
     const convoy = REGION.locations.find((l) => l.kind === "convoy")!;
     const w = emptyWorld({ ...sitePads(convoy)[0] });
-    const after = scavenge(w);
+    const after = scavenge(w, convoy.id);
     expect(after.vehicles[0].job).toEqual(
       expect.objectContaining({ kind: "search", stockId: convoy.id }),
     );
-    expect(() => scavenge(after)).toThrow();
+    expect(() => scavenge(after, convoy.id)).toThrow();
   });
 
   it("a town in reach needs a stop before it can be used", () => {
@@ -601,7 +603,7 @@ describe("locations", () => {
     const convoy = REGION.locations.find((l) => l.kind === "convoy")!;
     const w = emptyWorld({ ...sitePads(convoy)[0] });
     w.vehicles[0].speed = RULES.parkedSpeed + 1;
-    expect(canScavenge(w)).toBe(false);
+    expect(canScavenge(w, convoy.id)).toBe(false);
     expect(salvageNear(w)?.id).toBe(convoy.id);
   });
 

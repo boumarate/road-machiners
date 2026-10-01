@@ -699,6 +699,15 @@ body {
 .action button {
   font-size: 14px;
 }
+#ui .action:has(.cycle) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.action .count {
+  font-size: 12px;
+  white-space: nowrap;
+}
 #ui .action button.combat {
   color: #ff5a40;
   border-color: #ff5a40;

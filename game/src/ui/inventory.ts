@@ -29,8 +29,8 @@ import { vehicleHasPerk } from "../sim/progress";
 import { PERK_NUMBERS } from "../data/skills";
 import { repairPlan, type RepairPlan } from "../sim/repair";
 import { townAt } from "../sim/sites";
-import { downedHere, takeAllLoot, takeLoot, takeStores } from "../sim/locations";
-import { hasStores, takeFromTruck } from "../sim/salvage";
+import { takeAllLoot, takeLoot, takeStores } from "../sim/locations";
+import { canLootTruck, hasStores, takeFromTruck } from "../sim/salvage";
 import { gaveUp, isKnockedOut } from "../sim/defeat";
 import { REGION } from "../data/region";
 import type {
@@ -930,10 +930,10 @@ export class InventoryScreen {
     this.render();
   }
 
-  // Opens the inventory with the grid of a knocked-out truck the player can loot on the right. False when none.
-  openDowned(world: World): boolean {
-    const downed = downedHere(world);
-    if (!downed) return false;
+  // Opens the inventory with the grid of the chosen knocked-out truck on the right. False when the player cannot loot it.
+  openDowned(world: World, vehicleId: string): boolean {
+    const downed = world.vehicles.find((v) => v.id === vehicleId);
+    if (!downed || !canLootTruck(playerVehicle(world), downed)) return false;
     this.view.setTruck(downed.id);
     this.root.style.display = "";
     this.render();
