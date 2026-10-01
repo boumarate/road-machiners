@@ -1,9 +1,12 @@
 import { GAME_VERSION } from "../config";
+import { playerAid, readyAid } from "../sim/aid";
+import { aidData } from "../sim/states";
+import { aidGoods } from "./format";
 import { tradePartner, tradeReady } from "../sim/economy";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { maxHp } from "../sim/wear";
-import { playerVehicle } from "../sim/damage";
+import { playerVehicle, vehicleById } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
 import { baseGrid, corePart, mountedParts, mountedItems, itemSize, MOUNT_CELLS } from "../sim/grid";
 import { fuelCap, hasWorkingEngine, isStranded, isWorking, vehicleStats } from "../sim/stats";
@@ -39,9 +42,18 @@ function shopNear(world: World): { id: string; name: string } | null {
 
 export function getContextAction(world: World, playing: boolean): ContextAction | null {
   if (playing || !playerCanAct(world)) return null;
-  // A trade the player arranged wins over the place once both trucks are parked side by side.
-  const trade = getTradeAction(world);
-  return trade?.ready ? trade : (getPlaceAction(world) ?? trade);
+  // An aid handover or a trade the player arranged wins over the place once both trucks are parked side by side.
+  const deals = [getAidAction(world), getTradeAction(world)].filter((d) => d !== null);
+  return deals.find((d) => d.ready) ?? getPlaceAction(world) ?? deals[0] ?? null;
+}
+
+// An agreed aid deal the player has not started yet.
+function getAidAction(world: World): ContextAction | null {
+  const s = playerAid(world);
+  if (!s || !aidData(s).agreed || aidData(s).started) return null;
+  const npc = npcName(vehicleById(world, s.holder));
+  const label = aidData(s).giver === "player" ? `Give ${aidGoods(s)} to ${npc}` : `Take ${aidGoods(s)} from ${npc}`;
+  return { label, ready: readyAid(world) !== null };
 }
 
 function getTradeAction(world: World): ContextAction | null {

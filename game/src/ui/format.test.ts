@@ -6,7 +6,9 @@ import { partDef } from "../data/parts";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import type { GameEvent, Job, PartInstance } from "../sim/types";
 import { maxHp } from "../sim/wear";
-import { contractDue, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel } from "./format";
+import { workOf, addState } from "../sim/states";
+import { startAid } from "../sim/aid";
+import { contractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel } from "./format";
 import { mountedParts } from "../sim/grid";
 
 function part(wear: number): PartInstance {
@@ -204,5 +206,20 @@ describe("NPC names in the log", () => {
     w.removed.push(npc);
     expect(eventText(w, offer)?.text).toMatch(/^Roamer Silas Kane offers/);
     expect(vehicleName(w, w.player.vehicleId)).toBe("You");
+  });
+});
+
+describe("aid handover text", () => {
+  it("labels the work for both trucks and logs its start", () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = addVehicle(w, "traders", "scout", ["stockEngine"], { x: 34, y: 30 });
+    npc.brain = npcBrain("trader", npc.pos, ["trader"]);
+    addState(w, "aid", npc.id, w.player.vehicleId, { kind: "aid", giver: "player", fuel: 5, supplies: 0, price: 0, free: true, agreed: true, started: false, work: 1, workLeft: 1 });
+    const next = startAid(w, npc.id);
+    const mine = next.vehicles[0];
+    expect(workLabel(next, mine, workOf(next, mine)!)).toMatch(/^Giving .* to /);
+    const theirs = next.vehicles.find((v) => v.id === npc.id)!;
+    expect(workLabel(next, theirs, workOf(next, theirs)!)).toMatch(/^Taking .* from you$/);
+    expect(eventText(next, next.events.find((e) => e.t === "aidStarted")!)?.text).toMatch(/^You start handing/);
   });
 });

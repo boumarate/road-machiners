@@ -172,6 +172,8 @@ export const AID = {
   // ...and worth at most this much. That covers the start scout, worth about 3600 new, and worn tier 1 trucks, not
   // geared tier 2 and 3 trucks like the combat start kit's hauler, worth about 6000.
   poorValue: 4000,
+  // Turns both trucks stay parked side by side after the player presses [E] before the goods move.
+  handoverTurns: 1,
 };
 
 // Raiders look for prey on lonely road stretches and at the pads of salvage sites, where scavengers stop. Each raider
