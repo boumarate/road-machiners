@@ -248,6 +248,24 @@ describe('work clones', () => {
     expect(await repo.isMerged(commit, 'factory/issue-8')).toBe(true);
   });
 
+  it('takes a force-committed task file out of the branch and keeps it on disk', async () => {
+    const { home, repo } = await setup();
+    const work = join(home, 'work', 'issue-10');
+    await repo.prepareWorkClone('factory/issue-10', 'dev', work);
+    mkdirSync(join(work, 'game', '.factory-tasks'), { recursive: true });
+    writeFileSync(join(work, 'game', '.factory-tasks', 'issue-10.md'), '# plan\n');
+    writeFileSync(join(work, 'f.txt'), 'ten\n');
+    await git(work, 'add', '-f', 'f.txt', 'game/.factory-tasks/issue-10.md');
+    await git(work, 'commit', '-m', 'work on 10 with the task file');
+    expect(await repo.untrackFactoryFiles(work)).toEqual(['game/.factory-tasks/issue-10.md']);
+    expect(await repo.untrackFactoryFiles(work)).toEqual([]);
+    const head = await repo.fetchFromWork(work, 'factory/issue-10');
+    const diff = await repo.diff('dev', head);
+    expect(diff).toContain('+ten');
+    expect(diff).not.toContain('.factory-tasks');
+    expect(readFileSync(join(work, 'game', '.factory-tasks', 'issue-10.md'), 'utf8')).toBe('# plan\n');
+  });
+
   it('continues a branch that exists on GitHub', async () => {
     const { home, repo, commit } = await setup();
     await commit('factory/issue-9', 'f.txt', 'nine\n');

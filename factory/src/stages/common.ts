@@ -99,8 +99,10 @@ export function factoryPaths(diff: string): string[] {
   return [...new Set(paths)].filter((path) => FORBIDDEN_PATH.test(path));
 }
 
-// Nothing of the agent's work reaches GitHub before this check.
-export async function guardAndPush(ctx: Ctx, issue: number, base: string): Promise<void> {
+// Nothing of the agent's work reaches GitHub before this check. A committed task file only leaves the branch, so the stage goes on.
+export async function guardAndPush(ctx: Ctx, issue: number, base: string, stage: CardStage): Promise<void> {
+  const untracked = await ctx.repo.untrackFactoryFiles(workDir(ctx, issue));
+  if (untracked.length > 0) ctx.log(stage, issue, `took factory files out of the branch: ${untracked.join(', ')}`);
   const head = await ctx.repo.fetchFromWork(workDir(ctx, issue), BRANCH(issue));
   const diff = await ctx.repo.diff(base, head);
   const leaked = factoryPaths(diff);

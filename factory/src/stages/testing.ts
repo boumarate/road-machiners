@@ -104,7 +104,7 @@ async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'test-fix', 
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   throwIfNeedsCommittee(home);
   readApproval(home);
-  await guardAndPush(ctx, issue, base);
+  await guardAndPush(ctx, issue, base, 'testing');
 }
 
 function readApproval(home: string): Approval {

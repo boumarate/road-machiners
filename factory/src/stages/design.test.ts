@@ -34,7 +34,7 @@ function fakeCtx(agent: (run: AgentRun) => void): Ctx {
     },
     container: { agent: async (run: AgentRun) => { calls.push('agent'); agent(run); } },
     repo: {
-      fetch: record('fetch'), push: record('push'), fetchFromWork: async () => 'w1',
+      fetch: record('fetch'), push: record('push'), fetchFromWork: async () => 'w1', untrackFactoryFiles: async () => [],
       prepareWorkClone: async (_b: string, base: string, dir: string) => { bases.push(`prepare ${base}`); mkdirSync(dir, { recursive: true }); },
       diff: async (base: string) => { bases.push(`diff ${base}`); return diff; },
     },

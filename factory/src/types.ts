@@ -159,6 +159,8 @@ export interface HostRepo {
   revertIssueMerge(issue: number, branch: string): Promise<boolean>;
   deleteBranch(branch: string): Promise<void>; // on GitHub, if it is there
   prepareWorkClone(branch: string, base: string, dir: string): Promise<void>;
+  // Agent skills expect their task file in git and commit it. This commits its removal, keeps it on disk, and returns the removed paths.
+  untrackFactoryFiles(dir: string): Promise<string[]>;
   // Brings the work clone's branch head into the host clone, without pushing it, and returns its full hash.
   fetchFromWork(dir: string, branch: string): Promise<string>;
   push(commit: string, branch: string): Promise<void>; // sets `branch` on GitHub to `commit`, which must hold the branch's current head
