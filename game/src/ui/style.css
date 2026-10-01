@@ -572,21 +572,26 @@ body {
 }
 #ui .help,
 #ui .feedback {
-  padding: 5px 9px;
+  padding: 0;
   background: #272b2ef5;
   font-size: 12px;
 }
 .help summary,
 .feedback summary {
+  display: block;
+  padding: 5px 9px;
   font-size: 16px;
   list-style: none;
 }
 .feedback details[open] summary {
   margin-bottom: 6px;
 }
+.feedback details[open] {
+  padding-bottom: 5px;
+}
 .feedback details a {
   display: block;
-  margin: 4px 0;
+  margin: 4px 9px;
   color: var(--ink);
   text-decoration: none;
   white-space: nowrap;
@@ -597,16 +602,18 @@ body {
   text-decoration: underline;
 }
 .help details[open] {
-  width: calc(var(--inspection-width) - 20px);
-  height: calc(var(--inspection-height) - 12px);
-  max-width: calc(100vw - 48px);
+  box-sizing: border-box;
+  width: calc(var(--inspection-width) - 2px);
+  height: calc(var(--inspection-height) - 2px);
+  max-width: calc(100vw - 30px);
+  padding-bottom: 5px;
   overflow: auto;
 }
 .help details[open] summary {
   margin-bottom: 8px;
 }
 .help details > div {
-  margin: 4px 0;
+  margin: 4px 9px;
   color: var(--muted);
 }
 .help .version {
@@ -698,6 +705,15 @@ body {
 }
 .action button {
   font-size: 14px;
+}
+#ui .action:has(.cycle) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.action .count {
+  font-size: 12px;
+  white-space: nowrap;
 }
 #ui .action button.combat {
   color: #ff5a40;
@@ -1372,6 +1388,10 @@ canvas.view {
 #ui .top-right > .panel {
   position: static;
   padding: 6px 8px;
+}
+#ui .top-right > .camera-mode {
+  padding: 0;
+  border: 0;
 }
 .sound {
   font-size: 12px;

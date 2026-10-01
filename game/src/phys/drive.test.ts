@@ -582,7 +582,7 @@ describe('physics turns', () => {
     const { w } = play(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 12);
     expect(me(w).pos.x).toBeGreaterThan(32);
     expect(me(w).speed).toBeGreaterThan(0.5);
-  });
+  }, 90_000); // twelve physics turns take 5s alone and over 30s when the whole suite shares the cores
 
   it('a click in the hold zone keeps its speed up a hill', () => {
     let w = emptyWorld({ x: 29, y: 30 });
