@@ -8,7 +8,7 @@ import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
 import { canUseSite, nearestPad, siteGates, sitePads, type Site } from './sites';
 import { getResources } from './resources';
-import { isStranded, vehicleStats } from './stats';
+import { fuelCap, isStranded, vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere, testDrive , startCombat } from './testkit';
 import { hasLoot, mountedParts } from './grid';
 import { CONDITION } from '../data/wear';
@@ -989,6 +989,21 @@ describe('a broke driver', () => {
     const { w, npc } = broke({ x: far.x + 3, y: far.y });
     getResources(w, npc).fuel = 1;
     expect(thinkNpc(w, npc).kind).not.toBe('wait');
+  });
+
+  it('low on fuel heads for a town, not a fuel stall, while it can still drive', () => {
+    const pump = REGION.locations.find((l) => l.id === 'pump-station')!;
+    const { w, npc } = broke({ x: pump.pos.x + pump.radius + 4, y: pump.pos.y });
+    getResources(w, npc).fuel = 1;
+    const goal = thinkNpc(w, npc);
+    expect(goal).toMatchObject({ kind: 'resupply' });
+    expect(REGION.towns.map((t) => t.id)).toContain(goal.targetId);
+  });
+
+  it('with a full tank keeps working', () => {
+    const { w, npc } = broke({ x: far.x + 3, y: far.y });
+    getResources(w, npc).fuel = fuelCap(npc);
+    expect(thinkNpc(w, npc).kind).not.toBe('resupply');
   });
 
   it('dry on a town pad with working parts gets scrap fuel and keeps its loadout', () => {

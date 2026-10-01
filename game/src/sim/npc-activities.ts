@@ -186,8 +186,15 @@ function serviceReason(lowFuel: boolean, lowSupplies: boolean): string {
   return lowFuel ? 'low fuel' : lowSupplies ? 'low supplies' : 'needs repairs';
 }
 
-// Where a driver buys fuel. A raider fuels at its camps, any other driver in its towns or at a stall that sells fuel.
-function pumpsOf(vehicle: Vehicle, profile: NpcProfile): string[] {
+// The sites that serve a stranded driver: its bases if it has any, else any town.
+function servingSiteIds(profile: NpcProfile): string[] {
+  return profile.bases.length > 0 ? profile.bases : REGION.towns.map((t) => t.id);
+}
+
+// Where a driver buys fuel. A raider fuels at its camps, any other driver in its towns or at a stall that sells fuel. A broke driver
+// counts only the sites that serve it, since a stall gives it nothing.
+function pumpsOf(vehicle: Vehicle, profile: NpcProfile, broke: boolean): string[] {
+  if (broke) return servingSiteIds(profile);
   if (profile.bases.length > 0) return profile.bases;
   if (profile.towns.length === 0) throw new Error(`${vehicle.id} knows no pump`);
   return [...profile.towns, ...FUEL_STALLS];
@@ -197,7 +204,7 @@ const FUEL_STALLS: readonly string[] = Object.values(SHOPS).filter((s) => s.kind
 
 // The fuel a driver thinks the way to its nearest pump takes: the straight line at the heat where it stands.
 function fuelToPump(world: World, vehicle: Vehicle, profile: NpcProfile): number {
-  const pump = chooseNearestSite(vehicle, pumpsOf(vehicle, profile));
+  const pump = chooseNearestSite(vehicle, pumpsOf(vehicle, profile, isBroke(world, vehicle)));
   return dist(vehicle.pos, pump.pos) * vehicleStats(world, vehicle).fuelPerTile * heatAt(world, vehicle.pos);
 }
 
@@ -229,32 +236,32 @@ function isBroke(world: World, vehicle: Vehicle): boolean {
 }
 
 // The fixed survival rule. Null when no service is needed. An oasis refills supplies for free. A broke driver sells
-// its cargo first. With nothing to sell, it works on while it can drive, and once stranded it heads for service
-// anyway, where serveStranded gives it a fresh loadout.
+// its cargo first. With nothing to sell, it works on while its tank holds, low on fuel it heads for a town or its camp
+// for scrap fuel, and once stranded it heads for service anyway, where serveStranded gives it a fresh loadout.
 function serviceGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity | null {
   const need = serviceNeed(world, vehicle, profile);
   if (!need) return null;
   const oasis = need.suppliesOnly ? chooseNearestSite(vehicle, profile.supplySites) : undefined;
   if (oasis) return createSiteActivity('resupply', oasis.id, 'low supplies');
   if (isBroke(world, vehicle)) return brokeServiceGoal(world, vehicle, profile, need);
-  return serviceTrip(vehicle, profile, need);
+  return serviceTrip(world, vehicle, profile, need);
 }
 
 function brokeServiceGoal(world: World, vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): NpcActivity | null {
   if (hasSaleCargo(vehicle)) return saleGoal(world, vehicle, profile);
-  return isStranded(world, vehicle) ? serviceTrip(vehicle, profile, need) : null;
+  return isStranded(world, vehicle) || isLowOnFuel(world, vehicle, profile) ? serviceTrip(world, vehicle, profile, need) : null;
 }
 
-function serviceTrip(vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): NpcActivity {
-  const stop = chooseNearestSite(vehicle, serviceStops(vehicle, profile, need));
+function serviceTrip(world: World, vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): NpcActivity {
+  const stop = chooseNearestSite(vehicle, serviceStops(world, vehicle, profile, need));
   if (!stop) throw new Error(`${vehicle.id} knows no service stop`);
   return createSiteActivity('resupply', stop.id, need.reason);
 }
 
 // A raider is served at its camps. For anyone else only a town repairs, and fuel alone also comes from a fuel stall.
-function serviceStops(vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): string[] {
+function serviceStops(world: World, vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): string[] {
   if (profile.bases.length > 0) return profile.bases;
-  return need.damaged ? profile.towns : pumpsOf(vehicle, profile);
+  return need.damaged ? profile.towns : pumpsOf(vehicle, profile, isBroke(world, vehicle));
 }
 
 // The market that pays most for the carried cargo, of the driver's markets. Nearest wins a tie.
@@ -872,11 +879,6 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   judgeStrandedFoe(world, vehicle);
   steer(world, vehicle, profile, contacts);
   return currentActivity(world, vehicle, profile);
-}
-
-// The sites that serve a stranded driver: its bases if it has any, else any town.
-function servingSiteIds(profile: NpcProfile): string[] {
-  return profile.bases.length > 0 ? profile.bases : REGION.towns.map((t) => t.id);
 }
 
 // A stranded truck parked on the pad of a site that serves it, however it got there, buys the service it can pay
