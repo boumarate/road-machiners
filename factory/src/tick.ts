@@ -207,7 +207,7 @@ export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS
   cleanBuilds(ctx, cards);
   updateState(ctx.statePath, pruneCaptions);
   updateState(ctx.statePath, pruneFailures(ctx.now()));
-  await ctx.repo.sync();
+  await ctx.repo.fetch();
   const devHead = await ctx.repo.headHash('dev');
   await noteCap(ctx, cards, devHead);
   const picks = chooseJobs(readState(ctx.statePath), cards, ctx.now(), ctx.cfg, devHead);

@@ -11,6 +11,9 @@ export function diffPaths(diff: string): string[] {
   return [...new Set(paths)];
 }
 
+// The server runs main's factory code and settings, and deploys each new main. So a factory change starts from main and merges into it.
+const CHANGE_BASE = 'main';
+
 // Runs one committee request to change the factory itself and opens a pull request that only a human merges.
 export async function change(ctx: Ctx, id: number): Promise<void> {
   const request = readState(ctx.statePath).pendingChanges.find((item) => item.id === id);
@@ -18,20 +21,20 @@ export async function change(ctx: Ctx, id: number): Promise<void> {
   const dir = join(ctx.cfg.home, 'work', `change-${id}`);
   const branch = `factory-change/${id}`;
   rmSync(dir, { recursive: true, force: true });
-  await ctx.repo.sync();
-  await ctx.repo.prepareWorkClone(branch, 'dev', dir);
+  await ctx.repo.fetch();
+  await ctx.repo.prepareWorkClone(branch, CHANGE_BASE, dir);
   const home = agentHome(dir, FACTORY_DIR);
   resetOutputs(home);
   writeFileSync(join(home, OUT_DIR, 'request.md'), `Committee request from ${request.by}:\n\n${request.text}\n`);
   await ctx.container.agent({ clone: dir, dir: FACTORY_DIR, model: ctx.cfg.buildModel, prompt: fillPrompt('change', {}), log: agentLog(ctx, id, 'change'), openNetwork: await useOpenNetwork(ctx, 'change', null) });
-  await ctx.repo.fetchFromWork(dir, branch);
-  if (!(await ctx.repo.hasNewCommits('dev', branch))) throw new Error(`change ${id} made no commits`);
-  const outside = diffPaths(await ctx.repo.diff('dev', branch)).filter((path) => !path.startsWith(`${FACTORY_DIR}/`));
+  const head = await ctx.repo.fetchFromWork(dir, branch);
+  if (!(await ctx.repo.hasNewCommits(CHANGE_BASE, head))) throw new Error(`change ${id} made no commits`);
+  const outside = diffPaths(await ctx.repo.diff(CHANGE_BASE, head)).filter((path) => !path.startsWith(`${FACTORY_DIR}/`));
   if (outside.length > 0) throw new Error(`change ${id} touches files outside factory/: ${outside.join(', ')}`);
-  await ctx.repo.push(branch);
+  await ctx.repo.push(head, branch);
   const title = readOutput(home, 'pr-title.txt')?.trim().split('\n')[0] || `Factory change ${id}`;
   const body = `Requested by ${request.by}:\n\n${request.text}\n\nThe factory never merges this pull request. A human reviews and merges it.`;
-  const url = await ctx.github.openPullRequest(branch, 'dev', title, body);
+  const url = await ctx.github.openPullRequest(branch, CHANGE_BASE, title, body);
   updateState(ctx.statePath, (state) => ({ ...state, pendingChanges: state.pendingChanges.filter((item) => item.id !== id) }));
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Factory change ${id} is ready for review: ${url}`);
   ctx.log('change', id, `opened ${url}`);

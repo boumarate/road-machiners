@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeState, readState, EMPTY_STATE } from '../state';
-import { MergeConflictError, type Column, type Ctx } from '../types';
+import { MergeConflictError, type Column, type Ctx, type MergeStep } from '../types';
 
 vi.mock('../deploy', () => ({ deployDev: async () => 'https://play.test/dev/' }));
 const { approve, deny, feedback } = await import('./approval');
@@ -39,7 +39,10 @@ function fakeCtx(): Ctx {
     },
     telegram: { sendMessage: record('message') },
     container: { shell: record('shell') },
-    repo: { sync: record('sync'), merge: record('merge'), push: record('push'), prepareWorkClone: record('prepare'), headHash: async () => 'abc1234' },
+    repo: {
+      fetch: record('fetch'), prepareWorkClone: record('prepare'), headHash: async () => 'abc1234',
+      merge: async (steps: MergeStep[]) => { for (const step of steps) calls.push(`merge ${step.branch} ${step.into} ${step.message}`); calls.push(`push ${steps.map((step) => step.into).join(' ')}`); },
+    },
   };
   return fake as unknown as Ctx;
 }
@@ -48,7 +51,7 @@ describe('approve', () => {
   it('merges, pushes, labels a release candidate without closing, moves to Done and clears state', async () => {
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
-      'sync ',
+      'fetch ',
       'merge factory/issue-7 dev Merge issue #7: Big horn',
       'push dev',
       'comment 7 Approved by bob in the committee chat and merged into dev. It closes when its release ships.',
@@ -67,7 +70,7 @@ describe('approve', () => {
     writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [7, 9] }, pendingShip: 'ann', builds: { 7: 'aaa1111' } });
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
-      'sync release/2026-09-29',
+      'fetch ',
       'merge factory/issue-7 release/2026-09-29 Merge issue #7: Big horn',
       'push release/2026-09-29',
       'comment 7 Approved by bob and merged into the release branch release/2026-09-29. It closes when the release ships.',
@@ -88,13 +91,11 @@ describe('approve', () => {
     await approve(fakeCtx(), 7, 'bob');
     const changelog = 'ROAM hotfix 2026-09-30\n\nFixed: #7 Big horn';
     expect(calls.filter((call) => !call.startsWith('prepare') && !call.startsWith('shell'))).toEqual([
-      'sync main dev release/2026-09-29',
+      'fetch ',
       'merge factory/issue-7 main Hotfix #7: Big horn',
       'merge main dev Merge main into dev after hotfix #7',
       'merge main release/2026-09-29 Merge main into release/2026-09-29 after hotfix #7',
-      'push main',
-      'push dev',
-      'push release/2026-09-29',
+      'push main dev release/2026-09-29',
       'run butler push',
       `message public ${changelog}`,
       `release hotfix-2026-09-30-issue-7 main ROAM hotfix 2026-09-30 ${changelog}`,
@@ -111,10 +112,10 @@ describe('approve', () => {
 
   it('sends the card back to Testing on a conflict with dev, keeping the approver, with no chat post', async () => {
     const ctx = fakeCtx();
-    ctx.repo.merge = async (branch: string, into: string) => { throw new MergeConflictError(branch, into, ['game/src/a.ts'], 'boom'); };
+    ctx.repo.merge = async ([step]: MergeStep[]) => { throw new MergeConflictError(step.branch, step.into, ['game/src/a.ts'], 'boom'); };
     await approve(ctx, 7, 'bob');
     expect(calls).toEqual([
-      'sync ',
+      'fetch ',
       'comment 7 dev moved on since testing, and the branch conflicts with it in game/src/a.ts. Testing merges dev again and resolves the conflict. Then the approval by bob merges it, with no new post.',
       'move 7 Testing',
     ]);
@@ -127,7 +128,10 @@ describe('approve', () => {
   it('fails loud on a conflict of main into dev after a hotfix, which the agent cannot resolve', async () => {
     labels = ['hotfix'];
     const ctx = fakeCtx();
-    ctx.repo.merge = async (branch: string, into: string) => { if (branch === 'main') throw new MergeConflictError(branch, into, ['x'], 'boom'); };
+    ctx.repo.merge = async (steps: MergeStep[]) => {
+      const step = steps.find((item) => item.branch === 'main');
+      if (step) throw new MergeConflictError(step.branch, step.into, ['x'], 'boom');
+    };
     await expect(approve(ctx, 7, 'bob')).rejects.toThrow('merge of main into dev failed');
     expect(readState(`${home}/state.json`).approvedResolving).toEqual({});
   });

@@ -155,6 +155,52 @@ describe('NPC traffic', () => {
   });
 });
 
+describe('oncoming NPCs', () => {
+  // Two traders on open ground closing head-on, each bound past the other. The first has the lower id.
+  function headOn(): { w: World; first: Vehicle; second: Vehicle } {
+    const w = emptyWorld({ x: 100, y: 130 });
+    const first = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 100, y: 100 });
+    first.brain = npcBrain('trader', first.pos, ['trader']);
+    first.heading = 0;
+    first.speed = 4;
+    first.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 150, y: 100 }, phase: 'travel', reason: 'test trip east' });
+    const second = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 114, y: 100.5 }, Math.PI);
+    second.brain = npcBrain('trader', second.pos, ['trader']);
+    second.speed = 4;
+    second.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 50, y: 100 }, phase: 'travel', reason: 'test trip west' });
+    expect(first.id < second.id).toBe(true);
+    return { w, first, second };
+  }
+
+  it('of two NPCs closing head-on, the lower id brakes and the higher drives on', () => {
+    const { w, first, second } = headOn();
+    planNpcOrders(w);
+    expect(first.order?.kind).toBe('brake');
+    expect(second.order?.kind).toBe('stopAt');
+  });
+
+  it.each(['first', 'second'] as const)('a fleeing truck is not yielded to and does not yield: %s flees', (who) => {
+    const { w, first, second } = headOn();
+    const fleer = who === 'first' ? first : second;
+    fleer.brain!.goals.push({ kind: 'flee', targetId: null, destination: { x: 100, y: 60 }, phase: 'travel', reason: 'test flight' });
+    expect(trafficStops(w, first, DEST)).toBe(false);
+  });
+
+  it('a far pair does not use the rule', () => {
+    const { w, first } = headOn();
+    w.vehicles[0].pos = { x: 100, y: 100 + TERRAIN.vision.radius + PERF.liveMargin + 10 };
+    expect(trafficStops(w, first, DEST)).toBe(false);
+  });
+
+  it('a truck behind on the same heading does not make the leader brake', () => {
+    const { w, first, second } = headOn();
+    second.pos = { x: 94, y: 100 };
+    second.heading = 0;
+    second.speed = 5;
+    expect(trafficStops(w, first, DEST)).toBe(false);
+  });
+});
+
 describe('getting unstuck', () => {
   // A leader bound east whose following escort lags far behind, so the leader waits for it.
   function waitingLeader(): { w: World; leader: Vehicle } {
