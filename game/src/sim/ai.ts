@@ -310,8 +310,8 @@ export function fightOrder(world: World, v: Vehicle, target: Vehicle, dest: Vec)
 }
 
 // ---- Traffic: how NPC drivers treat other vehicles. A driver routes around parked vehicles and around the path
-// a moving vehicle on a collision course will cover. It stops only when that path blocks its way, or when it
-// faces off with a parked NPC.
+// a moving vehicle on a collision course will cover. It stops only when that path blocks its way, when it
+// faces off with a parked NPC, or when it is the lower id of two NPCs closing on each other.
 
 // What an NPC routes around: parked vehicles, and the swept path of each moving vehicle on a collision course.
 // A swerve takes a turn to show, and orders are set once per turn, so drivers route around a moving vehicle one
@@ -330,6 +330,7 @@ export function routeBlockers(world: World, v: Vehicle): Blocker[] {
 export function trafficStops(world: World, v: Vehicle, dest: Vec): boolean {
   if (facesParked(world, v)) return true;
   if (!isNear(world, v)) return false;
+  if (facesOncoming(world, v)) return true;
   const moving = conflicts(world, v, 0);
   if (moving.length === 0) return false;
   const parked = parkedVehicles(world, v.id);
@@ -363,6 +364,15 @@ function facesParked(world: World, v: Vehicle): boolean {
     const gap = gapAhead(world, v, x);
     return gap !== null && v.id < x.id && facesOff(world, v, x, gap);
   });
+}
+
+// Two moving NPCs that each have the other in their conflicts would each plan around the other's straight path
+// and swerve into each other, so the lower id waits and the higher goes around, as in a face off.
+function facesOncoming(world: World, v: Vehicle): boolean {
+  if (!givesWay(v)) return false;
+  return conflicts(world, v, 0).some(
+    (x) => v.id < x.id && givesWay(x) && conflicts(world, x, 0).some((y) => y.id === v.id),
+  );
 }
 
 // Seconds v looks ahead: the turn until the next check plus v's stopping time. v may speed up this turn, as in
