@@ -257,6 +257,30 @@ QUEUE_SCHEMA = {
     },
 }
 QUEUE_DONE = "Queued. Tell the member the task is queued and the answer will come as a reply to their message."
+
+CHANGE_TOOL = "factory_queue_change"
+CHANGE_SCHEMA = {
+    "name": CHANGE_TOOL,
+    "description": (
+        "Queue a change to the factory itself, its code or factory/settings.env, when a committee member asks for one. "
+        "A coding agent makes the change in a clone of main and opens a pull request to main. A member merges it, "
+        "and the server deploys main by itself. Call it once per change."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "request": {
+                "type": "string",
+                "description": (
+                    "The full change request. It must stand on its own: the agent sees nothing of this chat. "
+                    "Say what to change and why, and name the setting or behavior."
+                ),
+            },
+        },
+        "required": ["request"],
+    },
+}
+CHANGE_DONE = "Queued. The factory confirms it in a reply to the member's message, and posts the pull request link later. Add nothing about it."
 SESSION_KEYS = (
     "HERMES_SESSION_CHAT_ID", "HERMES_SESSION_USER_ID", "HERMES_SESSION_USER_NAME", "HERMES_SESSION_MESSAGE_ID",
 )
@@ -267,7 +291,8 @@ def _session_env(name: str) -> str:
     return get_session_env(name)
 
 
-def make_queue_handler(cfg: Config, session_env=_session_env):
+# `kind` is the inbox command, "adhoc" or "change". Both carry the member's message, so the factory answers it.
+def make_queue_handler(cfg: Config, session_env=_session_env, kind: str = "adhoc", done: str = QUEUE_DONE):
     def handle(args: dict, **kwargs) -> str:
         request = str(args.get("request") or "").strip()
         if not request:
@@ -281,11 +306,11 @@ def make_queue_handler(cfg: Config, session_env=_session_env):
         if not message.isdigit():
             return _tool_error("The session message id is not a number. Nothing was queued.")
         command = {
-            "kind": "adhoc", "issue": None, "text": request,
+            "kind": kind, "issue": None, "text": request,
             "by": user, "byName": name, "chat": chat, "messageId": int(message), "postId": None,
         }
         write_inbox(cfg.inbox, command)
-        return json.dumps({"success": True, "message": QUEUE_DONE})
+        return json.dumps({"success": True, "message": done})
 
     return handle
 
@@ -338,3 +363,4 @@ def register(ctx) -> None:
     ctx.register_hook("pre_gateway_dispatch", make_hook(cfg))
     ctx.register_telegram_handler(make_button_factory(cfg))
     ctx.register_tool(name=QUEUE_TOOL, toolset="factory", schema=QUEUE_SCHEMA, handler=make_queue_handler(cfg))
+    ctx.register_tool(name=CHANGE_TOOL, toolset="factory", schema=CHANGE_SCHEMA, handler=make_queue_handler(cfg, kind="change", done=CHANGE_DONE))

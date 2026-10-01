@@ -1,0 +1,14 @@
+[Unit]
+Description=Deploy GitHub's main to the ROAM game factory
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User={{ service_user }}
+UMask=0022
+ExecStart={{ script }}
+StandardOutput=append:{{ home_dir }}/logs/update.log
+StandardError=append:{{ home_dir }}/logs/update.log
+# An image build is the longest step.
+TimeoutStartSec=60min

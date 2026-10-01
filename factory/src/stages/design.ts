@@ -1,11 +1,11 @@
 import { BRANCH, GAME_DIR, TASK_FILE, WONT_DO_LABEL, type Ctx } from '../types';
-import { agentHome, askAuthor, baseBranchOf, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, syncBase, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
+import { agentHome, askAuthor, baseBranchOf, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 import { existsSync, readFileSync } from 'node:fs';
 
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const clone = workDir(ctx, issue);
   const base = await baseBranchOf(ctx, issue);
-  await syncBase(ctx, base);
+  await ctx.repo.fetch();
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, clone);
   const home = agentHome(clone, GAME_DIR);
   resetOutputs(home);

@@ -34,7 +34,7 @@ function fakeCtx(agent: (run: AgentRun) => void): Ctx {
     },
     container: { agent: async (run: AgentRun) => { calls.push('agent'); agent(run); } },
     repo: {
-      sync: record('sync'), push: record('push'), fetchFromWork: record('fetch'),
+      fetch: record('fetch'), push: record('push'), fetchFromWork: async () => 'w1',
       prepareWorkClone: async (_b: string, base: string, dir: string) => { bases.push(`prepare ${base}`); mkdirSync(dir, { recursive: true }); },
       diff: async (base: string) => { bases.push(`diff ${base}`); return diff; },
     },
@@ -51,7 +51,7 @@ describe('design stage', () => {
     expect(calls).toContain('addLabel 7 wont-do');
     expect(calls).toContain('close 7 not planned');
     expect(calls).toContain('move 7 Done');
-    expect(calls).not.toContain('push factory/issue-7');
+    expect(calls).not.toContain('push w1 factory/issue-7');
   });
 
   it('asks the author, moves back to Triage and pushes nothing on questions', async () => {
@@ -85,7 +85,7 @@ describe('design stage', () => {
       writeFileSync(`${run.clone}/${run.dir}/.factory-tasks/issue-7.md`, PLAN);
     });
     await runStage(ctx, 7);
-    expect(calls).toContain('push factory/issue-7');
+    expect(calls).toContain('push w1 factory/issue-7');
     expect(calls.at(-1)).toBe('move 7 Implementation');
   });
 
@@ -124,24 +124,23 @@ describe('design stage', () => {
     expect(calls.filter((call) => call.startsWith('move'))).toEqual([]);
   });
 
-  it('plans a release task against the release branch and syncs it', async () => {
+  it('plans a release task against the release branch, fetched first', async () => {
     labels = ['release-task'];
     const ctx = fakeCtx((run) => {
       mkdirSync(`${run.clone}/${run.dir}/.factory-tasks`, { recursive: true });
       writeFileSync(`${run.clone}/${run.dir}/.factory-tasks/issue-7.md`, PLAN);
     });
     await runStage(ctx, 7);
-    expect(calls).toContain('sync release/2026-09-29');
+    expect(calls[0]).toBe('fetch ');
     expect(bases).toEqual(['prepare release/2026-09-29', 'diff release/2026-09-29']);
   });
 
-  it('plans an ordinary card against dev with a plain sync', async () => {
+  it('plans an ordinary card against dev', async () => {
     const ctx = fakeCtx((run) => {
       mkdirSync(`${run.clone}/${run.dir}/.factory-tasks`, { recursive: true });
       writeFileSync(`${run.clone}/${run.dir}/.factory-tasks/issue-7.md`, PLAN);
     });
     await runStage(ctx, 7);
-    expect(calls).toContain('sync ');
     expect(bases).toEqual(['prepare dev', 'diff dev']);
   });
 

@@ -21,11 +21,6 @@ export async function baseBranchOf(ctx: Ctx, issue: number): Promise<string> {
   return baseBranchFor(ctx, (await ctx.github.issue(issue)).labels);
 }
 
-// Fast-forwards the base branch too when it is a release branch.
-export function syncBase(ctx: Ctx, base: string): Promise<void> {
-  return base === BASE_BRANCH ? ctx.repo.sync() : ctx.repo.sync(base);
-}
-
 export function workDir(ctx: Ctx, issue: number): string {
   return WORK_DIR(ctx.cfg.home, issue);
 }
@@ -104,13 +99,14 @@ export function factoryPaths(diff: string): string[] {
   return [...new Set(paths)].filter((path) => FORBIDDEN_PATH.test(path));
 }
 
+// Nothing of the agent's work reaches GitHub before this check.
 export async function guardAndPush(ctx: Ctx, issue: number, base: string): Promise<void> {
-  await ctx.repo.fetchFromWork(workDir(ctx, issue), BRANCH(issue));
-  const diff = await ctx.repo.diff(base, BRANCH(issue));
+  const head = await ctx.repo.fetchFromWork(workDir(ctx, issue), BRANCH(issue));
+  const diff = await ctx.repo.diff(base, head);
   const leaked = factoryPaths(diff);
   if (leaked.length) throw new Error(`The branch touches paths an agent may not push: ${leaked.join(', ')}`);
   if (changesSaveMajor(diff)) {
     throw new Error('The change bumps SAVE_MAJOR in game/src/three/save-migrations.ts. The committee must decide on a major save bump before this can go on.');
   }
-  await ctx.repo.push(BRANCH(issue));
+  await ctx.repo.push(head, BRANCH(issue));
 }
