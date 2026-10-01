@@ -12,7 +12,7 @@ describe('runJob', () => {
     rmSync(ROOT, { recursive: true, force: true });
     mkdirSync(ROOT, { recursive: true });
     const statePath = join(ROOT, 'state.json');
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), job: { stage: 'change', issue: 9, pid: 1, startedAt: '', log: 'l' }, pendingChanges: [{ id: 9, text: 't', by: 'b' }] });
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), jobs: [{ id: 'a', stage: 'design', issue: 4, pid: 1, startedAt: '', log: 'l' }, { id: 'b', stage: 'change', issue: 9, pid: 1, startedAt: '', log: 'l' }], pendingChanges: [{ id: 9, text: 't', by: 'b' }] });
     const posts: string[] = [];
     const ctx = {
       cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c' } as FactoryConfig, statePath, now: () => new Date(), log: () => undefined,
@@ -22,17 +22,17 @@ describe('runJob', () => {
     } as unknown as Ctx;
     await runJob(ctx, 'change', 9);
     const state = readState(statePath);
-    expect(state.job).toBeNull();
+    expect(state.jobs.map((job) => job.id)).toEqual(['a']);
     expect(state.pendingChanges).toEqual([]);
-    expect(posts).toHaveLength(1);
-    expect(posts[0]).toContain('offline');
+    expect(posts).toEqual([]);
+    expect(state.failures).toMatchObject([{ stage: 'change', issue: null, error: 'offline' }]);
   });
 
   it('clears the queued ship after a failed ship, and reports on the tracking issue', async () => {
     rmSync(ROOT, { recursive: true, force: true });
     mkdirSync(ROOT, { recursive: true });
     const statePath = join(ROOT, 'state.json');
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), job: { stage: 'ship', issue: 20, pid: 1, startedAt: '', log: 'l' }, pendingShip: 'Ann', release: { issue: 20, branch: 'release/x', day: 'd', postId: 5, removed: [] } });
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), jobs: [{ id: 'a', stage: 'ship', issue: 20, pid: 1, startedAt: '', log: 'l' }], pendingShip: 'Ann', release: { issue: 20, branch: 'release/x', day: 'd', postId: 5, removed: [] } });
     const labels: string[] = [];
     const ctx = {
       cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c', itchTarget: null, butlerKey: null } as unknown as FactoryConfig, statePath, now: () => new Date(), log: () => undefined,
@@ -50,17 +50,17 @@ describe('runJob', () => {
     rmSync(ROOT, { recursive: true, force: true });
     mkdirSync(ROOT, { recursive: true });
     const statePath = join(ROOT, 'state.json');
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), job: { stage: 'design', issue: 7, pid: 1, startedAt: '2026-01-10T11:50:00Z', log: 'l' } });
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), jobs: [{ id: 'a', stage: 'design', issue: 7, pid: 1, startedAt: '2026-01-10T11:50:00Z', log: 'l' }] });
     const events: string[] = [];
     const fail = async () => { throw new Error('offline'); };
     const ctx = {
       cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c' } as FactoryConfig, statePath, now: () => new Date('2026-01-10T12:00:00Z'), log: () => undefined,
       repo: { sync: fail },
       telegram: { sendMessage: async () => { events.push('report'); return 1; } },
-      github: { issue: fail, cards: fail, addLabel: async () => undefined, comment: async (n: number, body: string) => { events.push(`comment ${n} ${body}`); } },
+      github: { issue: fail, cards: fail, addLabel: async () => { events.push('label'); }, comment: async (n: number, body: string) => { events.push(`comment ${n} ${body}`); } },
     } as unknown as Ctx;
     await runJob(ctx, 'design', 7);
-    expect(events).toEqual(['report', 'comment 7 Design failed after 10 min. Hermes is looking into it.']);
+    expect(events).toEqual(['label', 'comment 7 Design failed after 10 min. Hermes is looking into it.']);
   });
 
   it('writes a finished note with the stage time', () => {
@@ -74,7 +74,7 @@ describe('runJob', () => {
     mkdirSync(ROOT, { recursive: true });
     const statePath = join(ROOT, 'state.json');
     const removals = [{ issue: 5, by: 'a', text: 't' }, { issue: 6, by: 'b', text: 'u' }];
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), job: { stage: 'remove', issue: 5, pid: 1, startedAt: '', log: 'l' }, pendingRemovals: removals });
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), jobs: [{ id: 'a', stage: 'remove', issue: 5, pid: 1, startedAt: '', log: 'l' }], pendingRemovals: removals });
     const labels: string[] = [];
     const ctx = {
       cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c' } as FactoryConfig, statePath, now: () => new Date(), log: () => undefined,

@@ -1,7 +1,8 @@
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { must } from './exec';
-import { OUT_DIR, TASK_DIR, type FactoryConfig, type HostRepo, type Run } from './types';
+import { withLock } from './lock';
+import { MergeConflictError, OUT_DIR, TASK_DIR, type FactoryConfig, type HostRepo, type Run } from './types';
 
 // Hooks are switched off on every call, so no git command here runs code from a repository.
 // The identity names the factory on its merge commits, the same one the agent image uses.
@@ -53,7 +54,7 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
     return (await git(['diff', '--name-only', '--diff-filter=U'])).split('\n').filter(Boolean);
   }
 
-  return {
+  return lockEach(join(cfg.home, 'locks', 'repo'), {
     path,
     async sync(...extra) {
       if (!existsSync(path)) {
@@ -95,6 +96,20 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
     async fetchFromWork(dir, branch) {
       await git(['fetch', dir, `+${branch}:${branch}`]);
     },
+    async mergeBaseIntoWork(dir, base) {
+      await gitIn(dir, ['fetch', 'origin']);
+      const commit = (await gitIn(dir, ['rev-parse', `origin/${base}`])).trim();
+      const result = await run('git', [...NO_HOOKS, 'merge', '--no-edit', commit], { cwd: dir });
+      if (result.code === 0) return { commit, conflicts: [] };
+      const conflicts = (await gitIn(dir, ['diff', '--name-only', '--diff-filter=U'])).split('\n').filter(Boolean);
+      if (conflicts.length === 0) throw new Error(`merge of ${base} into ${dir} failed without a conflict: ${(result.stderr || result.stdout).trim()}`);
+      return { commit, conflicts };
+    },
+    async isMerged(base, branch) {
+      const result = await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', base, branch], { cwd: path });
+      if (result.code === 0 || result.code === 1) return result.code === 0;
+      throw new Error(`git merge-base --is-ancestor ${base} ${branch} failed: ${result.stderr.trim()}`);
+    },
     async push(branch) {
       await git(['push', 'origin', branch]);
     },
@@ -102,6 +117,9 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
       return (await git(['rev-parse', '--short', branch])).trim();
     },
     diff: (base, branch) => git(['diff', `${base}...${branch}`]),
+    async changedFiles(base, branch) {
+      return (await git(['diff', '--name-only', `${base}...${branch}`])).split('\n').filter(Boolean);
+    },
     async hasNewCommits(base, branch) {
       return Number((await git(['rev-list', '--count', `${base}..${branch}`])).trim()) > 0;
     },
@@ -113,10 +131,24 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
       const reason = (result.stderr || result.stdout).trim();
       if (files.length === 0) throw new Error(`merge of ${branch} into ${into} failed without a conflict: ${reason}`);
       await git(['merge', '--abort']);
-      throw new Error(`merge of ${branch} into ${into} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
+      throw new MergeConflictError(branch, into, files, reason);
     },
     async mergeLog(from, to) {
       return (await git(['log', '--first-parent', '--merges', '--format=%s', `${to}..${from}`])).split('\n').filter(Boolean);
     },
-  };
+  });
+}
+
+// The longest single step is a clone of the repo. A job that waits this long found a stuck lock.
+const REPO_LOCK_MS = 15 * 60_000;
+
+// Parallel jobs share the host clone. Each method checks out branches and merges, so each runs whole under one lock.
+// A job's steps may interleave with another job's, which is safe: every method leaves the clone clean, and a sync only fast-forwards.
+function lockEach(dir: string, repo: HostRepo): HostRepo {
+  const entries = Object.entries(repo).map(([key, value]) => {
+    if (typeof value !== 'function') return [key, value];
+    const method = value as (...args: unknown[]) => Promise<unknown>;
+    return [key, (...args: unknown[]) => withLock(dir, REPO_LOCK_MS, () => method(...args))];
+  });
+  return Object.fromEntries(entries) as HostRepo;
 }

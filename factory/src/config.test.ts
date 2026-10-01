@@ -8,6 +8,7 @@ const FULL = {
   FACTORY_COMMITTEE_BOOTSTRAP: '1', TELEGRAM_BOT_TOKEN: 'bt', FACTORY_COMMITTEE_CHAT: '-1', FACTORY_PUBLIC_CHANNEL: '@c',
   FACTORY_STAGE_TIMEOUT_MINUTES: '180', FACTORY_RELEASE_DAYS: '7',
   ITCH_TARGET: 'u/g', BUTLER_API_KEY: 'bk', FACTORY_MAX_JOBS_PER_DAY: '10',
+  FACTORY_AGENT_WORKERS: '3', FACTORY_TEST_WORKERS: '1',
 };
 
 describe('loadConfig', () => {
@@ -20,6 +21,7 @@ describe('loadConfig', () => {
     expect(cfg.maxJobsPerDay).toBe(10);
     expect(cfg.itchTarget).toBe('u/g');
     expect(cfg.sfxMaxGenerations).toBe(6);
+    expect([cfg.agentWorkers, cfg.testWorkers]).toEqual([3, 1]);
   });
 
   it('names every missing key', () => {

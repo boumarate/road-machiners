@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeState, readState, EMPTY_STATE } from '../state';
-import type { Column, Ctx } from '../types';
+import { MergeConflictError, type Column, type Ctx } from '../types';
 
 vi.mock('../deploy', () => ({ deployDev: async () => 'https://play.test/dev/' }));
 const { approve, deny, feedback } = await import('./approval');
@@ -26,15 +26,20 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 function fakeCtx(): Ctx {
   const record = (name: string) => async (...args: unknown[]) => { calls.push(`${name} ${args.join(' ')}`); };
   const fake = {
-    cfg: { home, committeeChat: 'chat', publicUrl: 'https://play.test' },
+    cfg: { home, committeeChat: 'chat', publicChannel: 'public', publicUrl: 'https://play.test', itchTarget: 'u/g', butlerKey: 'key' },
     statePath: `${home}/state.json`,
+    now: () => new Date('2026-09-30T10:00:00Z'),
+    log: () => undefined,
+    run: async (cmd: string, args: string[]) => { calls.push(`run ${cmd} ${args[0]}`); return { code: 0, stdout: '', stderr: '' }; },
     github: {
       cards: async () => [{ itemId: 'x', issue: 7, column, labels: [] }],
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels, createdAt: '', state: 'OPEN', thumbsUp: [] }),
       comment: record('comment'), addLabel: record('addLabel'), pullRequestFor: async () => openPr, closePullRequest: record('closePullRequest'), close: record('close'), move: record('move'),
+      createRelease: record('release'),
     },
     telegram: { sendMessage: record('message') },
-    repo: { sync: record('sync'), merge: record('merge'), push: record('push') },
+    container: { shell: record('shell') },
+    repo: { sync: record('sync'), merge: record('merge'), push: record('push'), prepareWorkClone: record('prepare'), headHash: async () => 'abc1234' },
   };
   return fake as unknown as Ctx;
 }
@@ -59,7 +64,7 @@ describe('approve', () => {
 
   it('merges a release task into the release branch, skips the dev deploy and keeps dev as it is', async () => {
     labels = ['release-task'];
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [7, 9] }, builds: { 7: 'aaa1111' } });
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [7, 9] }, pendingShip: 'ann', builds: { 7: 'aaa1111' } });
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
       'sync release/2026-09-29',
@@ -70,7 +75,75 @@ describe('approve', () => {
       'move 7 Done',
       'message chat Issue #7 Big horn is merged into the release release/2026-09-29.',
     ]);
-    expect(readState(`${home}/state.json`).release?.removed).toEqual([9]);
+    const state = readState(`${home}/state.json`);
+    expect(state.release?.removed).toEqual([9]);
+    // The played candidate lacks the task, so its post can no longer ship and a new candidate follows.
+    expect(state.release?.postId).toBeNull();
+    expect(state.pendingShip).toBeNull();
+  });
+
+  it('ships a hotfix from main to itch.io, brings main into dev and the open release, and closes the issue', async () => {
+    labels = ['bug', 'hotfix'];
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [] }, pendingShip: 'ann', pendingApprovals: { 7: 'bob' } });
+    await approve(fakeCtx(), 7, 'bob');
+    const changelog = 'ROAM hotfix 2026-09-30\n\nFixed: #7 Big horn';
+    expect(calls.filter((call) => !call.startsWith('prepare') && !call.startsWith('shell'))).toEqual([
+      'sync main dev release/2026-09-29',
+      'merge factory/issue-7 main Hotfix #7: Big horn',
+      'merge main dev Merge main into dev after hotfix #7',
+      'merge main release/2026-09-29 Merge main into release/2026-09-29 after hotfix #7',
+      'push main',
+      'push dev',
+      'push release/2026-09-29',
+      'run butler push',
+      `message public ${changelog}`,
+      `release hotfix-2026-09-30-issue-7 main ROAM hotfix 2026-09-30 ${changelog}`,
+      'comment 7 Approved by bob in the committee chat and shipped as a hotfix. It is on main and itch.io.',
+      'close 7 completed',
+      'move 7 Done',
+      'message chat Hotfix #7 Big horn is on main and itch.io.\nRelease 2026-09-29 took the fix, so its candidate is built again.',
+    ]);
+    const state = readState(`${home}/state.json`);
+    expect(state.release?.postId).toBeNull();
+    expect(state.pendingShip).toBeNull();
+    expect(state.pendingApprovals).toEqual({});
+  });
+
+  it('sends the card back to Testing on a conflict with dev, keeping the approver, with no chat post', async () => {
+    const ctx = fakeCtx();
+    ctx.repo.merge = async (branch: string, into: string) => { throw new MergeConflictError(branch, into, ['game/src/a.ts'], 'boom'); };
+    await approve(ctx, 7, 'bob');
+    expect(calls).toEqual([
+      'sync ',
+      'comment 7 dev moved on since testing, and the branch conflicts with it in game/src/a.ts. Testing merges dev again and resolves the conflict. Then the approval by bob merges it, with no new post.',
+      'move 7 Testing',
+    ]);
+    const state = readState(`${home}/state.json`);
+    expect(state.approvedResolving).toEqual({ 7: 'bob' });
+    expect(state.approvalPosts).toEqual({ 200: 8 });
+    expect(state.pendingApprovals).toEqual({});
+  });
+
+  it('fails loud on a conflict of main into dev after a hotfix, which the agent cannot resolve', async () => {
+    labels = ['hotfix'];
+    const ctx = fakeCtx();
+    ctx.repo.merge = async (branch: string, into: string) => { if (branch === 'main') throw new MergeConflictError(branch, into, ['x'], 'boom'); };
+    await expect(approve(ctx, 7, 'bob')).rejects.toThrow('merge of main into dev failed');
+    expect(readState(`${home}/state.json`).approvedResolving).toEqual({});
+  });
+
+  it('clears a kept approver once the merge lands', async () => {
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, approvedResolving: { 7: 'bob', 8: 'ann' } });
+    await approve(fakeCtx(), 7, 'bob');
+    expect(readState(`${home}/state.json`).approvedResolving).toEqual({ 8: 'ann' });
+  });
+
+  it('refuses a hotfix without itch.io keys before any git call', async () => {
+    labels = ['hotfix'];
+    const ctx = fakeCtx();
+    ctx.cfg.butlerKey = null;
+    await expect(approve(ctx, 7, 'bob')).rejects.toThrow('BUTLER_API_KEY');
+    expect(calls).toEqual([]);
   });
 
   it('throws for a release task when no release is open, before any git call', async () => {

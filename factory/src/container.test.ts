@@ -27,7 +27,7 @@ const setupCalls = (calls: Call[]): string[] => calls.filter((call) => call !== 
 describe('dockerContainer', () => {
   it('passes the secrets by env only and mounts only the clone and the npm cache', async () => {
     const { run, calls } = fakeRun();
-    await dockerContainer(run, cfg).agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'do it', log: '/l.log' });
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'do it', log: '/l.log' });
     const call = runCall(calls);
     expect(call.args.join(' ')).not.toContain('secret-token');
     expect(call.args.join(' ')).not.toContain('sound-key');
@@ -44,7 +44,7 @@ describe('dockerContainer', () => {
 
   it('puts a restricted agent on the internal network with the proxy env', async () => {
     const { run, calls } = fakeRun();
-    await dockerContainer(run, cfg).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', openNetwork: false });
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', openNetwork: false });
     const { args } = runCall(calls);
     expect(args.slice(args.indexOf('--network'), args.indexOf('--network') + 2)).toEqual(['--network', 'roam-factory-agents']);
     for (const key of ['HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy']) expect(args).toContain(`${key}=http://roam-factory-proxy:8888`);
@@ -54,7 +54,7 @@ describe('dockerContainer', () => {
 
   it('runs an open agent on the default network with no proxy and no setup', async () => {
     const { run, calls } = fakeRun();
-    await dockerContainer(run, cfg).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', openNetwork: true });
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', openNetwork: true });
     expect(calls).toHaveLength(1);
     expect(calls[0].args).not.toContain('--network');
     expect(calls[0].args.join(' ')).not.toContain('PROXY');
@@ -62,28 +62,41 @@ describe('dockerContainer', () => {
 
   it('keeps a running proxy and an existing network as they are', async () => {
     const { run, calls } = fakeRun();
-    await dockerContainer(run, cfg).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
     expect(setupCalls(calls)).toEqual(['network inspect roam-factory-agents', 'image inspect -f {{.Id}} img:1-proxy', 'inspect -f {{.State.Running}} {{.Image}} roam-factory-proxy']);
   });
 
   it('replaces a running proxy from an older image before the agent starts', async () => {
     const { run, calls } = fakeRun(0, { 'inspect -f': { code: 0, stdout: 'true sha:0' } });
-    await dockerContainer(run, cfg).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
     const setup = setupCalls(calls);
     expect(setup).toContain('rm -f roam-factory-proxy');
     expect(setup).toContain('run -d --restart unless-stopped --name roam-factory-proxy --network roam-factory-agents img:1-proxy');
     expect(calls.indexOf(runCall(calls))).toBe(calls.length - 1);
   });
 
+  it('keeps a proxy from an older image while other factory containers run', async () => {
+    const { run, calls } = fakeRun(0, { 'inspect -f': { code: 0, stdout: 'true sha:0' }, 'ps -q': { code: 0, stdout: 'abc\n' } });
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
+    expect(setupCalls(calls)).toContain('ps -q --filter label=factory=1');
+    expect(setupCalls(calls)).not.toContain('rm -f roam-factory-proxy');
+  });
+
+  it('labels the containers of a job with its id', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, 'testing-8-x').shell('/c', 'x', '/l');
+    expect(runCall(calls).args.slice(0, 6)).toEqual(['run', '--rm', '--label', 'factory=1', '--label', 'factory-job=testing-8-x']);
+  });
+
   it('fails loud when the proxy image is missing', async () => {
     const { run, calls } = fakeRun(0, { 'image inspect': { code: 1 } });
-    await expect(dockerContainer(run, cfg).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' })).rejects.toThrow('inspect image img:1-proxy');
+    await expect(dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' })).rejects.toThrow('inspect image img:1-proxy');
     expect(calls.some((call) => call.args[1] === '--rm')).toBe(false);
   });
 
   it('creates the internal network and starts the proxy when missing', async () => {
     const { run, calls } = fakeRun(0, { 'network inspect': { code: 1 }, 'inspect -f': { code: 1 } });
-    await dockerContainer(run, cfg).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
     const setup = setupCalls(calls);
     expect(setup).toContain('network create --internal roam-factory-agents');
     expect(setup).toContain('run -d --restart unless-stopped --name roam-factory-proxy --network roam-factory-agents img:1-proxy');
@@ -93,17 +106,17 @@ describe('dockerContainer', () => {
 
   it('fails loud when the proxy cannot start', async () => {
     const { run, calls } = fakeRun(0, { 'inspect -f': { code: 1 }, 'run -d': { code: 125 } });
-    await expect(dockerContainer(run, cfg).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' })).rejects.toThrow('setup failed');
+    await expect(dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' })).rejects.toThrow('setup failed');
     expect(calls.some((call) => call.args[1] === '--rm')).toBe(false);
   });
 
   it('throws when the agent exits nonzero', async () => {
-    await expect(dockerContainer(fakeRun(2).run, cfg).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' })).rejects.toThrow('exit 2');
+    await expect(dockerContainer(fakeRun(2).run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' })).rejects.toThrow('exit 2');
   });
 
   it('runs a shell script with the given env and no token', async () => {
     const { run, calls } = fakeRun();
-    await dockerContainer(run, cfg).shell('/w/c', 'npm ci', '/l.log', { SAVE_SCOPE: 'dev' });
+    await dockerContainer(run, cfg, null).shell('/w/c', 'npm ci', '/l.log', { SAVE_SCOPE: 'dev' });
     const call = runCall(calls);
     expect(call.args).toContain('SAVE_SCOPE=dev');
     expect(call.args).toContain('/work/game');
@@ -117,6 +130,6 @@ describe('dockerContainer', () => {
   });
 
   it('throws when the shell exits nonzero', async () => {
-    await expect(dockerContainer(fakeRun(1).run, cfg).shell('/c', 'x', '/l')).rejects.toThrow('boom');
+    await expect(dockerContainer(fakeRun(1).run, cfg, null).shell('/c', 'x', '/l')).rejects.toThrow('boom');
   });
 });

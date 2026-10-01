@@ -18,7 +18,8 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 function fakeCtx(verdict: string | null): Ctx {
   const record = (name: string) => async (...args: unknown[]) => { calls.push(`${name} ${args.join(' ')}`); };
   const fake = {
-    cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r' },
+    cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat' },
+    telegram: { sendMessage: record('message') },
     log: () => undefined,
     github: {
       issue: async () => ({ number: 7, title: 'Big horn', body: 'Add a horn', labels: [], createdAt: '', state: 'OPEN', author: 'anna', thumbsUp: [] }),
@@ -40,7 +41,7 @@ function fakeCtx(verdict: string | null): Ctx {
   return fake as unknown as Ctx;
 }
 
-const verdict = (over: Record<string, unknown>): string => JSON.stringify({ verdict: 'ready', reason: 'Clear goal', questions: [], ...over });
+const verdict = (over: Record<string, unknown>): string => JSON.stringify({ verdict: 'ready', reason: 'Clear goal', questions: [], hotfix: false, ...over });
 
 describe('triage stage', () => {
   it('comments and moves to Design when ready', async () => {
@@ -49,7 +50,17 @@ describe('triage stage', () => {
     expect(calls).toContain('comment 7 Triage passed: Clear goal');
     expect(calls.at(-1)).toBe('move 7 Design');
     expect(prompt).not.toContain('{{');
-    expect(calls.filter((call) => call.startsWith('push'))).toEqual([]);
+    expect(calls.filter((call) => call.startsWith('push') || call.startsWith('message') || call.startsWith('addLabel'))).toEqual([]);
+  });
+
+  it('labels a hotfix, warns the committee and moves to Design', async () => {
+    await runStage(fakeCtx(verdict({ hotfix: true, reason: 'Saves from 0.3 fail to load.' })), 7);
+    expect(calls.slice(-4)).toEqual([
+      'addLabel 7 hotfix',
+      'comment 7 Triage passed as a hotfix: Saves from 0.3 fail to load.\n\nIt branches from main, and its approval ships it to main and itch.io at once.',
+      'message chat ⚠️ Triage marked #7 Big horn as a hotfix.\nSaves from 0.3 fail to load.\nIt skips dev. Its approval will merge into main and ship to itch.io at once. Remove the label hotfix on GitHub if it can wait for a release.',
+      'move 7 Design',
+    ]);
   });
 
   it('refuses, labels, closes and moves to Done on wont-do', async () => {
@@ -82,6 +93,8 @@ describe('triage stage', () => {
     [verdict({ verdict: 'unclear', questions: [] }), 'at least one'],
     [verdict({ verdict: 'unclear', questions: [3] }), 'at least one'],
     [JSON.stringify({ verdict: 'unclear', reason: 'x' }), 'at least one'],
+    [JSON.stringify({ verdict: 'ready', reason: 'x' }), 'hotfix as true or false'],
+    [verdict({ hotfix: 'yes' }), 'hotfix as true or false'],
   ])('throws on a bad triage.json %#', async (text, message) => {
     await expect(runStage(fakeCtx(text), 7)).rejects.toThrow(message);
     expect(calls.filter((call) => /^(comment|move|close|addLabel)/.test(call))).toEqual([]);

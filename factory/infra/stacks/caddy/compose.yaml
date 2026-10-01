@@ -13,6 +13,7 @@ services:
     environment:
       DOMAIN: ${FACTORY_DOMAIN:?set FACTORY_DOMAIN}
       ACME_EMAIL: ${FACTORY_ACME_EMAIL:?set FACTORY_ACME_EMAIL}
+      ITCH_URL: ${FACTORY_ITCH_URL:?set FACTORY_ITCH_URL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - /opt/factory/www:/srv/www:ro

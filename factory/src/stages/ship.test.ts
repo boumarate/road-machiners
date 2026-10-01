@@ -17,7 +17,7 @@ beforeEach(() => {
   const out = join(ROOT, 'work', 'release-candidate', 'game', '.factory');
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'screenshot.png'), 'png');
-  writeFileSync(join(out, 'release.md'), 'Trucks are faster.\n');
+  writeFileSync(join(out, 'release.md'), '- [#3] Trucks are faster.\n');
 });
 
 function shippable(): Fake {
@@ -48,8 +48,7 @@ describe('ship', () => {
     expect(shells).toEqual([{ script: 'npm ci && npm run build', env: { SAVE_SCOPE: '' } }]);
     expect(runs).toEqual([{ cmd: 'butler', args: ['push', join(ROOT, 'work', 'release-main', 'game', 'dist'), 'u/g:html5', '--userversion', 'abc1234'], env: { BUTLER_API_KEY: 'secret' } }]);
     const publicNote = f.calls.find((call) => call.startsWith('message public')) ?? '';
-    expect(publicNote).toContain('Trucks are faster.');
-    expect(publicNote).toContain('- #3 faster trucks');
+    expect(publicNote).toContain('- [#3] Trucks are faster.');
     expect(publicNote).not.toContain('#6');
   });
 
@@ -82,6 +81,38 @@ describe('ship', () => {
     expect(f.calls).toContain('removeLabel 3 release-candidate');
     expect(f.calls.some((call) => call.startsWith('removeLabel 6'))).toBe(false);
     expect(f.calls.filter((call) => call === 'close completed')).toHaveLength(2);
+  });
+
+  it('publishes a GitHub release of main with the changelog, after the itch push', async () => {
+    const f = shippable();
+    await ship(f.ctx, 11, 'Ann');
+    const at = (name: string) => f.calls.findIndex((call) => call.startsWith(name));
+    expect(at('run butler')).toBeLessThan(at('release release-2026-09-29'));
+    expect(f.calls).toContain('release release-2026-09-29 main ROAM release 2026-09-29\n- [#3] Trucks are faster.');
+  });
+
+  it('stops before it merges anything when main has game changes the release lacks', async () => {
+    const f = shippable();
+    f.ctx.repo.isMerged = async () => false;
+    f.ctx.repo.changedFiles = async () => ['factory/src/tick.ts', 'game/src/sim/sun.ts'];
+    await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('main changed 1 game files that release/2026-09-29 lacks, like game/src/sim/sun.ts');
+    expect(f.calls.some((call) => call.startsWith('merge') || call.startsWith('push'))).toBe(false);
+  });
+
+  it('merges main into the release first when main has only other changes', async () => {
+    const f = shippable();
+    f.ctx.repo.isMerged = async () => false;
+    f.ctx.repo.changedFiles = async () => ['factory/src/tick.ts'];
+    await ship(f.ctx, 11, 'Ann');
+    const merges = f.calls.filter((call) => call.startsWith('merge') || call.startsWith('push'));
+    expect(merges.slice(0, 4)).toEqual(['merge main release/2026-09-29', 'push release/2026-09-29', 'merge release/2026-09-29 main', 'push main']);
+  });
+
+  it('stops before it merges anything when the changelog does not match the release', async () => {
+    const f = shippable();
+    writeFileSync(join(ROOT, 'work', 'release-candidate', 'game', '.factory', 'release.md'), 'Trucks are faster.\n');
+    await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('not "- [#N] what changed"');
+    expect(f.calls.some((call) => call.startsWith('merge') || call.startsWith('push'))).toBe(false);
   });
 
   it('stops before it merges anything when the itch keys are missing', async () => {

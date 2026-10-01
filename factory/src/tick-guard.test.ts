@@ -22,14 +22,11 @@ describe('guardTick', () => {
     writeState(statePath, structuredClone(EMPTY_STATE));
   });
 
-  it('posts a crash once while the error stays the same, and again after a change', async () => {
+  it('records a crash for Hermes and posts nothing', async () => {
     const posts: string[] = [];
-    const crash = (text: string) => guardTick(fakeCtx(posts), async () => { throw new Error(text); });
-    await expect(crash('GitHub is down')).rejects.toThrow();
-    await expect(crash('GitHub is down')).rejects.toThrow();
-    await expect(crash('Telegram is down')).rejects.toThrow();
-    expect(posts).toHaveLength(2);
-    expect(posts[0]).toContain('GitHub is down');
+    await expect(guardTick(fakeCtx(posts), async () => { throw new Error('GitHub is down'); })).rejects.toThrow();
+    expect(readState(statePath).lastTickError).toBe('GitHub is down');
+    expect(posts).toEqual([]);
   });
 
   it('clears the last error after a good tick', async () => {

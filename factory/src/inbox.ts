@@ -1,6 +1,7 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { readCommittee, telegramIds } from './committee';
+import { markPost } from './post-status';
 import { deny, feedback } from './stages/approval';
 import { readState, updateState } from './state';
 import { ADHOC_LABEL, RELEASE_TASK_LABEL, type Ctx, type ReleaseState } from './types';
@@ -17,6 +18,7 @@ export type InboxCommand = {
   byName: string | null;
   chat: string;
   messageId: number;
+  postId: number | null; // the approval or candidate post the command acts on. Null for change and adhoc.
 };
 
 export function inboxDir(home: string): string {
@@ -27,7 +29,12 @@ export function parseCommand(raw: string): InboxCommand {
   const data = JSON.parse(raw) as Partial<InboxCommand>;
   if (!KINDS.includes(String(data.kind))) throw new Error(`Unknown inbox command kind ${data.kind}`);
   if (typeof data.by !== 'string' || typeof data.chat !== 'string' || typeof data.messageId !== 'number') throw new Error('Inbox command lacks by, chat or messageId');
+  requirePostId(data.postId);
   return data as InboxCommand;
+}
+
+function requirePostId(postId: unknown): void {
+  if (typeof postId !== 'number' && postId !== null) throw new Error('Inbox command lacks postId');
 }
 
 // Handles every queued command once, oldest first. A bad command is answered and dropped, never retried.
@@ -45,11 +52,27 @@ async function handleFile(ctx: Ctx, path: string): Promise<void> {
   try {
     command = parseCommand(raw);
     const answer = await handle(ctx, command);
-    await ctx.telegram.sendMessage(command.chat, answer, command.messageId);
+    await deliver(ctx, command, answer);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     ctx.log('tick', command?.issue ?? null, `inbox command failed: ${message}`);
     if (command) await ctx.telegram.sendMessage(command.chat, `That did not work: ${message}`, command.messageId);
+  }
+}
+
+// Each command gets one answer in the chat, never two.
+// A command on a post answers with a status line on that post. A reply comes only when that edit fails.
+// An ad hoc task has Hermes's own reply already, so the factory adds nothing. Other commands get the answer as a reply.
+async function deliver(ctx: Ctx, command: InboxCommand, answer: string): Promise<void> {
+  if (command.kind === 'adhoc') return;
+  if (command.postId === null) return void (await ctx.telegram.sendMessage(command.chat, answer, command.messageId));
+  try {
+    await markPost(ctx, command, command.byName ?? command.by);
+  } catch (error) {
+    // The command already worked, so a failed status edit is not "That did not work".
+    const message = error instanceof Error ? error.message : String(error);
+    ctx.log('tick', command.issue, `post status failed: ${message}`);
+    await ctx.telegram.sendMessage(command.chat, `${answer}\nThe post could not show its status: ${message}`, command.messageId);
   }
 }
 

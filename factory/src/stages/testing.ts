@@ -1,10 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
-import { updateState } from '../state';
-import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx } from '../types';
-import { approve } from './approval';
-import { agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir } from './common';
+import { readState, updateState } from '../state';
+import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type InlineButton } from '../types';
+import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, syncBase, throwIfNeedsCommittee, workDir } from './common';
 
 // Each step logs its start time, so the log shows where the time goes.
 // The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
@@ -49,7 +48,9 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const base = baseBranchFor(ctx, item.labels);
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, workDir(ctx, issue));
   resetOutputs(home);
+  const merged = await mergeBase(ctx, issue, base, home);
   await agentRound(ctx, issue, 'test', base);
+  await requireBaseMerged(ctx, issue, base, merged);
   let build = await ctx.repo.headHash(BRANCH(issue));
   const failure = await runChecks(ctx, issue, base, build);
   // The agent gets one round to fix what the factory's own checks found. A second failure stops the card.
@@ -63,21 +64,39 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const approval = readApproval(home);
   const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
-  // Cleanup tasks on the release branch skip the committee post. The committee plays them in the candidate.
-  const cleanup = item.labels.includes(RELEASE_TASK_LABEL) && item.labels.includes(MAINTENANCE_LABEL);
-  if (!cleanup) await post(ctx, issue, approval, `${home}/${OUT_DIR}/screenshot.png`, url, base);
+  const approver = approvedAlready(ctx, issue, item.labels);
+  if (approver === null) await post(ctx, issue, approval, `${home}/${OUT_DIR}/screenshot.png`, url, base);
   await ctx.github.move(issue, 'Approval');
-  if (cleanup) await mergeCleanup(ctx, issue);
+  if (approver !== null) queueMerge(ctx, issue, approver);
 }
 
-// approve() requires the Approval column. A failed merge puts the card back in Testing, so the stuck label the caller adds can be removed to retry.
-async function mergeCleanup(ctx: Ctx, issue: number): Promise<void> {
-  try {
-    await approve(ctx, issue, 'the factory');
-  } catch (error) {
-    await ctx.github.move(issue, 'Testing');
-    throw error;
-  }
+// Who approved the card before this round, or null when it needs a committee post.
+// Cleanup tasks on the release branch skip the post, since the committee plays them in the candidate.
+// A card approved before a conflict sent it back here keeps its approval.
+function approvedAlready(ctx: Ctx, issue: number, labels: string[]): string | null {
+  if (labels.includes(RELEASE_TASK_LABEL) && labels.includes(MAINTENANCE_LABEL)) return 'the factory';
+  return readState(ctx.statePath).approvedResolving[String(issue)] ?? null;
+}
+
+// The merge runs as an approve job in the branch queue, like a member's approval, so it never races another branch job.
+function queueMerge(ctx: Ctx, issue: number, by: string): void {
+  updateState(ctx.statePath, (state) => ({ ...state, pendingApprovals: { ...state.pendingApprovals, [String(issue)]: by } }));
+  ctx.log('testing', issue, `approved by ${by} already, merge queued`);
+}
+
+// The base moved on since design cut the branch. Testing runs on the branch with the current base merged in,
+// so the committee plays what approve will merge, and conflicts reach the agent here instead of failing approve.
+// Returns the base commit it merged.
+async function mergeBase(ctx: Ctx, issue: number, base: string, home: string): Promise<string> {
+  await syncBase(ctx, base);
+  const { commit, conflicts } = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
+  if (conflicts.length > 0) writeFileSync(`${home}/${OUT_DIR}/merge-conflicts.md`, `${conflicts.map((file) => `- ${file}`).join('\n')}\n`);
+  return commit;
+}
+
+// Checks the commit merged above, not the base branch. A parallel approval may move the base on meanwhile, and approve merges that newer base anyway.
+async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: string): Promise<void> {
+  if (!(await ctx.repo.isMerged(commit, BRANCH(issue)))) throw new Error(`The testing agent left the merge of ${base} at ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
 }
 
 async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'test-fix', base: string): Promise<void> {
@@ -141,9 +160,8 @@ export async function post(ctx: Ctx, issue: number, approval: Approval, screensh
   const pr = await pullRequestUrl(ctx, issue, item.title, approval, base);
   await ctx.github.comment(issue, `Ready for approval: ${url}\n\n${approval.description}\n\nHow to try: ${approval.howToTry}`);
   const caption = approvalCaption(`#${issue} ${item.title}`, url, link, pr, approval, base);
-  const buttons = [[{ text: 'Approve', data: `factory:approve:${issue}` }, { text: 'Deny', data: `factory:deny:${issue}` }]];
-  const photoId = await ctx.telegram.sendPhoto(ctx.cfg.committeeChat, screenshot, caption, buttons);
-  updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [photoId]: issue } }));
+  const photoId = await ctx.telegram.sendPhoto(ctx.cfg.committeeChat, screenshot, caption, approvalButtons(issue, base));
+  updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [photoId]: issue }, postCaptions: { ...state.postCaptions, [photoId]: caption } }));
 }
 
 // A feedback round reuses the pull request of the first round.
@@ -154,9 +172,17 @@ async function pullRequestUrl(ctx: Ctx, issue: number, title: string, approval: 
   return ctx.github.openPullRequest(BRANCH(issue), base, `#${issue} ${title}`, body);
 }
 
+export function approvalButtons(issue: number, base: string): InlineButton[][] {
+  const approveText = base === HOTFIX_BASE ? 'Approve and ship to players' : 'Approve';
+  return [[{ text: approveText, data: `factory:approve:${issue}` }, { text: 'Deny', data: `factory:deny:${issue}` }]];
+}
+
 export function approvalCaption(title: string, url: string, link: string, pr: string, approval: Approval, base: string): string {
-  const head = `${title}\n\nPlay: ${url}\nIssue: ${link}\nPR: ${pr}`;
-  const tail = `Approve merges into ${base}. Deny closes the issue. A reply to this post sends feedback to design.`;
+  // A hotfix skips dev and the release, so its post opens with a warning the committee cannot miss.
+  const warning = base === HOTFIX_BASE ? '⚠️ HOTFIX. Approve merges into main and ships to players at once. Play it with care.\n\n' : '';
+  const head = `${warning}${title}\n\nPlay: ${url}\nIssue: ${link}\nPR: ${pr}`;
+  const action = base === HOTFIX_BASE ? 'Approve ships this hotfix to main and itch.io at once.' : `Approve merges into ${base}.`;
+  const tail = `${action} Deny closes the issue. A reply to this post sends feedback to design.`;
   const room = CAPTION_LIMIT - head.length - tail.length - '\n\n'.repeat(3).length - 'How to try: '.length;
   const [description, howToTry] = fitBoth(approval.description, approval.howToTry, room);
   return [head, description, `How to try: ${howToTry}`, tail].join('\n\n');

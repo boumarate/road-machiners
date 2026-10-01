@@ -4,8 +4,7 @@ import { EMPTY_STATE, readState, writeState } from '../state';
 import type { AgentRun, Ctx } from '../types';
 
 vi.mock('../deploy', () => ({ checkScope: () => undefined, publishBuild: (_ctx: unknown, _clone: string, scope: string) => `https://play.test/${scope}/`, recordBuild: () => undefined }));
-vi.mock('./approval', () => ({ approve: async (_ctx: unknown, issue: number, by: string) => { if (approveError) throw new Error(approveError); approved.push(`approve ${issue} ${by}`); } }));
-const { runStage, approvalCaption } = await import('./testing');
+const { runStage, approvalCaption, approvalButtons } = await import('./testing');
 
 let home = '';
 let calls: string[] = [];
@@ -15,18 +14,20 @@ let photoButtons: unknown;
 let openPr: string | null = null;
 let labels: string[] = [];
 let bases: string[] = [];
-const approved: string[] = [];
-let approveError = '';
+// The merges testing queued for the approve job.
+const queued = (): Record<string, string> => readState(`${home}/state.json`).pendingApprovals;
+let conflicts: string[] = [];
+let merged = true;
 
 beforeEach(() => {
+  conflicts = [];
+  merged = true;
   mkdirSync('tmp', { recursive: true });
   home = mkdtempSync('tmp/factory-testing-');
   calls = [];
   openPr = null;
   labels = [];
   bases = [];
-  approved.length = 0;
-  approveError = '';
   writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [] } });
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
@@ -63,6 +64,9 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
       push: async (branch: string) => { calls.push(`push ${branch}`); },
       diff: async (base: string) => { bases.push(`diff ${base}`); return ''; },
       headHash: async () => 'abc123',
+      sync: async (...extra: string[]) => { bases.push(`sync ${extra.join(' ')}`.trim()); },
+      mergeBaseIntoWork: async (_dir: string, base: string) => { bases.push(`merge ${base}`); return { commit: 'base0001', conflicts }; },
+      isMerged: async (base: string) => { bases.push(`isMerged ${base}`); return merged; },
     },
   };
   return fake as unknown as Ctx;
@@ -117,6 +121,14 @@ describe('testing stage', () => {
     expect(caption).toContain('Deny closes the issue');
   });
 
+  it('says a hotfix approval ships to main and itch.io', () => {
+    const caption = approvalCaption('#7 Big horn', 'u', 'l', 'p', { description: 'd', howToTry: 'h' }, 'main');
+    expect(caption.startsWith('⚠️ HOTFIX. Approve merges into main and ships to players at once.')).toBe(true);
+    expect(caption).toContain('Approve ships this hotfix to main and itch.io at once.');
+    expect(approvalCaption('#7 Big horn', 'u', 'l', 'p', { description: 'd', howToTry: 'h' }, 'dev')).not.toContain('HOTFIX');
+    expect(approvalButtons(7, 'main')[0][0]).toEqual({ text: 'Approve and ship to players', data: 'factory:approve:7' });
+  });
+
   it('throws when approval.json lacks howToTry', async () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'x' })));
     await expect(runStage(ctx, 7)).rejects.toThrow('howToTry');
@@ -148,16 +160,35 @@ describe('testing stage', () => {
     labels = ['release-task'];
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
     await runStage(ctx, 7);
-    expect(new Set(bases)).toEqual(new Set(['prepare release/2026-09-29', 'diff release/2026-09-29']));
+    expect(new Set(bases)).toEqual(new Set(['prepare release/2026-09-29', 'sync release/2026-09-29', 'merge release/2026-09-29', 'isMerged base0001', 'diff release/2026-09-29']));
     expect(calls.find((call) => call.startsWith('openPullRequest'))).toContain('openPullRequest factory/issue-7 release/2026-09-29 #7 Big horn');
     expect(calls.find((call) => call.startsWith('photo'))).toContain('Approve merges into release/2026-09-29.');
-    expect(approved).toEqual([]);
+    expect(queued()).toEqual({});
   });
 
   it('works on dev for an ordinary card even while a release is open', async () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
     await runStage(ctx, 7);
-    expect(new Set(bases)).toEqual(new Set(['prepare dev', 'diff dev']));
+    expect(new Set(bases)).toEqual(new Set(['prepare dev', 'sync', 'merge dev', 'isMerged base0001', 'diff dev']));
+  });
+
+  it('merges dev into the branch before the agent runs, and lists conflicts for it', async () => {
+    conflicts = ['game/src/a.ts', 'game/src/b.ts'];
+    let seen = '';
+    const ctx = fakeCtx((run) => {
+      seen = readFileSync(`${run.clone}/${run.dir}/.factory/merge-conflicts.md`, 'utf8');
+      writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' }));
+    });
+    await runStage(ctx, 7);
+    expect(bases.indexOf('merge dev')).toBeLessThan(bases.indexOf('diff dev'));
+    expect(seen).toBe('- game/src/a.ts\n- game/src/b.ts\n');
+  });
+
+  it('fails the stage when the agent leaves the merge of dev unfinished', async () => {
+    merged = false;
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
+    await expect(runStage(ctx, 7)).rejects.toThrow('left the merge of dev at base000 into factory/issue-7 unfinished');
+    expect(calls).not.toContain('checks');
   });
 
   it('merges a cleanup task into the release itself, with no committee post', async () => {
@@ -167,15 +198,16 @@ describe('testing stage', () => {
     expect(calls.some((call) => call.startsWith('photo') || call.startsWith('openPullRequest') || call === 'comment 7')).toBe(false);
     expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
     expect(calls.at(-1)).toBe('move 7 Approval');
-    expect(approved).toEqual(['approve 7 the factory']);
+    expect(queued()).toEqual({ 7: 'the factory' });
   });
 
-  it('moves a cleanup task back to Testing when the merge fails', async () => {
-    labels = ['release-task', 'maintenance'];
-    approveError = 'merge conflict';
+  it('queues the merge of a card approved before a conflict sent it back, with no new post', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
-    await expect(runStage(ctx, 7)).rejects.toThrow('merge conflict');
-    expect(calls.filter((call) => call.startsWith('move'))).toEqual(['move 7 Approval', 'move 7 Testing']);
+    await runStage(ctx, 7);
+    expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+    expect(queued()).toEqual({ 7: 'Ann' });
   });
 
   it('posts a maintenance task on dev for approval as usual', async () => {
@@ -183,13 +215,13 @@ describe('testing stage', () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
     await runStage(ctx, 7);
     expect(calls.some((call) => call.startsWith('photo'))).toBe(true);
-    expect(approved).toEqual([]);
+    expect(queued()).toEqual({});
   });
 
   it('does not merge a cleanup task when the checks fail twice', async () => {
     labels = ['release-task', 'maintenance'];
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })), 2);
     await expect(runStage(ctx, 7)).rejects.toThrow('checks failed twice');
-    expect(approved).toEqual([]);
+    expect(queued()).toEqual({});
   });
 });

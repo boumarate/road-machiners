@@ -25,9 +25,30 @@ describe('state', () => {
     expect([state.release, state.pendingShip, state.pendingRemovals]).toEqual([null, null, []]);
   });
 
+  it('turns the single job of an old state file into the job list', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'factory-state-')), 'state.json');
+    const job = { stage: 'testing', issue: 8, pid: 5, startedAt: 's', log: '/h/logs/testing-8-x.log' };
+    writeFileSync(path, JSON.stringify({ job }));
+    const state = readState(path);
+    expect(state.jobs).toEqual([{ ...job, id: 'testing-8-x' }]);
+    expect('job' in state).toBe(false);
+    writeFileSync(path, JSON.stringify({ job: null }));
+    expect(readState(path).jobs).toEqual([]);
+  });
+
+  it('keeps every update of writers that interleave', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'factory-state-')), 'state.json');
+    updateState(path, (s) => {
+      expect(() => updateState(path, (inner) => inner)).toThrow('already held by this process');
+      return { ...s, approvalPosts: { '1': 1 } };
+    });
+    for (let n = 2; n <= 5; n += 1) updateState(path, (s) => ({ ...s, approvalPosts: { ...s.approvalPosts, [String(n)]: n } }));
+    expect(Object.keys(readState(path).approvalPosts)).toEqual(['1', '2', '3', '4', '5']);
+  });
+
   it('starts empty and keeps updates', () => {
     const path = join(mkdtempSync(join(tmpdir(), 'factory-state-')), 'state.json');
-    expect(readState(path).job).toBeNull();
+    expect(readState(path).jobs).toEqual([]);
     updateState(path, (s) => ({ ...s, approvalPosts: { '7': 12 } }));
     expect(readState(path).approvalPosts).toEqual({ '7': 12 });
   });

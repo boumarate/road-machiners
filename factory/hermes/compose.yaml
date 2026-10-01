@@ -34,7 +34,6 @@ services:
       FACTORY_STATE_DIR: /factory/home/state
     volumes:
       - ${FACTORY_HERMES_DIR:-${FACTORY_HOME:?set FACTORY_HOME}/hermes}:/opt/data
-      - ./plugin:/opt/data/plugins/factory:ro
       # Hermes manages the factory: it reads and edits the whole factory home and reads the factory code. SOUL.md names these paths.
       - ${FACTORY_HOME:?set FACTORY_HOME}:/factory/home
       - ../..:/factory/code:ro

@@ -177,6 +177,9 @@ export function ghClient(run: Run, cfg: FactoryConfig): GitHub {
       if (!card) throw new Error(`Issue ${number} is not on the board`);
       await setStatus(card.itemId, column);
     },
+    async createRelease(tag, target, title, notes) {
+      await gh(['release', 'create', tag, '-R', repo, '--target', target, '--title', title, '--notes', notes]);
+    },
     async openPullRequest(branch, base, title, body) {
       const out = await gh(['pr', 'create', '-R', repo, '--head', branch, '--base', base, '--title', title, '--body', body]);
       return out.trim();

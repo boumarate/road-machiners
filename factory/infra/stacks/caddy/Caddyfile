@@ -17,8 +17,10 @@
 }
 
 # The web root holds /dev/ and one folder per build hash. Folder requests serve index.html.
+# The bare domain sends players to the released game on itch.io. The builds stay under their paths.
 {$DOMAIN} {
 	import security_headers
+	redir / {$ITCH_URL} temporary
 	root * /srv/www
 	file_server {
 		index index.html

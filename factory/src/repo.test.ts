@@ -21,7 +21,7 @@ function tmpHome(): string {
 describe('hostRepo', () => {
   it('turns hooks off on every git call', async () => {
     const { run, calls } = fakeRun();
-    const repo = hostRepo(run, cfg('/nowhere/home'));
+    const repo = hostRepo(run, cfg(tmpHome()));
     await repo.push('b');
     await repo.headHash('b');
     await repo.diff('dev', 'b');
@@ -38,13 +38,13 @@ describe('hostRepo', () => {
 
   it('aborts and names the files when a merge conflicts', async () => {
     const { run, calls } = fakeRun((args) => args.includes('--no-ff'));
-    await expect(hostRepo(run, cfg('/h')).merge('b', 'dev', 'msg')).rejects.toThrow('Conflicting files: a.ts');
+    await expect(hostRepo(run, cfg(tmpHome())).merge('b', 'dev', 'msg')).rejects.toThrow('Conflicting files: a.ts');
     expect(calls.some((a) => a.includes('--abort'))).toBe(true);
   });
 
   it('fetches a work branch into the host clone', async () => {
     const { run, calls } = fakeRun();
-    await hostRepo(run, cfg('/h')).fetchFromWork('/w/x', 'factory/issue-3');
+    await hostRepo(run, cfg(tmpHome())).fetchFromWork('/w/x', 'factory/issue-3');
     expect(calls[0].slice(6)).toEqual(['fetch', '/w/x', '+factory/issue-3:factory/issue-3']);
   });
 
@@ -171,7 +171,7 @@ describe('release branch operations', () => {
       if (args.includes('--diff-filter=U')) return { code: 0, stdout: '', stderr: '' };
       return { code: 0, stdout: '', stderr: '' };
     };
-    await expect(hostRepo(run, cfg('/h')).revertIssueMerge(3, 'dev')).rejects.toThrow('without a conflict');
+    await expect(hostRepo(run, cfg(tmpHome())).revertIssueMerge(3, 'dev')).rejects.toThrow('without a conflict');
     expect(calls.some((a) => a.includes('--abort'))).toBe(true);
   });
 
@@ -207,5 +207,53 @@ describe('release branch operations', () => {
     await repo.sync('release/x');
     expect((await git('show', 'release/x:g.txt'))).toBe('later\n');
     await repo.sync('release/x');
+  });
+});
+
+describe('merging the base into a work clone', () => {
+  // An issue branch cut from dev, then a dev commit to `file` that the branch lacks. The work clone holds the branch.
+  async function behindDev(file: string) {
+    const { repo, git, home } = await releaseSetup();
+    await git('checkout', '-B', 'factory/issue-5', 'dev');
+    writeFileSync(join(repo.path, 'f.txt'), 'five\n');
+    await git('commit', '-am', 'work on 5');
+    await git('checkout', 'dev');
+    writeFileSync(join(repo.path, file), 'dev moved\n');
+    await git('commit', '-am', 'dev moves');
+    const work = join(home, 'work');
+    await repo.prepareWorkClone('factory/issue-5', 'dev', work);
+    return { repo, work };
+  }
+
+  it('merges a moved dev into the branch, and the host sees it as merged after the fetch', async () => {
+    const { repo, work } = await behindDev('g.txt');
+    expect(await repo.isMerged('dev', 'factory/issue-5')).toBe(false);
+    const devHead = (await realRun('git', ['rev-parse', 'dev'], { cwd: repo.path })).stdout.trim();
+    expect(await repo.mergeBaseIntoWork(work, 'dev')).toEqual({ commit: devHead, conflicts: [] });
+    expect(readFileSync(join(work, 'g.txt'), 'utf8')).toBe('dev moved\n');
+    expect(readFileSync(join(work, 'f.txt'), 'utf8')).toBe('five\n');
+    await repo.fetchFromWork(work, 'factory/issue-5');
+    expect(await repo.isMerged('dev', 'factory/issue-5')).toBe(true);
+  });
+
+  it('still sees the merged commit inside the branch after dev moves on', async () => {
+    const { repo, work } = await behindDev('g.txt');
+    const { commit } = await repo.mergeBaseIntoWork(work, 'dev');
+    await repo.fetchFromWork(work, 'factory/issue-5');
+    const git = (...a: string[]) => realRun('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { cwd: repo.path });
+    await git('checkout', 'dev');
+    writeFileSync(join(repo.path, 'h.txt'), 'another approval\n');
+    await git('add', 'h.txt');
+    await git('commit', '-m', 'dev moves again');
+    expect(await repo.isMerged('dev', 'factory/issue-5')).toBe(false);
+    expect(await repo.isMerged(commit, 'factory/issue-5')).toBe(true);
+  });
+
+  it('names the conflicted files and leaves the merge open for the agent', async () => {
+    const { repo, work } = await behindDev('f.txt');
+    expect((await repo.mergeBaseIntoWork(work, 'dev')).conflicts).toEqual(['f.txt']);
+    expect(readFileSync(join(work, 'f.txt'), 'utf8')).toContain('<<<<<<<');
+    await repo.fetchFromWork(work, 'factory/issue-5');
+    expect(await repo.isMerged('dev', 'factory/issue-5')).toBe(false);
   });
 });
