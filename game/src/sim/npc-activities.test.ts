@@ -131,6 +131,15 @@ describe('NPC activities', () => {
     expect(npc.brain!.lastTown).toBe(REGION.towns[1].id);
   });
 
+  it('leaves the goal of a knocked-out NPC with a working cab untouched', () => {
+    const { w, npc } = createScavenger();
+    npc.pos = { ...sitePads(REGION.towns[0])[0] };
+    npc.brain!.goals = [{ kind: 'sell', targetId: REGION.towns[0].id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+    npc.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: false };
+    resolveNpcActivities(w);
+    expect(npc.brain!.goals).toHaveLength(1);
+  });
+
   it('does not remember a site that is not a town', () => {
     const { w, npc } = createScavenger();
     const oasis = REGION.locations.find((l) => l.kind === 'oasis')!;

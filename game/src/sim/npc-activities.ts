@@ -1299,7 +1299,7 @@ function resolveActivity(world: World, vehicle: Vehicle, activity: NpcActivity):
 
 // A driver works on its goal when alive, parked and off any tow rope.
 function canAct(world: World, vehicle: Vehicle): boolean {
-  if (corePart(vehicle, 'cab').hp <= 0 || getResources(world, vehicle).health <= 0) return false;
+  if (isKnockedOut(vehicle) || corePart(vehicle, 'cab').hp <= 0 || getResources(world, vehicle).health <= 0) return false;
   return vehicle.speed <= RULES.parkedSpeed && !isOnRope(world, vehicle.id);
 }
 
