@@ -4,7 +4,7 @@ import { SALVAGE } from '../data/salvage';
 import { NPCS, type TraitId } from '../data/npcs';
 import { isHostile, noteCollision } from './combat';
 import { playerVehicle } from './damage';
-import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, raiseCalls } from './dialogue';
+import { callVehicle, chooseOption, currentLine, currentOptions, endCallIfOut, hangUp, raiseCalls } from './dialogue';
 import { addGoods } from './inventory';
 import { takeAllLoot } from './locations';
 import { pushGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
@@ -621,6 +621,7 @@ describe('the player at a claimed pile', () => {
     const { w, claimant } = claimedNearPlayer();
     raiseCalls(w);
     expect(w.player.call).toMatchObject({ with: claimant.id, topic: 'claim' });
+    expect(currentLine(w)).toBe('This is mine.');
     const done = pick(w, 'Rolling on.');
     expect(feuding(done, claimant)).toBe(false);
     raiseCalls(done);
