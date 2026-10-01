@@ -19,7 +19,7 @@ import { route } from './path';
 import {
   tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot,
+  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -364,11 +364,30 @@ function heldTow(world: World, vehicle: Vehicle): NpcState | null {
 // Why a goal of one kind can no longer run, or null while it can.
 type GoalCheck = (world: World, vehicle: Vehicle, goal: NpcActivity, contacts: Contact[]) => string | null;
 
+const GAVE_UP_ROBBERY = 'stranded, gave up the robbery';
+
+// A stranded driver ends each robbery feud whose target is not fighting it and backs off that target, as a robbery
+// that went quiet does.
+function giveUpStrandedRobberies(world: World, vehicle: Vehicle): void {
+  if (!isStranded(world, vehicle)) return;
+  for (const s of statesHeld(world, vehicle.id).filter(isRobberyFeud)) {
+    const other = world.vehicles.find((v) => v.id === s.other);
+    if (!other || !holdsOffRobbery(world, vehicle, other)) continue;
+    endState(world, s, 'broken');
+    addState(world, 'backedOff', vehicle.id, s.other, { kind: 'none' });
+  }
+}
+
+function isRobberyFeud(s: NpcState): boolean {
+  return s.kind === 'feud' && s.data.kind === 'feud' && s.data.robbery;
+}
+
 // A fight holds while the driver sees or detects its target, and hunts it for NPC_BEHAVIOR.fightSearchTurns turns
 // after it last did.
 function fightInvalid(world: World, vehicle: Vehicle, goal: NpcActivity, contacts: Contact[]): string | null {
   const target = world.vehicles.find((v) => v.id === goal.targetId);
   if (!target || !isHostile(world, vehicle, target)) return 'lost the target';
+  if (holdsOffRobbery(world, vehicle, target)) return GAVE_UP_ROBBERY;
   if (vehicleStats(world, vehicle).weapons.length === 0) return 'no gun left to fight with';
   return fightTargetLost(world, vehicle, goal, target, contacts) ? 'lost the target' : null;
 }
@@ -408,7 +427,8 @@ function fleeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity, contacts
 
 function investigateInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   const target = world.vehicles.find((v) => v.id === goal.targetId);
-  return target && isHostile(world, vehicle, target) ? null : 'the contact is gone';
+  if (!target || !isHostile(world, vehicle, target)) return 'the contact is gone';
+  return holdsOffRobbery(world, vehicle, target) ? GAVE_UP_ROBBERY : null;
 }
 
 // A wreck or a loot pile is an opportunity only while it remains observable. A known site stays one.
@@ -851,6 +871,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   forget(world, vehicle, contacts);
   pruneAttackers(world, vehicle);
   breakOffDeals(world, vehicle);
+  giveUpStrandedRobberies(world, vehicle);
   dropInvalidGoals(world, vehicle, contacts);
   serveStranded(world, vehicle, profile);
   if (isDefeated(vehicle)) return retreatHome(world, vehicle);

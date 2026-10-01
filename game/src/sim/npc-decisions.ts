@@ -17,7 +17,7 @@ import {
 } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { huntsForLoot, inCombatWithOther, isHostile } from './combat';
+import { fightsAgainst, huntsForLoot, inCombatWithOther, isHostile } from './combat';
 import { ramFactor, ramImpact } from './crash-contact';
 import { isKnockedOut } from './defeat';
 import { vehicleById } from './damage';
@@ -446,14 +446,24 @@ function canFight(world: World, vehicle: Vehicle, decision: DecisionId, subject:
   return firepower(world, vehicle) > 0 && canVehicleSee(world, vehicle, subjectOf(world, decision, subject).pos);
 }
 
+// A stranded driver holds off a robbery against a target that is not fighting it.
+function canFightSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  return canFight(world, vehicle, decision, subject) && !holdsOffRobbery(world, vehicle, subjectOf(world, decision, subject));
+}
+
+function canInvestigate(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  return canDrive(world, vehicle) && !holdsOffRobbery(world, vehicle, subjectOf(world, decision, subject));
+}
+
 // Driving off and closing in on a contact need fuel.
 function canDrive(world: World, vehicle: Vehicle): boolean {
   return getResources(world, vehicle).fuel > 0;
 }
 
 // A robbery is a fight, so it also needs a working gun. The driver's traits must allow it too.
+// A stranded truck can neither chase prey nor carry the loot off.
 function canRobSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
-  if (!traitsAllowRobbing(vehicle)) return false;
+  if (isStranded(world, vehicle) || !traitsAllowRobbing(vehicle)) return false;
   return firepower(world, vehicle) > 0 && canRob(world, vehicle, subjectOf(world, decision, subject));
 }
 
@@ -531,10 +541,10 @@ type OptionName = DecisionOptions[DecisionId];
 
 const AVAILABLE: Record<OptionName, Availability> = {
   keep: always,
-  fight: canFight,
+  fight: canFightSubject,
   fightBack: canFight,
   flee: canDrive,
-  investigate: canDrive,
+  investigate: canInvestigate,
   rob: canRobSubject,
   ram: canRamSubject,
   tow: canTow,
@@ -720,7 +730,17 @@ function robs(world: World, vehicle: Vehicle, subject: string | null): boolean {
 
 // Whether the driver may and does want the target's cargo. Only these drivers strip a stranded player.
 export function wantsLoot(world: World, vehicle: Vehicle, target: Vehicle): boolean {
-  return traitsAllowRobbing(vehicle) && robs(world, vehicle, target.id);
+  return !isStranded(world, vehicle) && traitsAllowRobbing(vehicle) && robs(world, vehicle, target.id);
+}
+
+// The driver's hostility toward the target is only for its cargo.
+export function robbedFor(world: World, vehicle: Vehicle, target: Vehicle): boolean {
+  return robbingFeud(world, vehicle, target) || huntsForLoot(world, vehicle, target);
+}
+
+// A stranded driver cannot carry out a robbery, unless the target is fighting it. The one stranded robbery rule.
+export function holdsOffRobbery(world: World, vehicle: Vehicle, target: Vehicle): boolean {
+  return isStranded(world, vehicle) && robbedFor(world, vehicle, target) && !fightsAgainst(world, target, vehicle);
 }
 
 function robbingFeud(world: World, vehicle: Vehicle, target: Vehicle): boolean {
