@@ -110,7 +110,7 @@ const UNAVAILABLE: Record<string, Setup> = {
   knockedOut: () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const target = addPrey(w, { x: 15, y: 10 });
-    target.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+    target.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: true };
     return { w, robber: addScumbag(w, { x: 10, y: 10 }), target };
   },
   towed: () => {

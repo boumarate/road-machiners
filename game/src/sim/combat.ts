@@ -11,6 +11,7 @@ import { PHYSICS } from '../data/physics';
 import { blastLanes, laneCount, lanePoint, partLane, planLane, sideToward, walkLane, type PartHit, type Round, type Side } from './armor';
 import { wholeDamage } from './damage';
 import { bodyOf } from './body';
+import { rollCabKnock } from "./cab-knock";
 import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
@@ -888,7 +889,8 @@ function joinsFeud(world: World, v: Vehicle, shooter: Vehicle, target: Vehicle):
   return v.faction === target.faction && dist(v.pos, target.pos) <= SPAWN.neighborHelp && canVehicleSee(world, v, shooter.pos);
 }
 
-// An NPC whose cab breaks is knocked out, or dies into a wreck at the death chance. Health at 0 kills it, and so
+// An NPC whose cab breaks is knocked out, or dies into a wreck at the death chance. A cab below half may knock the
+// driver out first, and that never kills. Health at 0 kills it, and so
 // does a shot that damages it while it is defeated. The player's broken cab is a knockout in src/sim/defeat.ts.
 export function resolveDestroyed(world: World): void {
   const shot = damagedByShots(world);
@@ -917,7 +919,14 @@ export function settleAims(world: World): void {
 function npcFate(world: World, v: Vehicle, shot: Set<string>): "dies" | "knockedOut" | null {
   if (getResources(world, v).health <= 0) return "dies";
   if (isDefeated(v)) return shot.has(v.id) ? "dies" : null;
-  if (corePart(v, "cab").hp > 0) return null;
+  return corePart(v, "cab").hp > 0 ? cabKnockFate(world, v) : brokenCabFate(world);
+}
+
+function cabKnockFate(world: World, v: Vehicle): "knockedOut" | null {
+  return rollCabKnock(world, v) ? "knockedOut" : null;
+}
+
+function brokenCabFate(world: World): "dies" | "knockedOut" {
   return chance(world, RULES.npcDeathChance) ? "dies" : "knockedOut";
 }
 

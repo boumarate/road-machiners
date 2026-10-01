@@ -761,7 +761,7 @@ describe('one looter per target', () => {
   it('gives a knocked-out player truck only one NPC looter', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = w.vehicles[0];
-    me.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+    me.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: true };
     const gap = chassisDef(me.chassisId).radius + chassisDef('scout').radius + 0.2;
     const looters = [-gap, gap].map((dx) => {
       const npc = parkedScavenger(w, { x: 30 + dx, y: 30 });

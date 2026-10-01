@@ -8,6 +8,7 @@ import { RULES } from "../data/rules";
 import { isJunk, maxHp, restorePart } from "./wear";
 import { playerVehicle } from "./damage";
 import { isHostile } from "./combat";
+import { rollCabKnock } from "./cab-knock";
 import { corePart, mountedParts } from "./grid";
 import { cancelJob } from "./jobs";
 import { practice, vehicleHasPerk } from "./progress";
@@ -37,11 +38,11 @@ export function checkDeath(world: World): void {
 export function checkKnockout(world: World): void {
   const p = world.player;
   const me = playerVehicle(world);
-  if (p.state !== "active" || corePart(me, "cab").hp > 0 || fightsThrough(world, me)) return;
+  if (p.state !== "active" || !knockedNow(world, me)) return;
   // Only a knockout with a hostile truck in sight teaches toughness. A cab broken on purpose does not.
   const watchers = world.vehicles.filter((v) => isHostile(world, v, me) && canVehicleSee(world, v, me.pos));
   if (watchers.length > 0) practice(world, "knockout", 1, null, "driver");
-  me.defeat = { phase: "out", turns: 0, unseen: 0, foes: withLastHitter(world, me, watchers.map((v) => v.id)) };
+  me.defeat = { phase: "out", turns: 0, unseen: 0, foes: withLastHitter(world, me, watchers.map((v) => v.id)), gaveUp: false };
   p.state = "knockedOut";
   p.knockoutTurns = 0;
   p.knockouts++;
@@ -56,7 +57,15 @@ export function checkKnockout(world: World): void {
   world.events.push({ t: "knockout" });
 }
 
-// The Fight through perk keeps the driver going on a broken cab while health stays above its share.
+// A broken cab knocks the player out unless Fight through holds. A working cab may knock them out below
+// RULES.cabKnock.playerHealth. The cheap checks come first, so a spared player draws no RNG.
+function knockedNow(world: World, me: Vehicle): boolean {
+  if (fightsThrough(world, me)) return false;
+  if (corePart(me, "cab").hp <= 0) return true;
+  return world.player.health < RULES.cabKnock.playerHealth && rollCabKnock(world, me);
+}
+
+// The Fight through perk keeps the driver going on a broken cab or a cab knock while health stays above its share.
 function fightsThrough(world: World, me: Vehicle): boolean {
   return vehicleHasPerk(world, me, "fightThrough") && world.player.health > maxHealthOf(world) * PERK_NUMBERS.fightThrough.health;
 }
@@ -93,24 +102,23 @@ export function isKnockedOut(v: Vehicle): boolean {
   return v.defeat?.phase === "out";
 }
 
-// A knocked-out driver whose cab still works gave up: a knockout always breaks the cab, and nothing repairs it while
-// the driver lies out.
+// A knocked-out driver gave up when a demand made it stand down, and was knocked out when a fight did.
 export function gaveUp(v: Vehicle): boolean {
-  return isKnockedOut(v) && corePart(v, "cab").hp > 0;
+  return isKnockedOut(v) && v.defeat!.gaveUp;
 }
 
-function layDown(world: World, v: Vehicle, foes: string[]): void {
-  v.defeat = { phase: "out", turns: 0, unseen: 0, foes };
+function layDown(world: World, v: Vehicle, foes: string[], gaveUp: boolean): void {
+  v.defeat = { phase: "out", turns: 0, unseen: 0, foes, gaveUp };
   stopKnockedOut(world, v);
 }
 
 // A driver that gives up lies as if knocked out, with no knockout event, death or grudge.
 export function standDown(world: World, v: Vehicle, winnerId: string): void {
-  layDown(world, v, [...new Set([...foesOf(world, v), winnerId])]);
+  layDown(world, v, [...new Set([...foesOf(world, v), winnerId])], true);
 }
 
 export function knockOutNpc(world: World, v: Vehicle): void {
-  layDown(world, v, foesOf(world, v));
+  layDown(world, v, foesOf(world, v), false);
   world.events.push({ t: "npcKnockout", vehicle: v.id, by: v.lastHitBy ?? "unknown" });
   if (v.lastHitBy === world.player.vehicleId && chance(world, NPC_BEHAVIOR.revengeChance))
     addState(world, "revenge", v.id, world.player.vehicleId, { kind: "none" });

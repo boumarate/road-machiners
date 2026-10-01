@@ -8,6 +8,7 @@ import FORMAT_2_2 from './save-fixtures/format-2-2.json';
 import FORMAT_2_3 from './save-fixtures/format-2-3.json';
 import FORMAT_2_4 from './save-fixtures/format-2-4.json';
 import FORMAT_2_5 from './save-fixtures/format-2-5.json';
+import FORMAT_2_6 from './save-fixtures/format-2-6.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS } from './save-migrations';
@@ -155,5 +156,17 @@ describe('save migration 5 to 6', () => {
 
     expect(next.states[0].data).toEqual({ ...FORMAT_2_5.states[0].data, started: false, work: 1, workLeft: 1 });
     expect(next.states[1]).toEqual(FORMAT_2_5.states[1]);
+  });
+});
+
+describe('save migration 6 to 7', () => {
+  it('marks a defeat as gave up only for a driver out with a working cab', () => {
+    const next = MIGRATIONS[6](FORMAT_2_6) as { vehicles: { defeat?: { gaveUp: boolean } }[] };
+    const [gaveUp, knocked, retreating, free] = next.vehicles;
+
+    expect(gaveUp.defeat).toEqual({ ...FORMAT_2_6.vehicles[0].defeat, gaveUp: true });
+    expect(knocked.defeat?.gaveUp).toBe(false);
+    expect(retreating.defeat?.gaveUp).toBe(false);
+    expect(free).toEqual(FORMAT_2_6.vehicles[3]);
   });
 });

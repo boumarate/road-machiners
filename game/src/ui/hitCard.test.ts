@@ -81,7 +81,7 @@ describe('hover card rows', () => {
 
   it('shows a knocked-out driver firing nothing at me', () => {
     const { world, them } = createDuel();
-    them.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+    them.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: true };
     expect(hitCardRows(world, them.id)!.theirs[0]).toMatchObject({ odds: null, text: 'driver knocked out' });
   });
 

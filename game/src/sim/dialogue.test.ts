@@ -295,7 +295,7 @@ describe('honk', () => {
 
   it('a knocked-out driver does not honk back', () => {
     const w = emptyWorld({ x: 30, y: 30 });
-    npcAt(w, 'trader', 'traders', 36).defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+    npcAt(w, 'trader', 'traders', 36).defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: true };
     expect(honkers(honk(w))).toEqual([w.player.vehicleId]);
   });
 
@@ -347,14 +347,14 @@ describe('calls during a turn', () => {
   it('a call ends when the NPC is knocked out during the turn', () => {
     const { w, npc } = withNpc('trader', 'traders');
     const open = callVehicle(w, npc.id);
-    open.vehicles.find((v) => v.id === npc.id)!.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+    open.vehicles.find((v) => v.id === npc.id)!.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: true };
     endCallIfOut(open);
     expect(open.player.call).toBeNull();
   });
 
   it('the player cannot call a knocked-out driver', () => {
     const { w, npc } = withNpc('trader', 'traders');
-    npc.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+    npc.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: true };
     expect(() => callVehicle(w, npc.id)).toThrow(/knocked-out/);
   });
 });
@@ -388,7 +388,7 @@ describe('demand', () => {
     const w = endTurn(start, testDrive);
     w.player.call = null;
     const out = structuredClone(w);
-    out.vehicles.find((v) => v.id === raider.id)!.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+    out.vehicles.find((v) => v.id === raider.id)!.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: true };
     raiseCalls(w);
     raiseCalls(out);
     expect(w.player.call).toMatchObject({ with: raider.id, topic: 'demand' });
