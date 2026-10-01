@@ -40,9 +40,15 @@ approvals:
 cron:
   wrap_response: false
 
+# Hermes core ignores session_reset since v2026.9.11. The hermes-session-reset-policy plugin reads this block and resets a chat that sat idle, on its next message. A chat with a turn in flight never resets.
+session_reset:
+  mode: idle
+  idle_minutes: 60
+
 plugins:
   enabled:
     - factory
+    - hermes-session-reset-policy
 
 # The file toolset also holds write and patch. Hermes has no read-only file toolset.
 platform_toolsets:
