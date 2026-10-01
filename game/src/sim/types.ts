@@ -259,7 +259,8 @@ export type Plea = 'truce' | 'mercy';
 // answered yet.
 // An aid deal: the giver hands the receiver fuel and supplies when both are parked side by side. The holder is always
 // the NPC and the other party the player. price is what the NPC pays, 0 when free or for an NPC gift. agreed is false
-// while an NPC's unprompted offer waits for the player's answer. See src/sim/aid.ts.
+// while an NPC's unprompted offer waits for the player's answer. started is set by the player's [E]; work and workLeft
+// are the handover turns. See src/sim/aid.ts.
 export type StateData =
   | { kind: 'tow'; site: string; fee: number; waived: number; hitched: boolean }
   | { kind: 'feud'; robbery: boolean }
@@ -268,7 +269,7 @@ export type StateData =
   | { kind: 'escort'; site: string | null; fee: number }
   | { kind: 'patch'; deal: PatchDeal; parts: number; price: number; work: number; workLeft: number } // holder patches other
   | { kind: 'strayFire'; damage: number } // unintended damage the holder took from the other party
-  | { kind: 'aid'; giver: 'player' | 'npc'; fuel: number; supplies: number; price: number; free: boolean; agreed: boolean }
+  | { kind: 'aid'; giver: 'player' | 'npc'; fuel: number; supplies: number; price: number; free: boolean; agreed: boolean; started: boolean; work: number; workLeft: number }
   | { kind: 'none' };
 export type NpcState = {
   id: string;
@@ -397,6 +398,7 @@ export type GameEvent =
   | { t: 'say'; speaker: string; text: string; vars: CallVars } // speaker is a vehicle id; the player's lines use the player's
   | { t: 'call'; with: string; outcome: 'opened' | 'ended' }
   | { t: 'honk'; vehicle: string }
+  | { t: 'aidStarted'; giver: string; receiver: string }
   | { t: 'patch'; patcher: string; client: string; outcome: 'started' | 'done' | 'lapsed' | 'broken' }
   | { t: 'aid'; giver: string; receiver: string; fuel: number; supplies: number; paid: number } // units moved, money paid
   | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null } // null while the player has to answer

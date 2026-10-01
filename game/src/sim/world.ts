@@ -34,6 +34,7 @@ import { advanceStates } from './states';
 import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from './tow';
 import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
+import { advanceAid, readyAid } from './aid';
 import type { GridItem, MoveOrder, PartInstance, Vehicle, WeaponOrder, World, XpSource } from './types';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
@@ -218,6 +219,7 @@ export function autoRuns(world: World): boolean {
   const p = world.player;
   if (p.call) return false; // an open call stops every turn until it ends
   if (p.state === 'knockedOut' || isTowed(world)) return true;
+  if (readyAid(world)) return false; // the handover waits for the player's [E]
   return waitsOnBeacon(world);
 }
 
@@ -286,6 +288,7 @@ export function endTurn(
     dropStrandedTowers(w);
     advanceContracts(w);
     advancePatches(w);
+    advanceAid(w);
     advanceStates(w);
     checkBeacon(w);
     resolveNpcActivities(w);

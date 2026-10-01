@@ -22,6 +22,7 @@ import {
   type VehicleFrame,
 } from "../phys/frames";
 import { applyTurn, type PreparedTurn } from "../phys/turn";
+import { readyAid, startAid } from "../sim/aid";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { mountedParts } from "../sim/grid";
 import { applySiteAction, canLoot, salvageHere } from "../sim/locations";
@@ -380,6 +381,8 @@ export class Game {
 
   private useContext(): void {
     if (this.anim || !playerCanAct(this.world)) return;
+    const aid = readyAid(this.world);
+    if (aid) { this.apply(startAid(this.world, aid.holder)); this.hud.pushEvents(this.world); return; }
     if (this.trade.openIfReady()) return;
     return shopAt(this.world) ? this.town.open() : this.useSite();
   }
