@@ -202,6 +202,12 @@ test('handles deleted source files', () => {
   assert.equal(result.status, 0, result.stdout + result.stderr);
 });
 
+test('rejects an oversized agent guidance file in any folder', () => {
+  writeSource('word '.repeat(2500), 'factory/AGENTS.md');
+  runGit('add', 'factory');
+  assertRejected(runCheck(), /factory\/AGENTS\.md: 2500 words/);
+});
+
 test('rejects staged type errors in the factory project', () => {
   writeSource('export const value: number = "wrong";\n', 'factory/src/example.ts');
   runGit('add', 'factory');

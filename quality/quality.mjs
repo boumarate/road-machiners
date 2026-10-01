@@ -1,8 +1,8 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkFragmentation, collectComponents, inspectSource } from './quality-policy.mjs';
+import { checkFragmentation, checkGuidance, collectComponents, inspectSource, isGuidance } from './quality-policy.mjs';
 
 const root = process.cwd();
 const sourcePattern = /\.(?:[cm]?[jt]s|[jt]sx)$/;
@@ -33,6 +33,11 @@ function selectSources(files) {
 
 function readSources(directory, files) {
   return new Map(files.map(file => [file, readFileSync(path.join(directory, file), 'utf8')]));
+}
+
+function readGuidance(directory, files) {
+  const docs = files.filter(file => isGuidance(file) && !ignoredPattern.test(file));
+  return readSources(directory, docs.filter(file => !lstatSync(path.join(directory, file)).isSymbolicLink()));
 }
 
 function writeSources(directory, sources) {
@@ -106,8 +111,9 @@ function checkQuality(directory, baseline, files, headFiles) {
   const baselineConfig = path.join(baseline, '.oxlintrc.json');
   copyFileSync(config, baselineConfig);
   const findings = findRegressions(collectFindings(directory, current, config), collectFindings(baseline, previous, baselineConfig));
-  const { maxFilesPerKloc } = JSON.parse(readFileSync(path.join(directory, '.quality.json'), 'utf8'));
+  const { maxFilesPerKloc, maxGuidanceWords } = JSON.parse(readFileSync(path.join(directory, '.quality.json'), 'utf8'));
   const failures = checkFragmentation(current, collectComponents(previous), maxFilesPerKloc);
+  failures.push(...checkGuidance(readGuidance(directory, files), maxGuidanceWords));
   for (const finding of findings) console.error(`${finding.filename}: ${finding.code} ${finding.message}`);
   for (const failure of failures) console.error(failure);
   if (findings.length + failures.length) throw new Error('Quality regressed against HEAD. Fix the code. Do not weaken the checks.');

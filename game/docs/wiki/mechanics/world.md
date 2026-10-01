@@ -1,0 +1,25 @@
+# World
+
+The map, sites, guard guns, time of day, weather and engine heat. The principles behind them are in [DESIGN.md](../../DESIGN.md).
+
+## Map and sites
+
+The map is a grid of tiles with a height on every tile corner, so the ground is smooth hills and valleys. Rain cut gullies and dry washes into it, slopes slid into scree, dry lakes left salt crust and mud, and wind piled deep sand into dune ridges up to about 3 m tall. Boulders lie at cliff feet and on ridges. Ruins of the old world stand on flat ground near today's places, on hill edges and on road bends: houses, silos, water towers, gas stations, dead fields, power lines, billboards and tank hulks. Faded asphalt roads join the old settlements. A few old highways ended in broken bridges over deep gorges. Ruins and structures block driving and sight, so they give cover. Squatters live in shack camps outside towns, among ruins and at junctions, behind wooden fences and junk piles. Burnt cars line the roads. Scrub grows where water gathers, and small basins hold dirty water or toxic pools that slow trucks. Everything collides by its real shape: trucks see over low fences, junk and wrecks, but not over walls. Each tile has a terrain type: road, hardpan, loose sand, scrub, scree, mud, gravel, salt crust, cracked asphalt or ash. Each type has its own driving speed. Uphill slows a truck, downhill speeds it up a little. Tiles too steep to climb are cliffs, and routes go around them. Hills and obstacles block sight, and the fog of war shows only what the truck sees.
+
+Danger is set by region, not by player level.
+
+Faction squads roam the map. Places are discovered by exploring. Towns and locations are static places that trucks never enter, so they block driving. Small locations have one gate, where the first road crosses their edge. Towns and large locations have a gate on every road. Each gate post carries a lamp. A dust pad lies outside each gate. A site is used only from a pad. Towns have a wall, and other sites have palisades, stone walls, wreck walls or fences. The truck must be stopped to use a town or search salvage. In reach but still moving, the action shows dimmed.
+
+Each town gate has a guard gun. Each turn it shoots the nearest vehicle in its range that fired at anyone but a raider, whatever its own faction. Raiders also trade in towns, so guards judge by action. A town gate is therefore a safe place to run to.
+
+Raiders have two camps, Scrapjaw Camp in the north and Kiln Camp in the south. A dirt track leads to each camp gate. Raiders spawn outside a camp gate and patrol the roads around their own camp between raids. Each camp gate gun shoots the nearest non-raider in its range every turn, whether or not that vehicle fired. The player cannot use camp services.
+
+## Sun, time and weather
+
+A day is a fixed number of turns, and the clock starts in the morning. The sun rises in the east, crosses north at noon and sets in the west. There is no sun at night. A point is in shade when a hill, rock, wreck or building blocks the ray toward the sun. Heat is at its base rate in shade and at night, and rises toward its peak in full sun. Heat multiplies fuel and supply drain, so the wrong time and route cost more fuel and supplies. The ground darkens over explored shaded tiles, by the same rule the sim uses. The sun's light follows the clock, and the scene dims after dark.
+
+Weather events come from the world's own randomness, so a seed replays the same weather. Dust storms are huge moving areas, and several can roam the region at once. Inside one, sight and aim both suffer, top speed drops, and wear climbs faster. The effects fade in over the outer 25 tiles of a storm, so riding in is gradual. A heat wave covers the whole region and strengthens the sun's heat. Overcast also covers the region, and cancels the sun's heat. The HUD shows the day, time, current heat and the region's weather.
+
+The sun also heats the player's running engine, faster at higher speed. Airflow, shade, night and parking cool it, and parking in shade cools it fastest. Full noon sun at top speed overheats a cold stock engine in about 25 turns, while morning and evening sun barely warm it. An overheated engine loses HP every turn it keeps driving. Every engine starts heating at the same sun heat, where the ground shimmers, and engines differ only in how fast they heat. A racing V6 or a turbine overheats fast in the noon sun, and a diesel runs cool. Still, every engine overheats on the shortest Bowl to Nose trip at top speed, leaving at 10:00. The HUD shows the engine temperature as a gauge, and the log warns once when it runs hot. NPCs have no engine heat, since they have no rule for stopping to cool down.
+
+Engine overdrive, on the O key, gives the player 33% more top speed and acceleration. It heats a driving engine in any sun. A cold engine overheats in about 16 turns at night and 8 in full noon sun. The G key pours 1 supply of water over the engine and takes away half of the full heat at once, with a cloud of steam.

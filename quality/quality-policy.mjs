@@ -33,6 +33,20 @@ export function collectComponents(sources) {
   return components;
 }
 
+export function isGuidance(file) {
+  const name = file.split('/').pop();
+  return /^(?:claude|agents)\.md$/i.test(name) || name === 'DESIGN.md';
+}
+
+export function checkGuidance(docs, limit) {
+  if (!Number.isFinite(limit) || limit <= 0) throw new Error('maxGuidanceWords must be positive.');
+  return [...docs].flatMap(([file, text]) => {
+    const words = text.split(/\s+/).filter(Boolean).length;
+    if (words < limit) return [];
+    return [`${file}: ${words} words, the limit is under ${limit}. Move details to docs/.`];
+  });
+}
+
 export function checkFragmentation(current, previous, limit) {
   if (!Number.isFinite(limit) || limit <= 0) throw new Error('maxFilesPerKloc must be positive.');
   return [...collectComponents(current)].flatMap(([name, component]) => {
