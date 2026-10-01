@@ -14,6 +14,12 @@ compression:
   # Compress the context once the estimated prompt reaches this many tokens.
   threshold_tokens: 100000
 
+# The summary of a long chat used the main model's default reasoning. It thought silently past the 60-second stall limit, failed, and left the chat over the threshold.
+auxiliary:
+  compression:
+    reasoning_effort: low
+    no_progress_timeout: 180
+
 display:
   # A message sent while Hermes works waits for the next turn, instead of cutting the running task off. /stop still interrupts.
   busy_input_mode: queue
