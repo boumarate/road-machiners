@@ -40,7 +40,7 @@ import type {
   Vehicle,
   World,
 } from "../sim/types";
-import { el, panel } from "./dom";
+import { el, isBrowserChord, panel } from "./dom";
 import type { UiHost } from "./host";
 import { baselinePart, conditionMeter, createIcon, diffStats, footprint as footprintEl, partIcon, partStats, statGrid } from "./cards";
 import { vehicleMass } from "../sim/mass";
@@ -122,7 +122,7 @@ export class InventoryView {
       this.select(null);
     });
     window.addEventListener("keydown", (e) => {
-      if (e.key.toLowerCase() !== "r" || e.repeat) return;
+      if (e.key.toLowerCase() !== "r" || e.repeat || isBrowserChord(e)) return;
       if (this.drag) this.rotate();
       else this.rotateSelected();
     });
