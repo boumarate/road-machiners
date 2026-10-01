@@ -264,10 +264,10 @@ export class KeyPan {
   private held = new Set<string>();
   private speed = 1; // multiplies KEY_PAN_PX_PER_S
 
-  // typing: true while a text field has focus, so its keys do not pan.
-  constructor(typing: () => boolean) {
+  // ignore: true for a keydown that is not a pan, such as typing in a text field or a browser chord.
+  constructor(ignore: (e: KeyboardEvent) => boolean) {
     window.addEventListener("keydown", (e) => {
-      if (e.code in KEY_PAN_DIRECTIONS && !typing()) this.held.add(e.code);
+      if (e.code in KEY_PAN_DIRECTIONS && !ignore(e)) this.held.add(e.code);
     });
     window.addEventListener("keyup", (e) => this.held.delete(e.code));
     window.addEventListener("blur", () => this.held.clear());
