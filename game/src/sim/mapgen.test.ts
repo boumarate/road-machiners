@@ -99,7 +99,8 @@ describe('world from the baked map', () => {
   });
 
   it('keeps every baked landmark off every road surface and out of every site', () => {
-    const sites = [...REGION.towns, ...REGION.locations];
+    // A territory's own props stand inside it.
+    const sites = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
     const landmarks = baked.filter((o): o is Landmark => o.kind === 'landmark');
     expect(landmarks.length).toBeGreaterThan(0);
     for (const o of landmarks) {

@@ -3,7 +3,7 @@
 import type { Vec } from "../sim/vec";
 
 export type TownDef = { id: string; name: string; pos: Vec; radius: number };
-export type LocationDef = {
+export type SiteLocationDef = {
   id: string;
   name: string;
   kind: "oasis" | "convoy" | "landmark" | "camp";
@@ -11,6 +11,9 @@ export type LocationDef = {
   radius: number;
   edge: SiteEdge;
 };
+// Open ground full of loot spots. It has no edge, gates or pads: trucks drive in. Its rules live in TERRITORIES.
+export type TerritoryDef = { id: string; name: string; kind: "territory"; pos: Vec; radius: number };
+export type LocationDef = SiteLocationDef | TerritoryDef;
 // What closes a location on its collision edge. Towns always have a town wall.
 export type SiteEdge = "palisade" | "camp" | "stone" | "fence" | "wrecks";
 export const MAP_SCALE = 5;
@@ -184,9 +187,8 @@ export const REGION = {
     },
     {
       id: "fallen-sun",
-      edge: "fence",
       name: "Fallen Sun",
-      kind: "landmark",
+      kind: "territory",
       pos: FALLEN_SUN_POS,
       radius: FALLEN_SUN_RADIUS,
     },

@@ -42,7 +42,7 @@ export function initializeSalvage(world: World): void {
 
 // The loot table of a site that holds salvage, or null. A site with a shop trades instead.
 export function siteLootTable(site: LocationDef): LootTable | null {
-  if (site.id in SHOPS) return null;
+  if (site.kind === 'territory' || site.id in SHOPS) return null;
   if (site.kind === 'convoy') return SALVAGE.convoy;
   return site.kind === 'landmark' ? SALVAGE.landmark : null;
 }

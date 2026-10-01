@@ -108,7 +108,8 @@ export function finishLayer(seed: number, d: MapDraft): MapDraft {
 // tile marks, then the first geology rule that holds for the tile, then hardpan. Geology marks live on
 // corners, so each rule reads the tile's four corners.
 
-const SITES = [...REGION.towns, ...REGION.locations];
+// Territories keep their natural ground.
+const SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 const T = TERRAIN.types;
 const G = GEOLOGY.ground;
 
