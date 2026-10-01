@@ -152,6 +152,17 @@ export function answerPlea(world: World, npc: Vehicle, accepted: boolean): void 
   if (accepted) grantPlea(world, npc, playerVehicle(world), data.plea);
 }
 
+// The player grants the NPC's waiting mercy plea by making it stand down. Unlike a granted plea, its cargo stays on the truck.
+export function standDownBeggar(world: World, npc: Vehicle): void {
+  const s = stateOf(world, 'plea', npc.id, world.player.vehicleId);
+  if (!s || pleaData(s).answered) throw new Error(`${npc.id} has no plea waiting for the player`);
+  const data = pleaData(s);
+  data.answered = true;
+  world.events.push({ t: 'plea', from: npc.id, to: world.player.vehicleId, plea: data.plea, accepted: true });
+  endState(world, s, 'fulfilled');
+  standDownTo(world, npc, playerVehicle(world));
+}
+
 // Whether the player pleaded with this NPC recently.
 export function playerPleaded(world: World, npc: Vehicle): boolean {
   return stateOf(world, 'plea', world.player.vehicleId, npc.id) !== null;
