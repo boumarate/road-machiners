@@ -28,7 +28,7 @@ Each town gate has one gun. It fires `RULES.guards.rounds` rounds each turn at t
 
 ## Knockouts and death
 
-A broken cab knocks out the player and NPCs alike. A knockout ends after at most `RULES.knockoutMaxTurns` turns. An NPC whose cab breaks dies into a wreck with chance `RULES.npcDeathChance`. Broken core parts get back `RULES.defeatPatch` of their max HP when a driver wakes.
+A broken cab knocks out the player and NPCs alike. A knockout ends after at most `RULES.knockoutMaxTurns` turns. An NPC whose cab breaks dies into a wreck with chance `RULES.npcDeathChance`. A cab below half of its max HP may knock its driver out before it breaks, with a chance from the turn's cab damage and how deep the cab sits in that band, set by `RULES.cabKnock` and rolled in `src/sim/cab-knock.ts`. A cab knock never kills an NPC, and the player takes none at `RULES.cabKnock.playerHealth` health or more. Broken core parts get back `RULES.defeatPatch` of their max HP when a driver wakes.
 
 ## Lawmen
 
@@ -61,5 +61,7 @@ Patrols of the Bowl Farmers and the Nose Army are hostile to raiders. `callLawme
 | `RULES.guards.rounds` | 4 |
 | `RULES.knockoutMaxTurns` | 30 |
 | `RULES.npcDeathChance` | 0.05 |
+| `RULES.cabKnock` | {"below":0.5,"hazard":0.75,"playerHealth":75} |
+| `RULES.cabKnock.playerHealth` | 75 |
 | `RULES.defeatPatch` | 0.25 |
 <!-- /wiki:numbers -->

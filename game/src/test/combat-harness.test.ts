@@ -66,3 +66,16 @@ describe('combat harness', () => {
     expect(() => setNumber('RULES.leadError=abc')).toThrow('path=number');
   });
 });
+
+describe('foe hp left', () => {
+  it('reports a share between 0 and 1 for a won fight', () => {
+    const r = runFight({ ...FIGHT, policy: 'charge', seed: 2, maxTurns: 60 });
+    expect(r.outcome).toBe('won');
+    expect(r.theirHpLeft).toBeGreaterThan(0);
+    expect(r.theirHpLeft).toBeLessThan(1);
+  });
+
+  it('is null for a fight that is not won', () => {
+    expect(runFight({ ...FIGHT, maxTurns: 1 }).theirHpLeft).toBeNull();
+  });
+});
