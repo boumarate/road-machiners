@@ -284,20 +284,34 @@ function topUp(world: World, vehicle: Vehicle, kinds: readonly Supply[]): void {
   }
 }
 
-// ---- Scrap patch: a broke player stranded at a town gets going again, so the run never locks up.
+// ---- Scrap patch: a broke player stranded or low on fuel at a town gets going again, so the run never locks up.
 
-// Runs each turn. It fires when the player is stranded at a town and money plus everything the town would buy
-// cannot pay for the fix. The engine, transmission, wheels and tank rise to RULES.scrapPatch of max HP, a junk engine included. An
-// empty tank gets RULES.scrapPatch of its room in fuel. A truck with no engine gets nothing, as no patch makes one.
+// Runs each turn. It fires when the player is stranded or at or below RULES.lowFuelThreshold of the tank, on a town pad,
+// and money plus everything the town would buy cannot pay for the fix. A stranded player gets the engine, transmission,
+// wheels and tank raised to RULES.scrapPatch of max HP, a junk engine included. A low tank is topped up to RULES.scrapPatch
+// of its cap. A truck with no engine gets nothing, as no patch makes one.
 export function scrapPatch(world: World): void {
-  const town = strandedInTown(world);
+  const town = needsPatchInTown(world);
   if (!town) return;
   const me = playerVehicle(world);
   if (canPayFix(world, me, town.id)) return;
-  const fuel = patchFuel(world, me);
-  world.player.fuel += fuel;
-  for (const part of driveParts(me)) scrapPatchPart(part, RULES.scrapPatch);
+  if (isStranded(world, me)) for (const part of driveParts(me)) scrapPatchPart(part, RULES.scrapPatch);
+  const fuel = scrapFuel(world, me);
   world.events.push({ t: 'scrapPatch', fuel });
+}
+
+// The fuel that lifts a tank at or below RULES.lowFuelThreshold of its cap up to RULES.scrapPatch of it, else 0.
+export function scrapFuelNeed(world: World, v: Vehicle): number {
+  const cap = fuelCap(v);
+  const fuel = getResources(world, v).fuel;
+  return fuel <= cap * RULES.lowFuelThreshold ? Math.max(0, cap * RULES.scrapPatch - fuel) : 0;
+}
+
+// Adds the scrap fuel and returns the amount. It checks neither pay nor site, so the caller decides who gets it.
+export function scrapFuel(world: World, v: Vehicle): number {
+  const fuel = scrapFuelNeed(world, v);
+  getResources(world, v).fuel += fuel;
+  return fuel;
 }
 
 // The player command for opening a shop, a town or a stall, at its gate. The first time on a visit, each worn critical
@@ -319,9 +333,10 @@ function criticalParts(v: Vehicle): PartInstance[] {
   return [...driveParts(v), corePart(v, 'cab')];
 }
 
-function strandedInTown(world: World): TownDef | null {
+function needsPatchInTown(world: World): TownDef | null {
   const me = playerVehicle(world);
-  if (world.player.state !== 'active' || !isStranded(world, me) || mountedParts(me, 'engine').length === 0) return null;
+  if (world.player.state !== 'active' || mountedParts(me, 'engine').length === 0) return null;
+  if (!isStranded(world, me) && scrapFuelNeed(world, me) === 0) return null;
   return townNear(world);
 }
 
@@ -331,12 +346,8 @@ function canPayFix(world: World, v: Vehicle, shopId: string): boolean {
   const broken = driveParts(v).filter((p) => !isWorking(p));
   if (broken.some((p) => isJunk(p) && !canRebuild(world, p))) return false;
   const repairs = broken.reduce((sum, p) => sum + partRepairCost(world, p), 0);
-  const cost = repairs + Math.ceil(patchFuel(world, v)) * ECONOMY.supplyPrice.fuel;
+  const cost = repairs + Math.ceil(scrapFuelNeed(world, v)) * ECONOMY.supplyPrice.fuel;
   return world.player.money + saleValue(world, v, shopId) >= cost;
-}
-
-function patchFuel(world: World, v: Vehicle): number {
-  return world.player.fuel > 0 ? 0 : fuelCap(v) * RULES.scrapPatch;
 }
 
 // The first engine, the transmission, the wheels and the tank.

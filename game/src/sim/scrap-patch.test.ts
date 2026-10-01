@@ -166,6 +166,64 @@ describe('scrap patch', () => {
   });
 });
 
+describe('scrap fuel for a low tank', () => {
+  function lowFuel(share: number, pos = sitePads(bowl)[0]): World {
+    const w = strandedBroke(pos);
+    const me = w.vehicles[0];
+    corePart(me, 'transmission').hp = maxHp(corePart(me, 'transmission'));
+    w.player.fuel = fuelCap(me) * share;
+    return w;
+  }
+
+  it('tops a broke player with a sliver of fuel to the patch share and leaves the parts alone', () => {
+    const w = lowFuel(0.1);
+    const me = w.vehicles[0];
+    const engineHp = engineOf(me).hp;
+
+    scrapPatch(w);
+
+    expect(w.player.fuel).toBeCloseTo(fuelCap(me) * RULES.scrapPatch);
+    expect(engineOf(me).hp).toBe(engineHp);
+  });
+
+  it('gives nothing above the low fuel threshold, and nothing a second time', () => {
+    const w = lowFuel(0.3);
+    scrapPatch(w);
+    expect(w.player.fuel).toBeCloseTo(fuelCap(w.vehicles[0]) * 0.3);
+
+    const low = lowFuel(0.1);
+    scrapPatch(low);
+    low.events = [];
+    scrapPatch(low);
+    expect(low.events).toHaveLength(0);
+  });
+
+  it('gives nothing to a player who can pay for the fuel', () => {
+    const w = lowFuel(0.1);
+    w.player.money = 100000;
+    scrapPatch(w);
+    expect(w.player.fuel).toBeCloseTo(fuelCap(w.vehicles[0]) * 0.1);
+  });
+
+  it('gives nothing on a stall pad', () => {
+    const stall = REGION.locations.find((l) => l.id === 'salvage-yard')!;
+    const w = lowFuel(0.1, sitePads(stall)[0]);
+    scrapPatch(w);
+    expect(w.player.fuel).toBeCloseTo(fuelCap(w.vehicles[0]) * 0.1);
+  });
+
+  it('leaves a player with no money, no fuel and a broken engine able to drive and take a haul', () => {
+    const w = strandedBroke();
+    w.player.fuel = 0;
+    engineOf(w.vehicles[0]).hp = 0;
+
+    const next = endTurn(w, () => undefined);
+
+    expect(isStranded(next, next.vehicles[0])).toBe(false);
+    expect(next.player.fuel).toBeGreaterThan(0);
+  });
+});
+
 describe('enter town', () => {
   const critical = (me: Vehicle) => [engineOf(me), corePart(me, 'transmission'), corePart(me, 'cab'), corePart(me, 'tank'), ...coreParts(me, 'wheel')];
 
