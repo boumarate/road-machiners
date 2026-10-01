@@ -230,7 +230,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     start: 'warn',
     nodes: {
       warn: {
-        line: 'That pile is mine. Roll on.',
+        line: 'This is mine.',
         options: [
           { text: 'Rolling on.', when: [], effects: ['backOffClaim'], go: END },
           { text: 'Finders keepers.', when: [], effects: ['defyClaim'], go: END },
