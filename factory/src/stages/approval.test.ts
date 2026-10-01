@@ -64,7 +64,7 @@ describe('approve', () => {
 
   it('merges a release task into the release branch, skips the dev deploy and keeps dev as it is', async () => {
     labels = ['release-task'];
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [7, 9] }, builds: { 7: 'aaa1111' } });
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [7, 9] }, pendingShip: 'ann', builds: { 7: 'aaa1111' } });
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
       'sync release/2026-09-29',
@@ -75,7 +75,11 @@ describe('approve', () => {
       'move 7 Done',
       'message chat Issue #7 Big horn is merged into the release release/2026-09-29.',
     ]);
-    expect(readState(`${home}/state.json`).release?.removed).toEqual([9]);
+    const state = readState(`${home}/state.json`);
+    expect(state.release?.removed).toEqual([9]);
+    // The played candidate lacks the task, so its post can no longer ship and a new candidate follows.
+    expect(state.release?.postId).toBeNull();
+    expect(state.pendingShip).toBeNull();
   });
 
   it('ships a hotfix from main to itch.io, brings main into dev and the open release, and closes the issue', async () => {

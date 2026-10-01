@@ -3,9 +3,9 @@ import { join } from 'node:path';
 import { deployDev } from '../deploy';
 import { must } from '../exec';
 import { updateState } from '../state';
-import { GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, RELEASE_TASK_LABEL, type Ctx, type ReleaseState } from '../types';
+import { GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type ReleaseState } from '../types';
 import { agentLog } from './common';
-import { candidateDir, changeLines, releaseFeatures, releaseLog, requireRelease } from './release-common';
+import { candidateDir, changeLines, openReleaseTasks, releaseFeatures, releaseLog, requireRelease } from './release-common';
 
 export type ItchKeys = { itchTarget: string; butlerKey: string };
 
@@ -22,8 +22,8 @@ async function requireShippable(ctx: Ctx, issue: number, by: string | null): Pro
   const release = requireRelease(ctx);
   if (release.issue !== issue) throw new Error(`Issue #${issue} is not the tracking issue of the open release, #${release.issue} is`);
   if (release.postId === null) throw new Error('The release has no current candidate post, so there is nothing to ship.');
-  const open = (await ctx.github.cards()).filter((card) => card.labels.includes(RELEASE_TASK_LABEL) && card.column !== 'Done');
-  if (open.length > 0) throw new Error(`Release tasks are still open: ${open.map((card) => `#${card.issue}`).join(', ')}.`);
+  const open = await openReleaseTasks(ctx);
+  if (open.length > 0) throw new Error(`Release tasks are still open: ${open.map((n) => `#${n}`).join(', ')}.`);
   return release;
 }
 

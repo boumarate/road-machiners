@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { readState } from '../state';
-import type { Ctx, ReleaseState } from '../types';
+import { RELEASE_TASK_LABEL, type Ctx, type ReleaseState } from '../types';
 
 export type Feature = { issue: number; title: string };
 
@@ -34,6 +34,11 @@ export function changeLines(notes: string, features: Feature[]): string[] {
   const wanted = features.map((feature) => `#${feature.issue}`).sort().join(', ');
   if (named !== wanted) throw new Error(`release.md names ${named || 'nothing'}, but the release holds ${wanted || 'nothing'}`);
   return lines;
+}
+
+// The release tasks whose cards are not in Done yet.
+export async function openReleaseTasks(ctx: Ctx): Promise<number[]> {
+  return (await ctx.github.cards()).filter((card) => card.labels.includes(RELEASE_TASK_LABEL) && card.column !== 'Done').map((card) => card.issue);
 }
 
 export function requireRelease(ctx: Ctx): ReleaseState {

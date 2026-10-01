@@ -65,6 +65,17 @@ describe('candidate', () => {
     expect(deployed).toEqual([]);
   });
 
+  it('does not post a build when a release task opened during it, so the old post stays dead', async () => {
+    const f = fake();
+    f.changelog = ['Merge issue #3: faster trucks'];
+    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': 'png' };
+    f.cards = [{ itemId: 'i74', issue: 74, column: 'Design', labels: ['release-task'] }];
+    await candidate(f.ctx, 11);
+    expect(f.photos).toEqual([]);
+    expect(f.calls.some((call) => call.startsWith('comment') || call.startsWith('message'))).toBe(false);
+    expect(readState(f.ctx.statePath).release?.postId).toBeNull();
+  });
+
   it('throws when the changelog misses a change, before it builds or posts anything', async () => {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];

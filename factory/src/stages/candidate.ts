@@ -4,7 +4,7 @@ import { buildAndDeploy, recordBuild } from '../deploy';
 import { updateState } from '../state';
 import { GAME_DIR, OUT_DIR, type Ctx } from '../types';
 import { agentHome, fillPrompt, readOutput, resetOutputs } from './common';
-import { candidateDir, changeLines, featureLine, releaseFeatures, releaseLog, requireRelease, trackingLink } from './release-common';
+import { candidateDir, changeLines, featureLine, openReleaseTasks, releaseFeatures, releaseLog, requireRelease, trackingLink } from './release-common';
 
 // The build of the candidate lives under this web folder, kept while the tracking card waits in Approval.
 export const CANDIDATE_SCOPE = 'rc';
@@ -56,6 +56,9 @@ export async function candidate(ctx: Ctx, issue: number): Promise<void> {
   const url = await buildAndDeploy(ctx, dir, CANDIDATE_SCOPE, log);
   recordBuild(ctx.statePath, issue, CANDIDATE_SCOPE);
   const pr = (await ctx.github.pullRequestFor(release.branch)) ?? await ctx.github.openPullRequest(release.branch, 'main', `Release ${release.day}`, `The release candidate of ${release.day}. The factory merges it when the committee presses Ship.`);
+  // A reply to the old post can open a release task while this build runs. This build lacks that task, so it is not posted.
+  const open = await openReleaseTasks(ctx);
+  if (open.length > 0) return ctx.log('candidate', issue, `not posted, release tasks opened during the build: ${open.map((n) => `#${n}`).join(', ')}`);
   await ctx.github.comment(issue, `Release candidate: ${url}\n\n${changes}`);
   const caption = candidateCaption(release.day, url, trackingLink(ctx, issue), pr, features.length);
   const buttons = [[{ text: 'Ship', data: `factory:ship:${issue}` }]];

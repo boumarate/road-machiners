@@ -71,8 +71,9 @@ async function mergedIntoDev(ctx: Ctx, issue: number, title: string, by: string)
 }
 
 // Release work never reaches dev by itself, so dev stays as it is until Ship. A feature back after a removal is in the release again.
+// The played candidate lacks this work, so its post can no longer ship. The tick builds a new one.
 async function mergedIntoRelease(ctx: Ctx, issue: number, title: string, by: string, branch: string): Promise<string> {
-  updateState(ctx.statePath, (state) => (state.release ? { ...state, release: { ...state.release, removed: state.release.removed.filter((n) => n !== issue) } } : state));
+  updateState(ctx.statePath, (state) => (state.release ? { ...state, pendingShip: null, release: { ...state.release, postId: null, removed: state.release.removed.filter((n) => n !== issue) } } : state));
   await ctx.github.comment(issue, `Approved by ${by} and merged into the release branch ${branch}. It closes when the release ships.`);
   return `Issue #${issue} ${title} is merged into the release ${branch}.`;
 }
