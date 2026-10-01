@@ -174,7 +174,7 @@ describe('a client that jumps home as its NPC tow ends', () => {
     const tower = withTower(w, 'trader', 'traders', 'hauler', { x: 150, y: 150 });
     const client = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 147, y: 150 });
     client.brain = npcBrain('buggy', client.pos, ['raider']);
-    client.defeat = { phase: 'retreat', turns: 3, unseen: RULES.retreatTeleportTurns, foes: [] };
+    client.defeat = { phase: 'retreat', turns: 3, unseen: RULES.retreatTeleportTurns, foes: [], gaveUp: true };
     tower.items = tower.items.filter((it) => !(it.kind === 'part' && partDef(it.part.defId).kind === 'engine'));
     tower.brain!.goals = [{ kind: 'tow', targetId: client.id, destination: null, phase: 'act', reason: 'test' }];
     addState(w, 'tow', tower.id, client.id, { kind: 'tow', site: npcHomeSite(client)!.id, fee: 0, waived: 0, hitched: true });

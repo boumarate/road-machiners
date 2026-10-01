@@ -60,6 +60,15 @@ describe("town guards", () => {
     expect(w.events.some((e) => e.t === "guardShot")).toBe(false);
   });
 
+  it("spare a knocked-out driver with a working cab", () => {
+    const { w, raider } = raiderFiringAt(outside(4));
+    fireWeapons(w);
+    expect(w.events.some((e) => e.t === "shot" && e.shooter === raider.id)).toBe(true);
+    raider.defeat = { phase: "out", turns: 0, unseen: 0, foes: [], gaveUp: false };
+    fireGuards(w);
+    expect(w.events.some((e) => e.t === "guardShot")).toBe(false);
+  });
+
   it("leave alone vehicles that do not fire, and fights out of range", () => {
     const near = raiderFiringAt(outside(3));
     near.raider.weaponOrders = {};

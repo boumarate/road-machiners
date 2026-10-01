@@ -161,6 +161,15 @@ function packExplored_3_4(list: unknown[]): string {
 }
 
 const HANDOVER_TURNS_5_6 = 1;
+const CAB_IDS_6_7 = ['cab', 'cabPickup', 'cabHardtop'];
+
+// A saved defeat gave up when its driver lay out with a working cab, the rule the game used before it saved the fact.
+function withGaveUp_6_7(vehicle: SavedJson): SavedJson {
+  const defeat = vehicle.defeat as SavedJson | undefined;
+  if (!defeat) return vehicle;
+  const cab = (vehicle.items as Item[]).find((item) => CAB_IDS_6_7.includes(item.part?.defId ?? ''));
+  return { ...vehicle, defeat: { ...defeat, gaveUp: defeat.phase === 'out' && ((cab?.part?.hp as number | undefined) ?? 0) > 0 } };
+}
 
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
@@ -206,6 +215,12 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     };
     return { ...world, states: (world.states as SavedJson[]).map(handover) };
   },
+  // 6 to 7: a defeat records whether its driver gave up, where it used to be read from the cab.
+  (world) => ({
+    ...world,
+    vehicles: (world.vehicles as SavedJson[]).map(withGaveUp_6_7),
+    removed: (world.removed as SavedJson[]).map(withGaveUp_6_7),
+  }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

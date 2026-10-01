@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { hitOdds } from "../sim/combat";
 import { playerVehicle } from "../sim/damage";
-import { corePart, mountedParts } from "../sim/grid";
+import { mountedParts } from "../sim/grid";
 import type { Vehicle } from "../sim/types";
 import { addState } from "../sim/states";
 import { vehicleStats } from "../sim/stats";
@@ -202,9 +202,9 @@ describe("vehicle marks", () => {
   it("marks a seen knocked-out NPC and offers no radio key on it", () => {
     const { world, target } = createDuel();
     target.brain = npcBrain("scavenger", target.pos, ["scavenger"]);
-    target.defeat = { phase: "out", turns: 0, unseen: 0, foes: [] };
+    target.defeat = { phase: "out", turns: 0, unseen: 0, foes: [], gaveUp: true };
     expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: true, gaveUp: true, radio: false });
-    corePart(target, "cab").hp = 0;
+    target.defeat.gaveUp = false;
     expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: true, gaveUp: false });
     target.defeat.phase = "retreat";
     expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: false, radio: true });

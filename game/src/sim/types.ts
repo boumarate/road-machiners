@@ -230,8 +230,9 @@ export type Vehicle = {
 
 // A lost fight. The driver lies 'out' until the trucks that attacked it look away. An NPC then retreats home.
 // turns: turns spent out. unseen: turns in a row the retreating truck spent beyond the player's gray vision.
-// foes: the vehicles that attacked it before the knockout.
-export type Defeat = { phase: 'out' | 'retreat'; turns: number; unseen: number; foes: string[] };
+// foes: the vehicles that attacked it before the knockout. gaveUp: true for a driver that gave up to a demand, false
+// for a knockout.
+export type Defeat = { phase: 'out' | 'retreat'; turns: number; unseen: number; foes: string[]; gaveUp: boolean };
 
 // Every baked prop but a rock is a landmark of its prop kind.
 export type LandmarkLook = Exclude<PropKind, "rock">;

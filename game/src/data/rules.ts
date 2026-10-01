@@ -139,6 +139,11 @@ export const RULES = {
   knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
   surrenderParts: 2, // installed parts, best first, a robber takes with the cargo from a stranded player who gives up
   npcDeathChance: 0.05, // an NPC whose cab breaks dies into a wreck instead of a knockout
+  cabKnock: {
+    below: 0.5, // share of cab max hp where the band starts, in which cab damage may knock the driver out
+    hazard: 0.75, // total over the band: exp(-hazard) of cabs worn from `below` to 0 never knock
+    playerHealth: 75, // absolute health at and above which the player takes no cab knock
+  },
   // A defeated NPC that spent this many turns in a row beyond the player's gray vision appears at its home pad, so
   // crawlers do not pile up on the map. 50 turns is a quarter of a day: a player who turns back still meets it.
   retreatTeleportTurns: 50,

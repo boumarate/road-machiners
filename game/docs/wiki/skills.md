@@ -72,7 +72,7 @@ Skills and perks are owned by `src/sim/progress.ts`, and the numbers live in `sr
 | roadMechanic | Road mechanic | machining | 4 | Drivers pay double for the patches you do. |
 | desertRat | Desert rat | toughness | 2 | Noon sun heats your engine like morning sun. |
 | stormRider | Storm rider | toughness | 2 | Dust storms do not cut your sight or aim. |
-| fightThrough | Fight through | toughness | 4 | A broken cab does not knock you out while health is above half. |
+| fightThrough | Fight through | toughness | 4 | A broken cab, or a hit on a cab below half, does not knock you out while health is above half. |
 | longHaul | Long haul | toughness | 4 | You heal while driving, not only while parked. |
 | marketEars | Market ears | social | 2 | A trader you call tells you the prices of the last town it left. |
 | rumorMill | Rumor mill | social | 2 | A driver you call marks a wreck or site it passed. |

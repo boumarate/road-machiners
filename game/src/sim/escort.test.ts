@@ -268,7 +268,7 @@ describe('escort pay', () => {
 
   it('breaks when the leader is knocked out', () => {
     const { w, trader, merc } = hired(50, 1000);
-    trader.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+    trader.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: true };
     advanceStates(w);
     expect(escortOf(w, merc, trader)).toBeNull();
     expect(paid(w)).toEqual([]);

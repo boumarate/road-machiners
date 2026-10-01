@@ -11,6 +11,7 @@ import { PHYSICS } from '../data/physics';
 import { blastLanes, laneCount, lanePoint, partLane, planLane, sideToward, walkLane, type PartHit, type Round, type Side } from './armor';
 import { wholeDamage } from './damage';
 import { bodyOf } from './body';
+import { rollCabKnock } from "./cab-knock";
 import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
@@ -604,6 +605,20 @@ export function shotDamage(e: { rounds: ShotRound[] }): Map<string, PartHit[]> {
   return out;
 }
 
+// Every part hit of this turn per truck, from shots, guard shots and collisions.
+export function turnPartHits(world: World): Map<string, PartHit[]> {
+  const out = new Map<string, PartHit[]>();
+  const add = (id: string, hits: PartHit[]) => { if (hits.length > 0) out.set(id, [...(out.get(id) ?? []), ...hits]); };
+  for (const e of world.events) {
+    if (e.t === "shot" || e.t === "guardShot") for (const [id, hits] of shotDamage(e)) add(id, hits);
+    else if (e.t === "collision") {
+      add(e.a, e.hitsA);
+      add(e.b, e.hitsB);
+    }
+  }
+  return out;
+}
+
 function vehicleById(world: World, id: string): Vehicle {
   const v = world.vehicles.find((x) => x.id === id);
   if (!v) throw new Error(`No vehicle ${id}`);
@@ -874,7 +889,8 @@ function joinsFeud(world: World, v: Vehicle, shooter: Vehicle, target: Vehicle):
   return v.faction === target.faction && dist(v.pos, target.pos) <= SPAWN.neighborHelp && canVehicleSee(world, v, shooter.pos);
 }
 
-// An NPC whose cab breaks is knocked out, or dies into a wreck at the death chance. Health at 0 kills it, and so
+// An NPC whose cab breaks is knocked out, or dies into a wreck at the death chance. A cab below half may knock the
+// driver out first, and that never kills. Health at 0 kills it, and so
 // does a shot that damages it while it is defeated. The player's broken cab is a knockout in src/sim/defeat.ts.
 export function resolveDestroyed(world: World): void {
   const shot = damagedByShots(world);
@@ -903,7 +919,14 @@ export function settleAims(world: World): void {
 function npcFate(world: World, v: Vehicle, shot: Set<string>): "dies" | "knockedOut" | null {
   if (getResources(world, v).health <= 0) return "dies";
   if (isDefeated(v)) return shot.has(v.id) ? "dies" : null;
-  if (corePart(v, "cab").hp > 0) return null;
+  return corePart(v, "cab").hp > 0 ? cabKnockFate(world, v) : brokenCabFate(world);
+}
+
+function cabKnockFate(world: World, v: Vehicle): "knockedOut" | null {
+  return rollCabKnock(world, v) ? "knockedOut" : null;
+}
+
+function brokenCabFate(world: World): "dies" | "knockedOut" {
   return chance(world, RULES.npcDeathChance) ? "dies" : "knockedOut";
 }
 

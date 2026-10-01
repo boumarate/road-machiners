@@ -8,8 +8,7 @@ import { SHOPS, shopDef } from '../data/market';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
-import type { PartHit } from './armor';
-import { callLawmen, inCombat, isHostile, shotDamage, startFeuds } from './combat';
+import { callLawmen, inCombat, isHostile, startFeuds, turnPartHits } from './combat';
 import { affordableBuyCount, cargoSaleValue, sellAtCamp, sellVehicleCargo, serviceAtCamp, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
 import { corePart, goodsCount, mountedParts } from './grid';
@@ -33,7 +32,7 @@ import { vehicleById } from './damage';
 import { judgeStrandedFoe, plead, warnedOff } from './parley';
 import { addState, endState, stateOf, statesHeld } from './states';
 import { isStranded, suppliesCap, vehicleStats } from './stats';
-import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Vehicle, World } from './types';
+import type { Contact, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Vehicle, World } from './types';
 import { canUseSite, nearestPad, type Site } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { heatAt } from './sun';
@@ -987,21 +986,10 @@ function nextGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActiv
 // Sums the part damage each NPC took this turn from shots, guard shots and collisions into brain.hurt. It runs
 // last in the turn, before events clear.
 export function noteHurt(world: World): void {
-  const hurt = new Map<string, number>();
-  for (const e of world.events) addEventHurt(hurt, e);
-  for (const v of world.vehicles) if (v.brain) v.brain.hurt = hurt.get(v.id) ?? 0;
-}
-
-function addEventHurt(hurt: Map<string, number>, e: GameEvent): void {
-  if (e.t === 'shot' || e.t === 'guardShot') for (const [id, hits] of shotDamage(e)) addHurt(hurt, id, hits);
-  else if (e.t === 'collision') {
-    addHurt(hurt, e.a, e.hitsA);
-    addHurt(hurt, e.b, e.hitsB);
+  const hits = turnPartHits(world);
+  for (const v of world.vehicles) {
+    if (v.brain) v.brain.hurt = (hits.get(v.id) ?? []).reduce((sum, hit) => sum + hit.damage, 0);
   }
-}
-
-function addHurt(hurt: Map<string, number>, id: string, hits: PartHit[]): void {
-  hurt.set(id, (hurt.get(id) ?? 0) + hits.reduce((sum, hit) => sum + hit.damage, 0));
 }
 
 // ---- Watchdog: no driver stays stuck for good, whatever bug stranded it.
@@ -1311,7 +1299,7 @@ function resolveActivity(world: World, vehicle: Vehicle, activity: NpcActivity):
 
 // A driver works on its goal when alive, parked and off any tow rope.
 function canAct(world: World, vehicle: Vehicle): boolean {
-  if (corePart(vehicle, 'cab').hp <= 0 || getResources(world, vehicle).health <= 0) return false;
+  if (isKnockedOut(vehicle) || corePart(vehicle, 'cab').hp <= 0 || getResources(world, vehicle).health <= 0) return false;
   return vehicle.speed <= RULES.parkedSpeed && !isOnRope(world, vehicle.id);
 }
 

@@ -27,7 +27,7 @@ it('shows a knocked-out NPC as knocked out instead of its last goal', () => {
   const w = emptyWorld();
   const npc = addVehicle(w, 'raiders', 'buggy', [], { x: 32, y: 30 });
   npc.brain = { ...npcBrain('buggy', npc.pos, ['raider']), goals: [{ kind: 'fight', targetId: w.player.vehicleId, destination: null, phase: 'act', reason: 'rob cargo' }] };
-  npc.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+  npc.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: false };
   corePart(npc, 'cab').hp = 0;
   refreshVision(w);
   expect(formatNpcActivity(w, npc)).toBe('Knocked out');
@@ -37,7 +37,7 @@ it('shows an NPC that lies out with a working cab as having given up', () => {
   const w = emptyWorld();
   const npc = addVehicle(w, 'raiders', 'buggy', [], { x: 32, y: 30 });
   npc.brain = npcBrain('buggy', npc.pos, ['raider']);
-  npc.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+  npc.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: true };
   refreshVision(w);
   expect(formatNpcActivity(w, npc)).toBe('Gave up');
 });

@@ -140,7 +140,7 @@ export const PERKS: Record<PerkId, PerkDef> = {
   roadMechanic: { skill: 'machining', level: 4, name: 'Road mechanic', rule: 'Drivers pay double for the patches you do.' },
   desertRat: { skill: 'toughness', level: 2, name: 'Desert rat', rule: 'Noon sun heats your engine like morning sun.' },
   stormRider: { skill: 'toughness', level: 2, name: 'Storm rider', rule: 'Dust storms do not cut your sight or aim.' },
-  fightThrough: { skill: 'toughness', level: 4, name: 'Fight through', rule: 'A broken cab does not knock you out while health is above half.' },
+  fightThrough: { skill: 'toughness', level: 4, name: 'Fight through', rule: 'A broken cab, or a hit on a cab below half, does not knock you out while health is above half.' },
   longHaul: { skill: 'toughness', level: 4, name: 'Long haul', rule: 'You heal while driving, not only while parked.' },
   marketEars: { skill: 'social', level: 2, name: 'Market ears', rule: 'A trader you call tells you the prices of the last town it left.' },
   rumorMill: { skill: 'social', level: 2, name: 'Rumor mill', rule: 'A driver you call marks a wreck or site it passed.' },
@@ -166,7 +166,7 @@ export const PERK_NUMBERS = {
   cannibal: { turns: 1 }, // job turns to take one part from a wreck stock or a knocked-out truck
   roadMechanic: { price: 2 }, // paid patch price when the player patches, times this
   desertRat: { sunShare: 0.62 }, // cap on the sun height share that heats the engine: the 9:00 sun, sin(pi * 3 / 14)
-  fightThrough: { health: 0.5 }, // share of max health above which a broken cab does not knock the player out
+  fightThrough: { health: 0.5 }, // share of max health above which a broken cab or a cab knock does not knock the player out
   rumorMill: { radius: 60 }, // tiles around the driver in which it knows a wreck or site
   paidTruce: { share: 0.1 }, // truce price as a share of the driver's truck value
 } as const;

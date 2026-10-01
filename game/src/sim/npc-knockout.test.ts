@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { cabKnockChance } from './cab-knock';
+import { maxHp } from './wear';
 import { RULES } from '../data/rules';
 import { autoOrders, isFoe, resolveDestroyed } from './combat';
 import { advanceNpcKnockouts, checkKnockout, knockOutNpc, refitAtHome } from './defeat';
@@ -155,7 +157,7 @@ describe('the retreat home', () => {
     const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 150, y: 150 });
     buggy.brain = npcBrain('buggy', buggy.pos, ['raider']);
     buggy.items = buggy.items.filter((it) => !(it.kind === 'part' && it.part.defId === 'mg'));
-    buggy.defeat = { phase: 'retreat', turns: 3, unseen: 0, foes: [] };
+    buggy.defeat = { phase: 'retreat', turns: 3, unseen: 0, foes: [], gaveUp: true };
     refreshVision(w);
     return { w, buggy };
   }
@@ -265,5 +267,35 @@ describe('revenge', () => {
     knockOutRolling(w, buggy, true);
     refitAtHome(w, buggy);
     expect(stateOf(w, 'revenge', buggy.id, me.id)).not.toBeNull();
+  });
+});
+
+// The cab drops from half to 5% this turn by one hit, and the next world roll is `roll`-ish.
+function cabHitFromHalf(w: World, v: Vehicle, roll: (r: number) => boolean): void {
+  const cab = corePart(v, 'cab');
+  cab.hp = maxHp(cab) * 0.05;
+  const damage = maxHp(cab) * 0.45;
+  const round = { struck: v.id, hits: [{ part: cab.id, damage }], blast: [] };
+  w.events.push({ t: 'shot', shooter: w.player.vehicleId, weapon: 'w', target: v.id, aim: 'body', chance: 1, damageChance: 1, side: 'front', rounds: [round] } as never);
+  w.rngState = rngStateWhere(roll);
+}
+
+describe('cab knock', () => {
+  it('knocks an NPC out with a working cab, never into a wreck, even on a low roll', () => {
+    const { w, buggy } = beside();
+    cabHitFromHalf(w, buggy, (roll) => roll < RULES.npcDeathChance);
+    resolveDestroyed(w);
+    expect(w.vehicles).toContain(buggy);
+    expect(corePart(buggy, 'cab').hp).toBeGreaterThan(0);
+    expect(buggy.defeat).toMatchObject({ phase: 'out', gaveUp: false });
+    expect(w.events).toContainEqual({ t: 'npcKnockout', vehicle: buggy.id, by: w.player.vehicleId });
+  });
+
+  it('keeps an NPC active when the roll fails', () => {
+    const { w, buggy } = beside();
+    const miss = cabKnockChance(0.5, 0.05, RULES.cabKnock);
+    cabHitFromHalf(w, buggy, (roll) => roll >= miss);
+    resolveDestroyed(w);
+    expect(buggy.defeat).toBeUndefined();
   });
 });

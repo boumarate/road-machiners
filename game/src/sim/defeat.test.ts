@@ -5,14 +5,15 @@ import { RULES } from '../data/rules';
 import { CONDITION } from '../data/wear';
 import { autoOrders, isHostile } from './combat';
 import { buyGood } from './economy';
-import { advanceKnockout, checkDeath, checkKnockout, isKnockedOut } from './defeat';
+import { advanceKnockout, checkDeath, checkKnockout, gaveUp, isKnockedOut, standDown } from './defeat';
 import { corePart, coreParts, goodsCount, hasLoot, isLoot } from './grid';
 import { addGoods, dumpItem, moveItem } from './inventory';
 import { scavenge } from './locations';
 import { startSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { startRepair } from './jobs';
-import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, rngStateWhere, testDrive } from './testkit';
+import { maxHp } from './wear';
 import { maxHealthOf } from './health';
 import { PERK_NUMBERS } from '../data/skills';
 import { refreshVision } from './vision';
@@ -398,3 +399,56 @@ describe('knockout practice', () => {
   });
 });
 
+
+describe('cab knock of the player', () => {
+  // A working cab that dropped from half to 5% this turn, with a roll that knocks out.
+  function hurtCab(health: number, perks: World['player']['perks']): World {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.player.perks = perks;
+    w.player.health = health;
+    const me = w.vehicles[0];
+    const cab = corePart(me, 'cab');
+    cab.hp = maxHp(cab) * 0.05;
+    const round = { struck: me.id, hits: [{ part: cab.id, damage: maxHp(cab) * 0.45 }], blast: [] };
+    w.events.push({ t: 'shot', shooter: 'x', weapon: 'w', target: me.id, aim: 'body', chance: 1, damageChance: 1, side: 'front', rounds: [round] } as never);
+    w.rngState = rngStateWhere((roll) => roll < 0.01);
+    return w;
+  }
+
+  it('spares the player at 75 health or more and draws no RNG', () => {
+    const w = hurtCab(80, []);
+    const state = w.rngState;
+    checkKnockout(w);
+    expect(w.player.state).toBe('active');
+    expect(w.rngState).toBe(state);
+  });
+
+  it('knocks the player out below 75 health, and the knockout is not a give-up', () => {
+    const w = hurtCab(60, []);
+    checkKnockout(w);
+    expect(w.player.state).toBe('knockedOut');
+    expect(w.vehicles[0].defeat?.gaveUp).toBe(false);
+    expect(w.events).toContainEqual({ t: 'knockout' });
+  });
+
+  it('spares a player who fights through', () => {
+    const w = hurtCab(maxHealthOf(emptyWorld()) * (PERK_NUMBERS.fightThrough.health + 0.1), ['fightThrough']);
+    w.player.health = Math.min(w.player.health, 70);
+    const state = w.rngState;
+    checkKnockout(w);
+    expect(w.player.state).toBe('active');
+    expect(w.rngState).toBe(state);
+  });
+});
+
+describe('gave up', () => {
+  it('is true after standDown and false after a knockout', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    npc.brain = npcBrain('buggy', npc.pos, ['raider']);
+    standDown(w, npc, w.player.vehicleId);
+    expect(gaveUp(npc)).toBe(true);
+    npc.defeat!.gaveUp = false;
+    expect(gaveUp(npc)).toBe(false);
+  });
+});
