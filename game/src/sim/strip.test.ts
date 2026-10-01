@@ -3,7 +3,7 @@ import { NPCS } from '../data/npcs';
 import { SPARE_LINE } from '../data/dialogue';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
-import { callVehicle, chooseOption, currentOptions, hangUp } from './dialogue';
+import { callVehicle, chooseOption, currentOptions, hangUp, raiseCalls } from './dialogue';
 import { isHostile } from './combat';
 import { corePart, mountedParts } from './grid';
 import { addGoods } from './inventory';
@@ -15,7 +15,7 @@ import { advanceNpcKnockouts, isKnockedOut } from './defeat';
 import { downedHere } from './locations';
 import { takeFromTruck } from './salvage';
 import { findSpot, goodsCount, gridOf, isMounted, MOUNT_CELLS } from './grid';
-import { aimAt } from './parley';
+import { aimAt, offeredSurrenderBy, plead } from './parley';
 import { addState, stateOf } from './states';
 import { topGoal } from './npc-activities';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
@@ -339,5 +339,89 @@ describe('the player demands a beaten NPC give up', () => {
     mountedParts(npc).forEach((p) => { p.hp = 1000; });
     npc.resources!.health = 1;
     expect(asks(callVehicle(w, npc.id))).toBe(true);
+  });
+});
+
+describe('a beggar offers to stand down and be stripped', () => {
+  const STRIP = 'Stand down and let me strip your truck.';
+  const CARGO = 'Dump your cargo and drive off.';
+
+  // A healthy trader with cargo and spare parts begs the player for mercy, and the player's call opens.
+  function begging(): { w: World; npc: Vehicle } {
+    const w = emptyWorld({ x: 30, y: 30 });
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine', 'mg', 'mg', 'mg'], { x: 40, y: 30 }, Math.PI);
+    npc.brain = npcBrain('trader', npc.pos, ['trader']);
+    addGoods(w, npc, 'scrap', 3);
+    addState(w, 'feud', npc.id, w.player.vehicleId, { kind: 'feud', robbery: false });
+    addState(w, 'feud', w.player.vehicleId, npc.id, { kind: 'feud', robbery: false });
+    plead(w, npc, playerVehicle(w), 'mercy');
+    raiseCalls(w);
+    return { w, npc };
+  }
+
+  const npcOf = (w: World, npc: Vehicle) => w.vehicles.find((v) => v.id === npc.id)!;
+  const pleaEvents = (w: World) => w.events.filter((e) => e.t === 'plea');
+
+  it('offers the strip beside cargo and no mercy', () => {
+    const { w } = begging();
+    expect(currentOptions(w).map((o) => o.text)).toEqual([CARGO, STRIP, 'No mercy.', 'Hang up.']);
+  });
+
+  it('is not offered once the driver answered a stand-down demand', () => {
+    const { w, npc } = begging();
+    w.player.call = null;
+    npcOf(w, npc).brain!.noticed[`surrenderOffered:${w.player.vehicleId}`] = 1;
+    raiseCalls(w);
+    expect(currentOptions(w).map((o) => o.text)).toEqual([CARGO, 'No mercy.', 'Hang up.']);
+  });
+
+  it('accepting leaves the truck lying with all its gear, and makes peace', () => {
+    forceOption('surrenderOffered', 'accept');
+    const { w: start, npc } = begging();
+    const items = npc.items.length;
+    const cab = corePart(npc, 'cab').hp;
+    const salvage = start.salvage.length;
+    let w = pick(start, STRIP);
+    w = pick(w, 'Your call. Last chance.');
+    w = pick(w, 'Sit tight.');
+    const after = npcOf(w, npc);
+    expect(isKnockedOut(after)).toBe(true);
+    expect(after.items.length).toBe(items);
+    expect(corePart(after, 'cab').hp).toBe(cab);
+    expect(w.salvage.length).toBe(salvage);
+    for (const [a, b] of [[npc.id, w.player.vehicleId], [w.player.vehicleId, npc.id]]) {
+      expect(stateOf(w, 'feud', a, b)).toBeNull();
+      expect(stateOf(w, 'combat', a, b)).toBeNull();
+    }
+    expect(isHostile(w, after, playerVehicle(w))).toBe(false);
+    expect(isHostile(w, playerVehicle(w), after)).toBe(false);
+    expect(stateOf(w, 'plea', npc.id, w.player.vehicleId)).toBeNull();
+    expect(pleaEvents(w)).toContainEqual(expect.objectContaining({ plea: 'mercy', accepted: true }));
+    expect(practiceOf(w, 'deal')).toHaveLength(1);
+    expect(w.player.call).toBeNull();
+  });
+
+  it('refusing keeps the fight and the stand-down demand is not askable', () => {
+    forceOption('surrenderOffered', 'refuse');
+    const { w: start, npc } = begging();
+    const parts = mountedParts(npc).length;
+    let w = pick(start, STRIP);
+    w = pick(w, 'Your call. Last chance.');
+    w = pick(w, 'Then we finish this.');
+    const after = npcOf(w, npc);
+    expect(isHostile(w, after, playerVehicle(w))).toBe(true);
+    expect(hasCargo(after)).toBe(true);
+    expect(mountedParts(after).length).toBe(parts);
+    expect(pleaEvents(w)).toContainEqual(expect.objectContaining({ plea: 'mercy', accepted: false }));
+    corePart(after, 'cab').hp = 1;
+    const ask = currentOptions(callVehicle(w, npc.id)).some((o) => o.text.startsWith('Your truck is finished'));
+    expect(ask).toBe(false);
+  });
+
+  it('taking the cargo never notes a stand-down offer', () => {
+    const { w: start, npc } = begging();
+    const w = pick(start, CARGO);
+    expect(offeredSurrenderBy(w, npcOf(w, npc), playerVehicle(w))).toBe(false);
   });
 });

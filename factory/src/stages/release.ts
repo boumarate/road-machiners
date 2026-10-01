@@ -15,6 +15,7 @@ export async function release(ctx: Ctx): Promise<void> {
   // Recorded first, so a failed cut waits a full interval instead of cutting again on the next tick.
   updateState(ctx.statePath, (state) => ({ ...state, lastRelease: now.toISOString() }));
   await ctx.repo.sync();
+  await bringMainIntoDev(ctx);
   const features = featureMerges(await ctx.repo.mergeLog('dev', 'main'));
   if (features.length === 0) {
     ctx.log('release', null, 'nothing new on dev, skipped');
@@ -34,4 +35,13 @@ export async function release(ctx: Ctx): Promise<void> {
     await ctx.github.addCard(n, 'Design');
   }
   ctx.log('release', tracking, `cut ${branch} with ${features.length} features`);
+}
+
+// main can hold work dev lacks, like a merge made by hand on GitHub. The release merges into main at Ship, so the cut
+// must hold main already. Otherwise the committee plays a candidate without that work. A conflict fails the cut before any branch exists.
+async function bringMainIntoDev(ctx: Ctx): Promise<void> {
+  if (await ctx.repo.isMerged('main', 'dev')) return;
+  await ctx.repo.merge('main', 'dev', 'Merge main into dev before the release cut');
+  await ctx.repo.push('dev');
+  ctx.log('release', null, 'merged main into dev before the cut');
 }

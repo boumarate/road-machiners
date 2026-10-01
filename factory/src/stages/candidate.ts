@@ -4,8 +4,7 @@ import { buildAndDeploy, recordBuild } from '../deploy';
 import { updateState } from '../state';
 import { GAME_DIR, OUT_DIR, type Ctx } from '../types';
 import { agentHome, fillPrompt, readOutput, resetOutputs } from './common';
-import { candidateDir, featureLine, releaseFeatures, releaseLog, requireRelease, trackingLink, type Feature } from './release-common';
-import { CAPTION_LIMIT, cut } from './testing';
+import { candidateDir, changeLines, featureLine, openReleaseTasks, releaseFeatures, releaseLog, requireRelease, trackingLink } from './release-common';
 
 // The build of the candidate lives under this web folder, kept while the tracking card waits in Approval.
 export const CANDIDATE_SCOPE = 'rc';
@@ -53,37 +52,26 @@ export async function candidate(ctx: Ctx, issue: number): Promise<void> {
   await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt: fillPrompt('release', {}), log });
   const notes = readOutput(home, 'release.md');
   if (notes === null) throw new Error('release agent wrote no .factory/release.md');
+  const changes = changeLines(notes, features).join('\n') || 'No changes in this candidate.';
   const url = await buildAndDeploy(ctx, dir, CANDIDATE_SCOPE, log);
   recordBuild(ctx.statePath, issue, CANDIDATE_SCOPE);
   const pr = (await ctx.github.pullRequestFor(release.branch)) ?? await ctx.github.openPullRequest(release.branch, 'main', `Release ${release.day}`, `The release candidate of ${release.day}. The factory merges it when the committee presses Ship.`);
-  const link = trackingLink(ctx, issue);
-  const list = features.map(featureLine).join('\n');
-  await ctx.github.comment(issue, `Release candidate: ${url}\n\n${notes.trim()}\n\nFeatures:\n${list || 'None.'}`);
-  const caption = candidateCaption(release.day, url, link, pr, notes.trim(), features);
+  // A reply to the old post can open a release task while this build runs. This build lacks that task, so it is not posted.
+  const open = await openReleaseTasks(ctx);
+  if (open.length > 0) return ctx.log('candidate', issue, `not posted, release tasks opened during the build: ${open.map((n) => `#${n}`).join(', ')}`);
+  await ctx.github.comment(issue, `Release candidate: ${url}\n\n${changes}`);
+  const caption = candidateCaption(release.day, url, trackingLink(ctx, issue), pr, features.length);
   const buttons = [[{ text: 'Ship', data: `factory:ship:${issue}` }]];
   const photoId = await ctx.telegram.sendPhoto(ctx.cfg.committeeChat, join(home, OUT_DIR, 'screenshot.png'), caption, buttons);
-  updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: photoId } }));
+  updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: photoId }, postCaptions: { ...state.postCaptions, [photoId]: caption } }));
+  // A caption holds 1024 characters, so the whole changelog goes in a message under the post. It splits only past Telegram's message limit.
+  await ctx.telegram.sendMessage(ctx.cfg.committeeChat, changes, photoId);
 }
 
-const SEPARATOR = '\n\n';
-
-// Fits Telegram's caption limit. The notes take at most half of the room left after the fixed lines, and the
-// feature list cuts to "and K more" when it does not fit. The full list is on the tracking issue.
-export function candidateCaption(day: string, url: string, link: string, pr: string, notes: string, features: Feature[]): string {
+// The candidate post. Commands act on it alone, so it says to reply to it, not to the changelog under it.
+export function candidateCaption(day: string, url: string, link: string, pr: string, count: number): string {
   const head = `ROAM release candidate ${day}\n\nPlay: ${url}\nPR: ${pr}\nIssue: ${link}`;
-  const tail = 'Ship publishes it. Reply "remove #N" to take a feature out. Any other reply asks for a change and holds the release.';
-  const room = CAPTION_LIMIT - head.length - tail.length - 3 * SEPARATOR.length;
-  const shownNotes = cut(notes, Math.floor(room / 2));
-  return [head, shownNotes, fitFeatures(features, room - shownNotes.length), tail].join(SEPARATOR);
-}
-
-function fitFeatures(features: Feature[], room: number): string {
-  if (features.length === 0) return 'No features in this candidate.';
-  for (let shown = features.length; shown >= 0; shown--) {
-    const lines = features.slice(0, shown).map(featureLine);
-    if (shown < features.length) lines.push(`and ${features.length - shown} more, see the issue`);
-    const text = lines.join('\n');
-    if (text.length <= room) return text;
-  }
-  throw new Error('The candidate caption has no room for its feature list');
+  const changes = count === 0 ? 'No changes in this candidate.' : `${count} changes, listed in the message under this post.`;
+  const tail = 'Ship publishes it. Reply to this post with "remove #N" to take a change out. Any other reply to it asks for a change and holds the release.';
+  return [head, changes, tail].join('\n\n');
 }

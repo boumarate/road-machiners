@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Hermes with the factory config, identity and a start script. The plugin is mounted at run time, not copied.
+# Hermes with the factory config, identity, plugin and a start script. All of them are in the image, so a deploy that changes one rebuilds and restarts Hermes.
 # v2026.9.24 is the first release with gpt-6-sol on the Codex provider.
 FROM nousresearch/hermes-agent:v2026.9.24
 
@@ -14,6 +14,7 @@ RUN apt-get update \
 COPY config.yaml /opt/factory/config.yaml
 COPY SOUL.md /opt/factory/SOUL.md
 COPY --chmod=755 factory-incidents.sh /opt/factory/factory-incidents.sh
+COPY plugin /opt/factory/plugin
 COPY --chmod=755 factory-host /usr/local/bin/factory-host
 
 # The image supervises the gateway with s6, and the gateway reads its env from $HERMES_HOME/.env.
@@ -25,6 +26,10 @@ cp /opt/factory/config.yaml "$HERMES_HOME/config.yaml"
 cp /opt/factory/SOUL.md "$HERMES_HOME/SOUL.md"
 mkdir -p "$HERMES_HOME/scripts"
 cp /opt/factory/factory-incidents.sh "$HERMES_HOME/scripts/factory-incidents.sh"
+# A fresh copy each start, so no file of an older plugin stays behind.
+rm -rf "$HERMES_HOME/plugins/factory"
+mkdir -p "$HERMES_HOME/plugins"
+cp -r /opt/factory/plugin "$HERMES_HOME/plugins/factory"
 python3 "$HERMES_HOME/plugins/factory/allowlist.py"
 # Hermes never passes GH_TOKEN to its shell, since a model provider uses that name. So gh saves the login in the Hermes home, and git asks gh.
 printenv GH_TOKEN | env -u GH_TOKEN gh auth login --with-token

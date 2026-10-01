@@ -1,8 +1,9 @@
 import { rmSync } from 'node:fs';
 import { deployDev } from '../deploy';
 import { readState, updateState } from '../state';
-import { BRANCH, FEEDBACK_HEADING, RELEASE_CANDIDATE_LABEL, WONT_DO_LABEL, type Ctx } from '../types';
-import { BASE_BRANCH, agentLog, baseBranchFor, syncBase, workDir } from './common';
+import { BRANCH, FEEDBACK_HEADING, MergeConflictError, RELEASE_CANDIDATE_LABEL, WONT_DO_LABEL, type Ctx } from '../types';
+import { BASE_BRANCH, HOTFIX_BASE, agentLog, baseBranchFor, syncBase, workDir } from './common';
+import { shipHotfix } from './hotfix';
 
 async function requireApproval(ctx: Ctx, issue: number): Promise<void> {
   const card = (await ctx.github.cards()).find((item) => item.issue === issue);
@@ -16,25 +17,50 @@ function forgetPosts(ctx: Ctx, issue: number, dropPending: boolean): void {
     if (dropPending) delete pendingApprovals[String(issue)];
     const builds = { ...state.builds };
     delete builds[String(issue)];
-    return { ...state, approvalPosts, pendingApprovals, builds };
+    const approvedResolving = { ...state.approvedResolving };
+    delete approvedResolving[String(issue)];
+    return { ...state, approvalPosts, pendingApprovals, builds, approvedResolving };
   });
 }
 
 export async function approve(ctx: Ctx, issue: number, by: string): Promise<void> {
   await requireApproval(ctx, issue);
   const item = await ctx.github.issue(issue);
-  const base = baseBranchFor(ctx, item.labels);
-  await syncBase(ctx, base);
-  await ctx.repo.merge(BRANCH(issue), base, `Merge issue #${issue}: ${item.title}`);
-  await ctx.repo.push(base);
-  const message = base === BASE_BRANCH ? await mergedIntoDev(ctx, issue, item.title, by) : await mergedIntoRelease(ctx, issue, item.title, by, base);
-  // The issue stays open until its release ships to main. Ship closes it and drops the label.
-  await ctx.github.addLabel(issue, RELEASE_CANDIDATE_LABEL);
+  const message = await mergeOrResolve(ctx, issue, item.title, by, baseBranchFor(ctx, item.labels));
+  if (message === null) return;
   await ctx.github.move(issue, 'Done');
   forgetPosts(ctx, issue, true);
   rmSync(workDir(ctx, issue), { recursive: true, force: true });
   rmSync(`${ctx.cfg.home}/work/check-issue-${issue}`, { recursive: true, force: true });
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, message);
+}
+
+// Parallel work moves the base on after testing, so the branch may conflict with it. That is routine work, not an incident.
+// The card goes back to Testing, which merges the base, lets the agent resolve the conflict and runs the checks again.
+// Testing then queues the merge under the same approver, with no new post. Returns null in that case.
+async function mergeOrResolve(ctx: Ctx, issue: number, title: string, by: string, base: string): Promise<string | null> {
+  try {
+    return await mergeApproved(ctx, issue, title, by, base);
+  } catch (error) {
+    if (!(error instanceof MergeConflictError) || error.branch !== BRANCH(issue)) throw error;
+    forgetPosts(ctx, issue, true);
+    updateState(ctx.statePath, (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [String(issue)]: by } }));
+    await ctx.github.comment(issue, `${base} moved on since testing, and the branch conflicts with it in ${error.files.join(', ')}. Testing merges ${base} again and resolves the conflict. Then the approval by ${by} merges it, with no new post.`);
+    await ctx.github.move(issue, 'Testing');
+    ctx.log('approve', issue, `conflict with ${base}, back to Testing to resolve`);
+    return null;
+  }
+}
+
+// A hotfix ships at once. Other work stays open with the label until its release ships to main. Ship closes it and drops the label.
+async function mergeApproved(ctx: Ctx, issue: number, title: string, by: string, base: string): Promise<string> {
+  if (base === HOTFIX_BASE) return shipHotfix(ctx, issue, title, by);
+  await syncBase(ctx, base);
+  await ctx.repo.merge(BRANCH(issue), base, `Merge issue #${issue}: ${title}`);
+  await ctx.repo.push(base);
+  const message = base === BASE_BRANCH ? await mergedIntoDev(ctx, issue, title, by) : await mergedIntoRelease(ctx, issue, title, by, base);
+  await ctx.github.addLabel(issue, RELEASE_CANDIDATE_LABEL);
+  return message;
 }
 
 // The pushed dev holds the branch head, so GitHub marks the pull request merged by itself.
@@ -45,8 +71,9 @@ async function mergedIntoDev(ctx: Ctx, issue: number, title: string, by: string)
 }
 
 // Release work never reaches dev by itself, so dev stays as it is until Ship. A feature back after a removal is in the release again.
+// The played candidate lacks this work, so its post can no longer ship. The tick builds a new one.
 async function mergedIntoRelease(ctx: Ctx, issue: number, title: string, by: string, branch: string): Promise<string> {
-  updateState(ctx.statePath, (state) => (state.release ? { ...state, release: { ...state.release, removed: state.release.removed.filter((n) => n !== issue) } } : state));
+  updateState(ctx.statePath, (state) => (state.release ? { ...state, pendingShip: null, release: { ...state.release, postId: null, removed: state.release.removed.filter((n) => n !== issue) } } : state));
   await ctx.github.comment(issue, `Approved by ${by} and merged into the release branch ${branch}. It closes when the release ships.`);
   return `Issue #${issue} ${title} is merged into the release ${branch}.`;
 }

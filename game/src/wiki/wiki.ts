@@ -144,7 +144,7 @@ const TABLES: WikiTable[] = [
       c.core.map((k) => k.defId),
     ]),
   },
-  partTable('weapons', 'weapon', ['range (tiles)', 'reload (turns)', 'arc (deg)', 'spread (deg)', 'rounds per shot', 'recoil (deg)', 'shake'], (p) => [p.range, p.reload, p.arc, p.spread, p.rounds, p.recoil, p.shake]),
+  partTable('weapons', 'weapon', ['range (tiles)', 'cooldown (turns)', 'magazine (shots)', 'reload (turns)', 'arc (deg)', 'spread (deg)', 'rounds per shot', 'recoil (deg)', 'shake'], (p) => [p.range, p.cooldown, p.magazine, p.reload, p.arc, p.spread, p.rounds, p.recoil, p.shake]),
   {
     id: 'weapon-rounds',
     headers: ['id', 'damage', 'pen', 'blast', 'speed (m/s)', 'splash radius (m)', 'splash damage', 'splash pen'],

@@ -31,6 +31,8 @@ export type FactoryConfig = {
   itchTarget: string | null; // itch.io page as "user/game". Null until set, and then a release fails loud.
   butlerKey: string | null; // BUTLER_API_KEY, only ever in the env of the butler call
   maxJobsPerDay: number; // public-driven agent jobs allowed in any 24 hours
+  agentWorkers: number; // jobs of the agent queue that run at once
+  testWorkers: number; // jobs of the test queue that run at once
 };
 
 export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string };
@@ -57,8 +59,21 @@ export type Card = { itemId: string; issue: number; column: Column; labels: stri
 // A job is one detached `factory run` process. `issue` is null for the release cut and a change id for change.
 // Candidate and ship carry the tracking issue, remove the issue of the feature to take out. Dev rebuilds /dev/ and has no issue.
 export type JobStage = CardStage | ReleaseStage | 'approve' | 'change' | 'adhoc' | 'dev';
-export type Job = { stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
-export type ChangeRequest = { id: number; text: string; by: string };
+// `id` names the job's containers, so a kill stops only its own.
+export type Job = { id: string; stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
+
+// Jobs run in parallel up to a limit per queue.
+// The branch queue moves dev, main and the release, or rebuilds a shared build, so it runs one job at a time.
+// The agent queue runs light agent jobs. The test queue builds the game and plays it in a browser, which is heavy.
+export type Queue = 'branch' | 'agent' | 'test';
+export const QUEUE_OF: Record<JobStage, Queue> = {
+  triage: 'agent', design: 'agent', implement: 'agent', adhoc: 'agent',
+  testing: 'test',
+  approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', change: 'branch',
+};
+// `error` is the short summary. The full text is in `log`.
+export type Failure = { stage: Stage; issue: number | null; error: string; log: string | null; at: string };
+export type ChangeRequest ={ id: number; text: string; by: string };
 export type Removal = { issue: number; by: string; text: string };
 
 // The open release. Its branch takes the release tasks, and Ship merges it into main.
@@ -71,19 +86,22 @@ export type ReleaseState = {
 };
 
 export type FactoryState = {
-  job: Job | null;
+  jobs: Job[]; // running jobs, at most one per issue
   approvalPosts: Record<string, number>; // Telegram message id -> issue number
   lastRelease: string | null; // ISO time
   release: ReleaseState | null;
   pendingShip: string | null; // Telegram user who pressed Ship, run by the next tick
   pendingRemovals: Removal[]; // features to take out of the release, run by the next ticks in order
   pendingApprovals: Record<string, string>; // issue number -> approving Telegram user, run by the next tick
+  approvedResolving: Record<string, string>; // issue number -> approver, for an approved card back in Testing to resolve a conflict with its base. Testing then queues its merge with no new post.
   pendingChanges: ChangeRequest[]; // factory change requests, run by the next ticks in order
-  lastTickError: string | null; // the last tick crash posted to the committee, so a lasting outage posts once
+  lastTickError: string | null; // the last tick crash. Hermes's incident watch reports it.
+  failures: Failure[]; // failed jobs of the last day. Hermes's incident watch reports each one, and the chat hears of it only from Hermes.
   adhocReplies: Record<string, { chat: string; messageId: number }>; // ad hoc issue number -> the chat message its report answers
   builds: Record<string, string>; // issue number -> folder name of its deployed build under the web root
   jobStarts: string[]; // ISO start times of public-driven jobs in the last 24 hours
   capNoticed: boolean; // the committee heard that the daily job cap blocks work, until the cap frees
+  postCaptions: Record<string, string>; // Telegram message id -> caption of an open approval or candidate post. Telegram cannot read a caption back, and a status line edits it.
   devBuild: string | null; // short hash of dev that /dev/ serves
   devFailed: string | null; // short hash of dev whose build failed. The tick skips it until dev moves or Hermes clears it.
 };
@@ -102,6 +120,7 @@ export interface GitHub {
   addCard(issue: number, column: Column): Promise<void>;
   move(issue: number, column: Column): Promise<void>;
   openPullRequest(branch: string, base: string, title: string, body: string): Promise<string>;
+  createRelease(tag: string, target: string, title: string, notes: string): Promise<void>; // tags `target` and publishes a GitHub release
   pullRequestFor(branch: string): Promise<string | null>; // URL of the open pull request with that head branch
   closePullRequest(branch: string, comment: string): Promise<void>;
   reopen(number: number): Promise<void>;
@@ -113,6 +132,7 @@ export type InlineButton = { text: string; data: string };
 export interface Telegram {
   sendMessage(chat: string, text: string, replyTo?: number): Promise<number>;
   sendPhoto(chat: string, pngPath: string, caption: string, buttons?: InlineButton[][]): Promise<number>;
+  editCaption(chat: string, messageId: number, caption: string): Promise<void>; // replaces a photo's caption and drops its buttons
 }
 
 // `dir` is the repo folder the agent works in, `game` or `factory`. The container starts it there.
@@ -136,12 +156,24 @@ export interface HostRepo {
   deleteBranch(branch: string): Promise<void>; // locally if present, and on origin if it is there
   prepareWorkClone(branch: string, base: string, dir: string): Promise<void>;
   fetchFromWork(dir: string, branch: string): Promise<void>;
+  // Merges the host's `base` into the checked-out branch of a work clone. Returns the merged commit and the conflicted files, and leaves a conflicted merge open for an agent. No conflicts means it merged.
+  // Parallel jobs move `base` on, so a later check names the returned commit, not the branch.
+  mergeBaseIntoWork(dir: string, base: string): Promise<{ commit: string; conflicts: string[] }>;
+  isMerged(base: string, branch: string): Promise<boolean>; // whether `branch` holds every commit of `base`, a branch or a commit
   push(branch: string): Promise<void>;
   headHash(branch: string): Promise<string>; // short hash
   diff(base: string, branch: string): Promise<string>;
+  changedFiles(base: string, branch: string): Promise<string[]>; // files `branch` changed since it split from `base`
   hasNewCommits(base: string, branch: string): Promise<boolean>;
-  merge(branch: string, into: string, message: string): Promise<void>; // throws on conflict
+  merge(branch: string, into: string, message: string): Promise<void>; // throws MergeConflictError on a conflict, after it aborts the merge
   mergeLog(from: string, to: string): Promise<string[]>; // first-parent merge subjects on `from` missing in `to`
+}
+
+// A merge that stopped on conflicting files. The host clone is clean again when this is thrown.
+export class MergeConflictError extends Error {
+  constructor(readonly branch: string, readonly into: string, readonly files: string[], reason: string) {
+    super(`merge of ${branch} into ${into} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
+  }
 }
 
 export type Ctx = {
@@ -172,6 +204,8 @@ export const MAINTENANCE_LABEL = 'maintenance';
 export const RELEASE_LABEL = 'release'; // the tracking issue of the open release
 export const RELEASE_TASK_LABEL = 'release-task'; // work that runs on the release branch
 export const RELEASE_CANDIDATE_LABEL = 'release-candidate'; // approved and merged, waiting for a ship to main. The issue closes on ship.
+// A fix for a shipped bug. It branches from main, and its approval ships it to main and itch.io at once. Only collaborators set labels, so it needs no votes.
+export const HOTFIX_LABEL = 'hotfix';
 export const ADHOC_LABEL = 'adhoc';
 export const CANDIDATE_LABELS = ['feature-request', 'bug'];
 export const NEEDS_INFO_LABEL = 'needs-info';

@@ -98,6 +98,11 @@ describe('base branch', () => {
     expect(await baseBranchOf(ctxWith(['release-task']), 7)).toBe('release/2026-09-29');
   });
 
+  it('is main for a hotfix, also with no release open', async () => {
+    expect(baseBranchFor(ctxWith([]), ['bug', 'hotfix'])).toBe('main');
+    expect(await baseBranchOf(ctxWith(['hotfix', 'release-task']), 7)).toBe('main');
+  });
+
   it('throws for a release task when no release is open', async () => {
     mkdirSync('tmp/factory-common-test', { recursive: true });
     writeState(statePath, structuredClone(EMPTY_STATE));

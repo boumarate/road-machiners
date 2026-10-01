@@ -69,7 +69,7 @@ def test_pattern_scopes_core_buttons():
 def test_member_approve_writes_command_and_clears_markup(tmp_path):
     query = FakeQuery("factory:approve:12")
     assert press(tmp_path, query) == [{
-        "kind": "approve", "issue": 12, "text": None, "by": "7", "byName": "Ann Lee", "chat": "-100", "messageId": 55,
+        "kind": "approve", "issue": 12, "text": None, "by": "7", "byName": "Ann Lee", "chat": "-100", "messageId": 55, "postId": 55,
     }]
     assert query.answers == ["Approve queued"]
     assert query.markups == [None]

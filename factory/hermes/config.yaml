@@ -33,6 +33,10 @@ terminal:
 approvals:
   mode: "off"
 
+# A scheduled job's post is Hermes's message alone, with no "Cronjob Response" header or footer.
+cron:
+  wrap_response: false
+
 plugins:
   enabled:
     - factory
@@ -45,11 +49,44 @@ platform_toolsets:
     - skills
     - memory
     - session_search
+    - vision
     - factory
   # The incident watch job runs with no chat. It resolves incidents with the same tools.
   cron:
     - terminal
     - file
     - skills
+    - memory
     - session_search
+    - vision
     - factory
+
+# Off everywhere, the command line included. Hermes runs commands through terminal, and game work goes to the factory as ad hoc tasks. The start script owns the incident watch, so Hermes needs no cronjob.
+agent:
+  disabled_toolsets:
+    - connections
+    - browser
+    - video
+    - image_gen
+    - video_gen
+    - bfl
+    - moa
+    - tts
+    - x_search
+    - delegation
+    - code_execution
+    - cronjob
+    - clarify
+    - messaging
+    - homeassistant
+    - spotify
+    - discord
+    - discord_admin
+    - yuanbao
+    - computer_use
+    - context_engine
+    - project
+    - desktop_ui
+    - kanban
+    - feishu_doc
+    - feishu_drive

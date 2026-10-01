@@ -17,7 +17,7 @@ export type ConditionId =
 export type EffectId =
   | 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch' | 'handOver' | 'surrender' | 'giveUp' | 'backOffClaim' | 'defyClaim'
   | 'acceptPlea' | 'refusePlea' | 'settlePlea' | 'withdrawPlea' | 'settleThreat' | 'settleWarning' | 'hitchNpc' | 'hitchNpcFree' | 'releaseNpc' | 'startTrade'
-  | 'revealRumor' | 'payTruce' | 'giveAidPaid' | 'giveAidFree' | 'takeAid' | 'acceptAidOffer' | 'refuseAidOffer' | 'yieldToPlayer';
+  | 'revealRumor' | 'payTruce' | 'giveAidPaid' | 'giveAidFree' | 'takeAid' | 'acceptAidOffer' | 'refuseAidOffer' | 'yieldToPlayer' | 'askStandDown' | 'standDownPlea';
 export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'warnAnswer' | 'npcTowTerms' | 'lastTownPrices' | 'nearestRumor' | 'trucePrice' | 'aidWanted' | 'aidAnswer' | 'aidOffered' | 'yieldAnswer';
 
 // `go` is a node of the same topic, the hub of topics, or the end of the call.
@@ -389,7 +389,8 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A beaten foe gives up. Sparing it leaves its cargo on the ground for the player.
+  // A beaten foe gives up. Sparing it leaves its cargo on the ground for the player. The player can instead demand that
+  // it stand down and be stripped, which it answers like the yieldDemand topic.
   mercyPlea: {
     id: 'mercyPlea',
     once: false,
@@ -403,8 +404,24 @@ export const TOPICS: Record<TopicId, Topic> = {
         line: 'Stop shooting! I give up. Take what I carry and let me go.',
         options: [
           { text: 'Dump your cargo and drive off.', when: [], effects: ['acceptPlea'], go: END },
+          { text: 'Stand down and let me strip your truck.', when: ['notOfferedYield'], effects: ['askStandDown'], go: 'strip' },
           { text: 'No mercy.', when: [], effects: ['refusePlea'], go: END },
         ],
+      },
+      strip: {
+        line: 'You want to pick my truck clean?',
+        options: [
+          { text: 'Your call. Last chance.', when: ['accepts'], effects: [], go: 'stripAgreed' },
+          { text: 'Your call. Last chance.', when: ['refuses'], effects: [], go: 'stripRefused' },
+        ],
+      },
+      stripAgreed: {
+        line: 'All right. I am done. Take what you want.',
+        options: [{ text: 'Sit tight.', when: [], effects: ['standDownPlea'], go: END }],
+      },
+      stripRefused: {
+        line: 'Not while I can still pull a trigger.',
+        options: [{ text: 'Then we finish this.', when: [], effects: ['refusePlea'], go: END }],
       },
     },
   },

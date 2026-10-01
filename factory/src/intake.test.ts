@@ -44,4 +44,23 @@ describe('intake', () => {
     expect(await intake(ctx)).toEqual([4]);
     expect(calls).toEqual(['addCard 4 Triage', 'comment 4 The factory picked this up for triage.']);
   });
+
+  it('puts a fresh hotfix with no votes straight into Design', async () => {
+    const calls: string[] = [];
+    let asked: string[] = [];
+    const ctx = {
+      cfg: { home: 'tmp/factory-intake-none', minVotes: 3, minAgeHours: 24, committeeBootstrapTelegram: '1', committeeBootstrapGithub: 'boss' },
+      now: () => NOW,
+      log: () => undefined,
+      github: {
+        cards: async () => [],
+        candidates: async (labels: string[]) => { asked = labels; return [issue({ number: 6, labels: ['bug', 'hotfix'], createdAt: NOW.toISOString() })]; },
+        addCard: async (n: number, column: string) => { calls.push(`addCard ${n} ${column}`); },
+        comment: async (n: number, body: string) => { calls.push(`comment ${n} ${body}`); },
+      },
+    } as unknown as Ctx;
+    expect(await intake(ctx)).toEqual([6]);
+    expect(asked).toContain('hotfix');
+    expect(calls).toEqual(['addCard 6 Design', 'comment 6 The factory picked this up as a hotfix. It goes to design now.']);
+  });
 });

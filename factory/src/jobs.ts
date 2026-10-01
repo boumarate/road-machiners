@@ -4,12 +4,17 @@ import { dirname } from 'node:path';
 import { must } from './exec';
 import type { Run } from './types';
 
+// The job process gets its id in this variable, and its containers carry it as a label.
+export const JOB_ID_ENV = 'FACTORY_JOB_ID';
+export const jobLabel = (id: string): string => `factory-job=${id}`;
+
 // Starts `factory run <args>` detached, with output appended to the log. Returns its pid.
-export function spawnJob(args: string[], cwd: string, log: string): number {
+export function spawnJob(args: string[], cwd: string, log: string, id: string): number {
   mkdirSync(dirname(log), { recursive: true });
   const fd = openSync(log, 'a');
   try {
-    const child = spawn('npm', ['run', '-s', 'factory', '--', 'run', ...args], { cwd, detached: true, stdio: ['ignore', fd, fd] });
+    const env = { ...process.env, [JOB_ID_ENV]: id };
+    const child = spawn('npm', ['run', '-s', 'factory', '--', 'run', ...args], { cwd, env, detached: true, stdio: ['ignore', fd, fd] });
     child.unref();
     if (child.pid === undefined) throw new Error('job process did not start');
     return child.pid;
@@ -28,14 +33,14 @@ export function isAlive(pid: number): boolean {
   }
 }
 
-// Only one job runs at a time, so every factory container belongs to the job being killed.
-export async function killJob(run: Run, pid: number): Promise<void> {
+// Other jobs run beside this one, so only the containers with its label go.
+export async function killJob(run: Run, pid: number, id: string): Promise<void> {
   try {
     process.kill(-pid, 'SIGTERM');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
   }
-  const listed = must(await run('docker', ['ps', '-q', '--filter', 'label=factory=1']), 'docker ps');
+  const listed = must(await run('docker', ['ps', '-q', '--filter', `label=${jobLabel(id)}`]), 'docker ps');
   for (const id of listed.split('\n').map((line) => line.trim()).filter(Boolean)) {
     must(await run('docker', ['rm', '-f', id]), `docker rm ${id}`);
   }
