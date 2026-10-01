@@ -112,6 +112,16 @@ describe("collision log", () => {
   });
 });
 
+describe("patch log", () => {
+  it("says a broken patch is off, naming the driver", () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, "scavengers", "scout", ["stockEngine"], { x: 40, y: 30 });
+    const line = eventText(w, { t: "patch", patcher: w.player.vehicleId, client: npc.id, outcome: "broken" });
+    expect(line?.text).toBe(`The patch with ${vehicleName(w, npc.id)} is off.`);
+    expect(line?.cls).toBe("dim");
+  });
+});
+
 describe("shot log", () => {
   it("names stray fire that hits the player in a shot between other trucks", () => {
     const w = emptyWorld();

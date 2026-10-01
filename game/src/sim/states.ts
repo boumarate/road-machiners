@@ -7,7 +7,7 @@ import { checkAid, settleAid } from './aid';
 import { vehicleById } from './damage';
 import { newId } from './factory';
 import { lootRobbed } from './npc-activities';
-import { checkPatch, isPatching, lapsePatch, patchWork, settlePatch } from './patch';
+import { checkPatch, isPatching, breakPatch, lapsePatch, patchWork, settlePatch } from './patch';
 import { practice } from './progress';
 import { checkEscort, checkPlayerTow, payEscort } from './tow';
 import { checkTrade, isMeeting } from './economy';
@@ -88,7 +88,7 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   patch: {
     refresh: isPatching,
     check: checkPatch,
-    hooks: { fulfilled: settlePatch, expired: lapsePatch },
+    hooks: { fulfilled: settlePatch, expired: lapsePatch, broken: breakPatch },
     work: patchWork,
     binds: true,
   },
