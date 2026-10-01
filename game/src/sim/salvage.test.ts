@@ -765,9 +765,9 @@ describe('territory loot spots', () => {
     const me = w.vehicles[0];
     me.pos = { x: o.pos.x + propReach(o) + 1, y: o.pos.y };
     me.speed = 0;
-    expect(canScavenge(w)).toBe(true);
+    expect(canScavenge(w, o.id)).toBe(true);
     me.speed = RULES.parkedSpeed + 1;
-    expect(canScavenge(w)).toBe(false);
+    expect(canScavenge(w, o.id)).toBe(false);
   }, 30_000);
 
   it('leaves road wreck and site stock alone', async () => {
