@@ -54,6 +54,7 @@ export function fake(): Fake {
       fetch: async () => note('fetch'),
       prepareWorkClone: async (branch: string, _base: string, dir: string) => { note(`prepare ${branch}`); mkdirSync(dir, { recursive: true }); },
       fetchFromWork: async () => { note('fetchFromWork'); return 'work-head'; },
+      untrackFactoryFiles: async () => [],
       push: async (commit: string, branch: string) => note(`push ${commit} ${branch}`),
       merge: async (steps: MergeStep[]) => {
         for (const step of steps) note(`merge ${step.branch} ${step.into}`);

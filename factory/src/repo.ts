@@ -131,6 +131,14 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
       appendFileSync(join(dir, '.git', 'info', 'exclude'), `\n${OUT_DIR}/\n${TASK_DIR}/\n`);
       await checkoutBranch(dir, branch, base);
     },
+    async untrackFactoryFiles(dir) {
+      const tracked = lines(await gitIn(dir, ['ls-files', '--', `:(glob)**/${TASK_DIR}/**`, `:(glob)**/${OUT_DIR}/**`]));
+      if (tracked.length === 0) return [];
+      await gitIn(dir, ['rm', '-r', '-q', '--cached', '--', ...tracked]);
+      // A path list would commit the file from disk again, so the commit takes the index.
+      await gitIn(dir, ['commit', '-q', '-m', 'Keep factory task files out of the branch']);
+      return tracked;
+    },
     async fetchFromWork(dir, branch) {
       const head = (await gitIn(dir, ['rev-parse', `refs/heads/${branch}`])).trim();
       await git(['fetch', dir, `refs/heads/${branch}`]);

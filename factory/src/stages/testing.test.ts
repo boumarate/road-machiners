@@ -61,6 +61,7 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
     repo: {
       prepareWorkClone: async (_b: string, base: string, dir: string) => { bases.push(`prepare ${base}`); mkdirSync(dir, { recursive: true }); },
       fetchFromWork: async () => 'w1',
+      untrackFactoryFiles: async () => [],
       push: async (commit: string, branch: string) => { calls.push(`push ${commit} ${branch}`); },
       diff: async (base: string) => { bases.push(`diff ${base}`); return ''; },
       headHash: async () => 'abc123',

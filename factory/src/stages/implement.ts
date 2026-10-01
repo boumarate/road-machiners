@@ -11,6 +11,6 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   throwIfNeedsCommittee(home);
   const head = await ctx.repo.fetchFromWork(clone, BRANCH(issue));
   if (await ctx.repo.isMerged(head, BRANCH(issue))) throw new Error('The implementation stage made no new commits');
-  await guardAndPush(ctx, issue, base);
+  await guardAndPush(ctx, issue, base, 'implement');
   await ctx.github.move(issue, 'Testing');
 }

@@ -18,7 +18,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const reason = readOutput(home, 'wont-do.md');
   if (reason !== null) return refuse(ctx, issue, reason);
   requirePlan(home, TASK_FILE(issue));
-  await guardAndPush(ctx, issue, base);
+  await guardAndPush(ctx, issue, base, 'design');
   await postDesign(ctx, issue, readFileSync(`${home}/${TASK_FILE(issue)}`, 'utf8'));
   await ctx.github.move(issue, 'Implementation');
 }
