@@ -33,7 +33,8 @@ import { judgeStrandedFoe, plead, warnedOff } from './parley';
 import { addState, endState, stateOf, statesHeld } from './states';
 import { isStranded, suppliesCap, vehicleStats } from './stats';
 import type { Contact, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Vehicle, World } from './types';
-import { canUseSite, nearestPad, type Site } from './sites';
+import { canUseSite, isTerritory, nearestPad, type Site } from './sites';
+import { spotGoal, territoryOfStock, tripGoal } from './territory';
 import { clamp, dist, type Vec } from './vec';
 import { heatAt } from './sun';
 import { canVehicleSee } from './vision';
@@ -278,9 +279,14 @@ function scavengeGoal(world: World, vehicle: Vehicle): NpcActivity {
   const truck = visibleDowned(world, vehicle)[0];
   if (truck && (!stock || dist(vehicle.pos, truck.pos) < dist(vehicle.pos, stock.pos))) return createActivity('loot', truck.id, { ...truck.pos }, 'loot a knocked-out truck');
   if (stock) return createActivity('scavenge', stock.id, { ...stock.pos }, 'collect visible salvage');
+  return siteGoal(world, vehicle);
+}
+
+function siteGoal(world: World, vehicle: Vehicle): NpcActivity {
   const sites = salvageSitesAway(vehicle);
   if (sites.length === 0) throw new Error(`${vehicle.id} chose to scavenge with no salvage known`);
-  return createSiteActivity('scavenge', sites[randInt(world, 0, sites.length - 1)].id, 'search a known salvage site');
+  const site = sites[randInt(world, 0, sites.length - 1)];
+  return isTerritory(site) ? spotGoal(world, site.id) : createSiteActivity('scavenge', site.id, 'search a known salvage site');
 }
 
 type IdleGoal = (world: World, vehicle: Vehicle) => NpcActivity;
@@ -305,7 +311,8 @@ function patrolGoal(world: World, vehicle: Vehicle): NpcActivity {
 function travelGoal(world: World, vehicle: Vehicle): NpcActivity {
   const sites = travelSitesAway(vehicle);
   if (sites.length === 0) throw new Error(`${vehicle.id} chose a trip with no known site away`);
-  return createSiteActivity('travel', sites[randInt(world, 0, sites.length - 1)].id, 'make a trip to another site');
+  const site = sites[randInt(world, 0, sites.length - 1)];
+  return isTerritory(site) ? tripGoal(vehicle, site) : createSiteActivity('travel', site.id, 'make a trip to another site');
 }
 
 // A random free point anywhere on the map, off road included. Rare bad luck on every try gives a wait this turn.
@@ -411,9 +418,11 @@ function investigateInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): 
   return target && isHostile(world, vehicle, target) ? null : 'the contact is gone';
 }
 
-// A wreck or a loot pile is an opportunity only while it remains observable. A known site stays one.
+// A wreck or a loot pile is an opportunity only while it remains observable. A known site or loot spot stays one.
 function scavengeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   if (goal.targetId === null || [...REGION.towns, ...REGION.locations].some((site) => site.id === goal.targetId)) return null;
+  const known = world.salvage.some((stock) => stock.id === goal.targetId && territoryOfStock(stock));
+  if (known) return lootTaken(world, vehicle, goal.targetId);
   const seen = world.salvage.some((stock) => stock.id === goal.targetId && canVehicleSee(world, vehicle, stock.pos));
   return lootTaken(world, vehicle, goal.targetId) ?? (seen ? null : 'lost sight of the salvage');
 }
@@ -1076,12 +1085,18 @@ export function getActivityDestination(world: World, vehicle: Vehicle, activity:
 function siteStop(world: World, vehicle: Vehicle, activity: NpcActivity, destination: Vec): Vec {
   const out = vehicleStats(world, vehicle).radius + RULES.arriveRadius;
   const site = [...REGION.towns, ...REGION.locations].find((entry) => entry.id === activity.targetId);
-  if (site) return parkedOn(vehicle, site) ? { ...vehicle.pos } : siteSpot(world, vehicle, site, out, activity.kind === 'tow' ? TOW.gap / 2 : 0);
+  if (site) return padStop(world, vehicle, activity, site, out);
   const radius = stockRadius(world, activity) ?? towedRadius(world, activity);
   if (radius === undefined) throw new Error(`Missing activity destination ${activity.targetId}`);
   // A stock or a towed truck is met on the side the vehicle comes from.
   const angle = Math.atan2(vehicle.pos.y - destination.y, vehicle.pos.x - destination.x);
   return { x: destination.x + Math.cos(angle) * (radius + out), y: destination.y + Math.sin(angle) * (radius + out) };
+}
+
+// A territory has no pad, so a driver stops at the destination it was given, a road end.
+function padStop(world: World, vehicle: Vehicle, activity: NpcActivity, site: Site, out: number): Vec {
+  if (isTerritory(site)) return activity.destination!;
+  return parkedOn(vehicle, site) ? { ...vehicle.pos } : siteSpot(world, vehicle, site, out, activity.kind === 'tow' ? TOW.gap / 2 : 0);
 }
 
 // A driver parked on a pad of the site already uses it. Its own spot may lie under a truck parked there since,
@@ -1254,7 +1269,8 @@ function resolveHaul(world: World, vehicle: Vehicle, activity: NpcActivity): voi
 }
 
 function resolveTravel(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  if (reachSite(vehicle, activity)) finishGoal(world, vehicle, 'arrived');
+  const arrived = isTerritory(getKnownSite(activity.targetId!)) ? reachedDestination(world, vehicle, activity) : reachSite(vehicle, activity);
+  if (arrived) finishGoal(world, vehicle, 'arrived');
 }
 
 // A goal that only drives to a point ends parked on it.

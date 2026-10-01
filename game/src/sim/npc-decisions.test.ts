@@ -8,7 +8,8 @@ import { maxHp } from './wear';
 import { addGoods } from './inventory';
 import { decide, huntingGrounds, isWeak, lawmanTowns, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
 import { siteLootTable } from './salvage';
-import { siteGates, sitePads } from './sites';
+import { isTerritory, siteGates, sitePads } from './sites';
+import { hazardZones, territoryGrounds } from './territory';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
 import { addState, endState, stateOf } from './states';
 import { playerVehicle } from './damage';
@@ -490,7 +491,8 @@ describe('hunting grounds', () => {
   });
 
   const grounds = huntingGrounds();
-  const lootPads = REGION.locations.filter((l) => l.kind !== 'camp' && siteLootTable(l)).flatMap((l) => sitePads(l));
+  const territories = REGION.locations.filter(isTerritory);
+  const lootPads = [...REGION.locations.filter((l) => l.kind !== 'camp' && siteLootTable(l)).flatMap((l) => sitePads(l)), ...territories.flatMap(territoryGrounds)];
   const isPad = (p: Vec) => lootPads.some((pad) => dist(p, pad) < 0.01);
   const onRoad = (p: Vec) => !isPad(p) && REGION.roads.some((road) => polylineDist(p, road) < 0.01);
 
@@ -498,6 +500,11 @@ describe('hunting grounds', () => {
     expect(lootPads.length).toBeGreaterThan(0);
     for (const pad of lootPads) expect(grounds).toContainEqual(pad);
     expect(grounds.filter(onRoad).length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('reach into each territory, outside every hazard', () => {
+    for (const t of territories) for (const p of territoryGrounds(t)) expect(grounds).toContainEqual(p);
+    for (const p of grounds) for (const z of hazardZones()) expect(dist(p, z.pos)).toBeGreaterThan(z.radius);
   });
 
   it('keeps road grounds far from every site, and none at a town or camp', () => {
