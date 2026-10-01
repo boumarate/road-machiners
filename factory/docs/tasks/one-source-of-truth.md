@@ -87,3 +87,13 @@ Out of scope: game stages, the queue model, and how releases and approvals decid
 - Manual try, positive: approve a card. The merge appears on GitHub `dev`, and the host clone has no local `dev` branch.
 - Manual try, negative: edit a file in `/opt/factory/code` by hand. The next update refuses and leaves `update-failed`, and Hermes posts about it. The edit is still there.
 - Manual try, negative: make the `main` push fail during a Ship, for example with a temporary branch protection. Ship fails before anything public happens. A retry after the protection is lifted ships cleanly, with no repair by hand.
+
+## Result
+
+Done and deployed on 2026-10-01.
+
+- Checks: factory vitest 305 passed, Hermes plugin pytest 100 passed, infra pytest 11 passed, quality gate passed.
+- Switchover: the deploy turned `/opt/factory/code` into a clean clone of main. The first tick deleted every local branch of the host clone, and a check beforehand found none ahead of GitHub.
+- Manual try, positive: a docs commit pushed to main was deployed by `factory-update` within 2 minutes, with no pause left behind.
+- Manual try, negative: a hand edit in `/opt/factory/code` blocked the next update and wrote `update-failed`. The edit stayed. Removing it let the update deploy.
+- Not tried live: a rejected push during Ship. `repo.test.ts` covers a rejected push, its retry and a rejected atomic push against a local stand-in for GitHub.
