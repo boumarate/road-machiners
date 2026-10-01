@@ -121,22 +121,38 @@ describe("playback clock", () => {
 });
 
 describe("turns that run on their own", () => {
-  const space = (repeat = false) => ({ repeat, preventDefault: () => {} }) as KeyboardEvent;
-
-  it("Space stops them, and the next Space restarts them", () => {
+  it("a turn press stops them, and the next press restarts them", () => {
     const world = makeSafeWorld();
     world.player.state = "knockedOut";
     const travel = new Travel(250);
     expect(travel.autoAllowed(world)).toBe(true);
-    travel.handleSpace(space(), false, world);
+    travel.pressTurn(false, world);
     expect(travel.autoAllowed(world)).toBe(false);
-    travel.handleSpace(space(true), false, world);
-    expect(travel.autoAllowed(world)).toBe(false);
-    travel.handleSpace(space(), false, world);
+    travel.release();
+    travel.pressTurn(false, world);
     expect(travel.autoAllowed(world)).toBe(true);
   });
 
-  it("the turn button stops them as Space does", () => {
+  it("a press with a drive-through order starts travel, and a press while playing stops it", () => {
+    const world = setMoveOrder(makeSafeWorld(), { kind: "through", dest: { x: 40, y: 30 } });
+    const travel = new Travel(250);
+    expect(travel.pressTurn(false, world)).toBe(true);
+    expect(travel.isAuto(world)).toBe(true);
+    travel.release();
+    expect(travel.pressTurn(true, world)).toBe(false);
+    expect(travel.isAuto(world)).toBe(false);
+  });
+
+  it("holding a press fast-forwards until release", () => {
+    const world = setMoveOrder(makeSafeWorld(), { kind: "through", dest: { x: 40, y: 30 } });
+    const travel = new Travel(250);
+    travel.pressTurn(false, world);
+    expect(travel.isFast(performance.now() + 250)).toBe(true);
+    travel.release();
+    expect(travel.isFast(performance.now() + 250)).toBe(false);
+  });
+
+  it("stopAuto ends them for abandon", () => {
     const world = makeSafeWorld();
     world.player.state = "knockedOut";
     const travel = new Travel(250);
@@ -150,7 +166,7 @@ describe("turns that run on their own", () => {
     const world = makeSafeWorld();
     world.player.state = "knockedOut";
     const travel = new Travel(250);
-    travel.handleSpace(space(), false, world);
+    travel.pressTurn(false, world);
     world.player.state = "active";
     expect(travel.autoAllowed(world)).toBe(false);
     world.player.state = "knockedOut";

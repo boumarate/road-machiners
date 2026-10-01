@@ -257,12 +257,12 @@ export class Game {
     this.character = new CharacterScreen(host);
     this.inventory = new InventoryScreen(host);
     this.hud = new Hud({
-      openInventory: () => this.toggleScreen(this.inventory),
-      openCharacter: () => this.toggleScreen(this.character),
-      toggleManual: this.whenIdle(() => this.controls.toggleManual()),
-      toggleAutoRepair: this.whenIdle(() => this.controls.toggleAutoRepair()),
-      toggleOverdrive: this.whenIdle(() => this.controls.toggleOverdrive()),
-      douseEngine: this.whenIdle(() => this.controls.douseEngine()),
+      openInventory: () => this.runKey("KeyI"),
+      openCharacter: () => this.runKey("KeyC"),
+      toggleManual: () => this.runKey("KeyR"),
+      toggleAutoRepair: () => this.runKey("KeyP"),
+      toggleOverdrive: () => this.runKey("KeyO"),
+      douseEngine: () => this.runKey("KeyG"),
       unhitch: () =>
         this.rescueCommand((w) =>
           w.player.state === "active" && isTowed(w) ? unhitch(w) : null,
@@ -276,7 +276,7 @@ export class Game {
       isBusy: () => this.anim !== null,
       autoTravel: () => this.travel.isAuto(this.world),
       dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
-      recenter: () => this.follow.recenter(),
+      recenter: () => this.runKey("KeyF"),
       aimPart: (vehicleId, partId) => this.anim === null && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
@@ -298,8 +298,10 @@ export class Game {
       world: () => this.displayWorld(),
       apply: (next) => { this.apply(next); if (!this.saves.held) saveInTown(window.localStorage, next, Date.now()); },
       selectedWeapon: () => this.selected,
-      selectWeapon: (id) => { if (this.anim) return; this.selected = id; this.refreshUi(); },
-      endTurn: () => this.travel.stopAuto(this.world) || this.endTurn(),
+      selectWeapon: (id) => { if (this.anim || this.modalOpen()) return; this.selected = id; this.refreshUi(); },
+      pressTurn: () => this.pressTurn(),
+      releaseTurn: () => this.releaseTurn(),
+      runKey: (code) => this.runKey(code),
       autoTravel: () => this.travel.isAuto(this.world),
       getTurnPhase: () => this.phase,
     };
@@ -374,7 +376,7 @@ export class Game {
     this.hud.renderAction(
       getContextAction(this.world, this.anim !== null),
       this.displayWorld(),
-      () => this.useContext(),
+      () => this.runKey("KeyE"),
     );
     this.refreshInfo();
     this.refreshTargetMarkers();
@@ -446,7 +448,7 @@ export class Game {
     });
     canvas.addEventListener("wheel", (e) => this.rig.zoomBy(e.deltaY), { passive: true });
     window.addEventListener("keyup", (e) => {
-      if (e.code === "Space") this.travel.release();
+      if (e.code === "Space") this.releaseTurn();
     });
     window.addEventListener("blur", () => this.travel.pause());
     document.addEventListener("visibilitychange", () => {
@@ -454,16 +456,29 @@ export class Game {
     });
     window.addEventListener("keydown", (e) => {
       if (this.isEditingControl() || this.death.isShown()) return;
-      const modal = this.modalOpen();
-      const playing = this.travel.isPlaying(this.anim);
       if (e.code === "Space") {
-        if (!modal && this.travel.handleSpace(e, playing, this.world)) this.endTurn();
+        e.preventDefault();
+        if (!e.repeat) this.pressTurn();
       }
-      const key = this.keys[e.code];
-      if (key && !(key.noModal && modal) && !(key.idle && playing)) key.run();
-      const digit = ["Digit1", "Digit2", "Digit3", "Digit4"].indexOf(e.code);
-      if (digit >= 0) this.selectWeaponIndex(digit);
+      this.runKey(e.code);
     });
+  }
+
+  // Plays a turn when a press asks for one. Space and the turn button both come here.
+  private pressTurn(): void {
+    if (this.death.isShown() || this.modalOpen()) return;
+    if (this.travel.pressTurn(this.travel.isPlaying(this.anim), this.world)) this.endTurn();
+  }
+
+  private releaseTurn(): void {
+    this.travel.release();
+  }
+
+  // Runs a key's action under its gates. The key and its HUD button both come here.
+  private runKey(code: string): void {
+    const key = this.keys[code];
+    if (!key || (key.noModal && this.modalOpen()) || (key.idle && this.travel.isPlaying(this.anim))) return;
+    key.run();
   }
 
   // Single-key actions. noModal keys wait for panels and calls to close, idle keys wait for the turn to finish playing.
@@ -473,6 +488,7 @@ export class Game {
     KeyQ: { run: () => this.weapons.toggleAuto(), noModal: true },
     KeyX: { run: () => this.weapons.toggleVisible(), noModal: true },
     Digit0: { run: () => this.weapons.selectWeapon(null), noModal: true },
+    ...Object.fromEntries([0, 1, 2, 3].map((i) => [`Digit${i + 1}`, { run: () => this.weapons.selectIndex(i), noModal: true as const, idle: true as const }])),
     KeyE: { run: () => this.useContext(), noModal: true },
     KeyR: { run: () => this.controls.toggleManual(), noModal: true, idle: true },
     KeyP: { run: () => this.controls.toggleAutoRepair(), noModal: true, idle: true },
@@ -492,20 +508,6 @@ export class Game {
     if (this.anim) return;
     this.closeScreens(screen);
     screen.toggle();
-  }
-
-  // A HUD button action that waits for the turn to finish playing and for panels and calls to close.
-  private whenIdle(run: () => void): () => void {
-    return () => void (!this.anim && !this.modalOpen() && run());
-  }
-
-  private selectWeaponIndex(i: number): void {
-    if (this.anim || this.modalOpen()) return;
-    const all = vehicleStats(this.world, playerVehicle(this.world)).weapons;
-    if (i >= all.length) return;
-    this.weapons.selectWeapon(
-      this.selected === all[i].part.id ? null : all[i].part.id,
-    );
   }
 
   private onLeftClick(e: MouseEvent): void {

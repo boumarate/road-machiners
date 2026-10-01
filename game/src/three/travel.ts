@@ -121,9 +121,7 @@ export class Travel {
   }
 
   // Returns whether to play one turn now.
-  handleSpace(event: KeyboardEvent, playing: boolean, world: World): boolean {
-    event.preventDefault();
-    if (event.repeat) return false;
+  pressTurn(playing: boolean, world: World): boolean {
     if (autoRuns(world)) {
       this.toggleAutoHalt();
       return false;
@@ -133,14 +131,14 @@ export class Travel {
     return this.press(performance.now(), playing, follow);
   }
 
-  // Space stops the turns that run on their own while the player is stranded, and the next Space restarts them.
+  // A turn press stops the turns that run on their own while the player is stranded, and the next press restarts them.
   // Holding the restarting press fast-forwards, as in travel.
   private toggleAutoHalt(): void {
     this.autoHalted = !this.autoHalted;
     if (!this.autoHalted) this.pressedAt = performance.now();
   }
 
-  // Whether turns run on their own now. A stop lasts until Space or until the stranded spell ends.
+  // Whether turns run on their own now. A stop lasts until a turn press or until the stranded spell ends.
   autoAllowed(world: World): boolean {
     if (!autoRuns(world)) this.autoHalted = false;
     return autoRuns(world) && !this.autoHalted;
