@@ -12,7 +12,7 @@ import { canSpareFor } from './aid';
 import { ECONOMY } from '../data/goods';
 import { GOOD_SOURCES, SHOPS, type ShopDef } from '../data/market';
 import {
-  DECISIONS, HUNT, MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
+  DECISIONS, HUNT, MIN_CHANCE, NPCS, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
   type DecisionId, type DecisionOptions, type Trait, type TraitId, type TraitWeights, type Weighted, type WeightChange,
 } from '../data/npcs';
 import { REGION } from '../data/region';
@@ -32,7 +32,7 @@ import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { skillEffect } from './progress';
 import { randRange } from './rng';
-import { canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, jobTarget, lootBlocker, siteLootTable } from './salvage';
+import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable } from './salvage';
 import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { boundTo, givesWord, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
@@ -46,6 +46,7 @@ import { canVehicleSee } from './vision';
 export type NpcProfile = {
   towns: string[];
   bases: string[];
+  markets: string[];
   salvageSites: string[];
   supplySites: string[];
   travelSites: string[];
@@ -76,10 +77,11 @@ export function profileOf(traits: TraitId[]): NpcProfile {
     if (!Object.hasOwn(TRAITS, id)) throw new Error(`Unknown trait ${id}`);
     return TRAITS[id];
   });
-  const union = (key: 'towns' | 'bases' | 'salvageSites' | 'supplySites' | 'travelSites' | 'haulSites') => [...new Set(defs.flatMap((t) => t[key]))];
+  const union = (key: 'towns' | 'bases' | 'markets' | 'salvageSites' | 'supplySites' | 'travelSites' | 'haulSites') => [...new Set(defs.flatMap((t) => t[key]))];
   return {
     towns: union('towns'),
     bases: union('bases'),
+    markets: union('markets'),
     salvageSites: union('salvageSites'),
     supplySites: union('supplySites'),
     travelSites: union('travelSites'),
@@ -118,7 +120,7 @@ export function bodyCondition(vehicle: Vehicle): number {
 }
 
 // Damage times rounds summed over working guns.
-function firepower(world: World, vehicle: Vehicle): number {
+export function firepower(world: World, vehicle: Vehicle): number {
   return vehicleStats(world, vehicle).weapons.filter((weapon) => weapon.part.hp > 0).reduce((sum, weapon) => sum + weapon.def.round.damage * weapon.def.rounds, 0);
 }
 
@@ -249,7 +251,7 @@ function seesDowned(world: World, vehicle: Vehicle, target: Vehicle): boolean {
 }
 
 function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
-  if (!canVehicleSee(world, vehicle, stock.pos)) return false;
+  if (backedOff(stock, vehicle.id) || !canVehicleSee(world, vehicle, stock.pos)) return false;
   return (!canReachSalvage(vehicle, stock) || canTakeAny(world, vehicle, stock)) && lootTaken(world, vehicle, stock.id) === null;
 }
 
@@ -322,25 +324,62 @@ export function huntingGroundsAway(vehicle: Vehicle): Vec[] {
   return huntingGrounds().filter((point) => dist(vehicle.pos, point) > RULES.arriveRadius * 2);
 }
 
+const raiderStops = new Map<string, readonly Vec[]>();
+
+// The towns where lawmen live: the `sites` spawn of every lawman template.
+export function lawmanTowns(): readonly Site[] {
+  const ids = new Set(Object.values(NPCS).filter((t) => t.traits.includes('lawman') && t.spawn.kind === 'sites').flatMap((t) => (t.spawn.kind === 'sites' ? t.spawn.ids : [])));
+  return [...ids].map(getKnownSite);
+}
+
+// The hunting grounds a camp's raiders raid: those nearer it than any other camp, and farther than HUNT.lawReach from
+// every gate of a lawman town. Built once per camp from the region.
+export function raiderGrounds(camp: Site): readonly Vec[] {
+  const cached = raiderStops.get(camp.id);
+  if (cached) return cached;
+  const camps = REGION.locations.filter((site) => site.kind === 'camp');
+  const nearestCamp = (p: Vec) => camps.reduce((best, c) => (dist(p, c.pos) < dist(p, best.pos) ? c : best));
+  const gates = lawmanTowns().flatMap((town) => siteGates(town));
+  const points = huntingGrounds().filter((p) => nearestCamp(p).id === camp.id && gates.every((gate) => dist(gate, p) > HUNT.lawReach));
+  raiderStops.set(camp.id, points);
+  return points;
+}
+
+// A raider's camp grounds it has not arrived at.
+export function raiderGroundsAway(vehicle: Vehicle): Vec[] {
+  return raiderGrounds(homeCamp(vehicle)).filter((point) => dist(vehicle.pos, point) > RULES.arriveRadius * 2);
+}
+
 // ---- Patrols, trips and hauls.
 
-// The known town nearest the driver's home, which its patrols circle.
-export function patrolTown(vehicle: Vehicle) {
+function nearestHome(vehicle: Vehicle, ids: readonly string[]): Site {
   const home = vehicle.brain!.home;
-  return npcProfile(vehicle).towns.map(getKnownSite).sort((a, b) => dist(home, a.pos) - dist(home, b.pos))[0];
+  return ids.map(getKnownSite).sort((a, b) => dist(home, a.pos) - dist(home, b.pos))[0];
+}
+
+// The camp nearest the driver's home among the bases its profile knows.
+export function homeCamp(vehicle: Vehicle): Site {
+  const { bases } = npcProfile(vehicle);
+  if (bases.length === 0) throw new Error(`${vehicle.id} knows no camp`);
+  return nearestHome(vehicle, bases);
+}
+
+// The site the driver's patrols circle: its camp when it has bases, else the known town nearest its home.
+export function patrolSite(vehicle: Vehicle): Site {
+  return npcProfile(vehicle).bases.length > 0 ? homeCamp(vehicle) : nearestHome(vehicle, npcProfile(vehicle).towns);
 }
 
 const patrolStops = new Map<string, readonly Vec[]>();
 
-// Where a patrol of a town drives: points every NPC_BEHAVIOR.patrolSpacing tiles along the roads, within
-// NPC_BEHAVIOR.patrolRadius of a town gate and outside every site. Built once per town from the region.
-export function patrolPoints(town: Site): readonly Vec[] {
-  const cached = patrolStops.get(town.id);
+// Where a patrol of a town or camp drives: points every NPC_BEHAVIOR.patrolSpacing tiles along the roads, within
+// NPC_BEHAVIOR.patrolRadius of a gate and outside every site. Built once per site from the region.
+export function patrolPoints(site: Site): readonly Vec[] {
+  const cached = patrolStops.get(site.id);
   if (cached) return cached;
-  const gates = siteGates(town);
+  const gates = siteGates(site);
   const near = (p: Vec) => gates.some((gate) => dist(gate, p) <= NPC_BEHAVIOR.patrolRadius);
   const points = REGION.roads.flatMap((road) => pointsAlong(road, NPC_BEHAVIOR.patrolSpacing)).filter((p) => near(p) && siteUnder(p) === null);
-  patrolStops.set(town.id, points);
+  patrolStops.set(site.id, points);
   return points;
 }
 
@@ -459,9 +498,9 @@ function canLootSubject(world: World, vehicle: Vehicle, decision: DecisionId, su
   return truck !== undefined && seesDowned(world, vehicle, truck);
 }
 
-// Only raiders are hostile to trucks with loot, so only they have prey to hunt.
+// Only raiders are hostile to trucks with loot, so only they have prey to hunt, on the grounds of their own camp.
 function canRaid(_world: World, vehicle: Vehicle): boolean {
-  return vehicle.faction === 'raiders' && huntingGroundsAway(vehicle).length > 0;
+  return vehicle.faction === 'raiders' && raiderGroundsAway(vehicle).length > 0;
 }
 
 // Any driver that can drive can prowl to a hunting ground. Only vultures weigh it above the minimum.
@@ -469,8 +508,9 @@ function canProwl(world: World, vehicle: Vehicle): boolean {
   return canDrive(world, vehicle) && huntingGroundsAway(vehicle).length > 0;
 }
 
+// Lawmen patrol their town and raiders their camp, where they have road to drive.
 function canPatrol(_world: World, vehicle: Vehicle): boolean {
-  return hasTrait(vehicle, 'lawman') && patrolPoints(patrolTown(vehicle)).length > 0;
+  return (hasTrait(vehicle, 'lawman') || hasTrait(vehicle, 'raider')) && patrolPoints(patrolSite(vehicle)).length > 0;
 }
 
 function canTravel(_world: World, vehicle: Vehicle): boolean {
@@ -859,9 +899,12 @@ const DECISION_KINDS: Record<DecisionId, 'venture' | 'response'> = {
   needySeen: 'venture',
 };
 
-// A driver that gave its word starts no venture until the deal ends, except about the truck it gave it to.
+// A driver holding a pile claim starts no venture until the claim ends. A driver that gave its word starts none
+// until the deal ends, except about the truck it gave it to.
 export function keepsWord(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
-  if (DECISION_KINDS[decision] !== 'venture' || !givesWord(world, vehicle.id)) return false;
+  if (DECISION_KINDS[decision] !== 'venture') return false;
+  if (holdsClaim(world, vehicle.id)) return true;
+  if (!givesWord(world, vehicle.id)) return false;
   return subject === null || !boundTo(world, vehicle.id, subject);
 }
 

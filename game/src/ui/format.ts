@@ -8,7 +8,7 @@ import { PERK_LEVELS, SKILL_INFO } from '../data/skills';
 import { TERRAIN } from '../data/terrain';
 import { TIME } from '../data/time';
 import { playerVehicle, vehicleById } from '../sim/damage';
-import { isKnockedOut } from '../sim/defeat';
+import { gaveUp, isKnockedOut } from '../sim/defeat';
 import type { Work, WorkLeft } from '../sim/states';
 import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
@@ -66,8 +66,23 @@ function itemName(it: GridItem): string {
 export function workLabel(world: World, v: Vehicle, work: Work): string {
   if (work.from === 'job') return jobLabel(world, v, work.job);
   const s = work.state;
+  if (s.kind === 'aid') return aidWorkLabel(world, v, s);
   if (s.kind !== 'patch') throw new Error(`No work label for a ${s.kind} state`);
   return s.holder === v.id ? `Patch ${npcName(vehicleById(world, s.other))}` : `Patched by ${npcName(vehicleById(world, s.holder))}`;
+}
+
+// The goods of an aid deal in words, like "12 L of fuel and 3 supplies".
+export function aidGoods(s: NpcState): string {
+  const data = aidData(s);
+  return fillLine('{aid}', { aid: { kind: 'aid', fuel: data.fuel, supplies: data.supplies } });
+}
+
+// The handover as the truck `v` sees it: who gives what to whom.
+function aidWorkLabel(world: World, v: Vehicle, s: NpcState): string {
+  const npc = npcName(vehicleById(world, s.holder));
+  const playerGives = aidData(s).giver === 'player';
+  if (v.id === s.holder) return playerGives ? `Taking ${aidGoods(s)} from you` : `Giving you ${aidGoods(s)}`;
+  return playerGives ? `Giving ${aidGoods(s)} to ${npc}` : `Taking ${aidGoods(s)} from ${npc}`;
 }
 
 // The share of the work's turns already done, from 0 to 1.
@@ -105,7 +120,7 @@ function partName(world: World, vehicleId: string, partId: string): string {
 // driver pursues no goal.
 export function formatNpcActivity(world: World, vehicle: Vehicle): string | null {
   if (!vehicle.brain || !playerSees(world, vehicle.pos)) return null;
-  if (isKnockedOut(vehicle)) return 'Knocked out';
+  if (isKnockedOut(vehicle)) return gaveUp(vehicle) ? 'Gave up' : 'Knocked out';
   const activity = topGoal(vehicle);
   if (!activity) return null;
   return activity.reason.charAt(0).toUpperCase() + activity.reason.slice(1);
@@ -199,7 +214,7 @@ const STATE_ENDED_TEXT: Partial<Record<StateKindId, Record<StateEnding, ((holder
   },
   // A fulfilled deal logs through its aid event.
   aid: {
-    expired: (holder) => ({ text: `The fuel deal with ${holder} ran out: you never met.`, cls: 'dim' }),
+    expired: (holder) => ({ text: `The fuel deal with ${holder} ran out.`, cls: 'dim' }),
     fulfilled: null,
     broken: (holder) => ({ text: `The fuel deal with ${holder} is off.`, cls: 'dim' }),
   },
@@ -334,8 +349,10 @@ function patchText(world: World, e: Extract<GameEvent, { t: 'patch' }>): LogLine
     started: e.patcher === me ? `You start patching ${other}. Stay parked beside it.` : `${other} starts patching your truck. Stay parked.`,
     done: e.patcher === me ? `You patched ${other}.` : `${other} patched your truck.`,
     lapsed: `The patch with ${other} is off: nobody worked on it.`,
+    broken: `The patch with ${other} is off.`,
   };
-  return { text: lines[e.outcome], cls: e.outcome === 'lapsed' ? 'dim' : e.outcome === 'done' ? 'good' : '' };
+  const cls = { started: '', done: 'good', lapsed: 'dim', broken: 'dim' }[e.outcome];
+  return { text: lines[e.outcome], cls };
 }
 
 // Fuel and supplies that changed hands between the player and a driver, and what the driver paid.
@@ -345,6 +362,12 @@ function aidText(world: World, e: Extract<GameEvent, { t: 'aid' }>): LogLine {
   const moved = `${fillLine('{aid}', { aid: { kind: 'aid', fuel: e.fuel, supplies: e.supplies } })}${e.paid > 0 ? ` for ${e.paid}` : ''}`;
   if (e.giver === me) return { text: `You give ${vehicleName(world, e.receiver)} ${moved}.`, cls: '' };
   return { text: `${vehicleName(world, e.giver)} gives you ${moved}.`, cls: 'good' };
+}
+
+function aidStartedText(world: World, e: Extract<GameEvent, { t: 'aidStarted' }>): LogLine {
+  const me = world.player.vehicleId;
+  if (e.giver === me) return { text: `You start handing ${vehicleName(world, e.receiver)} the goods.`, cls: '' };
+  return { text: `${vehicleName(world, e.giver)} starts handing you the goods.`, cls: '' };
 }
 
 function sayText(world: World, e: Extract<GameEvent, { t: 'say' }>): LogLine {
@@ -431,6 +454,7 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   towDropped: (e) => [e.by, e.client],
   plea: (e) => [e.from, e.to],
   escortPaid: (e) => [e.by, e.client],
+  aidStarted: (e) => [e.giver, e.receiver],
   escortHired: (e) => [e.by, e.client],
   escortRefused: (e) => [e.by, e.client],
 };
@@ -525,6 +549,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   honk: honkText,
   patch: patchText,
   aid: aidText,
+  aidStarted: aidStartedText,
   towOffer: towOfferText,
   towHitched: towHitchedText,
   towDone: towDoneText,

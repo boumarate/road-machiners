@@ -9,6 +9,8 @@ import { npcName } from "../sim/spawn";
 import { maxHealthOf } from "../sim/health";
 import { XP_TO_REACH } from "../data/skills";
 import { addState, towData } from "../sim/states";
+import { playerAid } from "../sim/aid";
+import { aidGoods } from "./format";
 import { bugReportUrl, featureRequestUrl, getContextAction, getHudReadout, getRescueReadout, versionLabel } from "./hud-readout";
 import { GAME_VERSION } from "../config";
 import { REGION } from '../data/region';
@@ -264,5 +266,30 @@ describe('issue form links', () => {
 
   it('labels the version as the ? menu shows it', () => {
     expect(versionLabel()).toBe(`v${GAME_VERSION}`);
+  });
+});
+
+describe('aid handover action', () => {
+  function aidScene(npcX: number, giver: 'player' | 'npc') {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: npcX, y: 30 });
+    npc.brain = npcBrain('trader', npc.pos, ['trader']);
+    addState(w, 'aid', npc.id, w.player.vehicleId, { kind: 'aid', giver, fuel: 5, supplies: 0, price: 0, free: true, agreed: true, started: false, work: 1, workLeft: 1 });
+    return { w, npc };
+  }
+
+  it('offers giving fuel, not ready while the trucks are apart, ready once side by side', () => {
+    const far = aidScene(60, 'player');
+    expect(getContextAction(far.w, false)).toEqual({ label: `Give ${aidGoods(playerAid(far.w)!)} to ${npcName(far.npc)}`, ready: false });
+    const near = aidScene(34, 'player');
+    expect(getContextAction(near.w, false)).toMatchObject({ label: expect.stringContaining('Give'), ready: true });
+  });
+
+  it('offers taking fuel when the driver gives, and wins over a ready place action', () => {
+    const { w, npc } = aidScene(34, 'npc');
+    const site = REGION.locations.find((s) => s.kind === 'oasis')!;
+    w.vehicles[0].pos = { ...sitePads(site)[0] };
+    npc.pos = { x: w.vehicles[0].pos.x + 4, y: w.vehicles[0].pos.y };
+    expect(getContextAction(w, false)).toEqual({ label: `Take ${aidGoods(playerAid(w)!)} from ${npcName(npc)}`, ready: true });
   });
 });

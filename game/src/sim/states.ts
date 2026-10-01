@@ -3,11 +3,11 @@
 // of each kind toward each other party.
 
 import { STATE_TURNS } from '../data/npcs';
-import { checkAid, settleAid } from './aid';
+import { aidWork, checkAid, refreshAid, settleAid } from './aid';
 import { vehicleById } from './damage';
 import { newId } from './factory';
 import { lootRobbed } from './npc-activities';
-import { checkPatch, isPatching, lapsePatch, patchWork, settlePatch } from './patch';
+import { checkPatch, isPatching, breakPatch, lapsePatch, patchWork, settlePatch } from './patch';
 import { practice } from './progress';
 import { checkEscort, checkPlayerTow, payEscort } from './tow';
 import { checkTrade, isMeeting } from './economy';
@@ -88,7 +88,7 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   patch: {
     refresh: isPatching,
     check: checkPatch,
-    hooks: { fulfilled: settlePatch, expired: lapsePatch },
+    hooks: { fulfilled: settlePatch, expired: lapsePatch, broken: breakPatch },
     work: patchWork,
     binds: true,
   },
@@ -104,10 +104,10 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   // The holder took unintended damage from the other party's fire. src/sim/combat.ts sums it and turns it into an
   // attack past a threshold.
   strayFire: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
-  // The holder and the player deal in fuel and supply aid. See src/sim/aid.ts. An agreed deal is fulfilled once both
-  // trucks are parked in reach, and the fulfilled hook moves everything once. A feud between the two breaks it.
-  // Nothing refreshes it: parked in reach, an agreed deal is fulfilled, and a pending offer still lapses unanswered.
-  aid: { refresh: never, check: checkAid, hooks: { fulfilled: settleAid }, work: noWork, binds: true },
+  // The holder and the player deal in fuel and supply aid. See src/sim/aid.ts. An agreed deal waits for the player's
+  // [E], then both trucks stay parked for its handover work, and the fulfilled hook moves everything once. Combat or
+  // a feud breaks it. Parked in reach keeps an agreed deal alive, and a pending offer still lapses unanswered.
+  aid: { refresh: refreshAid, check: checkAid, hooks: { fulfilled: settleAid }, work: aidWork, binds: true },
   // The holder is the aggressor and the other party its target. It starts with a hostile act, like a shot or a ram, or
   // with the holder hunting the other on a fight goal in sight. src/sim/combat.ts refreshes it. Both trucks count as in
   // combat while it lasts. It breaks once the two are no longer hostile to each other.

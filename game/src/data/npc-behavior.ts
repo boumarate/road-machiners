@@ -172,14 +172,19 @@ export const AID = {
   // ...and worth at most this much. That covers the start scout, worth about 3600 new, and worn tier 1 trucks, not
   // geared tier 2 and 3 trucks like the combat start kit's hauler, worth about 6000.
   poorValue: 4000,
+  // Turns both trucks stay parked side by side after the player presses [E] before the goods move.
+  handoverTurns: 1,
 };
 
-// Raiders look for prey on lonely road stretches and at the pads of salvage sites, where scavengers stop.
+// Raiders look for prey on lonely road stretches and at the pads of salvage sites, where scavengers stop. Each raider
+// hunts only the grounds nearest its own camp, and only those outside lawman reach. Vultures prowl all of them.
 export const HUNT = {
   roadSpacing: 60, // tiles along a road between two hunting points: three sight radii, so views do not overlap
   // Tiles from any site edge to a road hunting point: two sight radii. Prey there has left a town or site
   // behind and is alone on the road.
   siteDistance: 40,
+  // Tiles from any lawman town gate within which a raider never hunts: the farthest lawman patrol stop plus its sight.
+  lawReach: NPC_BEHAVIOR.patrolRadius + TERRAIN.vision.radius,
 };
 
 // Name pools for NPC drivers. Each driver gets one first name and one surname at spawn.

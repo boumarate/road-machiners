@@ -81,7 +81,10 @@ export type SalvageStock = {
 // A pile is gone at turn `until`. The player's items and other trucks' items never share a pile. A player pile counts
 // as searched, and `basis` keeps the average paid per unit of each good on it, so taking them back restores their
 // cost. Goods on any other pile cost nothing.
-export type Pile = { until: number; fromPlayer: boolean; basis: Record<string, number> };
+// An NPC that was handed the pile claims it. The claim lapses at turn `until` or when the claimant drops its loot goal
+// on the pile, is knocked out or leaves the world. `warned` lists the drivers who agreed to back off.
+export type PileClaim = { by: string; until: number; warned: string[] };
+export type Pile = { until: number; fromPlayer: boolean; basis: Record<string, number>; claim?: PileClaim };
 
 export type RefitMove = {
   itemId: string;
@@ -256,7 +259,8 @@ export type Plea = 'truce' | 'mercy';
 // answered yet.
 // An aid deal: the giver hands the receiver fuel and supplies when both are parked side by side. The holder is always
 // the NPC and the other party the player. price is what the NPC pays, 0 when free or for an NPC gift. agreed is false
-// while an NPC's unprompted offer waits for the player's answer. See src/sim/aid.ts.
+// while an NPC's unprompted offer waits for the player's answer. started is set by the player's [E]; work and workLeft
+// are the handover turns. See src/sim/aid.ts.
 export type StateData =
   | { kind: 'tow'; site: string; fee: number; waived: number; hitched: boolean }
   | { kind: 'feud'; robbery: boolean }
@@ -265,7 +269,7 @@ export type StateData =
   | { kind: 'escort'; site: string | null; fee: number }
   | { kind: 'patch'; deal: PatchDeal; parts: number; price: number; work: number; workLeft: number } // holder patches other
   | { kind: 'strayFire'; damage: number } // unintended damage the holder took from the other party
-  | { kind: 'aid'; giver: 'player' | 'npc'; fuel: number; supplies: number; price: number; free: boolean; agreed: boolean }
+  | { kind: 'aid'; giver: 'player' | 'npc'; fuel: number; supplies: number; price: number; free: boolean; agreed: boolean; started: boolean; work: number; workLeft: number }
   | { kind: 'none' };
 export type NpcState = {
   id: string;
@@ -394,7 +398,8 @@ export type GameEvent =
   | { t: 'say'; speaker: string; text: string; vars: CallVars } // speaker is a vehicle id; the player's lines use the player's
   | { t: 'call'; with: string; outcome: 'opened' | 'ended' }
   | { t: 'honk'; vehicle: string }
-  | { t: 'patch'; patcher: string; client: string; outcome: 'started' | 'done' | 'lapsed' }
+  | { t: 'aidStarted'; giver: string; receiver: string }
+  | { t: 'patch'; patcher: string; client: string; outcome: 'started' | 'done' | 'lapsed' | 'broken' }
   | { t: 'aid'; giver: string; receiver: string; fuel: number; supplies: number; paid: number } // units moved, money paid
   | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null } // null while the player has to answer
   | { t: 'info'; text: string; debug?: true }; // a debug line shows only with the full log flag

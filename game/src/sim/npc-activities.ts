@@ -10,7 +10,7 @@ import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
 import type { PartHit } from './armor';
 import { callLawmen, inCombat, isHostile, shotDamage, startFeuds } from './combat';
-import { affordableBuyCount, getTradePrice, sellVehicleCargo, serviceAtCamp, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
+import { affordableBuyCount, cargoSaleValue, sellAtCamp, sellVehicleCargo, serviceAtCamp, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods, cargoRoom } from './inventory';
@@ -18,8 +18,8 @@ import { cancelJob } from './jobs';
 import { isFree } from './spawn';
 import { route } from './path';
 import {
-  tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
-  huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
+  tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolSite, travelSitesAway,
+  huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
   lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
@@ -30,7 +30,7 @@ import { canLootTruck, canReachSalvage, canTakeAny, hasSalvage, isSiteStock, loo
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
-import { judgeStrandedFoe, plead } from './parley';
+import { judgeStrandedFoe, plead, warnedOff } from './parley';
 import { addState, endState, stateOf, statesHeld } from './states';
 import { isStranded, suppliesCap, vehicleStats } from './stats';
 import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Vehicle, World } from './types';
@@ -258,17 +258,13 @@ function serviceStops(vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed):
   return need.damaged ? profile.towns : pumpsOf(vehicle, profile);
 }
 
-// The shop that pays most for the carried cargo, of the driver's towns and every stall. Nearest wins a tie.
+// The market that pays most for the carried cargo, of the driver's markets. Nearest wins a tie.
 function saleGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity {
-  const goods = Object.entries(goodsCount(vehicle));
-  const shops = [...new Set([...profile.towns, ...STALLS])].map(getKnownSite);
-  const getValue = (id: string) => goods.reduce((sum, [good, count]) => sum + (shopDef(id).goods.includes(good) ? count * getTradePrice(world, vehicle, id, good, 'sell') : 0), 0);
-  shops.sort((a, b) => getValue(b.id) - getValue(a.id) || dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
-  if (!shops[0]) throw new Error(`${vehicle.id} knows no buyer`);
-  return createSiteActivity('sell', shops[0].id, 'sell carried cargo');
+  const buyers = profile.markets.map(getKnownSite);
+  buyers.sort((a, b) => cargoSaleValue(world, vehicle, b.id) - cargoSaleValue(world, vehicle, a.id) || dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
+  if (!buyers[0]) throw new Error(`${vehicle.id} knows no buyer`);
+  return createSiteActivity('sell', buyers[0].id, 'sell carried cargo');
 }
-
-const STALLS: readonly string[] = Object.values(SHOPS).filter((s) => s.kind === 'stall').map((s) => s.id);
 
 function tradeGoal(world: World, vehicle: Vehicle): NpcActivity {
   const offers = tradeOffers(world, vehicle);
@@ -290,21 +286,21 @@ function scavengeGoal(world: World, vehicle: Vehicle): NpcActivity {
 
 type IdleGoal = (world: World, vehicle: Vehicle) => NpcActivity;
 
-// A raid or a prowl drives to a hunting ground. A prowl looks for wrecks, and passed salvage is looted through salvageSeen.
-function huntingGoal(kind: 'raid' | 'prowl', reason: string): IdleGoal {
+// A raid drives to a ground of the raider's camp, a prowl to any hunting ground. A prowl looks for wrecks, and passed salvage is looted through salvageSeen.
+function huntingGoal(kind: 'raid' | 'prowl', reason: string, grounds: (vehicle: Vehicle) => Vec[]): IdleGoal {
   return (world, vehicle) => {
-    const places = huntingGroundsAway(vehicle);
+    const places = grounds(vehicle);
     if (places.length === 0) throw new Error(`${vehicle.id} chose to ${kind} with no hunting ground away`);
     return createActivity(kind, null, { ...places[randInt(world, 0, places.length - 1)] }, reason);
   };
 }
 
-// A patrol drives to a road point near the town it guards.
+// A patrol drives to a road point near the town or camp it guards.
 function patrolGoal(world: World, vehicle: Vehicle): NpcActivity {
-  const town = patrolTown(vehicle);
-  const points = patrolPoints(town);
-  if (points.length === 0) throw new Error(`${vehicle.id} chose to patrol ${town.id} with no road near it`);
-  return createActivity('patrol', town.id, { ...points[randInt(world, 0, points.length - 1)] }, 'patrol the roads near town');
+  const site = patrolSite(vehicle);
+  const points = patrolPoints(site);
+  if (points.length === 0) throw new Error(`${vehicle.id} chose to patrol ${site.id} with no road near it`);
+  return createActivity('patrol', site.id, { ...points[randInt(world, 0, points.length - 1)] }, `patrol the roads near ${'kind' in site && site.kind === 'camp' ? 'camp' : 'town'}`);
 }
 
 function travelGoal(world: World, vehicle: Vehicle): NpcActivity {
@@ -335,8 +331,8 @@ function haulGoal(world: World, vehicle: Vehicle): NpcActivity {
 const IDLE_GOALS: Record<Exclude<DecisionOptions['idle'], 'wait'>, IdleGoal> = {
   trade: tradeGoal,
   scavenge: scavengeGoal,
-  raid: huntingGoal('raid', 'look for prey at known hunting grounds'),
-  prowl: huntingGoal('prowl', 'prowl the roads for wrecks'),
+  raid: huntingGoal('raid', 'look for prey at known hunting grounds', raiderGroundsAway),
+  prowl: huntingGoal('prowl', 'prowl the roads for wrecks', huntingGroundsAway),
   patrol: patrolGoal,
   travel: travelGoal,
   explore: exploreGoal,
@@ -686,11 +682,11 @@ function hurtingFoe(world: World, vehicle: Vehicle): Vehicle | null {
 }
 
 // A driver that refuses a threat starts a feud with the one who made it, then fights it or runs from it.
-export function defyThreat(world: World, vehicle: Vehicle, threatener: Vehicle, answer: Exclude<DecisionOptions['threatened'], 'comply'>): void {
+export function defyThreat(world: World, vehicle: Vehicle, threatener: Vehicle, answer: Exclude<DecisionOptions['threatened'], 'comply'>, reason = answer === 'fightBack' ? 'refuse a threat' : 'escape a threat'): void {
   startFeuds(world, threatener, vehicle);
   vehicle.brain!.noticed[`hostileSeen:${threatener.id}`] = world.turn;
-  if (answer === 'fightBack') interrupt(world, vehicle, fightGoal(world, vehicle, threatener, 'refuse a threat'));
-  else interrupt(world, vehicle, fleeFrom(world, vehicle, npcProfile(vehicle), threatener.id, threatener.pos, 'escape a threat'));
+  if (answer === 'fightBack') interrupt(world, vehicle, fightGoal(world, vehicle, threatener, reason));
+  else interrupt(world, vehicle, fleeFrom(world, vehicle, npcProfile(vehicle), threatener.id, threatener.pos, reason));
 }
 
 // A driver warned off its loot gives it up: its job on the target ends, its loot goal pops, and it notices the target
@@ -879,11 +875,16 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   return currentActivity(world, vehicle, profile);
 }
 
-// A stranded truck parked on the pad of any town or one of its own camps, however it got there, buys the service it
-// can pay for. If that leaves it stranded, it gets a fresh loadout from its pool.
+// The sites that serve a stranded driver: its bases if it has any, else any town.
+function servingSiteIds(profile: NpcProfile): string[] {
+  return profile.bases.length > 0 ? profile.bases : REGION.towns.map((t) => t.id);
+}
+
+// A stranded truck parked on the pad of a site that serves it, however it got there, buys the service it can pay
+// for. If that leaves it stranded, it gets a fresh loadout from its pool.
 function serveStranded(world: World, vehicle: Vehicle, profile: NpcProfile): void {
   if (!isStranded(world, vehicle) || isOnRope(world, vehicle.id) || vehicle.speed > RULES.parkedSpeed) return;
-  const site = [...REGION.towns.map((t) => t.id), ...profile.bases].map(getKnownSite).find((s) => canUseSite(vehicle.pos, s));
+  const site = servingSiteIds(profile).map(getKnownSite).find((s) => canUseSite(vehicle.pos, s));
   if (!site) return;
   serviceAt(world, vehicle, site);
   if (isStranded(world, vehicle)) refitAtHome(world, vehicle);
@@ -1167,7 +1168,7 @@ function searchStock(world: World, vehicle: Vehicle, stock: SalvageStock): void 
   if (vehicle.job) return;
   // No search starts in combat, so the driver gives the salvage up rather than park beside it for good.
   if (inCombat(world, vehicle)) finishGoal(world, vehicle, 'combat stops the search');
-  else beginSearch(world, vehicle, stock.id);
+  else if (!warnedOff(world, vehicle, stock)) beginSearch(world, vehicle, stock.id);
 }
 
 // The goal reach rule: within twice the stop radius of the destination.
@@ -1220,7 +1221,7 @@ function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity):
 function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
   const kind = 'kind' in site ? site.kind : null;
   if (kind === 'oasis') getResources(world, vehicle).supplies = suppliesCap(vehicle);
-  else if (kind === 'camp') serviceAtCamp(world, vehicle, site.id);
+  else if (kind === 'camp') serviceAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else if (shopDef(site.id).kind === 'stall') serviceAtStall(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else serviceVehicle(world, vehicle, site.id, NPC_UPKEEP.repairParts);
 }
@@ -1228,7 +1229,8 @@ function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
 function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
   if (!site) return;
-  sellVehicleCargo(world, vehicle, site.id, NPC_UPKEEP.repairParts);
+  if ('kind' in site && site.kind === 'camp') sellAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
+  else sellVehicleCargo(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   noteTown(vehicle, site.id);
   finishGoal(world, vehicle, 'sold cargo');
 }

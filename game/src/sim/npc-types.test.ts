@@ -8,7 +8,7 @@ import { chassisDef } from '../data/chassis';
 import { makePart } from './factory';
 import { freeCells, goodsCount, mountedParts } from './grid';
 import { addGoods } from './inventory';
-import { huntingGrounds, optionChances, optionWeights } from './npc-decisions';
+import { huntingGrounds, optionChances, optionWeights, patrolPoints, raiderGrounds } from './npc-decisions';
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { siteGates, sitePads } from './sites';
 import { spawnInitial, spawnNpcs } from './spawn';
@@ -79,10 +79,42 @@ describe('patrols', () => {
     expect(topGoal(npc)).toBeNull();
   });
 
-  it('never offers patrol to a driver that is not a lawman', () => {
+  it('never offers patrol to a courier', () => {
     const w = emptyWorld({ x: 300, y: 300 });
     const npc = createNpc(w, 'courier', ['courier'], 'courier', ['mg', 'flatFour'], sitePads(siteById('bowl'))[0]);
     expect(optionWeights(w, npc, 'idle', null, null)).not.toHaveProperty('patrol');
+  });
+
+  it('offers raiders a patrol of their camp, within the patrol radius of its gates', () => {
+    forceOption('idle', 'patrol');
+    for (const id of ['scrapjaw', 'kiln']) {
+      const camp = siteById(id);
+      expect(patrolPoints(camp).length).toBeGreaterThanOrEqual(1);
+      const w = emptyWorld({ x: 600, y: 600 });
+      const npc = createNpc(w, 'buggy', ['raider'], 'buggy', ['mg', 'stockEngine'], sitePads(camp)[0]);
+      expect(optionWeights(w, npc, 'idle', null, null)).toHaveProperty('patrol');
+      const goals = idleGoals(w, npc.id, 30).filter((g) => g.kind === 'patrol');
+      expect(goals.length).toBeGreaterThan(25);
+      for (const goal of goals) {
+        expect(goal.targetId).toBe(id);
+        expect(goal.reason).toBe('patrol the roads near camp');
+        expect(Math.min(...siteGates(camp).map((gate) => dist(gate, goal.destination!)))).toBeLessThanOrEqual(NPC_BEHAVIOR.patrolRadius);
+      }
+    }
+  });
+
+  it('sends a raider to raid only the grounds of its own camp', () => {
+    forceOption('idle', 'raid');
+    for (const id of ['scrapjaw', 'kiln']) {
+      const camp = siteById(id);
+      const w = emptyWorld({ x: 600, y: 600 });
+      const npc = createNpc(w, 'buggy', ['raider'], 'buggy', ['mg', 'stockEngine'], sitePads(camp)[0]);
+      const goals = idleGoals(w, npc.id, 30).filter((g) => g.kind === 'raid');
+      expect(goals.length).toBeGreaterThan(25);
+      for (const goal of goals) {
+        expect(raiderGrounds(camp)).toContainEqual(goal.destination);
+      }
+    }
   });
 });
 

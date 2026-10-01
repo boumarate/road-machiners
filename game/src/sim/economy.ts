@@ -176,12 +176,18 @@ export function serviceVehicle(
   refuelAndRepair(world, vehicle);
 }
 
-// A raider camp sells fuel, supplies and repairs to raiders at the town rates. It buys no cargo.
-export function serviceAtCamp(
-  world: World,
-  vehicle: Vehicle,
-  campId: string,
-): void {
+// A camp is a fence. It pays the NPC road price, the lowest in the region, keeps no stock and leaves the goods out of the world.
+const CAMP_MARGIN = ECONOMY.spread + ECONOMY.roadSpread;
+
+export function campGoodPrice(good: string): number {
+  return roadGoodPrice(good, CAMP_MARGIN, "sell");
+}
+
+export function campPartPrice(part: PartInstance): number {
+  return partPriceAt(part, CAMP_MARGIN, "sell");
+}
+
+function requireCampService(vehicle: Vehicle, campId: string): void {
   const camp = REGION.locations.find((l) => l.id === campId);
   if (camp?.kind !== "camp" || !canUseSite(vehicle.pos, camp))
     throw new Error("Not at a gate of the requested camp");
@@ -189,7 +195,41 @@ export function serviceAtCamp(
     throw new Error("Only raiders use camp services");
   if (vehicle.speed > RULES.parkedSpeed)
     throw new Error("Stop before using camp services");
+}
+
+// Sells every good above `retainedParts` units of parts, and every spare part, at the camp price. No shop state moves.
+export function sellAtCamp(world: World, vehicle: Vehicle, campId: string, retainedParts: number): void {
+  requireCampService(vehicle, campId);
+  const resources = getResources(world, vehicle);
+  for (const [good, count] of Object.entries(goodsCount(vehicle))) {
+    const sellCount = good === "parts" ? Math.max(0, count - retainedParts) : count;
+    if (sellCount <= 0) continue;
+    removeGoods(vehicle, good, sellCount);
+    resources.money += sellCount * campGoodPrice(good);
+  }
+  const spares = spareParts(vehicle);
+  for (const part of spares) resources.money += campPartPrice(part);
+  vehicle.items = vehicle.items.filter((item) => item.kind !== "part" || !spares.includes(item.part));
+}
+
+// A raider camp buys cargo, then sells fuel, supplies and repairs to raiders at the town rates.
+export function serviceAtCamp(
+  world: World,
+  vehicle: Vehicle,
+  campId: string,
+  retainedParts: number,
+): void {
+  sellAtCamp(world, vehicle, campId, retainedParts);
   refuelAndRepair(world, vehicle);
+}
+
+// What the carried cargo sells for at a buyer: a camp buys any good, a shop only the goods it trades.
+export function cargoSaleValue(world: World, vehicle: Vehicle, buyerId: string): number {
+  const camp = REGION.locations.find((l) => l.id === buyerId)?.kind === "camp";
+  return Object.entries(goodsCount(vehicle)).reduce((sum, [good, count]) => {
+    if (camp) return sum + count * campGoodPrice(good);
+    return sum + (shopDef(buyerId).goods.includes(good) ? count * getTradePrice(world, vehicle, buyerId, good, "sell") : 0);
+  }, 0);
 }
 
 // A roadside stall buys an NPC's cargo that it trades and sells the fuel or supplies it stocks. It does no repairs.
@@ -425,15 +465,22 @@ function garageRepair(part: PartInstance): void {
   else restorePart(part, maxHp(part));
 }
 
-export function repairAll(world: World): World {
+function repairParts(world: World, pick: (w: World, v: Vehicle) => PartInstance[]): World {
   return playerCommand(world, (w) => {
     requireTown(w);
-    const me = playerVehicle(w);
-    const parts = garageParts(w, me);
-    const cost = parts.reduce((a, p) => a + partRepairCost(w, p), 0);
-    pay(w, cost, "repairs");
+    const parts = pick(w, playerVehicle(w));
+    pay(w, costOf(w, parts), "repairs");
     for (const p of parts) garageRepair(p);
   });
+}
+
+export function repairAll(world: World): World {
+  return repairParts(world, garageParts);
+}
+
+// Only the built-in parts: cab, transmission, wheels and fuel tank.
+export function repairBasics(world: World): World {
+  return repairParts(world, basicParts);
 }
 
 // Buy or sell price at one place, both scaled by the part's current condition (HP share), not only
@@ -515,11 +562,16 @@ export function chassisTradeIn(world: World): number {
   );
 }
 
+function costOf(world: World, parts: PartInstance[]): number {
+  return parts.reduce((a, p) => a + partRepairCost(world, p), 0);
+}
+
 export function repairCost(world: World): number {
-  return garageParts(world, playerVehicle(world)).reduce(
-    (a, p) => a + partRepairCost(world, p),
-    0,
-  );
+  return costOf(world, garageParts(world, playerVehicle(world)));
+}
+
+export function basicsRepairCost(world: World): number {
+  return costOf(world, basicParts(world, playerVehicle(world)));
 }
 
 function allParts(v: Vehicle): PartInstance[] {
@@ -534,6 +586,10 @@ function repairableParts(v: Vehicle): PartInstance[] {
 // The player's town garage also takes junk parts the Rebuild perk can rebuild.
 function garageParts(world: World, v: Vehicle): PartInstance[] {
   return allParts(v).filter((p) => !isJunk(p) || canRebuild(world, p));
+}
+
+function basicParts(world: World, v: Vehicle): PartInstance[] {
+  return garageParts(world, v).filter((p) => partDef(p.defId).kind === "core");
 }
 
 // Swap chassis: the old built-in parts go with the old chassis and the new one brings its own.
@@ -654,9 +710,12 @@ function roadSpread(world: World): number {
 
 // Trucks keep no price pressure, so a good trades at its base value with the road spread either way.
 export function truckGoodPrice(world: World, good: string, direction: "buy" | "sell"): number {
+  return roadGoodPrice(good, roadSpread(world), direction);
+}
+
+function roadGoodPrice(good: string, margin: number, direction: "buy" | "sell"): number {
   const def = GOODS[good];
   if (!def) throw new Error(`Unknown good ${good}`);
-  const margin = roadSpread(world);
   const buy = Math.max(1, Math.ceil(def.value * (1 + margin)));
   return direction === "buy" ? buy : Math.max(0, Math.min(buy - 1, Math.floor(def.value * (1 - margin))));
 }

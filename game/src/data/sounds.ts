@@ -190,12 +190,11 @@ export const MIX = {
   ],
   // Wind bed: a base level, rising near dust storms.
   wind: { baseGain: 0.4, stormGain: 1, stormReachTiles: 12, fadeSeconds: 1 },
-  // Music crossfades to combat while a hostile is in sight. It holds combat for holdTurns after the last one
-  // leaves, so a hostile at the edge of sight does not flip the music every turn.
+  // Music crossfades to combat while the player is in combat, as the sim's combat state defines it.
   // Between turns, once no turn has played for pauseDelayMs, music is muffled to pauseCutoffHz over toneSeconds.
   // The delay keeps the short gaps between automatic turns clear.
-  music: { fadeSeconds: 3, holdTurns: 5, pauseDelayMs: 300, pauseCutoffHz: 4000, openCutoffHz: 20000, toneSeconds: 0.6 },
-  // Combat score. One random base plays while a hostile is in sight, as combat music did. Heat is a fading sum of
+  music: { fadeSeconds: 3, pauseDelayMs: 300, pauseCutoffHz: 4000, openCutoffHz: 20000, toneSeconds: 0.6 },
+  // Combat score. One random base plays while the player is in combat. Heat is a fading sum of
   // event weights, halving every heatHalfLifeSeconds; a busy fight adds about 1 per turn. It sets the base level
   // and muffle each bar, full at fullHeat. Each event stabs on the lead or secondary line with its peak on the
   // event, and its rhythm's tail follows on the grid; see SoundDesigner. Rhythms have one character per half beat,
