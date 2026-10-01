@@ -339,6 +339,13 @@ def test_change_tool_writes_change_command(tmp_path):
     assert json.loads(path.read_text())["text"] == "Set FACTORY_TEST_WORKERS to 2."
 
 
+def test_change_guidance_asks_for_an_acknowledgment_not_silence():
+    assert "[SILENT]" in plugin.CHANGE_DONE
+    assert "Never reply with [SILENT]" in plugin.CHANGE_DONE
+    assert "Queued for a PR." in plugin.CHANGE_DONE
+    assert "Add nothing about it" not in plugin.CHANGE_DONE
+
+
 def test_queue_tool_refuses_non_member(tmp_path):
     inbox, handle = queue_setup(tmp_path, {**SESSION, "HERMES_SESSION_USER_ID": "2"})
     assert "error" in json.loads(handle({"request": "x"}))
