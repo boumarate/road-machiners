@@ -8,7 +8,7 @@ export const RULES = {
   crawlSpeed: 1, // below this speed turning slows toward a standstill
   lowFuelThreshold: 0.2, // share of tank remaining when speed is limited
   lowFuelSpeedFactor: 0.5, // share of normal top speed below the threshold
-  fuelUseFactor: 0.075, // share of the chassis fuel rate burned per tile; a daytime Bowl to Nose road trip uses under 60% of the starting fuel, leaving room for detours and fights
+  fuelUseFactor: 0.045, // share of the chassis fuel rate burned per tile; a daytime Bowl to Nose road trip uses under 36% of the starting fuel, leaving room for detours and fights
   npcStuckTurns: 2, // failed drive attempts before backing out
   npcRecoveryTurns: 2, // turns spent backing out before resuming the route
   // An NPC that stays put `turns` turns in a row while its goal point is out of reach, for any reason, drives `driveTurns`
@@ -122,9 +122,9 @@ export const RULES = {
   maxKillWrecks: 12, // oldest wrecks from kills are cleared past this, so obstacles do not pile up
 
   // Supplies, per turn
-  suppliesPerTurn: 0.015, // at base heat; a full load lasts about 550 daytime turns, enough to explore off the roads
+  suppliesPerTurn: 0.009, // at base heat; a full load lasts about 920 daytime turns, enough to explore off the roads
   baseSupplies: 20, // supply cap before mounted supply stores
-  suppliesLow: 4, // the HUD warns at or below this, about 110 daytime turns before running out
+  suppliesLow: 4, // the HUD warns at or below this, about 180 daytime turns before running out
   starveDamage: 5, // character health lost per turn without supplies
   starveFloor: 30, // starving stops here, so only cab damage can kill
   maxHealth: 100,
