@@ -235,7 +235,7 @@ const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
     w.player.fuel = 0;
     w.player.supplies = 0;
     const totalScrap = w.salvage.find((s) => s.id === convoy.id)!.goods.scrap;
-    let next = scavenge(w);
+    let next = scavenge(w, convoy.id);
     let turns = 0;
     while (next.vehicles[0].job) {
       next = endTurn(next, testDrive);
@@ -243,7 +243,7 @@ const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
     }
     next = takeAllLoot(next, convoy.id);
     next.player.scavenged = [];
-    expect(canScavenge(next)).toBe(false);
+    expect(canScavenge(next, convoy.id)).toBe(false);
     expect(goodsCount(next.vehicles[0]).scrap).toBe(totalScrap);
   });
 

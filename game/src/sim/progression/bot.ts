@@ -390,9 +390,8 @@ function nearestStock(world: World, stocks: SalvageStock[]): SalvageStock | null
 
 // Takes all that fits from a searched stock in reach.
 function lootHere(o: Orders): void {
-  if (!canLoot(o.world) || freeCells(o.me) === 0) return;
   const stock = salvageHere(o.world);
-  if (!stock) throw new Error('A lootable stock is in reach but salvageHere found none');
+  if (!stock || !canLoot(o.world, stock.id) || freeCells(o.me) === 0) return;
   if (lootBlocker(o.world, o.me, stock.id)) return;
   o.run((w) => takeAllLoot(w, stock.id));
 }

@@ -32,7 +32,27 @@ import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
 
 // The E key action. ready is false while the truck must stop first.
 // A hint marks an action that can never run here, and says why. combat is the turns of combat left when it blocks the action.
-export type ContextAction = { label: string; ready: boolean; hint?: string; combat?: number };
+// target names what the action acts on, so the key runs the shown action and nothing re-decides it.
+export type ContextTarget =
+  | { kind: 'aid' }
+  | { kind: 'trade' }
+  | { kind: 'shop' }
+  | { kind: 'downed'; id: string }
+  | { kind: 'oasis' }
+  | { kind: 'stock'; id: string }
+  | { kind: 'empty' };
+export type ContextAction = { label: string; ready: boolean; target: ContextTarget; hint?: string; combat?: number };
+
+// Identifies an action across renders, so a selection can stay on it.
+export function contextKey(target: ContextTarget): string {
+  return 'id' in target ? `${target.kind}:${target.id}` : target.kind;
+}
+
+function actionTitle(action: ContextAction): string {
+  if (action.hint) return action.hint;
+  if (action.combat !== undefined) return combatBlocked(action.combat);
+  return action.ready ? "" : "Stop to use";
+}
 
 export const combatBlocked = (turns: number): string => `Can't do this while in combat, ${turns} turns left`;
 
@@ -203,14 +223,17 @@ export class Hud {
   // Work shows its progress instead, except work that blocks no job, which yields to any action.
   renderAction(
     action: ContextAction | null,
+    count: number,
+    index: number,
     world: World,
     onUse: () => void,
+    onCycle: (step: 1 | -1) => void,
   ): void {
     const me = playerVehicle(world);
     const shown = shownWork(action, workOf(world, me));
     this.action.style.display = action || shown ? "" : "none";
     if (shown) this.renderWork(shown, workLabel(world, me, shown));
-    else if (action) this.renderActionButton(action, onUse);
+    else if (action) this.renderActionButton(action, count, index, onUse, onCycle);
   }
 
   private renderWork(work: Work, label: string): void {
@@ -236,18 +259,24 @@ export class Hud {
     );
   }
 
-  private renderActionButton(action: ContextAction, onUse: () => void): void {
+  private renderActionButton(action: ContextAction, count: number, index: number, onUse: () => void, onCycle: (step: 1 | -1) => void): void {
+    const use = el(
+      "button",
+      {
+        onclick: onUse,
+        disabled: !action.ready,
+        class: action.combat !== undefined ? "combat" : "",
+        title: actionTitle(action),
+      },
+      action.hint ? action.label : `[E] ${action.label}`,
+    );
+    // With several actions in reach, arrow buttons and a count show that the arrow keys choose between them.
+    const cycle = (step: 1 | -1, glyph: string, key: string) =>
+      el("button", { class: "cycle", title: `[${key}]`, onclick: () => onCycle(step) }, glyph);
     this.action.replaceChildren(
-      el(
-        "button",
-        {
-          onclick: onUse,
-          disabled: !action.ready,
-          class: action.combat !== undefined ? "combat" : "",
-          title: action.hint ?? (action.combat !== undefined ? combatBlocked(action.combat) : action.ready ? "" : "Stop to use"),
-        },
-        action.hint ? action.label : `[E] ${action.label}`,
-      ),
+      ...(count > 1
+        ? [cycle(-1, "‹", "←"), use, el("span", { class: "count" }, `${index + 1}/${count}`), cycle(1, "›", "→")]
+        : [use]),
     );
   }
 

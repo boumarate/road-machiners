@@ -345,7 +345,7 @@ describe('commands while knocked out', () => {
       () => moveItem(w, me.items[0].id, { x: 0, y: 0, rot: 0 }),
       () => dumpItem(w, me.items[0].id),
       () => buyGood(w, 'scrap', 1),
-      () => scavenge(w),
+      () => scavenge(w, 'bowl'),
     ];
     for (const command of commands) expect(command).toThrow('Player is knockedOut');
   });

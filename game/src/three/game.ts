@@ -22,12 +22,9 @@ import {
   type VehicleFrame,
 } from "../phys/frames";
 import { applyTurn, type PreparedTurn } from "../phys/turn";
-import { readyAid, startAid } from "../sim/aid";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { mountedParts } from "../sim/grid";
-import { applySiteAction, canLoot, salvageHere } from "../sim/locations";
-import { getContextAction } from "../ui/hud-readout";
-import { shopAt } from "../sim/market";
+
 import { isStranded, maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder, parkedVehicles, throttleFor } from "../sim/steering";
 import { route } from "../sim/path";
@@ -38,14 +35,14 @@ import { TERRAIN } from "../data/terrain";
 import { isTowed, setBeacon, unhitch } from "../sim/tow";
 import { inCombat } from "../sim/combat";
 import { cloneWorld, hostileToPlayer, playerCanAct, setMoveOrder } from "../sim/world";
-import { TruckControls } from "./truck-controls";
+import { TruckContext, TruckControls } from "./truck-controls";
 import { PAL } from "../render/palette";
 import { READY_ARC_BIT } from "./render/models";
 import { timed } from "../perf";
 import { CharacterScreen } from "../ui/character";
 import { HitCard } from "../ui/hitCard";
 import type { UiHost } from "../ui/host";
-import { combatBlocked, Hud } from "../ui/hud";
+import { Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import { TownScreen, TruckTradeScreen } from "../ui/town";
 import { aimAtPart, HoverHold, toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
@@ -66,7 +63,6 @@ import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
 import { WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
 import { REGION } from "../data/region";
-import { isBusy } from "../sim/jobs";
 import { daylightAt, lampsOn, lightScene, NightLights, sunLight } from "./render/daylight";
 import { sunAt } from "../sim/sun";
 import { markError, markVehicle } from "../sim/detect";
@@ -176,6 +172,7 @@ export class Game {
   private readonly hitCard: HitCard;
   private readonly weapons: WeaponPanel;
   private readonly town: TownScreen;
+  private readonly context: TruckContext;
   private readonly trade: TruckTradeScreen;
   private readonly character: CharacterScreen;
   private readonly inventory: InventoryScreen;
@@ -244,6 +241,17 @@ export class Game {
     this.fx = new Fx3D(this.scene, overlay, this.rig);
     this.truckFx = new TruckFx(this.fx);
     this.controls = new TruckControls({ world: () => this.world, apply: (next) => this.apply(next), refreshPlan: () => this.refreshPlan(), doused: () => { this.truckFx.douse(); this.hud.pushEvents(this.world); }, revved: () => this.loops.rev(playerVehicle(this.world).chassisId) });
+    this.context = new TruckContext({
+      world: () => this.world,
+      playing: () => this.anim !== null,
+      apply: (next) => this.apply(next),
+      pushEvents: () => this.hud.pushEvents(this.world),
+      note: (text) => this.hud.note(this.world, text, "bad"),
+      openTrade: () => this.trade.openIfReady(),
+      openTown: () => this.town.open(),
+      openDowned: (id) => this.inventory.openDowned(this.world, id),
+      openLoot: (id) => this.inventory.openLoot(id),
+    });
     const score = new CombatScore(player, Math.random);
     this.sound = new SoundDirector(player, this.rig, score);
     this.loops = new SoundLoops(player, score);
@@ -375,39 +383,22 @@ export class Game {
     this.trade.render();
     this.character.render();
     this.inventory.render();
+    const { action, count, index } = this.context.shown();
     this.hud.renderAction(
-      getContextAction(this.world, this.anim !== null),
+      action,
+      count,
+      index,
       this.displayWorld(),
       () => this.runKey("KeyE"),
+      (step) => this.runKey(step === 1 ? "ArrowRight" : "ArrowLeft"),
     );
     this.refreshInfo();
     this.refreshTargetMarkers();
   }
 
-  private useContext(): void {
-    if (this.anim || !playerCanAct(this.world)) return;
-    const aid = readyAid(this.world);
-    if (aid) { this.apply(startAid(this.world, aid.holder)); this.hud.pushEvents(this.world); return; }
-    if (this.trade.openIfReady()) return;
-    return shopAt(this.world) ? this.town.open() : this.useSite();
-  }
-
-  // A search that combat blocks says so in the log, with the turns left.
-  private noteCombatBlock(): boolean {
-    const turns = getContextAction(this.world, false)?.combat;
-    if (turns !== undefined) this.hud.note(this.world, combatBlocked(turns), "bad");
-    return turns !== undefined;
-  }
-
-  private useSite(): void {
-    if (this.inventory.openDowned(this.world) || isBusy(playerVehicle(this.world)) || this.noteCombatBlock()) return;
-    const after = applySiteAction(this.world);
-    if (after) {
-      this.apply(after);
-      this.hud.pushEvents(this.world);
-    } else if (canLoot(this.world)) {
-      this.inventory.openLoot(salvageHere(this.world)!.id);
-    }
+  private cycleContext(step: 1 | -1): void {
+    this.context.cycle(step);
+    this.refreshUi();
   }
 
   private refreshInfo(): void {
@@ -493,7 +484,9 @@ export class Game {
     KeyX: { run: () => this.weapons.toggleVisible(), noModal: true },
     Digit0: { run: () => this.weapons.selectWeapon(null), noModal: true },
     ...Object.fromEntries([0, 1, 2, 3].map((i) => [`Digit${i + 1}`, { run: () => this.weapons.selectIndex(i), noModal: true as const, idle: true as const }])),
-    KeyE: { run: () => this.useContext(), noModal: true },
+    KeyE: { run: () => this.context.use(), noModal: true },
+    ArrowLeft: { run: () => this.cycleContext(-1), noModal: true, idle: true },
+    ArrowRight: { run: () => this.cycleContext(1), noModal: true, idle: true },
     KeyR: { run: () => this.controls.toggleManual(), noModal: true, idle: true },
     KeyP: { run: () => this.controls.toggleAutoRepair(), noModal: true, idle: true },
     KeyO: { run: () => this.controls.toggleOverdrive(), noModal: true, idle: true },

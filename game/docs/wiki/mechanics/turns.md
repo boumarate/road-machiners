@@ -33,3 +33,5 @@ Q toggles weapon auto mode. It gives every weapon a body shot at the nearest hos
 Beating a truck pays nothing by itself. The loot is on the truck. A wreck leaves parts worth a share of its chassis value, scaled by its HP left, so a kill pays well but not more than trading. Camps refill their raiders over about a day.
 
 The log is for important gameplay and role-play events. It gives the player extra information and details they need. It never lists mechanical state, like gun cooldowns, magazines or reloads, which the HUD shows. Damage readouts are one of the few exceptions: each shot logs the parts it damaged, so the player can study their combat tactics.
+
+When several things are in reach, such as a shop and a loot pile or two knocked-out trucks, the left and right arrow keys choose which one [E] uses, and the action button shows the choice with its place in the list.
