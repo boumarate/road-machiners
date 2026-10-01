@@ -465,15 +465,22 @@ function garageRepair(part: PartInstance): void {
   else restorePart(part, maxHp(part));
 }
 
-export function repairAll(world: World): World {
+function repairParts(world: World, pick: (w: World, v: Vehicle) => PartInstance[]): World {
   return playerCommand(world, (w) => {
     requireTown(w);
-    const me = playerVehicle(w);
-    const parts = garageParts(w, me);
-    const cost = parts.reduce((a, p) => a + partRepairCost(w, p), 0);
-    pay(w, cost, "repairs");
+    const parts = pick(w, playerVehicle(w));
+    pay(w, costOf(w, parts), "repairs");
     for (const p of parts) garageRepair(p);
   });
+}
+
+export function repairAll(world: World): World {
+  return repairParts(world, garageParts);
+}
+
+// Only the built-in parts: cab, transmission, wheels and fuel tank.
+export function repairBasics(world: World): World {
+  return repairParts(world, basicParts);
 }
 
 // Buy or sell price at one place, both scaled by the part's current condition (HP share), not only
@@ -555,11 +562,16 @@ export function chassisTradeIn(world: World): number {
   );
 }
 
+function costOf(world: World, parts: PartInstance[]): number {
+  return parts.reduce((a, p) => a + partRepairCost(world, p), 0);
+}
+
 export function repairCost(world: World): number {
-  return garageParts(world, playerVehicle(world)).reduce(
-    (a, p) => a + partRepairCost(world, p),
-    0,
-  );
+  return costOf(world, garageParts(world, playerVehicle(world)));
+}
+
+export function basicsRepairCost(world: World): number {
+  return costOf(world, basicParts(world, playerVehicle(world)));
 }
 
 function allParts(v: Vehicle): PartInstance[] {
@@ -574,6 +586,10 @@ function repairableParts(v: Vehicle): PartInstance[] {
 // The player's town garage also takes junk parts the Rebuild perk can rebuild.
 function garageParts(world: World, v: Vehicle): PartInstance[] {
   return allParts(v).filter((p) => !isJunk(p) || canRebuild(world, p));
+}
+
+function basicParts(world: World, v: Vehicle): PartInstance[] {
+  return garageParts(world, v).filter((p) => partDef(p.defId).kind === "core");
 }
 
 // Swap chassis: the old built-in parts go with the old chassis and the new one brings its own.

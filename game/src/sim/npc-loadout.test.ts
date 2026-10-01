@@ -376,3 +376,11 @@ describe('NPC loadout tables', () => {
     }
   });
 });
+
+describe('raider gear levels', () => {
+  it('never roll the poor level', () => {
+    for (const template of Object.values(NPCS).filter((t) => t.traits.includes('raider'))) {
+      expect(template.loadout.levels.map((l) => l.value), template.id).not.toContain('poor');
+    }
+  });
+});

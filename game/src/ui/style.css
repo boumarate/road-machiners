@@ -1711,6 +1711,22 @@ canvas.view {
   padding: 6px 0 10px;
   border-bottom: 1px solid #3b454b;
 }
+.town-repair {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0 10px;
+  border-bottom: 1px solid #3b454b;
+  font: 13px var(--font-mono);
+}
+.town-repair .bad,
+.town-repair .dim {
+  flex: 1;
+}
+#ui .town-repair button {
+  padding: 3px 10px;
+  font-size: 12px;
+}
 .service {
   display: contents;
 }

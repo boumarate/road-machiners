@@ -4,7 +4,7 @@
 
 import { SPAWN } from '../data/npcs';
 import { isHostile } from './combat';
-import { isKnockedOut } from './defeat';
+import { isKnockedOut, standDown } from './defeat';
 import { RULES } from '../data/rules';
 import { playerVehicle, vehicleById } from './damage';
 import { partSellPrice } from './economy';
@@ -77,6 +77,20 @@ export function giveUpTo(world: World, loser: Vehicle, winner: Vehicle): void {
   makePeace(world, loser, winner);
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');
+}
+
+// A beaten NPC gives up to the player where it stands. It lies as if knocked out, so the player strips its truck on the
+// loot grid, and both sides make peace. Combat states end at once, so a job can start this turn.
+export function standDownTo(world: World, loser: Vehicle, winner: Vehicle): void {
+  standDown(world, loser, winner.id);
+  makePeace(world, loser, winner);
+  for (const [a, b] of [[loser, winner], [winner, loser]]) {
+    const fight = stateOf(world, 'combat', a.id, b.id);
+    if (fight) endState(world, fight, 'broken');
+  }
+  const grudge = stateOf(world, 'revenge', winner.id, loser.id);
+  if (grudge) endState(world, grudge, 'fulfilled');
+  creditYield(world, loser, winner);
 }
 
 // With Bounty talk, an NPC that gives up to the player counts for a bounty on its template.
@@ -298,11 +312,22 @@ function spare(world: World, npc: Vehicle, prey: Vehicle): void {
   makePeace(world, npc, prey);
 }
 
+// A beaten NPC driver decides once whether to give up to the foe that offers it a way out, NPC or player. The offer
+// is noted for as long as the driver keeps the foe in sight.
+export function answersSurrender(world: World, prey: Vehicle, winner: Vehicle): boolean {
+  prey.brain!.noticed[`surrenderOffered:${winner.id}`] = world.turn;
+  return decide(world, prey, 'surrenderOffered', winner.id, null) === 'accept';
+}
+
+// Whether the prey was already offered a way out by the winner and has answered.
+export function offeredSurrenderBy(world: World, prey: Vehicle, winner: Vehicle): boolean {
+  return `surrenderOffered:${winner.id}` in (prey.brain?.noticed ?? {});
+}
+
 // A stranded NPC offered a way out gives up, stripped by a robber or let go by anyone else, or holds out and draws fire
 // at its cab.
 function answerOffer(world: World, prey: Vehicle, winner: Vehicle, robs: boolean): void {
-  prey.brain!.noticed[`surrenderOffered:${winner.id}`] = world.turn;
-  if (decide(world, prey, 'surrenderOffered', winner.id, null) === 'refuse') return;
+  if (!answersSurrender(world, prey, winner)) return;
   if (robs) surrenderTo(world, prey, winner);
   else giveUpTo(world, prey, winner);
 }
@@ -339,7 +364,7 @@ function dumpWantedParts(world: World, victim: Vehicle): SalvageStock | null {
 // The prey refused or, for the player, hung up on this driver's offer to end the fight. An NPC prey that answered and
 // is still fighting refused, since giving up makes peace.
 function refusedOffer(world: World, shooter: Vehicle, prey: Vehicle): boolean {
-  if (prey.brain) return `surrenderOffered:${shooter.id}` in prey.brain.noticed;
+  if (prey.brain) return offeredSurrenderBy(world, prey, shooter);
   const talked = world.player.talked[shooter.id];
   return talked?.surrender === 'refused' || talked?.giveUp === 'refused';
 }

@@ -397,7 +397,7 @@ export type GameEvent =
   | { t: 'say'; speaker: string; text: string; vars: CallVars } // speaker is a vehicle id; the player's lines use the player's
   | { t: 'call'; with: string; outcome: 'opened' | 'ended' }
   | { t: 'honk'; vehicle: string }
-  | { t: 'patch'; patcher: string; client: string; outcome: 'started' | 'done' | 'lapsed' }
+  | { t: 'patch'; patcher: string; client: string; outcome: 'started' | 'done' | 'lapsed' | 'broken' }
   | { t: 'aid'; giver: string; receiver: string; fuel: number; supplies: number; paid: number } // units moved, money paid
   | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null } // null while the player has to answer
   | { t: 'info'; text: string; debug?: true }; // a debug line shows only with the full log flag
