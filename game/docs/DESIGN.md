@@ -20,11 +20,9 @@ Combat is not just whoever has the best equipment wins or pure-micromanagement. 
 
 Most things a player can do he can discover by watching NPCs do it or by trying.
 
-4. Humanistic and social wasteland
+4. Life is valued in the wasteland
 
-RoaM avoids the gaming cliche of every fight ending in death. Most times the loosing combatant, including the player, ends up running away or giving up, living to live another day.
-
-The life of wasteland drivers is built on social interactions. The wasteland itself, while violent, is a living economy.
+In the wasteland, after the great catastrophe, life is valued. Robbery and blowing up each other's trucks are just business, but in most situations murder is too much. Even raiders consider killing a last resort.
 
 5. Avoiding equipment snowballing
 
@@ -36,7 +34,7 @@ The player's progression in the game is not simply accumulating more money, gear
 
 7. Player is not the main character
 
-The player is not a Chosen one, gets no plot armor or special treatment. It's down the player's wits to get the upper hand over the harsh world.
+The player is not a Chosen one, gets no plot armor or special treatment. It's down to the player's wits to get the upper hand over the harsh world. The game does not tell the player how to play or what is right. Being a raider, robbing other drivers or becoming the biggest scumbag in the wasteland are all valid paths if that's fun for the player.
 
 8. New World vs Old World contrasts
 
