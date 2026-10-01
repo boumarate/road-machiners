@@ -64,7 +64,7 @@ export class LogPanel {
     for (const line of lines) {
       this.box.prepend(lineRow(this.book.add(turn, line)));
     }
-    while (this.box.children.length > LOG_HISTORY) this.box.lastElementChild?.remove();
+    while (this.box.children.length > this.book.lines.length) this.box.lastElementChild?.remove();
     if (reading) this.box.scrollTop += this.box.scrollHeight - before;
   }
 
