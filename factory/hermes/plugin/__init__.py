@@ -280,7 +280,10 @@ CHANGE_SCHEMA = {
         "required": ["request"],
     },
 }
-CHANGE_DONE = "Queued. The factory confirms it in a reply to the member's message, and posts the pull request link later. Add nothing about it."
+CHANGE_DONE = (
+    "Queued. Reply to the member with one short sentence, like 'Queued for a PR.' Never reply with [SILENT] to a member's message. "
+    "The factory confirms it in a reply later, and posts the pull request link. Add nothing more about it."
+)
 SESSION_KEYS = (
     "HERMES_SESSION_CHAT_ID", "HERMES_SESSION_USER_ID", "HERMES_SESSION_USER_NAME", "HERMES_SESSION_MESSAGE_ID",
 )
