@@ -233,7 +233,20 @@ function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   const obj = model(pose.model);
   if (pose.model === 'building') paintRoof(obj, o.id);
   g.add(obj);
+  if (pose.model === 'reactor') lightCore(obj, g);
   return g;
+}
+
+// The reactor's core glows by itself and lights the ground around it, so its danger is seen before it is felt.
+function lightCore(reactor: THREE.Object3D, g: THREE.Group): void {
+  eachMaterial(reactor, (m) => {
+    if (m.name !== 'glow') return;
+    m.emissive.setHex(PAL.reactorGlow);
+    m.emissiveIntensity = REACTOR_GLOW.emissive;
+  });
+  const light = new THREE.PointLight(PAL.reactorGlow, REACTOR_GLOW.intensity, REACTOR_GLOW.range, REACTOR_GLOW.decay);
+  light.position.set(0, REACTOR_GLOW.height, 0);
+  g.add(light);
 }
 
 function paintRoof(house: THREE.Object3D, id: string): void {
@@ -263,6 +276,7 @@ function buildWater(t: Terrain, o: Obstacle): THREE.Object3D {
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
+const REACTOR_GLOW = { emissive: 2.5, intensity: 8, range: 70, decay: 1.5, height: 3 }; // glow strength, light strength, reach and fade in meters, and the light's height above the ground
 const WIRES = ['wire0', 'wire1', 'wire2'];
 const SAG = 0.7; // meters a wire hangs below its ends at mid-span
 const WIRE_POINTS = 8;
