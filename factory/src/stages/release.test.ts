@@ -38,6 +38,14 @@ describe('release cut', () => {
     expect(readState(f.ctx.statePath).release).toEqual({ issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [] });
   });
 
+  it('merges main into dev first when dev lacks it, so the release merges into main without conflicts', async () => {
+    const f = fake();
+    f.changelog = ['Merge issue #3: faster trucks'];
+    f.ctx.repo.isMerged = async (base: string, branch: string) => !(base === 'main' && branch === 'dev');
+    await release(f.ctx);
+    expect(f.calls.slice(0, 4)).toEqual(['sync', 'merge main dev', 'push dev', 'branch release/2026-09-29 dev']);
+  });
+
   it('keeps the release set when a task cannot be opened, so the failure names the tracking issue', async () => {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks'];

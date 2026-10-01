@@ -163,6 +163,7 @@ export interface HostRepo {
   push(branch: string): Promise<void>;
   headHash(branch: string): Promise<string>; // short hash
   diff(base: string, branch: string): Promise<string>;
+  changedFiles(base: string, branch: string): Promise<string[]>; // files `branch` changed since it split from `base`
   hasNewCommits(base: string, branch: string): Promise<boolean>;
   merge(branch: string, into: string, message: string): Promise<void>; // throws MergeConflictError on a conflict, after it aborts the merge
   mergeLog(from: string, to: string): Promise<string[]>; // first-parent merge subjects on `from` missing in `to`

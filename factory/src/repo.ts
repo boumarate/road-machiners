@@ -117,6 +117,9 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
       return (await git(['rev-parse', '--short', branch])).trim();
     },
     diff: (base, branch) => git(['diff', `${base}...${branch}`]),
+    async changedFiles(base, branch) {
+      return (await git(['diff', '--name-only', `${base}...${branch}`])).split('\n').filter(Boolean);
+    },
     async hasNewCommits(base, branch) {
       return Number((await git(['rev-list', '--count', `${base}..${branch}`])).trim()) > 0;
     },

@@ -59,6 +59,7 @@ export function fake(): Fake {
       mergeLog: async () => f.changelog,
       diff: async () => f.diff,
       hasNewCommits: async () => true,
+      isMerged: async () => true,
       headHash: async () => 'abc1234',
       createBranch: async (name: string, from: string) => note(`branch ${name} ${from}`),
       revertIssueMerge: async (issue: number, branch: string) => { note(`revert ${issue} ${branch}`); return true; },

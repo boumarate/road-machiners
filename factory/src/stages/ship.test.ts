@@ -91,6 +91,23 @@ describe('ship', () => {
     expect(f.calls).toContain('release release-2026-09-29 main ROAM release 2026-09-29\n- [#3] Trucks are faster.');
   });
 
+  it('stops before it merges anything when main has game changes the release lacks', async () => {
+    const f = shippable();
+    f.ctx.repo.isMerged = async () => false;
+    f.ctx.repo.changedFiles = async () => ['factory/src/tick.ts', 'game/src/sim/sun.ts'];
+    await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('main changed 1 game files that release/2026-09-29 lacks, like game/src/sim/sun.ts');
+    expect(f.calls.some((call) => call.startsWith('merge') || call.startsWith('push'))).toBe(false);
+  });
+
+  it('merges main into the release first when main has only other changes', async () => {
+    const f = shippable();
+    f.ctx.repo.isMerged = async () => false;
+    f.ctx.repo.changedFiles = async () => ['factory/src/tick.ts'];
+    await ship(f.ctx, 11, 'Ann');
+    const merges = f.calls.filter((call) => call.startsWith('merge') || call.startsWith('push'));
+    expect(merges.slice(0, 4)).toEqual(['merge main release/2026-09-29', 'push release/2026-09-29', 'merge release/2026-09-29 main', 'push main']);
+  });
+
   it('stops before it merges anything when the changelog does not match the release', async () => {
     const f = shippable();
     writeFileSync(join(ROOT, 'work', 'release-candidate', 'game', '.factory', 'release.md'), 'Trucks are faster.\n');

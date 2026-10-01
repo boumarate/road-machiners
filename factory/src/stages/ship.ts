@@ -27,6 +27,17 @@ async function requireShippable(ctx: Ctx, issue: number, by: string | null): Pro
   return release;
 }
 
+// The release merges into main with no conflict once it holds all of main. The cut and hotfixes keep it so, but factory
+// work lands on main directly. A game change on main was never in the played candidate, so Ship stops on it. Anything
+// else merges into the release first, so a conflict stops Ship before anything public happens.
+async function takeMain(ctx: Ctx, branch: string): Promise<void> {
+  if (await ctx.repo.isMerged('main', branch)) return;
+  const unplayed = (await ctx.repo.changedFiles(branch, 'main')).filter((file) => file.startsWith(`${GAME_DIR}/`));
+  if (unplayed.length > 0) throw new Error(`main changed ${unplayed.length} game files that ${branch} lacks, like ${unplayed[0]}, so the candidate was not played with them. Merge main into ${branch} and build a new candidate.`);
+  await ctx.repo.merge('main', branch, `Merge main into ${branch} before the ship`);
+  await ctx.repo.push(branch);
+}
+
 // Builds main in a fresh clone inside the container, so build code never runs next to the butler key.
 // The empty save scope keeps the itch save key. Only the butler call gets the key.
 export async function publish(ctx: Ctx, keys: ItchKeys, logName: string): Promise<void> {
@@ -52,6 +63,7 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   const features = await releaseFeatures(ctx, release);
   // A changelog that does not match the release fails here, before anything public happens.
   const changelog = changeLines(readFileSync(notesPath, 'utf8'), features).join('\n');
+  await takeMain(ctx, release.branch);
   await ctx.repo.merge(release.branch, 'main', `Release ${release.day}`);
   await ctx.repo.push('main');
   // A conflict in dev fails here, before anything public happens.
