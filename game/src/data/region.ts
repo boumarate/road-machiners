@@ -80,10 +80,14 @@ export const REGION = {
     // planned. It covers 4 turns, a real turn plus 3 preview turns, at the top speed of 11.7 tiles per
     // turn: the fastest chassis with the strongest engine.
     lookahead: 48,
-    // Route cost multiplier on sloped tiles: 1 + slopeCost * (slope / cliff slope)^2. Gentle rolling
-    // ground stays close to 1, and ground at the cliff slope costs 4 times flat. A loaded hauler stalls
-    // from rest on slopes well below the cliff slope, so routes go around hills when that is not much longer.
-    slopeCost: 3,
+    // Route cost multiplier on sloped tiles: 1 + slopeCost * (slope / cliff slope)^2. Ground at the cliff
+    // slope costs 2 times flat and half the cliff slope 1.25 times, so routes skirt steep hills but cross
+    // rolling ground. At 3, measured on 150 routes of the real map (issue 36), routes wound far around
+    // gentle hills: 4003 waypoints, 32% over straight. At 1 they take 1248 and 24%.
+    slopeCost: 1,
+    // A shortcut may cost this share more than the bends it replaces, so routes take fewer bends. It stays
+    // well below the road margin, so roads stay followed.
+    straighten: 0.05,
   },
   towns: [
     { id: "bowl", name: "Bowl", pos: scalePoint({ x: 16, y: 94 }), radius: 28 },

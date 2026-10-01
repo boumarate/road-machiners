@@ -272,7 +272,7 @@ function dropOnPile(world: World, vehicle: Vehicle, items: GridItem[], id: strin
 // Each drop restarts the pile timer. A player pile holds the player's own items, so it counts as searched and pays
 // no search XP.
 function stampPile(world: World, byPlayer: boolean, stock: SalvageStock): { stock: SalvageStock; pile: Pile } {
-  const pile: Pile = { until: world.turn + SALVAGE.pileTurns, fromPlayer: byPlayer, basis: stock.pile?.basis ?? {} };
+  const pile: Pile = { until: world.turn + SALVAGE.pileTurns, fromPlayer: byPlayer, basis: stock.pile?.basis ?? {}, claim: stock.pile?.claim };
   stock.pile = pile;
   if (byPlayer && !world.player.scavenged.includes(stock.id)) world.player.scavenged.push(stock.id);
   return { stock, pile };
@@ -287,8 +287,39 @@ function dropGood(world: World, { stock, pile }: { stock: SalvageStock; pile: Pi
   pile.basis[good] = ((pile.basis[good] ?? 0) * count + paid) / (count + 1);
 }
 
-// Piles that ran out of time or loot leave the ground.
+// The drivers in `warned` already know the pile is claimed, like the one who handed it over.
+export function claimPile(world: World, stock: SalvageStock, claimant: Vehicle, warned: string[] = []): void {
+  if (!stock.pile) throw new Error(`Cannot claim ${stock.id}, it is no pile`);
+  stock.pile.claim = { by: claimant.id, until: world.turn + SALVAGE.claimTurns, warned };
+}
+
+function claimHolds(world: World, stock: SalvageStock, claimant: Vehicle | undefined): claimant is Vehicle {
+  const claim = stock.pile?.claim;
+  if (!claim || !claimant || world.turn >= claim.until) return false;
+  return !isKnockedOut(claimant) && wantsLoot(claimant, stock.id);
+}
+
+function wantsLoot(vehicle: Vehicle, stockId: string): boolean {
+  return !!vehicle.brain && vehicle.brain.goals.some((goal) => goal.kind === 'loot' && goal.targetId === stockId);
+}
+
+// The claimant of a pile while its claim holds.
+export function claimantOf(world: World, stock: SalvageStock): Vehicle | null {
+  const claimant = world.vehicles.find((v) => v.id === stock.pile?.claim?.by);
+  return claimHolds(world, stock, claimant) ? claimant : null;
+}
+
+export function holdsClaim(world: World, vehicleId: string): boolean {
+  return world.salvage.some((stock) => stock.pile?.claim?.by === vehicleId && claimantOf(world, stock));
+}
+
+export function backedOff(stock: SalvageStock, vehicleId: string): boolean {
+  return !!stock.pile?.claim?.warned.includes(vehicleId);
+}
+
+// Piles that ran out of time or loot leave the ground, and claims that no longer hold end.
 export function clearPiles(world: World): void {
+  for (const stock of world.salvage) if (stock.pile?.claim && !claimantOf(world, stock)) delete stock.pile.claim;
   removeStocks(world, new Set(world.salvage.filter((stock) => stock.pile && (world.turn >= stock.pile.until || !hasSalvage(stock))).map((stock) => stock.id)));
 }
 
@@ -493,6 +524,8 @@ export function looterOf(world: World, targetId: string): Vehicle | null {
   if (!isLootTarget(world, targetId)) return null;
   const working = world.vehicles.find((v) => worksOn(v, targetId)) ?? world.vehicles.find((v) => actsOn(world, v, targetId));
   if (working) return working;
+  // A parked player does not out-wait a claimant on its way. Taking from the pile is what answers the claim.
+  if (world.salvage.some((s) => s.id === targetId && claimantOf(world, s))) return null;
   const me = playerVehicle(world);
   return inLootReach(world, me, targetId) ? me : null;
 }
@@ -515,7 +548,9 @@ export function lootBlockedError(world: World, blocker: Vehicle, targetId: strin
   throw new Error(`No loot target ${targetId}`);
 }
 
-// The target the NPC holds the claim on, or null. Only its job and its top goal can name one.
+// The target the NPC holds the one-looter claim on, or null. A pile's own claim, `claimantOf()`, is a different thing:
+// it reserves a handed-over pile for its robber, and a warn-off call that makes the robber back
+// off ends it. Only its job and its top goal can name one.
 export function lootClaimedBy(world: World, npc: Vehicle): string | null {
   const ids = [jobTarget(npc), npc.brain?.goals.at(-1)?.targetId ?? null];
   return ids.find((id) => id !== null && looterOf(world, id)?.id === npc.id) ?? null;
