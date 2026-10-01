@@ -16,7 +16,7 @@ import { startTow, thinkNpc, topGoal } from './npc-activities';
 import { optionChances, optionWeights } from './npc-decisions';
 import { addState, endState, stateOf, towData } from './states';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp } from './dialogue';
-import { dropTow, isOnRope, isTowed, playerTow, playerTowing, setBeacon, towOf, unhitch } from './tow';
+import { dropTow, isOnRope, runTow, isTowed, playerTow, playerTowing, setBeacon, towOf, unhitch } from './tow';
 import { sunAt } from './sun';
 import { canVehicleSee, refreshVision } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
@@ -494,6 +494,17 @@ describe('answering a stranded truck', () => {
       if (!stateOf(w, 'combat', foe.id, me)) startCombat(w, foe, find(w, me));
     }
     expect(claimOf(w, tower.id)).toBeDefined();
+  });
+
+  it('a tower that reaches its client on the turn its claim lapses ends the job without hitching', () => {
+    const s = stranded();
+    const client = find(s.w, s.w.player.vehicleId);
+    startTow(s.w, s.trader, client, { ...client.pos });
+    endState(s.w, claimOf(s.w, s.trader.id)!, 'expired');
+    s.trader.pos = { x: client.pos.x + 4, y: client.pos.y };
+    const goal = topGoal(s.trader)!;
+    expect(runTow(s.w, s.trader, goal)).toBe('could not get through to the truck');
+    expect(playerTow(s.w)).toBeNull();
   });
 
   it('a hitched tow never lapses on a timer', () => {

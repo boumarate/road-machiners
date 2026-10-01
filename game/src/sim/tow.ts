@@ -280,9 +280,10 @@ export function runTow(world: World, vehicle: Vehicle, activity: NpcActivity): s
 }
 
 // The tower offers or hitches once in reach. The client may have got going or reached its home while the tower drove
-// over, and then the job ends.
+// over, and then the job ends. So does a claim that lapsed this turn, before the goal drops.
 function reachClient(world: World, tower: Vehicle, activity: NpcActivity, client: Vehicle): string | null {
   if (!isStranded(world, client) || !towDestination(world, tower, client)) return 'the truck needs no tow anymore';
+  if (!stateOf(world, 'answering', tower.id, client.id)) return 'could not get through to the truck';
   if (!readyToTow(world, tower, client)) return null;
   activity.phase = 'act';
   if (isPlayer(world, client)) offer(world, tower, client);
