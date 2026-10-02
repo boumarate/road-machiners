@@ -9,6 +9,7 @@ import { TIME } from '../data/time';
 import type { Obstacle, Vehicle, World } from './types';
 import { heightAt, type Terrain } from './terrain';
 import { boxDistance, propBoxes, propReach, segmentCrossesBox } from './mapgen';
+import { propsAlong, propsAround } from './prop-index';
 import { sunAt } from './sun';
 import { weatherAt } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
@@ -17,18 +18,12 @@ import { cloudsSeenBy, contactDifficulty, contactsOf } from './detect';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { PERK_NUMBERS } from '../data/skills';
 
-const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building', 'landmark'];
 const EYE = TERRAIN.vision.eyeHeight * PHYSICS.metersPerTile; // meters above the ground
 
-function blocksSight(o: Obstacle): boolean {
-  return BLOCKING.includes(o.kind);
-}
-
-// The sight-blocking props that can touch the line a-b. Every point of the line lies within dist(a, b) of a, so a prop
-// farther than that plus its reach cannot hide anything.
+// The sight-blocking props whose reach touches the line a-b. A prop farther from the line than its reach cannot hide
+// anything.
 function propsNear(world: World, a: Vec, b: Vec): Obstacle[] {
-  const d = dist(a, b);
-  return world.obstacles.filter((o) => blocksSight(o) && dist(a, o.pos) < d + propReach(o));
+  return propsAlong(world, 'sight', a, b, 0);
 }
 
 // A dust screen: a circle that blocks sight lines through it.
@@ -66,7 +61,7 @@ function forSeenTiles(world: World, from: Vec, test: (idx: number) => boolean, s
   const size = world.size;
   const r = sightRadius(world, playerVehicle(world), from);
   // Every sight line lies within r of the viewer, so props beyond r plus their reach cannot touch it.
-  const props = world.obstacles.filter((o) => blocksSight(o) && dist(from, o.pos) < r + propReach(o));
+  const props = propsAround(world, 'sight', from, r);
   const lo = { x: Math.max(0, Math.floor(from.x - r)), y: Math.max(0, Math.floor(from.y - r)) };
   const hi = { x: Math.min(size - 1, Math.ceil(from.x + r)), y: Math.min(size - 1, Math.ceil(from.y + r)) };
   for (let x = lo.x; x <= hi.x; x++) {

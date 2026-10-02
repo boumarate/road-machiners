@@ -8,8 +8,9 @@ import { PERF } from '../data/perf';
 import { RULES } from '../data/rules';
 import { TERRAIN } from '../data/terrain';
 import { playerVehicle } from './damage';
-import { boxSegmentDistance, isBreakable, propBoxes, propReach } from './mapgen';
+import { boxSegmentDistance, propBoxes, propReach } from './mapgen';
 import { route } from './path';
+import { propSlotsAlong } from './prop-index';
 import { breakProp } from './salvage';
 import { burnFuel, getResources } from './resources';
 import { fuelCap, vehicleStats, type VehicleStats } from './stats';
@@ -114,8 +115,15 @@ function firstContact(w: World, v: Vehicle, path: Vec[], radius: number): { othe
 
 // Breaks every breakable prop the truck body touches along the walk.
 function breakCrossed(w: World, v: Vehicle, path: Vec[], radius: number): void {
-  const crossed = w.obstacles.filter((o) => isBreakable(o) && path.some((p, seg) => seg > 0 && touches(o, path[seg - 1], p, radius)));
-  for (const o of crossed) breakProp(w, o.id, v.id);
+  const crossed = new Set<number>();
+  for (let seg = 1; seg < path.length; seg++) {
+    for (const at of propSlotsAlong(w, 'breakable', path[seg - 1], path[seg], radius)) {
+      if (touches(w.obstacles[at], path[seg - 1], path[seg], radius)) crossed.add(at);
+    }
+  }
+  // Props break in world order, so the events and growback queue match a scan of every obstacle.
+  const ids = [...crossed].sort((a, b) => a - b).map((at) => w.obstacles[at].id);
+  for (const id of ids) breakProp(w, id, v.id);
 }
 
 // Whether a truck of this radius driving from a to b touches the prop's boxes. The reach test skips far props cheaply.

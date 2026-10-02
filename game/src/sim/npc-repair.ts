@@ -11,7 +11,7 @@ import { straightClear } from './path';
 import { repairPlan } from './repair';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
-import { inShade, sunAt } from './sun';
+import { inShade, shadeCasters, sunAt } from './sun';
 import type { NpcActivity, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 
@@ -55,8 +55,9 @@ function chooseRepairSpot(world: World, vehicle: Vehicle): Vec | null {
   const blockers = world.vehicles
     .filter((other) => other.id !== vehicle.id)
     .map((other) => ({ pos: other.pos, r: vehicleStats(world, other).radius }));
+  const casters = shadeCasters(world, vehicle.pos, NPC_UPKEEP.shadeSearchRadius);
   const shaded = getRepairCandidates(world, vehicle)
-    .find((point) => inShade(world, point, sun) && straightClear(world, vehicle.pos, point, radius, blockers));
+    .find((point) => inShade(world, point, sun, casters) && straightClear(world, vehicle.pos, point, radius, blockers));
   return shaded ?? null;
 }
 

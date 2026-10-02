@@ -11,13 +11,13 @@ export type Blocker = { pos: Vec; r: number; prop?: { key: string; boxes: readon
 const BUCKET = 8; // tiles per bucket side
 const HALF_DIAG = (BUCKET * Math.SQRT2) / 2;
 
-export class ObstacleBuckets {
+export class ObstacleBuckets<B extends Blocker = Blocker> {
   private readonly cols: number;
-  private readonly cells: Blocker[][];
-  private readonly outside: Blocker[] = []; // blockers centered off the map sit in no bucket and are always candidates
+  private readonly cells: B[][];
+  private readonly outside: B[] = []; // blockers centered off the map sit in no bucket and are always candidates
   private readonly maxR: number;
 
-  constructor(blockers: Blocker[], size: number) {
+  constructor(blockers: readonly B[], size: number) {
     this.cols = Math.ceil(size / BUCKET);
     this.cells = Array.from({ length: this.cols * this.cols }, () => []);
     let maxR = 0;
@@ -34,7 +34,7 @@ export class ObstacleBuckets {
   // Every circle that, grown by reach, can touch segment ab, and every prop with a box outline closer than reach
   // to it. Buckets whose center is farther than reach + the largest radius + half a bucket diagonal cannot hold
   // such a blocker.
-  alongSegment(a: Vec, b: Vec, reach: number): Blocker[] {
+  alongSegment(a: Vec, b: Vec, reach: number): B[] {
     const out = this.outside.slice();
     const pad = reach + this.maxR;
     const lim = pad + HALF_DIAG;
