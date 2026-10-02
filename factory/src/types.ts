@@ -129,9 +129,14 @@ export interface GitHub {
 // One inline keyboard button. `data` comes back as the callback data of a press.
 export type InlineButton = { text: string; data: string };
 
+// One photo of an album, with its own caption.
+export type AlbumPhoto = { path: string; caption: string };
+
 export interface Telegram {
   sendMessage(chat: string, text: string, replyTo?: number): Promise<number>;
   sendPhoto(chat: string, pngPath: string, caption: string, buttons?: InlineButton[][]): Promise<number>;
+  // Sends 1 to 10 photos as one photo or one album, with no buttons, optionally as a reply. Returns the message ids in order.
+  sendPhotos(chat: string, photos: AlbumPhoto[], replyTo?: number): Promise<number[]>;
   editCaption(chat: string, messageId: number, caption: string): Promise<void>; // replaces a photo's caption and drops its buttons
 }
 
