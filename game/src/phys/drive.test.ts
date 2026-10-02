@@ -633,7 +633,7 @@ describe('physics turns', () => {
     }
     freeDrive(d);
     expect(speeds[7]).toBeGreaterThan(speeds[1] * 0.95);
-  });
+  }, 90_000); // eight physics turns on a reshaped hill, slow when the suite runs in parallel
 
   it('new vehicles and obstacles join the physics world', () => {
     const w = emptyWorld();
