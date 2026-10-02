@@ -126,5 +126,5 @@ The server runs the factory from GitHub's `main`, and only from there. To change
 ## Tests
 
 - `npm test` runs the CLI tests.
-- `uv run --with pytest pytest hermes` runs the plugin tests.
+- `uv run --with pytest --with pyyaml pytest hermes` runs the plugin tests.
 - `cd infra && uv run pytest` runs the infra helper tests.

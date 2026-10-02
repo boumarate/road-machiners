@@ -28,7 +28,6 @@ COPY --chmod=755 factory-host /usr/local/bin/factory-host
 COPY --chmod=755 <<'EOF2' /usr/local/bin/factory-start
 #!/bin/sh
 set -eu
-cp /opt/factory/config.yaml "$HERMES_HOME/config.yaml"
 cp /opt/factory/SOUL.md "$HERMES_HOME/SOUL.md"
 mkdir -p "$HERMES_HOME/scripts"
 cp /opt/factory/factory-incidents.sh "$HERMES_HOME/scripts/factory-incidents.sh"
@@ -38,6 +37,8 @@ mkdir -p "$HERMES_HOME/plugins"
 cp -r /opt/factory/plugin "$HERMES_HOME/plugins/factory"
 rm -rf "$HERMES_HOME/plugins/hermes-session-reset-policy"
 cp -r /opt/factory/hermes-session-reset-policy "$HERMES_HOME/plugins/hermes-session-reset-policy"
+# The repo config, with the settings Hermes changed itself kept on top.
+python3 "$HERMES_HOME/plugins/factory/config_sync.py" /opt/factory/config.yaml
 python3 "$HERMES_HOME/plugins/factory/allowlist.py"
 # Hermes never passes GH_TOKEN to its shell, since a model provider uses that name. So gh saves the login in the Hermes home, and git asks gh.
 printenv GH_TOKEN | env -u GH_TOKEN gh auth login --with-token
