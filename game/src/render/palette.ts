@@ -19,7 +19,7 @@ export const PAL = {
   brush: [0x4d512b, 0x5f6634, 0x8a8a4a], // desert scrub stems: dark core, olive body, dry lit tips
   cactus: { body: 0x6b7a3a, shade: 0x4e5a2c }, // short columnar cacti: lit column, shaded column
   rock: { top: 0x9a8a78, side: 0x6e6254, dark: 0x4e453c },
-  stone: { top: 0xb08a68, side: 0x84603f, dark: 0x5a3f2c }, // warm sandstone of loose boulders, crags and pebbles
+  stone: { top: 0xc27f58, side: 0x9a6448, dark: 0x6a4436 }, // terracotta of loose boulders, crags and pebbles
   rust: { top: 0x8a4a2a, side: 0x5e3420, dark: 0x3a2418 },
   wall: { top: 0xb89a74, side: 0x8e7454, dark: 0x6a5840 },
   roof: [0x7a5a3a, 0x5e6a5a, 0x8a3a2a],

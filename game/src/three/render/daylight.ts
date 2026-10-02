@@ -20,7 +20,8 @@ const GLASS_SATURATION = 0.9; // share of the glow color's saturation kept, so w
 const SHADOW_SOFTNESS = 3; // shadow-map texels of PCF blur, soft edges without losing the truck's contact shadow
 
 // Keyed by the sun's height in degrees, highest first. Negative is below the horizon.
-// By day the ground color is warm sand, so faces turned down catch light bounced off the desert.
+// By day the ground color is warm sand, so faces turned down catch light bounced off the desert, and the sky is
+// a warm mauve, so shade sides and shadows go mauve-brown as in the reference image of issue 129.
 type Key = {
   h: number;
   sun: number;
@@ -36,7 +37,7 @@ const KEYS: Key[] = [
     h: 45,
     sun: 0xffe0b0,
     sunI: 2.3,
-    sky: 0xaebbd7,
+    sky: 0xb8a4a0,
     ground: 0xc08a52,
     skyI: 0.8,
     glassI: 0,
@@ -46,7 +47,7 @@ const KEYS: Key[] = [
     h: 20,
     sun: 0xffd29c,
     sunI: 2.35,
-    sky: 0xb5b7cf,
+    sky: 0xbca0a0,
     ground: 0xc08a52,
     skyI: 0.78,
     glassI: 0,
