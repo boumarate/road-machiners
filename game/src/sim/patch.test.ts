@@ -342,7 +342,7 @@ describe('a holed fuel tank', () => {
     w = answer(answer(w, 'What are you offering?'), 'Deal. Stay where you are.');
     const deal = patchData(stateOf(w, 'patch', w.player.vehicleId, npc.id)!);
     const money = w.player.money;
-    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 38, y: 30 } });
+    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 39.5, y: 30 } });
     w = runUntil(w, 60, (x) => stateOf(x, 'patch', x.player.vehicleId, npc.id) === null).w;
     const tank = corePart(find(w, npc.id), 'tank')!;
     expect(tank.hp).toBe(Math.max(1, Math.round(maxHp(tank) * PATCH.share)));
