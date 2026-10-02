@@ -1,6 +1,7 @@
 #!/bin/bash
 # Deploys GitHub's main to the code checkout when main moved. roam-factory-update.timer runs it as the factory user.
 # It pauses the factory and waits for the running tick and jobs to end, so no job sees its code change. Each run waits once and exits.
+# After FACTORY_UPDATE_GRACE_MINUTES the paused tick stops agent and test jobs, and they start again after the update.
 # It records the deployed commit in $home/deployed. A failure leaves the reason in $home/update-failed, which Hermes's incident watch prints.
 set -euo pipefail
 code=/opt/factory/code
@@ -33,7 +34,10 @@ if [ -e "$paused" ] && ! grep -q "^$reason" "$paused"; then
   log "factory paused by someone else, update waits: $(cat "$paused")"
   exit 0
 fi
-echo "$reason ${target:0:7}, waiting for the running jobs" > "$paused"
+# The tick stops long jobs once the pause is older than the grace time, so a rewrite keeps the time of the first pause.
+echo "$reason ${target:0:7}, waiting for the running jobs" > "$paused.new"
+[ ! -e "$paused" ] || touch -r "$paused" "$paused.new"
+mv "$paused.new" "$paused"
 if systemctl is-active --quiet roam-factory-tick.service; then
   log "a tick runs, update waits"
   exit 0

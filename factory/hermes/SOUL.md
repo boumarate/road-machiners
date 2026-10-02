@@ -90,7 +90,7 @@ Common fixes:
 ## Changing factory state
 
 - Pause the factory before you edit the state file or the work clones. Write the reason into `/factory/home/paused`. Every tick skips while that file exists. Delete it when you are done.
-- A pause reason that starts with `update to` belongs to the factory update. Leave it. The update lifts it when it is done.
+- A pause reason that starts with `update to` belongs to the factory update. Leave it. The update lifts it when it is done. After the grace time in `settings.env` the tick stops agent and test jobs for it. They start again after the update and continue from their work clones, so a stopped job is no incident.
 - The pause does not stop running jobs. The list `jobs` in the state file holds them. Wait for them or let them fail.
 - Run a factory step yourself only while the factory is paused and `jobs` is empty. A step you run by hand does not appear in `jobs`, so the tick could start a clashing one.
 - Edit the state file only while `jobs` is empty. Jobs write it too, and your edit would undo theirs.

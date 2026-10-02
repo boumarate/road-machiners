@@ -38,7 +38,7 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 `/opt/factory/factory-update.sh` runs as the factory user from `roam-factory-update.timer`. Its log is `/opt/factory/home/logs/update.log`.
 
 - It fetches `main`. When `main` is past the commit in `/opt/factory/home/deployed`, it deploys it.
-- It pauses the factory with a pause reason that starts with `update to`. It waits until no tick and no job runs. A busy run exits, and the next run checks again. While it waits for running jobs, a tick still releases answered `needs-info` issues, a GitHub label edit only. The tick service stays active during it, so the update never checks out under it.
+- It pauses the factory with a pause reason that starts with `update to`. It waits until no tick and no job runs. A busy run exits, and the next run checks again. While it waits for running jobs, a tick still releases answered `needs-info` issues and fails jobs past the timeout. After `FACTORY_UPDATE_GRACE_MINUTES` from the first pause, it stops agent and test jobs, which start again after the update. A rewrite of the pause reason keeps the file's time. The tick service stays active during it, so the update never checks out under it.
 - It checks out the new commit. It runs `npm ci` when the factory's package files changed, builds the images when `factory/docker/` changed, and rebuilds Hermes when `factory/hermes/` or `settings.env` changed.
 - It records the commit in `deployed` and lifts its pause.
 - A local edit in the code dir stops it before the pause. A failed rebuild leaves the factory paused, and the next run tries again. Both write the reason to `/opt/factory/home/update-failed`, which Hermes's incident watch prints.

@@ -33,6 +33,16 @@ export function isAlive(pid: number): boolean {
   }
 }
 
+async function jobContainers(run: Run, id: string): Promise<string[]> {
+  const listed = must(await run('docker', ['ps', '-q', '--filter', `label=${jobLabel(id)}`]), 'docker ps');
+  return listed.split('\n').map((line) => line.trim()).filter(Boolean);
+}
+
+// A job does its long work in containers. Between them it pushes, posts and moves cards, which a stop could leave half done.
+export async function inContainer(run: Run, id: string): Promise<boolean> {
+  return (await jobContainers(run, id)).length > 0;
+}
+
 // Other jobs run beside this one, so only the containers with its label go.
 export async function killJob(run: Run, pid: number, id: string): Promise<void> {
   try {
@@ -40,8 +50,7 @@ export async function killJob(run: Run, pid: number, id: string): Promise<void> 
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
   }
-  const listed = must(await run('docker', ['ps', '-q', '--filter', `label=${jobLabel(id)}`]), 'docker ps');
-  for (const id of listed.split('\n').map((line) => line.trim()).filter(Boolean)) {
-    must(await run('docker', ['rm', '-f', id]), `docker rm ${id}`);
+  for (const container of await jobContainers(run, id)) {
+    must(await run('docker', ['rm', '-f', container]), `docker rm ${container}`);
   }
 }

@@ -102,13 +102,17 @@ export async function acquireMedia(ctx: Ctx, issue: number, stage: CardStage): P
   return mediaSection(entries);
 }
 
+// A factory update stopped the last job on this issue. Its work clone stays, so the agent continues instead of starting over.
+export const INTERRUPTED_NOTE = 'A factory update stopped the previous run of this job. The work clone keeps its commits and changed files. Read them with git log and git status, then continue from there.';
+
 export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, prompt: string): Promise<void> {
   const { labels } = await ctx.github.issue(issue);
   const model = modelFor(ctx.cfg, stage, labels);
   ctx.log(stage, issue, `agent model ${model}`);
   const openNetwork = await useOpenNetwork(ctx, stage, issue);
   const media = await acquireMedia(ctx, issue, stage);
-  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: `${prompt}\n\n${media}`, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue) });
+  const resumed = readState(ctx.statePath).interrupted.includes(issue) ? `\n\n${INTERRUPTED_NOTE}` : '';
+  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: `${prompt}\n\n${media}${resumed}`, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue) });
 }
 
 // Asks the issue author. The card stays where it is until a member answers on the issue.

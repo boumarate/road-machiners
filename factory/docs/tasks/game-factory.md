@@ -32,6 +32,7 @@ The factory is a Node CLI in `factory/`, run on the host. Hermes only triggers i
 - `factory tick` is the one entry point. A systemd timer runs it every `FACTORY_TICK_MINUTES` on the server. On the Mac a loop script runs it.
 - Hermes runs in Docker, like `Steelman/infrobot`, and owns Telegram chat. It cannot start agent containers, since that needs the Docker socket, which is root on the host. So the host timer runs the tick, not a Hermes cron job.
 - A tick checks the running job first. A job past `FACTORY_STAGE_TIMEOUT_MINUTES` is killed and reported as failed. A running job ends the tick.
+- A factory update pauses the factory and waits for running jobs. After `FACTORY_UPDATE_GRACE_MINUTES` the paused tick stops agent and test jobs while they work in a container. Their cards stay, and they start again after the update from their work clones.
 - A tick then runs intake, then starts at most one job. Release is due every `FACTORY_RELEASE_DAYS`, and maintenance every `FACTORY_MAINTENANCE_HOURS`. Due periodic jobs start first. Otherwise the card furthest along starts: testing, then implementation, then design.
 - A job runs as a detached `factory run <stage> <issue>` process with a pid file and a log in `$FACTORY_HOME/logs/`. The tick stays short, so the Hermes script timeout never matters.
 - The Hermes plugin writes each committee command as a JSON file into `$FACTORY_HOME/inbox/`. The tick drains the inbox first and answers in the chat through the Bot API.
