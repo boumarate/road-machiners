@@ -39,10 +39,10 @@ Read CLAUDE.md and DESIGN.md first.
 Follow them.
 
 Read docs/architecture/principles.md.
-It holds this project's global principles.
-up:udesign treats them as its global principles.
-For each principle the change touches, answer its plan check in the task file, as an invariant or a design decision.
-A design that deviates from a principle names it and says why.
+It holds this project's architecture principles.
+They come on top of the global principles of the up skills.
+For each project principle the change touches, answer its plan check in the task file's Principles section.
+A design that deviates from a project principle names it and says why.
 
 Create or revise the task file {{taskFile}}.
 Set `Mode: hands-off` in it.

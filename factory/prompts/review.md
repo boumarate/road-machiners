@@ -19,7 +19,7 @@ Read these files before you judge anything.
 
 - `CLAUDE.md` and `docs/DESIGN.md`.
 - `../docs/incident-log.md`. It lists past bugs. Your first task is to stop their repetition.
-- `docs/architecture/principles.md`. It holds the global principles. The task file answers the plan check of each principle the change touches.
+- `docs/architecture/principles.md`. It holds the project's architecture principles. The task file's Principles section answers the plan check of each principle the change touches.
 
 Judge against `origin/{{base}}` only.
 Intermediate commits are no defence.
