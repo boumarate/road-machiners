@@ -63,6 +63,7 @@ type HudActions = {
   toggleManual: () => void;
   toggleAutoRepair: () => void;
   toggleOverdrive: () => void;
+  toggleHeadlights: () => void;
   douseEngine: () => void;
   unhitch: () => void;
   setBeacon: (on: boolean) => void;
@@ -334,8 +335,16 @@ export class Hud {
     );
   }
 
-  // The character button, marked while a perk pair waits for a pick.
+  // The headlight switch, overdrive and engine cooling. The headlights work while a turn plays, so busy never disables them.
   private engineButtons(w: World, busy: boolean): HTMLElement[] {
+    const headlights = createSwitch({
+      on: "Lights on",
+      off: "Lights off",
+      checked: w.player.headlights,
+      key: "L",
+      title: "Headlights [L]",
+      onclick: () => this.actions.toggleHeadlights(),
+    });
     const overdrive = createSwitch({
       on: "Overdrive",
       off: "Normal",
@@ -355,9 +364,10 @@ export class Hud {
       },
       "Cool engine [G]",
     );
-    return [overdrive, douse];
+    return [headlights, overdrive, douse];
   }
 
+  // The character button, marked while a perk pair waits for a pick.
   private characterButton(w: World, busy: boolean): HTMLElement {
     const perkOpen = pendingPerkPairs(w).length > 0;
     return el(
