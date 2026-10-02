@@ -4,7 +4,7 @@
 // period far from the detail's, so the detail never repeats in the same light.
 
 import { REGION } from "../data/region";
-import { bridgeCut, deckAlong } from "../sim/bridge";
+import { bridgeCut, deckAt } from "../sim/bridge";
 import { dist, type Vec } from "../sim/vec";
 import type { PaintCanvas } from "./groundPaint";
 import { hash2 } from "./noise";
@@ -46,7 +46,7 @@ export function paintRoadMask(c: PaintCanvas): void {
   ctx.globalCompositeOperation = "source-over";
 }
 
-// Stretches of points off sites and off the bridge.
+// Stretches of points off sites and off the decks.
 function drawnRuns(points: Vec[]): Vec[][] {
   const runs: Vec[][] = [[]];
   for (const p of points) {
@@ -57,7 +57,7 @@ function drawnRuns(points: Vec[]): Vec[][] {
 }
 
 function drawn(p: Vec): boolean {
-  if (deckAlong(p.x, p.y) !== null || bridgeCut(p.x, p.y) > 0) return false;
+  if (deckAt(p.x, p.y) !== null || bridgeCut(p.x, p.y) > 0) return false;
   return !SITES.some((site) => dist(site.pos, p) < site.radius);
 }
 

@@ -6,7 +6,7 @@ import { REGION } from '../data/region';
 import { BREAKABLE } from '../data/rules';
 import { PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
 import { randInt, randRange } from './rng';
-import { TERRAIN } from '../data/terrain';
+import { DECKS } from './bridge';
 import type { LandmarkLook, Obstacle, World } from './types';
 import { angleDiff, bearing, dist, segmentDist, type Vec } from './vec';
 
@@ -90,7 +90,7 @@ function placeRoadWrecks(world: World, out: Obstacle[]): void {
   }
 }
 
-// A random spot on a road shoulder, clear of sites, the bridge deck, the given obstacles, and any spot `allowed`
+// A random spot on a road shoulder, clear of sites, the decks, the given obstacles, and any spot `allowed`
 // rejects. The world RNG picks it.
 export function findRoadWreckSpot(world: World, obstacles: Obstacle[], allowed: (pos: Vec, r: number) => boolean): { pos: Vec; r: number } {
   for (let tries = 1; tries <= O.maxTries; tries++) {
@@ -104,7 +104,7 @@ export function findRoadWreckSpot(world: World, obstacles: Obstacle[], allowed: 
     const len = dist(a, b);
     const pos = { x: a.x + (b.x - a.x) * t - ((b.y - a.y) / len) * side, y: a.y + (b.y - a.y) * t + ((b.x - a.x) / len) * side };
     const r = randRange(world, 0.55, 0.8);
-    if (clearOfSites(pos, r) && !overlapsAny(obstacles, pos, r) && !onBridge(pos, r) && allowed(pos, r)) return { pos, r };
+    if (clearOfSites(pos, r) && !overlapsAny(obstacles, pos, r) && !onDeck(pos, r) && allowed(pos, r)) return { pos, r };
   }
   throw new Error('Road wreck placement ran out of tries');
 }
@@ -123,10 +123,9 @@ export function isBreakable(o: Obstacle): boolean {
   return o.kind === 'landmark' && BREAKABLE.kinds.includes(o.look);
 }
 
-// A prop on the narrow bridge deck would close the crossing.
-export function onBridge(pos: Vec, r: number): boolean {
-  const bridge = TERRAIN.features.bridge;
-  return segmentDist(pos, bridge.from, bridge.to) < bridge.width / 2 + r;
+// A prop on a narrow deck would close the crossing. True when a circle reaches onto any deck.
+export function onDeck(pos: Vec, r: number): boolean {
+  return DECKS.some((deck) => segmentDist(pos, deck.from, deck.to) < deck.width / 2 + r);
 }
 
 // Whether a prop keeps the extra site clearance from every town and location.

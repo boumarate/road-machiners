@@ -49,6 +49,29 @@ export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   toxic: { id: "toxic", name: "Toxic pool", speed: 0.45, wear: 1.8, dust: 0.1, color: 0x9aa83c },
 };
 
+// A straight road deck. width is tiles between its two rails. cut, when set, removes the road's
+// flattening in the gap under the deck: abutment is tiles of causeway left under each deck end, and ramp
+// tiles over which the cut ground falls away. skirt makes the physics rails reach down past the lowest
+// ground beside the deck, so trucks on open ground cannot drive in under it.
+export type DeckSpec = {
+  id: string;
+  from: Vec;
+  to: Vec;
+  width: number;
+  cut: { abutment: number; ramp: number } | null;
+  skirt: boolean;
+};
+
+// Canyon Bridge: the road's causeway is cut away under the deck, so the canyon runs below it.
+const CANYON_BRIDGE: DeckSpec = {
+  id: "canyon-bridge",
+  from: scalePoint({ x: 97.9, y: 75.1 }),
+  to: scalePoint({ x: 101.5, y: 71.5 }),
+  width: 8, // the widest truck keeps its clearance from both rails
+  cut: { abutment: 1, ramp: 1.5 },
+  skirt: false,
+};
+
 export const TERRAIN = {
   // Elevation noise: a fractal sum of value-noise octaves. freq is cycles per tile.
   // seedOffset keeps each octave sampling a different part of the hash space.
@@ -84,15 +107,8 @@ export const TERRAIN = {
       bank: 18,
       depth: 2.9,
     },
-    // Canyon Bridge: a straight deck between two road points. The road's causeway is cut away under
-    // the deck, so the canyon runs below it.
-    bridge: {
-      from: scalePoint({ x: 97.9, y: 75.1 }),
-      to: scalePoint({ x: 101.5, y: 71.5 }),
-      width: 8, // tiles between the rails; the widest truck keeps its clearance from both
-      abutment: 1, // tiles of causeway left under each deck end
-      ramp: 1.5, // tiles over which the cut ground falls to the canyon
-    },
+    // Straight road decks, each between two road points. See src/sim/bridge.ts.
+    decks: [CANYON_BRIDGE] as readonly DeckSpec[],
     // Broken Wing: the crashed ship section, a baked prop. Its fuselage lies beside the road and its high wing boxes
     // leave the road open to trucks. pos and yaw come from BROKEN_WING, and r is the model's bake circle in tiles.
     wing: {
@@ -561,7 +577,7 @@ export const MAPGEN = {
   closeUpPxPerTile: 8,
   closeUps: [
     ...[...REGION.towns, ...REGION.locations].map((site) => ({ name: site.id, center: site.pos, side: 2 * (site.radius + SITE_SURROUND) })),
-    { name: 'bridge', center: { x: (TERRAIN.features.bridge.from.x + TERRAIN.features.bridge.to.x) / 2, y: (TERRAIN.features.bridge.from.y + TERRAIN.features.bridge.to.y) / 2 }, side: 60 },
+    { name: 'bridge', center: { x: (CANYON_BRIDGE.from.x + CANYON_BRIDGE.to.x) / 2, y: (CANYON_BRIDGE.from.y + CANYON_BRIDGE.to.y) / 2 }, side: 60 },
     { name: 'dry-river', center: scalePoint({ x: 48, y: 87 }), side: 120 },
     // The canyon floor, where blown sand gathers most.
     { name: 'canyon', center: { x: 470, y: 240 }, side: 100 },

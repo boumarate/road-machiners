@@ -17,8 +17,8 @@ import {
   type SettlementRules,
   type TankRules,
 } from '../data/terrain';
-import { deckAlong } from '../sim/bridge';
-import { clearOfSites, onBridge } from '../sim/mapgen';
+import { deckAt } from '../sim/bridge';
+import { clearOfSites, onDeck } from '../sim/mapgen';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, hashRandom, randInt, randRange, type Rng } from '../sim/rng';
 import type { BakedProp, PropKind } from '../sim/terrain';
@@ -112,12 +112,12 @@ export function ruleRng(seed: number, offset: number): Rng {
 }
 
 // Inside the map margin, roadGap tiles past every road edge, clear of sites with their pads, and off the
-// Canyon Bridge deck and its ramps.
+// decks and their ramps.
 export function clearGround(size: number, pos: Vec, r: number, roadGap: number): boolean {
   if (Math.min(pos.x, pos.y, size - pos.x, size - pos.y) < O.edgeMargin + r) return false;
   const reach = HALF + roadGap + r;
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, reach) < reach) return false;
-  return clearOfSites(pos, r) && !onBridge(pos, HALF + r);
+  return clearOfSites(pos, r) && !onDeck(pos, HALF + r);
 }
 
 // Adds the prop where it stands on clear ground, off cliffs and apart from every prop already placed.
@@ -131,9 +131,9 @@ export function place(d: MapDraft, p: BakedProp, roadGap: number): boolean {
   return true;
 }
 
-// Ground today's world built on: roads, the bridge deck, and sites with their pads.
+// Ground today's world built on: roads, the decks, and sites with their pads.
 export function builtGround(c: Vec): boolean {
-  if (deckAlong(c.x, c.y) !== null) return true;
+  if (deckAt(c.x, c.y) !== null) return true;
   return ROAD_INDEX.nearestWithin(c.x, c.y, HALF) < HALF || !clearOfSites(c, 0);
 }
 

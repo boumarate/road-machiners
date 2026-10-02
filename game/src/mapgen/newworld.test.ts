@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { GEOLOGY, NEW_WORLD, TERRAIN } from '../data/terrain';
-import { deckAlong } from '../sim/bridge';
+import { deckAt, deckById } from '../sim/bridge';
 import { ROAD_INDEX } from '../sim/road-index';
 import type { BakedProp } from '../sim/terrain';
 import { dist, segmentDist, type Vec } from '../sim/vec';
@@ -31,7 +31,7 @@ const SEED = 1337;
 
 // IV2: off every road surface, clear of sites with their pads, and off the Canyon Bridge deck.
 function expectOffBuilt(p: BakedProp): void {
-  const bridge = TERRAIN.features.bridge;
+  const bridge = deckById('canyon-bridge');
   expect(ROAD_INDEX.nearestWithin(p.pos.x, p.pos.y, Infinity)).toBeGreaterThanOrEqual(HALF + p.r);
   for (const site of SITES) expect(dist(p.pos, site.pos)).toBeGreaterThan(site.radius + O.siteClearance + p.r);
   expect(segmentDist(p.pos, bridge.from, bridge.to)).toBeGreaterThanOrEqual(bridge.width / 2 + p.r);
@@ -40,7 +40,7 @@ function expectOffBuilt(p: BakedProp): void {
 // IV4: whether a tile center lies on a road, the deck, a site or a pad. The far corners of a pad reach
 // hypot(radius + pad length, pad width / 2) from the site center.
 function onBuilt(c: Vec): boolean {
-  if (ROAD_INDEX.nearestWithin(c.x, c.y, HALF) < HALF || deckAlong(c.x, c.y) !== null) return true;
+  if (ROAD_INDEX.nearestWithin(c.x, c.y, HALF) < HALF || deckAt(c.x, c.y) !== null) return true;
   return SITES.some((site) => dist(c, site.pos) <= Math.hypot(site.radius + REGION.sites.pad.length, REGION.sites.pad.width / 2));
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { GEOLOGY, TERRAIN, type TerrainTypeId } from '../data/terrain';
+import { deckById } from '../sim/bridge';
 import { ROAD_INDEX } from '../sim/road-index';
 import { TYPE_IDS } from '../sim/terrain';
 import { groundLayer, newDraft, type MapDraft } from './bake';
@@ -144,7 +145,7 @@ describe('built ground', () => {
   });
 
   it('keeps the Canyon Bridge deck road under every geology mark', () => {
-    const bridge = TERRAIN.features.bridge;
+    const bridge = deckById('canyon-bridge');
     const mid = { x: Math.floor((bridge.from.x + bridge.to.x) / 2), y: Math.floor((bridge.from.y + bridge.to.y) / 2) };
     const d = groundLayer(SEED, marked());
 

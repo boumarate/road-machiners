@@ -8,7 +8,7 @@ import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
 import { siteGates } from '../../sim/sites';
-import { BRIDGE_AXIS, BRIDGE_LENGTH } from '../../sim/bridge';
+import { deckById } from '../../sim/bridge';
 import { deckEnds, heightAt, type Terrain } from '../../sim/terrain';
 import { angleDiff, segmentDist } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
@@ -386,16 +386,17 @@ function buildLock(b: SiteBuilder): void {
 
 // The deck top follows the sim deck line from sim/terrain.ts, which the physics deck also follows.
 function buildBridge(b: SiteBuilder, terrain: Terrain): void {
-  const { from, width } = TERRAIN.features.bridge;
-  const [h0, h1] = deckEnds(terrain);
-  const pitch = Math.atan2((h1 - h0) * S, BRIDGE_LENGTH * S);
-  const mid = { x: from.x + (BRIDGE_AXIS.x * BRIDGE_LENGTH) / 2, y: from.y + (BRIDGE_AXIS.y * BRIDGE_LENGTH) / 2 };
-  const bridge = b.addModel('bridge', mid.x - b.site.pos.x, mid.y - b.site.pos.y, 0, new THREE.Vector3((BRIDGE_LENGTH * S) / 32, BRIDGE_RISE, (width * S) / 7));
+  const deck = deckById('canyon-bridge');
+  const { from, width, axis, length } = deck;
+  const [h0, h1] = deckEnds(terrain, deck);
+  const pitch = Math.atan2((h1 - h0) * S, length * S);
+  const mid = { x: from.x + (axis.x * length) / 2, y: from.y + (axis.y * length) / 2 };
+  const bridge = b.addModel('bridge', mid.x - b.site.pos.x, mid.y - b.site.pos.y, 0, new THREE.Vector3((length * S) / 32, BRIDGE_RISE, (width * S) / 7));
   // Trucks cross the bridge, which lies outside the site edge.
   bridge.userData.outsideEdge = true;
   bridge.position.y = ((h0 + h1) / 2) * S - BRIDGE_DECK_TOP * BRIDGE_RISE;
   // YXZ applies the pitch about the model's own z first, then the yaw.
-  bridge.rotation.set(0, -Math.atan2(BRIDGE_AXIS.y, BRIDGE_AXIS.x), pitch, 'YXZ');
+  bridge.rotation.set(0, -Math.atan2(axis.y, axis.x), pitch, 'YXZ');
   b.addRuin(0, 0, 3, 2);
 }
 

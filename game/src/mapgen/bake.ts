@@ -4,13 +4,13 @@
 
 import { REGION } from '../data/region';
 import { GEOLOGY, MAPGEN, TERRAIN, type TerrainTypeId } from '../data/terrain';
-import { bridgeCut, deckAlong } from '../sim/bridge';
+import { bridgeCut, deckAt } from '../sim/bridge';
 import { broadAt, flattenFactor, reliefAt } from '../sim/elevation';
 import { gradeRoads } from '../sim/road-grade';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, randRange, type Rng } from '../sim/rng';
 import { heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
-import { clearOfSites, onBridge } from '../sim/mapgen';
+import { clearOfSites, onDeck } from '../sim/mapgen';
 import { dist, polylineDist, type Vec } from '../sim/vec';
 import { BUILT_DIRTY_WATER, BUILT_SCRUB, BUILT_TOXIC, newWorldLayer } from './newworld';
 import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer } from './oldworld';
@@ -161,9 +161,9 @@ function drainChannels(pond: Float32Array, size: number): Float32Array {
   return pond;
 }
 
-// Road on roads and the bridge deck, hardpan on and around sites, null elsewhere.
+// Road on roads and the decks, hardpan on and around sites, null elsewhere.
 function builtType(c: Vec): TerrainTypeId | null {
-  if (deckAlong(c.x, c.y) !== null) return 'road';
+  if (deckAt(c.x, c.y) !== null) return 'road';
   if (ROAD_INDEX.nearestWithin(c.x, c.y, REGION.roadWidth / 2) < REGION.roadWidth / 2) return 'road';
   return SITES.some((s) => nearSite(s.pos, s.radius, c)) ? 'hardpan' : null;
 }
@@ -214,7 +214,7 @@ function cornerMean(a: ArrayLike<number>, size: number, k: number): number {
 
 
 // Rock layer: boulders on corners at the foot of cliffs and on ridge tops, each by its own chance from
-// the map seed, off the roads, sites, the bridge deck, cliffs, the map margin and earlier props. A boulder
+// the map seed, off the roads, sites, the decks, cliffs, the map margin and earlier props. A boulder
 // on a ridge top as high as the crag height is a crag, a larger rock spire.
 
 const O = REGION.obstacles;
@@ -281,5 +281,5 @@ function fitsOffRoad(size: number, heights: ArrayLike<number>, placed: BakedProp
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, roadGap) < roadGap) return false;
   const tile = Math.floor(pos.y) * size + Math.floor(pos.x);
   if (tileSteepness(heights, size, tile) > BOULDER_SLOPE_LIMIT) return false;
-  return !onBridge(pos, r) && clearOfSites(pos, r) && placed.every((o) => dist(pos, o.pos) >= o.r + r + O.gap);
+  return !onDeck(pos, r) && clearOfSites(pos, r) && placed.every((o) => dist(pos, o.pos) >= o.r + r + O.gap);
 }

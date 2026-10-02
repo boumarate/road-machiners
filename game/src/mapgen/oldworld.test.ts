@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { GEOLOGY, OLD_WORLD, TERRAIN } from '../data/terrain';
-import { deckAlong } from '../sim/bridge';
+import { deckAt, deckById } from '../sim/bridge';
 import { ROAD_INDEX } from '../sim/road-index';
 import { hashRandom } from '../sim/rng';
 import type { BakedProp } from '../sim/terrain';
@@ -34,7 +34,7 @@ const SEED = 1337;
 
 // IV2: off every road surface, clear of sites with their pads, and off the Canyon Bridge deck.
 function expectOffBuilt(p: BakedProp): void {
-  const bridge = TERRAIN.features.bridge;
+  const bridge = deckById('canyon-bridge');
   expect(ROAD_INDEX.nearestWithin(p.pos.x, p.pos.y, Infinity)).toBeGreaterThanOrEqual(HALF + p.r);
   for (const site of SITES) expect(dist(p.pos, site.pos)).toBeGreaterThan(site.radius + O.siteClearance + p.r);
   expect(segmentDist(p.pos, bridge.from, bridge.to)).toBeGreaterThanOrEqual(bridge.width / 2 + p.r);
@@ -415,7 +415,7 @@ describe('old-world layer', () => {
     expect(tilesMarked(d, BUILT_FIELD).length).toBeGreaterThan(0);
     for (const c of marked) {
       expect(ROAD_INDEX.nearestWithin(c.x, c.y, Infinity)).toBeGreaterThanOrEqual(HALF);
-      expect(deckAlong(c.x, c.y)).toBeNull();
+      expect(deckAt(c.x, c.y)).toBeNull();
       // The far corners of a pad reach this far from the site center.
       for (const site of SITES) expect(dist(c, site.pos)).toBeGreaterThan(Math.hypot(site.radius + REGION.sites.pad.length, REGION.sites.pad.width / 2));
     }
