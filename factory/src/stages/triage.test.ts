@@ -117,6 +117,37 @@ describe('triage stage', () => {
     expect(calls.filter((call) => call.startsWith('move'))).toEqual([]);
   });
 
+  it('notifies the committee once, with stage, issue link and reply place, and no question text', async () => {
+    await runStage(fakeCtx(verdict({ verdict: 'unclear', reason: 'Vague', questions: ['Which horn?'] })), 7);
+    const messages = calls.filter((call) => call.startsWith('message'));
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toContain('❓ Triage needs answers on #7');
+    expect(messages[0]).toContain('https://github.com/o/r/issues/7');
+    expect(messages[0]).toContain('Answer there. Replies in this chat do not reach the stage.');
+    expect(messages[0]).not.toContain('Which horn?');
+    expect(messages[0]).not.toContain('Big horn');
+  });
+
+  it('adds no second notice while the earlier question set is unanswered', async () => {
+    const asked = '## Questions from the factory\n\n1. Old?\n\n<!-- roam-factory -->';
+    await runStage(fakeCtx(verdict({ verdict: 'unclear', reason: 'Vague', questions: ['Which horn?'] }), [], [asked]), 7);
+    expect(calls).toContain('addLabel 7 needs-info');
+    expect(calls.filter((call) => call.startsWith('message'))).toEqual([]);
+  });
+
+  it('notifies again for a new set after the author answered', async () => {
+    const asked = ['## Questions from the factory\n\n1. Old?\n\n<!-- roam-factory -->', 'This one'];
+    await runStage(fakeCtx(verdict({ verdict: 'unclear', reason: 'Vague', questions: ['Which horn?'] }), [], asked), 7);
+    expect(calls.filter((call) => call.startsWith('message'))).toHaveLength(1);
+  });
+
+  it('keeps the questions and label when Telegram fails', async () => {
+    const ctx = fakeCtx(verdict({ verdict: 'unclear', reason: 'Vague', questions: ['Which horn?'] }));
+    (ctx.telegram as { sendMessage: unknown }).sendMessage = async () => { throw new Error('down'); };
+    await runStage(ctx, 7);
+    expect(calls).toContain('addLabel 7 needs-info');
+  });
+
   it('throws when triage.json is missing', async () => {
     await expect(runStage(fakeCtx(null), 7)).rejects.toThrow('no .factory/triage.json');
   });
