@@ -87,7 +87,7 @@ function newGameSaved(): Booted {
 async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<Booted> {
   const stored = storedSave(slots, slot);
   const canMigrate = typeof stored === 'object' && stored !== null && !Array.isArray(stored);
-  if ((await chooseSaveFate(error.message, canMigrate)) === 'new') return freshRun();
+  if ((await chooseSaveFate(error.message, canMigrate, stored)) === 'new') return freshRun();
   const rescued = rescueSave(slots, slot, map, startKit(CONFIG.startKit), freshSeed, freshRunId, Date.now());
   if (!rescued) throw new Error('The save became unreadable while migrating');
   await showCarryReport(rescued.report);
