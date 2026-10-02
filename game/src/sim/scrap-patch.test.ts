@@ -8,6 +8,7 @@ import { getLotTradePrice, partRepairCost, enterTown, scrapPatch } from './econo
 import { corePart, coreParts, mountedParts } from './grid';
 import { makePart } from './factory';
 import { addGoods, stowPart } from './inventory';
+import { acceptContract, shopState } from './market';
 import { sitePads } from './sites';
 import { fuelCap, isStranded } from './stats';
 import { emptyWorld } from './testkit';
@@ -221,6 +222,9 @@ describe('scrap fuel for a low tank', () => {
 
     expect(isStranded(next, next.vehicles[0])).toBe(false);
     expect(next.player.fuel).toBeGreaterThan(0);
+    const haul = shopState(next, 'bowl').contracts.find((c) => c.kind === 'haul')!;
+    expect(haul).toBeDefined();
+    expect(acceptContract(next, haul.id).player.contracts.map((c) => c.id)).toContain(haul.id);
   });
 });
 
