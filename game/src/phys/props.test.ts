@@ -10,7 +10,7 @@ import { propPose, propShape } from '../sim/mapgen';
 import { emptyWorld } from '../sim/testkit';
 import type { LandmarkLook, Obstacle, World } from '../sim/types';
 import { endTurn, setMoveOrder } from '../sim/world';
-import { buildDrive, freeDrive, initPhysics, syncDrive, toTilesPerTurn, type Break, type Crash, type Drive, type TurnResult } from './drive';
+import { buildDrive, captureDrive, freeDrive, initPhysics, restoreDrive, syncDrive, toTilesPerTurn, type Break, type Crash, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
 
 beforeAll(async () => {
@@ -234,5 +234,34 @@ describe('breakable props', () => {
 
   it('the physics world a break leaves holds no colliders of the fence', () => {
     expect(play(paced({ x: 34, y: 30 }, { x: 60, y: 30 }, fast, [fence]), 8).live).toEqual([]);
+  });
+
+  it('a broken fence that grows back gets new colliders and breaks again', () => {
+    let w = paced({ x: 34, y: 30 }, { x: 80, y: 30 }, fast, [fence]);
+    let d = buildDrive(w);
+    const broke: string[] = [];
+    // The drive passes through a snapshot between turns, as the game's playback does.
+    const turn = () => {
+      let r: TurnResult | null = null;
+      w = endTurn(w, physicsMove(d, (x) => (r = x)));
+      const done = r as TurnResult | null;
+      broke.push(...done!.breaks.map((b) => b.prop));
+      const next = restoreDrive(captureDrive(done!.next));
+      freeDrive(done!.next);
+      freeDrive(d);
+      d = next;
+      syncDrive(d, w);
+    };
+    try {
+      for (let i = 0; i < 4; i++) turn();
+      expect(broke).toEqual(['fence1']);
+      expect(w.obstacles).toEqual([]);
+      w.obstacles = [{ ...fence, pos: { x: me(w).pos.x + 5, y: 30 } }];
+      for (let i = 0; i < 6; i++) turn();
+      expect(broke).toEqual(['fence1', 'fence1']);
+      expect(w.obstacles).toEqual([]);
+    } finally {
+      freeDrive(d);
+    }
   });
 });
