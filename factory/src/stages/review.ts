@@ -89,7 +89,7 @@ async function reviewRound(ctx: Ctx, issue: number, base: string): Promise<Findi
 
 // One adversarial review of the whole branch. A block gets one fix round and one more review. Returns whether the
 // change passed. A second block sends the card back to Design, since two blocks in a row point at the design, not
-// at the code.
+// at the code. A card already redesigned once for the review throws instead, so the stage stops it for Hermes.
 export async function reviewGate(ctx: Ctx, issue: number, base: string, fixRound: () => Promise<void>): Promise<boolean> {
   const first = await reviewRound(ctx, issue, base);
   if (!isBlocked(first)) return true;
@@ -99,6 +99,8 @@ export async function reviewGate(ctx: Ctx, issue: number, base: string, fixRound
   const again = await reviewRound(ctx, issue, base);
   rmSync(findingsFile);
   if (!isBlocked(again)) return true;
+  const redesigned = (await ctx.github.comments(issue)).some((comment) => comment.body.startsWith(REVIEW_HEADING));
+  if (redesigned) throw new Error(`The review blocked the change twice again after a redesign.\n${findingsMarkdown(again)}`);
   await ctx.github.comment(issue, `${REVIEW_HEADING}\n\nThe review blocked this change twice. A fix round did not clear it, so the flaw is in the design. Revise the design to remove the root cause behind these findings, not to patch each one.\n\n${findingsMarkdown(again)}`);
   await ctx.github.move(issue, 'Design');
   return false;

@@ -10,6 +10,8 @@ const { runStage, approvalCaption, approvalButtons } = await import('./testing')
 let home = '';
 let calls: string[] = [];
 let commentBodies: string[] = [];
+// Comments already on the issue before the stage runs.
+let priorComments: { login: string; body: string }[] = [];
 let shellScript = '';
 let shellEnv: Record<string, string> | undefined;
 let photoButtons: unknown;
@@ -38,6 +40,7 @@ beforeEach(() => {
   home = mkdtempSync('tmp/factory-testing-');
   calls = [];
   commentBodies = [];
+  priorComments = [];
   openPr = null;
   labels = [];
   bases = [];
@@ -53,9 +56,9 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
     statePath: `${home}/state.json`,
     github: {
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels, createdAt: '', state: 'OPEN', thumbsUp: [] }),
-      comments: async () => [],
       move: async (issue: number, column: string) => { calls.push(`move ${issue} ${column}`); },
       comment: async (issue: number, body: string) => { calls.push(`comment ${issue}`); commentBodies.push(body); },
+      comments: async () => priorComments,
       pullRequestFor: async (branch: string) => { calls.push(`pullRequestFor ${branch}`); return openPr; },
       openPullRequest: async (branch: string, base: string, title: string, body: string) => { calls.push(`openPullRequest ${branch} ${base} ${title} | ${body}`); return 'https://github.com/o/r/pull/50'; },
     },
