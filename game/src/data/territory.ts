@@ -66,12 +66,15 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
     // Read from north-west to south-east. Sections keep 10 tiles from the centre, 2 past the hazard, and leave
     // the floor to the south-west and north-east open for the roads.
     sections: [
-      // The bow is nose-up: its broken aft end is buried, its torn bow end is 8 m up over the north-west floor.
-      { id: 'bow', at: onSunLine(-32, -2), yaw: SUN_HEADING + Math.PI, length: 22, width: 9, rise: 2, ribStep: 4, bays: [0.3, 0.6, 0.85] },
+      // The bow is nose-up: its broken aft end is buried, its torn bow end is 8 m up over the north-west floor. The
+      // floor climbs about 1 unit toward the rim under it, so the rise is 3.
+      { id: 'bow', at: onSunLine(-32, -2), yaw: SUN_HEADING + Math.PI, length: 22, width: 9, rise: 3, ribStep: 4, bays: [0.3, 0.6, 0.85] },
       // The forward hull slid off the line to the south-west. It is nearly flat and overlooks the reactor pit.
       { id: 'forward', at: onSunLine(-17, 9.5), yaw: SUN_HEADING, length: 14, width: 8, rise: 0.6, ribStep: 4, bays: [0.3, 0.7] },
-      // The aft hull tilts up toward the south-east.
-      { id: 'aft', at: onSunLine(19, -2), yaw: SUN_HEADING, length: 16, width: 8, rise: 1.2, ribStep: 4, bays: [0.35, 0.75] },
+      // The aft hull tilts up toward the south-east. The bank climbs up to 2 units under it, so its rise of 3.6 keeps
+      // the deck clear of the bank and its high end 5 to 7 m over it. Its bays sit between ribs, since a bay under a
+      // rib leaves no way past between the rib legs and the cliff sides.
+      { id: 'aft', at: onSunLine(19, -2), yaw: SUN_HEADING, length: 16, width: 8, rise: 3.6, ribStep: 4, bays: [0.375, 0.625] },
       // Two plates thrown off the line, small ramps that climb back toward it: sniper perches. They are 7 tiles wide,
       // so a truck passes the bay in the middle and drives on up to the top.
       { id: 'plate-ne', at: onSunLine(4, -26), yaw: SUN_HEADING + Math.PI / 2, length: 8, width: 7, rise: 1, ribStep: null, bays: [0.6] },
