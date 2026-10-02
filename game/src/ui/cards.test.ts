@@ -4,7 +4,8 @@ import { mountedParts } from "../sim/grid";
 import { playerVehicle } from "../sim/damage";
 import { newWorld } from "../sim/world";
 import type { PartInstance } from "../sim/types";
-import { baselinePart, chassisPortraitCell, chassisStats, compareBase, diffStats, itemIconCell, partStats } from "./cards";
+import { baselinePart, chassisPortraitCell, chassisStats, compareBase, diffStats, gridIconFrame, itemIconCell, partStats } from "./cards";
+import ICONS from "../data/item-icons.json";
 import { CHASSIS } from "../data/chassis";
 import { GOODS } from "../data/goods";
 import { PARTS } from "../data/parts";
@@ -98,5 +99,23 @@ describe("item icons", () => {
 
   it.each(Object.keys(CHASSIS))("names the %s portrait after its chassis", (id) => {
     expect(chassisPortraitCell(id).label).toBe(CHASSIS[id].name);
+  });
+});
+
+describe("grid item icons", () => {
+  it("crop a gun to its drawn extent, so it fills its footprint box", () => {
+    const [x, y, w, h] = ICONS.items.longRifle.box;
+    expect(gridIconFrame(itemIconCell("longRifle"), 0).crop).toEqual({ x, y, w, h });
+    expect(h).toBeGreaterThan(2 * w);
+  });
+
+  it("turn a top-down part a quarter with the part, and not when it lies straight", () => {
+    expect(gridIconFrame(itemIconCell("longRifle"), 1).turn).toBe(1);
+    expect(gridIconFrame(itemIconCell("longRifle"), 0).turn).toBe(0);
+  });
+
+  it("never turn a good, which is drawn diagonal", () => {
+    expect(itemIconCell("scrap").view).toBe("diagonal");
+    expect(gridIconFrame(itemIconCell("scrap"), 1).turn).toBe(0);
   });
 });

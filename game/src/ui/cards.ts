@@ -139,20 +139,35 @@ export function createSpeedDial(speed: number, maxSpeed: number): HTMLElement {
 // ---- Item icons: cells of the sprite sheets that npm run icons renders from the game's models. See docs/art.md.
 
 type Sheet = "items" | "chassis";
+type View = "top" | "diagonal";
 
-// Where one icon sits on its sheet, as a share of the sheet: col and row of cols and rows cells.
-export type IconCell = { sheet: Sheet; label: string; col: number; row: number; cols: number; rows: number };
+// A share of a cell: x, y, w, h.
+export type Box = { x: number; y: number; w: number; h: number };
+const WHOLE: Box = { x: 0, y: 0, w: 1, h: 1 };
+
+// Where one icon sits on its sheet, as a share of the sheet: col and row of cols and rows cells. box is the share of
+// the cell that holds its drawn pixels, and view how npm run icons drew it.
+export type IconCell = { sheet: Sheet; label: string; col: number; row: number; cols: number; rows: number; box: Box; view: View };
 
 export function itemIconCell(id: string): IconCell {
-  const label = id in GOODS ? GOODS[id].name : partDef(id).name;
-  return cellOf("items", id, label);
+  const good = id in GOODS;
+  const label = good ? GOODS[id].name : partDef(id).name;
+  const cell = cellOf("items", id, label);
+  const boxes: Record<string, { box: number[] }> = ICONS.items;
+  const [x, y, w, h] = boxes[id].box;
+  return { ...cell, box: { x, y, w, h }, view: viewOf(good ? ICONS.views.good : ICONS.views.part) };
 }
 
 export function chassisPortraitCell(chassisId: string): IconCell {
-  return cellOf("chassis", chassisId, chassisDef(chassisId).name);
+  return { ...cellOf("chassis", chassisId, chassisDef(chassisId).name), box: WHOLE, view: viewOf(ICONS.views.chassis) };
 }
 
-function cellOf(sheet: Sheet, id: string, label: string): IconCell {
+function viewOf(view: string): View {
+  if (view !== "top" && view !== "diagonal") throw new Error(`Unknown icon view ${view}. Run npm run icons.`);
+  return view;
+}
+
+function cellOf(sheet: Sheet, id: string, label: string): Omit<IconCell, "box" | "view"> {
   const icons: Record<string, { index: number }> = ICONS[sheet];
   const icon = icons[id];
   if (!icon) throw new Error(`No ${sheet} icon for ${id}. Run npm run icons.`);
@@ -161,14 +176,21 @@ function cellOf(sheet: Sheet, id: string, label: string): IconCell {
   return { sheet, label, col: icon.index % cols, row: Math.floor(icon.index / cols), cols, rows };
 }
 
+// How an item's icon fills its grid box: cropped to its drawing, and a top-down part laid sideways with rot 1 turned
+// a quarter counter-clockwise, so its nose points to the truck's left as the 3D part does. Goods are drawn diagonal
+// and never turn.
+export function gridIconFrame(cell: IconCell, rot: 0 | 1): { crop: Box; turn: 0 | 1 } {
+  return { crop: cell.box, turn: cell.view === "top" ? rot : 0 };
+}
+
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 // The cell drawn into an SVG. A nested svg clips to the cell, and the outer one fits it to any box like the glyphs.
-// crop: the share of the cell to show, x, y, w, h.
-function sheetIcon(cell: IconCell, cls: string, crop = { x: 0, y: 0, w: 1, h: 1 }): HTMLElement {
+// crop: the share of the cell to show. turn 1 draws it a quarter turn counter-clockwise.
+function sheetIcon(cell: IconCell, cls: string, crop = WHOLE, turn: 0 | 1 = 0): HTMLElement {
   const icon = el("span", { class: cls, role: "img", "aria-label": cell.label, title: cell.label });
   const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("viewBox", `0 0 ${crop.w} ${crop.h}`);
+  svg.setAttribute("viewBox", turn ? `0 0 ${crop.h} ${crop.w}` : `0 0 ${crop.w} ${crop.h}`);
   svg.setAttribute("focusable", "false");
   const clip = document.createElementNS(SVG_NS, "svg");
   clip.setAttribute("viewBox", `${cell.col + crop.x} ${cell.row + crop.y} ${crop.w} ${crop.h}`);
@@ -179,7 +201,13 @@ function sheetIcon(cell: IconCell, cls: string, crop = { x: 0, y: 0, w: 1, h: 1 
   image.setAttribute("height", String(cell.rows));
   image.setAttribute("preserveAspectRatio", "none");
   clip.append(image);
-  svg.append(clip);
+  if (turn) {
+    // The cell's top edge, the nose, lands on the left.
+    const group = document.createElementNS(SVG_NS, "g");
+    group.setAttribute("transform", `translate(0 ${crop.w}) rotate(-90)`);
+    group.append(clip);
+    svg.append(group);
+  } else svg.append(clip);
   icon.append(svg);
   return icon;
 }
@@ -196,6 +224,14 @@ export function partIconEl(part: PartInstance): HTMLElement {
 
 export function itemIconEl(item: GridItem): HTMLElement {
   return item.kind === "good" ? createItemIcon(item.good) : partIconEl(item.part);
+}
+
+// An item's icon in its inventory grid box, fit to the box and turned with the item. See gridIconFrame.
+export function gridItemIcon(item: GridItem): HTMLElement {
+  if (item.kind === "part" && BODY_PARTS.has(item.part.defId)) return createIcon("cab");
+  const cell = itemIconCell(item.kind === "good" ? item.good : item.part.defId);
+  const { crop, turn } = gridIconFrame(cell, item.rot);
+  return sheetIcon(cell, "icon item-icon", crop, turn);
 }
 
 // A truck seen as the shop shows it, beside its grid. Seen from above it is cropped to the truck, so its nose and

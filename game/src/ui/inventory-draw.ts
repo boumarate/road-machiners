@@ -9,7 +9,7 @@ import type { GridItem, PartInstance, RefitJob, RefitMove, Vehicle, World } from
 import { playerVehicle } from "../sim/damage";
 import { el } from "./dom";
 import { wearLabel } from "./format";
-import { itemIconEl } from "./cards";
+import { gridItemIcon } from "./cards";
 import { hp, kg } from "./units";
 
 const CELL_TITLE: Record<Cell, string> = {
@@ -73,7 +73,7 @@ export function itemBox(it: GridItem, mounted: boolean, cell: number): HTMLEleme
   const node = el(
     "div",
     { class: `inv-item ${cls}`, "data-item-id": it.id, style: pos(x, y, size.w, size.h, cell), title: itemTitle(it, mounted), tabindex: 0, role: "button", "aria-label": itemTitle(it, mounted) },
-    itemIconEl(it),
+    gridItemIcon(it),
     el("span", { class: "inv-item-name" }, itemLabel(it).short),
   );
   if (it.kind === "part") node.append(conditionBar(it.part));

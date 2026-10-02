@@ -1107,8 +1107,10 @@ body {
 .inv-item .icon {
   width: 100%;
   height: 100%;
-  max-width: 62px;
-  max-height: 62px;
+}
+/* Clear of the condition bar. */
+.inv-item:has(.inv-hp) {
+  padding-bottom: 6px;
 }
 .inv-item-name {
   position: absolute;
