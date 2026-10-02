@@ -17,8 +17,7 @@ export type TerrainTypeId =
   | "ash"
   | "field"
   | "dirtyWater"
-  | "toxic"
-  | "hull";
+  | "toxic";
 
 export type TerrainType = {
   id: TerrainTypeId;
@@ -48,10 +47,6 @@ export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   // Last, so earlier type codes keep their values.
   dirtyWater: { id: "dirtyWater", name: "Dirty water", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x55583a },
   toxic: { id: "toxic", name: "Toxic pool", speed: 0.45, wear: 1.8, dust: 0.1, color: 0x9aa83c },
-  // Hull plating: the decks of a crashed ship. Smooth metal drives as fast as road, wears parts a little more
-  // than asphalt for its seams and torn edges, and holds only the thin dust blown onto it. Gray of PAL.metal.
-  // Last, so earlier type codes keep their values.
-  hull: { id: "hull", name: "Hull plating", speed: 1, wear: 0.7, dust: 0.2, color: 0x5a5a58 },
 };
 
 export const TERRAIN = {

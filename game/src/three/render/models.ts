@@ -46,8 +46,6 @@ const NAMES = [
   'hull_shard',
   'hull_tower',
   'hull_gantry',
-  'hull_wall',
-  'hull_rib',
   'bridge',
   'pump_station',
   'lock_gate',

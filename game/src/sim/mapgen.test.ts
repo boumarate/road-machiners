@@ -5,9 +5,10 @@ import { PHYSICS } from '../data/physics';
 import { boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propPose, propReach, propShape, segmentCrossesBox } from './mapgen';
 import { ROAD_INDEX } from './road-index';
 import type { Obstacle } from './types';
-import { dist, type Vec } from './vec';
+import { dist } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
+import { boxesOverlap } from '../test/boxes';
 import { PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
@@ -116,11 +117,20 @@ describe('world from the baked map', () => {
     // little, but the segments only touch. The map stores positions as float32, off by up to 6e-5 tiles at x = 600.
     const ends = (o: Obstacle) => (o.kind === 'landmark' && o.look === 'fence' ? [1, -1].map((k) => ({ x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) })) : []);
     const touching = (a: Obstacle, b: Obstacle) => ends(a).some((p) => ends(b).some((q) => dist(p, q) < 1e-4));
-    // A hull rib is an arch: only its two legs stand on the ground, r to each side along its yaw, and the model's leg
-    // reaches under a sixth of r each way. Other props stand under the arch between them.
-    const ground = (o: Obstacle): { pos: Vec; r: number }[] =>
-      o.kind === 'landmark' && o.look === 'hullRib' ? [1, -1].map((k) => ({ pos: { x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) }, r: o.r / 6 })) : [{ pos: o.pos, r: o.r }];
-    const overlap = (a: Obstacle, b: Obstacle) => ground(a).some((p) => ground(b).some((q) => dist(p.pos, q.pos) < p.r + q.r - 1e-6));
+    // A hull piece of the Fallen Sun is long or hollow, so it stands on the ground only under its low boxes: trucks,
+    // caches and the reactor sit inside and beside it. Rim rocks overlap each other on purpose, as one rock wall.
+    const low = (o: Obstacle) => propBoxes(o).filter((b) => b.z0 < PHYSICS.truckClearance);
+    const boxed = (o: Obstacle) => o.kind === 'landmark' && HULL_PIECES.has(o.look);
+    const rimPair = (a: Obstacle, b: Obstacle) => [a, b].every((o) => o.kind === 'landmark' && o.look === 'rimRock');
+    const overlap = (a: Obstacle, b: Obstacle): boolean => {
+      if (rimPair(a, b)) return false;
+      if (boxed(a) && boxed(b)) return low(a).some((p) => low(b).some((q) => boxesOverlap(p, q)));
+      if (boxed(a) || boxed(b)) {
+        const [piece, other] = boxed(a) ? [a, b] : [b, a];
+        return low(piece).some((box) => boxDistance(box, other.pos) < other.r - 1e-6);
+      }
+      return dist(a.pos, b.pos) < a.r + b.r - 1e-6;
+    };
     const overlaps = baked.flatMap((o) => all.filter((other) => other.id !== o.id && overlap(o, other) && !touching(o, other)).map((other) => `${o.id} ${other.id}`));
     expect(overlaps).toEqual([]);
   });
@@ -249,3 +259,6 @@ describe('prop poses', () => {
     expect(() => propShape('nothing')).toThrow(/nothing/);
   });
 });
+
+// The Fallen Sun's hull piece looks, which stand on their low boxes.
+const HULL_PIECES = new Set<string>(['shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry']);

@@ -732,12 +732,12 @@ describe('territory loot spots', () => {
     expect(w.salvage.some((s) => s.id === 'fallen-sun')).toBe(false);
   }, 30_000);
 
-  it('rolls deck bays from the landmark table and field spots from the hull scrap table', async () => {
+  it('rolls caches from the landmark table and field spots from the hull scrap table', async () => {
     const w = await realWorld();
     for (const o of spotsOf(w)) {
       const table = spotTable(o);
       const stock = stockOf(w, o.id);
-      expect(table).toBe(o.kind === 'landmark' && o.look === 'deckBay' ? SALVAGE.landmark : SALVAGE.hullScrap);
+      expect(table).toBe(o.kind === 'landmark' && o.look === 'hullCache' ? SALVAGE.landmark : SALVAGE.hullScrap);
       expect(stock.goods.parts).toBeGreaterThanOrEqual(table.parts[0]);
       expect(stock.goods.parts).toBeLessThanOrEqual(table.parts[1]);
       expect(stock.fuel).toBeLessThanOrEqual(table.fuel[1]);
@@ -747,7 +747,7 @@ describe('territory loot spots', () => {
 
   it('refills an emptied spot over days and never past its table', async () => {
     const w = await realWorld();
-    const o = spotsOf(w).find((spot) => spot.kind === 'landmark' && spot.look === 'deckBay')!;
+    const o = spotsOf(w).find((spot) => spot.kind === 'landmark' && spot.look === 'hullCache')!;
     const stock = stockOf(w, o.id);
     emptyStock(stock);
     runDays(w, 1);
