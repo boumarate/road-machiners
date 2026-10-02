@@ -2,12 +2,14 @@
 // drives over and claims the job, so no other driver answers. A tow is a `tow` state held by the tower toward its
 // client. Once hitched, the client leaves physics and trails the tower along its path. Arrival fulfils the state,
 // and its hook in src/sim/states.ts takes the fee, even into debt.
-// A player client gets an offer over the radio, for a fee to the tower's known town nearest it. Refusing, driving
+// A player client gets an offer over the radio, for a fee (free when the player has no money) to the tower's known town nearest it. Refusing, driving
 // away or unhitching breaks it for free, and the tower holds `turnedDown` toward the player, so it rarely offers
 // again. A stranded player can switch on an emergency beacon, which calls towers from beyond sight, and raiders too.
 // An NPC client takes the tow at once, to its nearest own camp, else its nearest known town, for what it can pay.
 // The player can tow a stranded NPC the same way, for its fee or for free. The radio releases it.
 // Raiders tow only raiders, and only raiders or the player tow a raider.
+// A claim that has its client in sight and out of combat for 20 turns without hitching lapses, so another driver can
+// answer.
 // Escorts live here too, since an escort tows its stranded leader. An escort is an `escort` state its holder keeps
 // toward the leader it guards. It is fulfilled when the leader can use its destination site, and its hook pays the
 // fee once. It breaks when either party is gone, beaten or hostile to the other. The escort follows the leader and
@@ -278,9 +280,10 @@ export function runTow(world: World, vehicle: Vehicle, activity: NpcActivity): s
 }
 
 // The tower offers or hitches once in reach. The client may have got going or reached its home while the tower drove
-// over, and then the job ends.
+// over, and then the job ends. So does a claim that lapsed this turn, before the goal drops.
 function reachClient(world: World, tower: Vehicle, activity: NpcActivity, client: Vehicle): string | null {
   if (!isStranded(world, client) || !towDestination(world, tower, client)) return 'the truck needs no tow anymore';
+  if (!stateOf(world, 'answering', tower.id, client.id)) return 'could not get through to the truck';
   if (!readyToTow(world, tower, client)) return null;
   activity.phase = 'act';
   if (isPlayer(world, client)) offer(world, tower, client);
@@ -315,7 +318,10 @@ function endClaim(world: World, tower: Vehicle, client: Vehicle): void {
 }
 
 function offer(world: World, tower: Vehicle, me: Vehicle): void {
-  const { site, fee } = towerTerms(world, tower, me);
+  const terms = towerTerms(world, tower, me);
+  const { site } = terms;
+  // A client with nothing to pay is towed free. This is decided here, and the state keeps it to arrival.
+  const fee = getResources(world, me).money <= 0 ? 0 : terms.fee;
   endClaim(world, tower, me);
   addState(world, 'tow', tower.id, me.id, { kind: 'tow', site, fee, waived: 0, hitched: false });
   world.events.push({ t: 'towOffer', by: tower.id, town: site, fee });
@@ -346,6 +352,12 @@ function towFee(world: World, tower: Vehicle, client: Vehicle, site: Site): numb
 function refuse(world: World, tow: NpcState): void {
   addState(world, 'turnedDown', tow.holder, tow.other, { kind: 'none' });
   dropTow(world, tow, 'refused');
+}
+
+// A tower that had its client in sight for the claim's turns without hitching cannot get through. The claim only
+// lapses here. The tower's tow goal drops on its next turn, in towInvalid(), because it holds no claim any more.
+export function lapseClaim(world: World, claim: NpcState): void {
+  world.events.push({ t: 'towDropped', by: claim.holder, client: claim.other, reason: 'blocked' });
 }
 
 // Ends an offer or a tow for free. The state's broken hook brakes a released truck.

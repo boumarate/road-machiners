@@ -1,7 +1,7 @@
 import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
-import { everyGunFires, fireSpans, gunLayoutScore, laneCount, openSides, partLane, sideBlockers, sideToward, walkLane } from './armor';
+import { aimWithin, everyGunFires, fireSpans, gunLayoutScore, laneCount, openSides, partLane, sideBlockers, sideToward, walkLane } from './armor';
 import { fireBlock, inArc, resolveDestroyed } from './combat';
 import { makePart } from './factory';
 import { advanceKnockout, checkKnockout } from './defeat';
@@ -384,5 +384,47 @@ describe('gun layout', () => {
     const v = truckWith(emptyWorld(), 'hauler', [{ defId: 'trailerBox', x: 2, y: 5 }]);
     const box = mountedItems(v).find((it) => it.part.defId === 'trailerBox')!;
     expect(sideBlockers(v, box)).toEqual({});
+  });
+});
+
+describe('aimWithin', () => {
+  const ALL = ['front', 'rear', 'left', 'right'] as const;
+  const forward = fireSpans(60, ALL);
+
+  it('keeps a bearing inside the span or on its edge', () => {
+    expect(aimWithin(forward, 10)).toBe(10);
+    expect(aimWithin(forward, 30)).toBe(30);
+    expect(aimWithin(forward, -30)).toBe(-30);
+  });
+
+  it('turns an outside bearing to the nearest edge, the first edge on a tie', () => {
+    expect(aimWithin(forward, 31)).toBe(30);
+    expect(aimWithin(forward, -100)).toBe(-30);
+    expect(aimWithin(forward, 180)).toBe(-30);
+  });
+
+  it('matches a span through the rear on both sides of 180', () => {
+    const rear = fireSpans(360, ['rear']);
+    expect(aimWithin(rear, 170)).toBe(170);
+    expect(aimWithin(rear, -170)).toBe(-170);
+    expect(aimWithin(rear, 90)).toBe(135);
+    expect(aimWithin(rear, -90)).toBe(-135);
+  });
+
+  it('picks the nearer of two spans', () => {
+    const flanks = fireSpans(360, ['left', 'right']);
+    expect(aimWithin(flanks, 60)).toBe(60);
+    expect(aimWithin(flanks, -60)).toBe(-60);
+    expect(aimWithin(flanks, 20)).toBe(45);
+    expect(aimWithin(flanks, -20)).toBe(-45);
+  });
+
+  it('turns all the way round in a full circle', () => {
+    const full = fireSpans(360, ALL);
+    for (const rel of [-180, -90, 0, 45, 135, 180]) expect(aimWithin(full, rel)).toBe(rel);
+  });
+
+  it('throws on no spans', () => {
+    expect(() => aimWithin([], 0)).toThrow();
   });
 });

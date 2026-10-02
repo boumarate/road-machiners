@@ -23,6 +23,9 @@ export const RULES = {
   // A player click within throttle reach and less than `cone` degrees off straight behind backs the truck up.
   // Any other point behind turns the truck around nose first. A truck blocked in front, or a stuck NPC, backs out `distance` tiles.
   reverse: { cone: 20, distance: 1 },
+  // A driver that parks beside another truck tries points around it `meetStep` radians apart when the nearest is taken.
+  // 0.3 rad is under a truck length at the usual meeting distance, so no truck-wide gap is skipped.
+  meetStep: 0.3,
   arriveRadius: 0.5, // a stop order clears inside this distance
   // Throttle zones ahead of the truck. They span `reach` tiles, split into brake, hold and accelerate
   // shares in that order. A click's distance picks the zone.
