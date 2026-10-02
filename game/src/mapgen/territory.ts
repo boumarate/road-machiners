@@ -38,7 +38,7 @@ function placeSpots(g: Ground): BakedProp[] {
   for (const rule of g.rules.spots) {
     const apart = (pos: Vec, r: number): boolean => g.outside(pos, r) && spots.every((o) => dist(o.pos, pos) >= g.rules.spotGap) && clearOf(g.d.props, pos, r, 0);
     for (let i = 0; i < rule.count; i++) {
-      const p = draw(g, rule.look, rule.ring, rule.radius, apart);
+      const p = draw(g, rule.look, () => bandPoint(g, rule.band), rule.radius, apart);
       spots.push(p);
       g.d.props.push(p);
     }
@@ -49,23 +49,40 @@ function placeSpots(g: Ground): BakedProp[] {
 function placeDebris(g: Ground, spots: BakedProp[]): void {
   for (const rule of g.rules.debris) {
     const open = (pos: Vec, r: number): boolean => g.outside(pos, r) && clearOf(g.d.props, pos, r, 0) && clearOf(spots, pos, r, g.rules.debrisGap);
-    for (let i = 0; i < rule.count; i++) g.d.props.push(draw(g, rule.look, DEBRIS_RING, rule.radius, open));
+    for (let i = 0; i < rule.count; i++) g.d.props.push(draw(g, rule.look, () => ringPoint(g, DEBRIS_RING), rule.radius, open));
   }
 }
 
-// The first drawn prop that stands on open ground in the band and passes ok. Fails loudly: a territory that
+// The first drawn prop at a picked point that stands on open ground and passes ok. Fails loudly: a territory that
 // cannot hold its props is a data problem, not something to place fewer of.
-function draw({ d, t, rng }: Ground, look: BakedProp['kind'], ring: [number, number], radius: [number, number], ok: (pos: Vec, r: number) => boolean): BakedProp {
+function draw(g: Ground, look: BakedProp['kind'], pick: () => Vec, radius: [number, number], ok: (pos: Vec, r: number) => boolean): BakedProp {
   for (let k = 0; k < TRIES; k++) {
-    const a = randRange(rng, 0, Math.PI * 2);
-    const at = t.radius * randRange(rng, ring[0], ring[1]);
-    const r = randRange(rng, radius[0], radius[1]);
-    const yaw = randRange(rng, 0, Math.PI * 2);
-    const pos = { x: t.pos.x + Math.cos(a) * at, y: t.pos.y + Math.sin(a) * at };
-    if (!standable(d, pos, r) || !ok(pos, r)) continue;
+    const pos = pick();
+    const r = randRange(g.rng, radius[0], radius[1]);
+    const yaw = randRange(g.rng, 0, Math.PI * 2);
+    if (!standable(g.d, pos, r) || !ok(pos, r)) continue;
     return prop(look, pos, r, yaw);
   }
-  throw new Error(`Territory ${t.id} has no room for a ${look} in ring ${ring[0]}-${ring[1]}`);
+  throw new Error(`Territory ${g.t.id} has no room for a ${look}`);
+}
+
+// A point in a ring around the centre, between shares of the territory radius.
+function ringPoint({ t, rng }: Ground, ring: [number, number]): Vec {
+  const a = randRange(rng, 0, Math.PI * 2);
+  const at = t.radius * randRange(rng, ring[0], ring[1]);
+  return { x: t.pos.x + Math.cos(a) * at, y: t.pos.y + Math.sin(a) * at };
+}
+
+// A point along the crash line, to either side of it between shares of the band.
+function bandPoint({ t, rules, rng }: Ground, band: [number, number]): Vec {
+  const { from, to } = rules.crashLine;
+  const share = randRange(rng, 0, 1);
+  const off = rules.crashLine.band * randRange(rng, band[0], band[1]) * (randRange(rng, 0, 1) < 0.5 ? -1 : 1);
+  const length = dist(from, to);
+  return {
+    x: t.pos.x + from.x + (to.x - from.x) * share - ((to.y - from.y) / length) * off,
+    y: t.pos.y + from.y + (to.y - from.y) * share + ((to.x - from.x) / length) * off,
+  };
 }
 
 // Inside the map margin, off every road and off cliffs.
