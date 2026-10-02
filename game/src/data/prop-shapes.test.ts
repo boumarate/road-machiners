@@ -54,6 +54,14 @@ describe('prop shapes', () => {
     for (const b of underCanopy) expect(b.z0).toBeGreaterThan(3.5);
   });
 
+  it('keeps the ship wing underside high over the 24 m road band, with all ground contact past it', () => {
+    const boxes = SHAPES.ship_wing.boxes;
+    const overRoad = boxes.filter((b) => b.y0 < 12 && b.y1 > -12);
+    expect(overRoad.length).toBeGreaterThan(0);
+    for (const b of overRoad) expect(b.z0).toBeGreaterThan(4);
+    expect(boxes.some((b) => b.z0 < 1)).toBe(true);
+  });
+
   it('keeps model axes: the gas station sign stands at +x, +y and its kiosk at -x', () => {
     const boxes = SHAPES.gas_station.boxes;
     const sign = boxes.reduce((a, b) => (b.z1 > a.z1 ? b : a));

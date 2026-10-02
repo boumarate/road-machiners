@@ -22,6 +22,7 @@ const PROP_MODELS = [
   'shack',
   'silo',
   'tank_hulk',
+  'ship_wing',
   'water_tower',
   'wreck',
 ];

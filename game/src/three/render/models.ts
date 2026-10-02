@@ -47,6 +47,7 @@ const NAMES = [
   'ruin_house',
   'bridge_broken',
   'gas_station',
+  'ship_wing',
   'shack',
   'fence',
   'junk',
