@@ -143,3 +143,30 @@ Approach: two parallel phases with disjoint files, then docs. PH1 owns the serve
 - PH1 -> @ factory/infra/, factory/hermes/compose.yaml, factory/hermes/claude-run, factory/src/paused-tick.ts, factory/src/paused-tick.test.ts, factory/src/cli.ts, factory/src/pause.ts, factory/src/pause.test.ts, factory/src/config.ts, factory/src/config.test.ts, factory/settings.env
 - PH2 -> IF1, IF2 @ factory/src/sessions.ts, factory/src/sessions.test.ts, factory/src/types.ts, factory/src/container.ts, factory/src/container.test.ts, factory/src/stages/, factory/src/tick.ts, factory/src/tick.test.ts, factory/src/jobs.ts, factory/src/job.ts, factory/src/job.test.ts, factory/src/state.ts
 - PH3 IF1, IF2 -> @ factory/README.md, factory/infra/README.md, factory/docs/tasks/game-factory.md, factory/hermes/SOUL.md
+
+## Verify
+
+Result: passed
+
+Happy-path:
+- CK1 — a deploy on Linux with real `/proc` and GNU `mv -T` migrates a real `code` folder, builds, swaps and serves the new commit through `code` — held: `debian:bookworm-slim` smoke with shims for npm, docker, systemctl and sudo.
+- CK2 — a resumed round continues its conversation in print mode — held locally: `claude -p --session-id`, then `--resume` with stdin, answered the code word from the first run.
+
+Negative:
+- CK3 — a card moved to another stage after a death resumes the wrong stage and keeps its outputs — broke, then fixed in `Resume only the stage whose process died`. The tick now writes the dead stage into the sessions folder, and only a job of that stage resumes.
+- CK4 — a resumed round whose container died before Claude Code saved anything fails on `--resume` — broke in review of PH2, fixed: `roundSession` resumes only when `<id>.jsonl` exists.
+- CK5 — the tick signals a dead job's pid, which another process may now own — broke in review of PH2, fixed: a dead job only loses its containers by label.
+
+Invariants / assumptions:
+- CK6 (IV1, IV2) — the update prunes a release a process still works in — held: the smoke kept the busy release and removed it once the process ended.
+- CK7 (IV3) — a tick that read the link just before the swap finds its release pruned — held after a change: the previous release now survives one more deploy.
+- CK8 (IV5, IV6) — a second death or a timeout resumes — held: `tick.test.ts` cases.
+- CK9 (IV7) — a fresh job resumes an older session — held: `job.test.ts` and `common.test.ts` cases.
+- CK10 (AS1) — resume works across two containers that share only the mounted projects folder — deferred: no local agent image or factory token. Checked during the rollout.
+
+Interfaces:
+- CK11 (IF1, IF2) — a caller still uses `updateGraceMinutes` or `mayRelease` — held: `tsc` is clean.
+- CK12 — Hermes's code mount — held: `docker compose config` gives `../..` at `/factory/code` by default, and `/opt/factory` at the same path, read only, with the server variables.
+
+Smoke: `tmp/smoke/run.sh` in Debian ran the layout migration and three deploys. Factory 456 tests, infra 22, Hermes 106, quality gate passed.
+Goal: proxy only. The live rollout must show a deploy while jobs run, with no pause and no stop, and one job killed by hand that resumes its conversation.
