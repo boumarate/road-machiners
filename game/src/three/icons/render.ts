@@ -4,6 +4,7 @@
 // Body space as in vehicle.ts: +x is the nose, +z the truck's right, +y up.
 
 import * as THREE from 'three';
+import { PHYSICS } from '../../data/physics';
 import { FACTION_COLORS, PAL } from '../../render/palette';
 import { renderKey, type IconEntry } from '../../render/partLooks';
 import { model, socket, type ModelName } from '../render/models';
@@ -21,16 +22,17 @@ export const DIAGONAL_PITCH_DEG = 20;
 // The view the game shows per sheet. Flip one and rerun npm run icons.
 export const ICON_VIEWS: { items: IconView; chassis: IconView } = { items: 'diagonal', chassis: 'top' };
 
+const CELL = PHYSICS.cell;
 const SUPERSAMPLE = 2; // drawn at this multiple of the cell, then scaled down
 const MARGIN = 0.1; // share of the cell left empty on each side, room for the outline and pips
-const OUTLINE_PX = 2; // silhouette outline width at cell size
+const OUTLINE_PX = 4; // silhouette outline width at cell size, about 1 px at 36 px
 const RAMP = [0.45, 0.75, 1]; // toon light steps
 const CREASE_NORMAL = 0.35; // normal change, as color distance in the normal pass, that draws a crease
 const CREASE_DEPTH = 6; // depth step, in 8-bit depth levels, that draws a crease
 const CREASE_SHADE = 0.45; // crease pixels keep this share of their color
 const INK = PAL.outline;
 const PIP_FILL = 0xf0d060;
-const PIP_SHARE = 0.13; // pip diameter as a share of the cell
+const PIP_SHARE = 0.18; // pip diameter as a share of the cell
 const GLASS_COLOR = 0x6a7a80; // cab windows, which the game tints by daylight
 const PAINT = 'paint';
 const TRIM = 'trim';
@@ -98,7 +100,8 @@ function stage(entry: IconEntry, view: IconView): Stage {
   return { scene, camera, head, tip };
 }
 
-// A weapon is its mount with the head at the mount's head socket, aimed forward, as on a truck.
+// A weapon is its mount stretched to fill the def's footprint, with the head at its authored size on the mount's head
+// socket, aimed forward. The stretch shows the footprint, so weapons of one look but different sizes differ.
 function build(entry: IconEntry): { root: THREE.Group; head: THREE.Vector3; tip: THREE.Vector3 } {
   const root = new THREE.Group();
   if (!entry.weapon) {
@@ -106,9 +109,13 @@ function build(entry: IconEntry): { root: THREE.Group; head: THREE.Vector3; tip:
     return { root, head: new THREE.Vector3(), tip: new THREE.Vector3() };
   }
   const look = entry.weapon;
-  root.add(model(look.mount));
+  const mount = model(look.mount);
+  const size = new THREE.Box3().setFromObject(mount).getSize(new THREE.Vector3());
+  mount.scale.set((entry.footprint.h * CELL.along) / size.x, 1, (entry.footprint.w * CELL.across) / size.z);
+  mount.updateMatrix();
+  root.add(mount);
   const built = weaponHead(look);
-  const at = socket(look.mount, 'head');
+  const at = socket(look.mount, 'head').applyMatrix4(mount.matrix);
   built.head.position.copy(at);
   root.add(built.head);
   return { root, head: at.clone(), tip: built.tip.add(at) };

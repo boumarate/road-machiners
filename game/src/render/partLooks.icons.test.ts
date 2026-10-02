@@ -54,7 +54,6 @@ describe('icon catalog', () => {
   it('ranks defs that draw alike by HP, then id', () => {
     expect(['wheel', 'wheelMid', 'wheelHeavy'].map((id) => entry(id).pips)).toEqual([1, 2, 3]);
     expect(['tank', 'tankLong', 'tankMid', 'tankHeavy'].map((id) => entry(id).pips)).toEqual([1, 2, 3, 4]);
-    expect(['amRifle', 'sniperCannon'].map((id) => entry(id).pips)).toEqual([1, 2]);
     expect(['transmission', 'transmissionMid', 'transmissionHeavy'].map((id) => entry(id).pips)).toEqual([1, 2, 3]);
   });
 
@@ -62,6 +61,13 @@ describe('icon catalog', () => {
     expect(entry('stockEngine').pips).toBe(0);
     expect(entry('salt').pips).toBe(0);
     expect(entry('scout').pips).toBe(0);
+  });
+
+  it('tells apart weapons of one look by pips and by their footprint, which the stretched mount draws', () => {
+    expect(entry('amRifle').models).toEqual(entry('sniperCannon').models);
+    expect([entry('amRifle').pips, entry('sniperCannon').pips]).toEqual([1, 2]);
+    expect(renderKey(entry('amRifle'))).toContain('@1x3');
+    expect(renderKey(entry('sniperCannon'))).toContain('@2x3');
   });
 
   it('takes its footprint from the def, one cell for a good and the layout for a chassis', () => {

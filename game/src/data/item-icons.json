@@ -14,75 +14,75 @@
   "items": {
     "mg": {
       "index": 0,
-      "hash": "c9169ac5"
+      "hash": "51482f65"
     },
     "shotgun": {
       "index": 1,
-      "hash": "0ed8a410"
+      "hash": "1fb2ab8d"
     },
     "longRifle": {
       "index": 2,
-      "hash": "e53bf1f9"
+      "hash": "ffde2ba4"
     },
     "flamer": {
       "index": 3,
-      "hash": "4d8ae830"
+      "hash": "d10f4361"
     },
     "pneumobolter": {
       "index": 4,
-      "hash": "cf3418a2"
+      "hash": "f797f98a"
     },
     "slugCannon": {
       "index": 5,
-      "hash": "9f8e7f46"
+      "hash": "7d9110c3"
     },
     "heavyMg": {
       "index": 6,
-      "hash": "302bdd2b"
+      "hash": "a1a1df6e"
     },
     "cannon": {
       "index": 7,
-      "hash": "efab2f08"
+      "hash": "28a8a300"
     },
     "amRifle": {
       "index": 8,
-      "hash": "f7e6ce20"
+      "hash": "79a92c62"
     },
     "autocannon": {
       "index": 9,
-      "hash": "50c0c32d"
+      "hash": "bd932b85"
     },
     "recoilless": {
       "index": 10,
-      "hash": "639f255c"
+      "hash": "ccceb18a"
     },
     "battleRifle": {
       "index": 11,
-      "hash": "7e118f56"
+      "hash": "3dc8dfc0"
     },
     "gatling": {
       "index": 12,
-      "hash": "609da26e"
+      "hash": "b9452056"
     },
     "rocketRack": {
       "index": 13,
-      "hash": "5fb293d9"
+      "hash": "9baf6021"
     },
     "sniperCannon": {
       "index": 14,
-      "hash": "00be00cd"
+      "hash": "240bd946"
     },
     "grenadeLauncher": {
       "index": 15,
-      "hash": "8f06d1c2"
+      "hash": "788689aa"
     },
     "tankGun": {
       "index": 16,
-      "hash": "dc48f04b"
+      "hash": "6a74af38"
     },
     "flechette": {
       "index": 17,
-      "hash": "def0b272"
+      "hash": "6eff14fa"
     },
     "stockEngine": {
       "index": 18,

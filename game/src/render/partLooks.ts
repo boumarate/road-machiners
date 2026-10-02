@@ -315,7 +315,8 @@ export type IconEntry = {
 };
 
 // One look per weapon def, each from that def's WEAPON_POOLS. Defs that would read alike take a different mount,
-// receiver, barrel or extra. sniperCannon and amRifle have one-model pools, so they are told apart by pips.
+// receiver, barrel or extra. Defs whose pools allow one look only, such as sniperCannon and amRifle, get pips and
+// differ by footprint, which the icon's stretched mount draws.
 export const ICON_WEAPON_PICKS: Record<string, WeaponLook> = {
   mg: { mount: 'wmount_ring_small', receiver: 'wrec_mg_a', barrel: 'wbar_mg_short', extra: 'wext_drum' },
   shotgun: { mount: 'wmount_pintle', receiver: 'wrec_shotgun', barrel: 'wbar_shotgun', extra: 'wext_shield' },
@@ -394,7 +395,8 @@ function weaponModels(look: WeaponLook): ModelName[] {
   return look.extra ? [look.mount, look.receiver, look.barrel, look.extra] : [look.mount, look.receiver, look.barrel];
 }
 
-// Entries drawn by the same models rank by HP, then id, and draw that many pips.
+// Entries drawn by the same models rank by HP, then id, and draw that many pips. A weapon's stretched mount shows its
+// footprint too, but seen from the side a wider mount barely shows, so same-model weapons get pips as well.
 function withPips(drafts: readonly IconDraft[]): IconEntry[] {
   const groups = new Map<string, IconDraft[]>();
   for (const d of drafts) {
@@ -409,7 +411,9 @@ function withPips(drafts: readonly IconDraft[]): IconEntry[] {
   return drafts.map((d) => ({ ...d.entry, pips: pips.get(d.entry.id) ?? 0 }));
 }
 
-// What an icon looks like: its models and pips. The footprint is left out, since a part draws at its authored size.
+// What an icon looks like: its models, its pips and, for a weapon, its footprint, since the weapon mount stretches to
+// fill it. Other parts draw at their authored size.
 export function renderKey(e: IconEntry): string {
-  return `${e.models.join('+')}#${e.pips}`;
+  const footprint = e.weapon ? `@${e.footprint.w}x${e.footprint.h}` : '';
+  return `${e.models.join('+')}${footprint}#${e.pips}`;
 }
