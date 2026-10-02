@@ -217,6 +217,29 @@
    {
     "fuel": "number",
     "goods": {
+     "meds": "number",
+     "parts": "number",
+     "scrap": "number"
+    },
+    "id": "string",
+    "parts": [
+     {
+      "defId": "string",
+      "hp": "number",
+      "id": "string",
+      "wear": "number"
+     }
+    ],
+    "pos": {
+     "x": "number",
+     "y": "number"
+    },
+    "radius": "number",
+    "supplies": "number"
+   },
+   {
+    "fuel": "number",
+    "goods": {
      "parts": "number",
      "scrap": "number"
     },
