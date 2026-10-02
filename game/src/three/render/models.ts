@@ -40,6 +40,7 @@ const NAMES = [
   'ship_nose',
   'reactor',
   'hull_chunk',
+  'hull_wall',
   'hull_rib',
   'bridge',
   'pump_station',

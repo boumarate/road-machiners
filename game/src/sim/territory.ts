@@ -1,17 +1,19 @@
-// Territories: open ground with loot spots, debris and a hazard. Pure queries over REGION and TERRITORIES. The bake
-// places the props, src/sim/salvage.ts rolls their stocks and src/sim/hazard.ts applies the hazard.
+// Territories: open ground with hull decks, loot spots, debris and a hazard. Pure queries over REGION and TERRITORIES.
+// The bake places the props and stamps the decks, src/sim/salvage.ts rolls the stocks and src/sim/hazard.ts applies
+// the hazard. This file owns deck geometry, so the bake and the render agree on every deck.
 
 import { REGION, type TerritoryDef } from '../data/region';
 import { SALVAGE, type LootTable } from '../data/salvage';
-import { TERRITORIES, type Hazard, type SpotRule } from '../data/territory';
+import { TERRITORIES, type Hazard, type HullSection, type SpotTable } from '../data/territory';
 import { edgeCrossings, isTerritory } from './sites';
 import { randInt } from './rng';
+import type { PropKind } from './terrain';
 import type { NpcActivity, Obstacle, SalvageStock, Vehicle, World } from './types';
-import { dist, type Vec } from './vec';
+import { dist, lerp, type Vec } from './vec';
 
 export { isTerritory };
 
-const GROUND_POINTS = 8; // points on a territory's ring of hunting grounds
+const GROUND_POINTS = 8; // hunting grounds beside a territory's crash line, half on each side
 
 export type HazardZone = Hazard & { id: string; pos: Vec };
 
@@ -21,29 +23,33 @@ export function territoryAt(pos: Vec): TerritoryDef | null {
   return TERRITORY_DEFS.find((t) => dist(pos, t.pos) < t.radius) ?? null;
 }
 
-function spotRule(o: Obstacle): SpotRule | null {
-  if (o.kind !== 'landmark') return null;
-  const t = territoryAt(o.pos);
-  return (t && TERRITORIES[t.id].spots.find((s) => s.look === o.look)) || null;
+// The prop kind of a loot spot in a deck bay. Field spots take their kinds from TERRITORIES spot rules.
+export const DECK_BAY: PropKind = 'deckBay';
+
+// The SALVAGE table a prop of this kind at pos rolls as a loot spot of its territory, or null when it is none.
+function spotTableAt(kind: string, pos: Vec): SpotTable | null {
+  const t = territoryAt(pos);
+  if (!t) return null;
+  const rules = TERRITORIES[t.id];
+  if (kind === DECK_BAY && rules.sections.some((s) => s.bays.length > 0)) return rules.bayTable;
+  return rules.spots.find((s) => s.look === kind)?.table ?? null;
 }
 
-// A baked prop of a spot kind inside the territory that makes that kind a spot.
+// A baked prop of a spot kind inside the territory that makes that kind a spot: a deck bay or a field spot.
 export function isLootSpot(o: Obstacle): boolean {
-  return spotRule(o) !== null;
+  return o.kind === 'landmark' && spotTableAt(o.look, o.pos) !== null;
 }
 
 export function spotTable(o: Obstacle): LootTable {
-  const rule = spotRule(o);
-  if (!rule) throw new Error(`Obstacle ${o.id} is not a loot spot`);
-  return SALVAGE[rule.table];
+  const table = o.kind === 'landmark' ? spotTableAt(o.look, o.pos) : null;
+  if (!table) throw new Error(`Obstacle ${o.id} is not a loot spot`);
+  return SALVAGE[table];
 }
 
 // The territory whose loot spot holds this stock. Ids of baked props are <kind>-<k>, so the id tells a spot's kind.
 export function territoryOfStock(stock: SalvageStock): TerritoryDef | null {
-  const t = territoryAt(stock.pos);
-  if (!t) return null;
   const kind = stock.id.slice(0, stock.id.lastIndexOf('-'));
-  return TERRITORIES[t.id].spots.some((s) => s.look === kind) ? t : null;
+  return spotTableAt(kind, stock.pos) ? territoryAt(stock.pos) : null;
 }
 
 export function territorySpots(world: World, id: string): SalvageStock[] {
@@ -56,17 +62,23 @@ export function territoryEntries(t: TerritoryDef): Vec[] {
   return crossings.filter((p, i) => !crossings.slice(0, i).some((q) => dist(q, p) < REGION.sites.gateSpacing));
 }
 
-// Open points inside a territory where raiders and vultures wait for scavengers: its entries, and a ring through
-// the band of its outermost spots (the rule with the largest outer ring). The ring lies clear of the hazard.
+// Open points inside a territory where raiders and vultures wait for scavengers: its entries, and points spread
+// along both sides of its crash line, through the band of its outermost field spots. They lie clear of the hazard.
 export function territoryGrounds(t: TerritoryDef): Vec[] {
-  const spots = TERRITORIES[t.id].spots;
-  const [lo, hi] = spots.reduce((a, b) => (b.ring[1] > a.ring[1] ? b : a)).ring;
-  const ring = Array.from({ length: GROUND_POINTS }, (_, i) => {
-    const a = (i / GROUND_POINTS) * Math.PI * 2;
-    const at = t.radius * (lo + hi) / 2;
-    return { x: t.pos.x + Math.cos(a) * at, y: t.pos.y + Math.sin(a) * at };
-  });
-  return [...territoryEntries(t), ...ring];
+  const rules = TERRITORIES[t.id];
+  const [lo, hi] = rules.spots.reduce((a, b) => (b.band[1] > a.band[1] ? b : a)).band;
+  const { from, to, band } = rules.crashLine;
+  const off = (band * (lo + hi)) / 2;
+  const length = dist(from, to);
+  const across = { x: -(to.y - from.y) / length, y: (to.x - from.x) / length };
+  const perSide = GROUND_POINTS / 2;
+  const sides = [-1, 1].flatMap((side) =>
+    Array.from({ length: perSide }, (_, i) => {
+      const share = (i + 0.5) / perSide;
+      return { x: t.pos.x + lerp(from.x, to.x, share) + across.x * off * side, y: t.pos.y + lerp(from.y, to.y, share) + across.y * off * side };
+    }),
+  );
+  return [...territoryEntries(t), ...sides];
 }
 
 export function hazardZones(): HazardZone[] {
@@ -74,6 +86,70 @@ export function hazardZones(): HazardZone[] {
     const hazard = TERRITORIES[t.id].hazard;
     return hazard ? [{ ...hazard, id: t.id, pos: { ...t.pos } }] : [];
   });
+}
+
+// ---- Hull decks: tilted rectangles of ground a truck drives up. The bake stamps them into the heights, and the render
+// lays plating on them.
+
+// A deck in map tiles. Corners go low left, high left, high right, low right; low and high are the end mid-points.
+export type HullDeck = { section: HullSection; territory: string; corners: [Vec, Vec, Vec, Vec]; low: Vec; high: Vec };
+export type RibPose = { pos: Vec; yaw: number; r: number };
+
+function buildDeck(t: TerritoryDef, section: HullSection): HullDeck {
+  const along = { x: Math.cos(section.yaw), y: Math.sin(section.yaw) };
+  const left = { x: along.y, y: -along.x };
+  const mid = { x: t.pos.x + section.at.x, y: t.pos.y + section.at.y };
+  const at = (a: number, l: number): Vec => ({ x: mid.x + along.x * a + left.x * l, y: mid.y + along.y * a + left.y * l });
+  const [a, l] = [section.length / 2, section.width / 2];
+  return { section, territory: t.id, corners: [at(-a, l), at(a, l), at(a, -l), at(-a, -l)], low: at(-a, 0), high: at(a, 0) };
+}
+
+const HULL_DECKS: readonly HullDeck[] = TERRITORY_DEFS.flatMap((t) => TERRITORIES[t.id].sections.map((s) => buildDeck(t, s)));
+
+export function hullDecks(): readonly HullDeck[] {
+  return HULL_DECKS;
+}
+
+// The share of the deck's length from its low end (0) to its high end (1) at pos, or null off its footprint.
+export function deckAlongAt(deck: HullDeck, pos: Vec): number | null {
+  const dx = deck.high.x - deck.low.x;
+  const dy = deck.high.y - deck.low.y;
+  const len2 = dx * dx + dy * dy;
+  const along = ((pos.x - deck.low.x) * dx + (pos.y - deck.low.y) * dy) / len2;
+  const across = ((pos.x - deck.low.x) * dy - (pos.y - deck.low.y) * dx) / Math.sqrt(len2);
+  return along < 0 || along > 1 || Math.abs(across) > deck.section.width / 2 ? null : along;
+}
+
+// Tiles from pos to the nearest point of the deck's footprint, 0 on it.
+export function deckGap(deck: HullDeck, pos: Vec): number {
+  const { yaw, length, width } = deck.section;
+  const mid = { x: (deck.low.x + deck.high.x) / 2, y: (deck.low.y + deck.high.y) / 2 };
+  const along = (pos.x - mid.x) * Math.cos(yaw) + (pos.y - mid.y) * Math.sin(yaw);
+  const across = (pos.y - mid.y) * Math.cos(yaw) - (pos.x - mid.x) * Math.sin(yaw);
+  return Math.hypot(Math.max(0, Math.abs(along) - length / 2), Math.max(0, Math.abs(across) - width / 2));
+}
+
+// The deck's height at a share along it, over the ground height at its low end.
+export function deckPlane(deck: HullDeck, lowGround: number, along: number): number {
+  return lowGround + deck.section.rise * along;
+}
+
+// Ribs every ribStep tiles from the low end, short of the torn high end. Each runs across the deck with a leg r tiles
+// to each side of the middle line, so both legs stand at one deck height.
+export function ribPoses(deck: HullDeck): RibPose[] {
+  const step = deck.section.ribStep;
+  if (step === null) return [];
+  const r = deck.section.width / 2 - TERRITORIES[deck.territory].ribInset;
+  const count = Math.floor((deck.section.length - step / 2) / step);
+  return Array.from({ length: count }, (_, i) => {
+    const share = ((i + 1) * step) / deck.section.length;
+    return { pos: { x: lerp(deck.low.x, deck.high.x, share), y: lerp(deck.low.y, deck.high.y, share) }, yaw: deck.section.yaw + Math.PI / 2, r };
+  });
+}
+
+// Where each loot spot of the deck stands, on its middle line.
+export function bayPoints(deck: HullDeck): Vec[] {
+  return deck.section.bays.map((share) => ({ x: lerp(deck.low.x, deck.high.x, share), y: lerp(deck.low.y, deck.high.y, share) }));
 }
 
 // ---- Goals of NPCs at a territory. It has no pad, so a scavenger works one loot spot at a time and a trip ends where a

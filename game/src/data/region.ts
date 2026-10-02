@@ -70,6 +70,11 @@ function rimPoint(from: Vec, centre: Vec, radius: number): Vec {
   return { x: centre.x + ((from.x - centre.x) / d) * (radius - RIM_REACH), y: centre.y + ((from.y - centre.y) / d) * (radius - RIM_REACH) };
 }
 
+// A point dx, dy tiles from the Fallen Sun's centre.
+function fromFallenSun(dx: number, dy: number): Vec {
+  return { x: FALLEN_SUN_POS.x + dx, y: FALLEN_SUN_POS.y + dy };
+}
+
 export const REGION = {
   name: "Icarus",
   size: 120 * MAP_SCALE,
@@ -309,14 +314,17 @@ export const REGION = {
       { x: 61, y: 79 },
       { x: 66, y: 76 },
     ]),
-    // Two dead-end approaches reach the hull rim; no road goes through the Fallen Sun.
+    // Three dead-end approaches come down the crater bank from the west, east and south, and end on the floor in
+    // the gaps between the hull sections. No road goes through the Fallen Sun. The south road leaves the Kiln Camp
+    // track, so raiders have a short way in.
     [
       ...scaleRoad([
         { x: 43, y: 54 },
         { x: 50, y: 55 },
         { x: 54, y: 57 },
       ]),
-      { x: FALLEN_SUN_POS.x - FALLEN_SUN_RADIUS, y: FALLEN_SUN_POS.y },
+      fromFallenSun(-FALLEN_SUN_RADIUS, 0),
+      fromFallenSun(-24, 13),
     ],
     [
       ...scaleRoad([
@@ -324,7 +332,16 @@ export const REGION = {
         { x: 75, y: 50 },
         { x: 74, y: 56 },
       ]),
-      { x: FALLEN_SUN_POS.x + FALLEN_SUN_RADIUS, y: FALLEN_SUN_POS.y },
+      fromFallenSun(FALLEN_SUN_RADIUS, 0),
+      fromFallenSun(26, -8),
+    ],
+    [
+      ...scaleRoad([
+        { x: 61, y: 79 },
+        { x: 63.6, y: 70.4 },
+      ]),
+      fromFallenSun(4, 52),
+      fromFallenSun(2, 24),
     ],
   ] as Vec[][],
   roadWidth: 6,

@@ -31,6 +31,8 @@ export class ObstacleViews {
   private readonly debris = new Map<string, THREE.Object3D>();
   private readonly flying: DebrisSim;
   private obstacles: readonly Obstacle[] = [];
+  private readonly glows = new Map<string, Glow>(); // reactor glows by obstacle id, pulsed every frame
+  private clock = 0; // seconds of drawn frames, for the glow pulse
 
   constructor(private readonly scope: RenderScope, private readonly terrain: Terrain) {
     this.flying = new DebrisSim(terrain);
@@ -53,15 +55,7 @@ export class ObstacleViews {
         continue;
       }
       seen.add(o.id);
-      if (!this.byId.has(o.id)) {
-        const obj = buildObstacle(this.terrain, o);
-        obj.traverse((m) => {
-          m.updateMatrix();
-          m.matrixAutoUpdate = false;
-        });
-        this.scope.add(obj, o.pos, viewReach(o));
-        this.byId.set(o.id, obj);
-      }
+      if (!this.byId.has(o.id)) this.addView(o);
     }
     if (rocks !== this.rockIds.size) throw new Error('A map rock was removed; rocks are drawn as fixed instances');
     for (const [id, obj] of this.byId) {
@@ -69,7 +63,19 @@ export class ObstacleViews {
       this.scope.remove(obj);
       disposeTree(obj);
       this.byId.delete(id);
+      this.glows.delete(id);
     }
+  }
+
+  private addView(o: Obstacle): void {
+    const obj = buildObstacle(this.terrain, o);
+    obj.traverse((m) => {
+      m.updateMatrix();
+      m.matrixAutoUpdate = false;
+    });
+    this.scope.add(obj, o.pos, viewReach(o));
+    this.byId.set(o.id, obj);
+    if (obj.userData.glow) this.glows.set(o.id, obj.userData.glow as Glow);
   }
 
   // Props break at the step their truck hits them, and once the movement is over every break of the turn has come.
@@ -79,6 +85,16 @@ export class ObstacleViews {
     if (anim) this.smash(anim.result, step ?? Infinity, world.broken);
     this.flying.moveTrucks(world.vehicles.filter((v) => frames[v.id]).map((v) => ({ id: v.id, chassisId: v.chassisId, ...frames[v.id] })));
     this.flying.step(dt);
+    this.pulse(dt);
+  }
+
+  private pulse(dt: number): void {
+    this.clock += dt;
+    const k = 1 + REACTOR_PULSE.share * Math.sin((this.clock / REACTOR_PULSE.period) * Math.PI * 2);
+    for (const glow of this.glows.values()) {
+      for (const m of glow.materials) m.emissiveIntensity = REACTOR_GLOW.emissive * k;
+      glow.light.intensity = REACTOR_GLOW.intensity * k;
+    }
   }
 
   // Each prop broken this turn bursts into flying pieces at its hit step. The standing view goes.
@@ -237,16 +253,21 @@ function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   return g;
 }
 
-// The reactor's core glows by itself and lights the ground around it, so its danger is seen before it is felt.
+// The reactor's core glows by itself and lights the pit around it, so its danger is seen before it is felt. The group
+// keeps its glow, so the views can pulse it.
 function lightCore(reactor: THREE.Object3D, g: THREE.Group): void {
+  const materials: THREE.MeshLambertMaterial[] = [];
   eachMaterial(reactor, (m) => {
     if (m.name !== 'glow') return;
     m.emissive.setHex(PAL.reactorGlow);
     m.emissiveIntensity = REACTOR_GLOW.emissive;
+    materials.push(m);
   });
   const light = new THREE.PointLight(PAL.reactorGlow, REACTOR_GLOW.intensity, REACTOR_GLOW.range, REACTOR_GLOW.decay);
   light.position.set(0, REACTOR_GLOW.height, 0);
   g.add(light);
+  const glow: Glow = { materials, light };
+  g.userData.glow = glow;
 }
 
 function paintRoof(house: THREE.Object3D, id: string): void {
@@ -276,7 +297,12 @@ function buildWater(t: Terrain, o: Obstacle): THREE.Object3D {
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
-const REACTOR_GLOW = { emissive: 2.5, intensity: 8, range: 70, decay: 1.5, height: 3 }; // glow strength, light strength, reach and fade in meters, and the light's height above the ground
+// Glow strength, light strength, reach and fade in meters, and the light's height above the ground. The core is 24 m
+// across with an 11 m rod, so the light hangs over the rod and reaches across the pit to the hazard's edge and past it.
+const REACTOR_GLOW = { emissive: 2.5, intensity: 160, range: 110, decay: 1.5, height: 10 };
+// The glow swells and fades by this share over one period in seconds, slow like a failing core breathing.
+const REACTOR_PULSE = { share: 0.2, period: 5 };
+type Glow = { materials: THREE.MeshLambertMaterial[]; light: THREE.PointLight };
 const WIRES = ['wire0', 'wire1', 'wire2'];
 const SAG = 0.7; // meters a wire hangs below its ends at mid-span
 const WIRE_POINTS = 8;

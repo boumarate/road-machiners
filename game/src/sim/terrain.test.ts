@@ -126,12 +126,16 @@ describe("terrain grid", () => {
     ]) expect(connects(a, b), `${a} to ${b}`).toBe(true);
   });
 
-  it('puts two dead-end approaches at the Fallen Sun without a road through its hull', () => {
+  it('puts three dead-end approaches into the Fallen Sun without a road through it', () => {
     const wreck = REGION.locations.find((site) => site.id === 'fallen-sun')!;
-    const approaches = REGION.roads.filter((road) => dist(road.at(-1)!, wreck.pos) <= wreck.radius);
-    expect(approaches).toHaveLength(2);
-    for (const road of REGION.roads) for (let i = 1; i < road.length; i++) {
-      expect(segmentDist(wreck.pos, road[i - 1], road[i])).toBeGreaterThanOrEqual(wreck.radius);
+    const entering = REGION.roads.filter((road) => road.some((p) => dist(p, wreck.pos) < wreck.radius));
+    expect(entering).toHaveLength(3);
+    for (const road of REGION.roads) {
+      const firstInside = road.findIndex((p) => dist(p, wreck.pos) < wreck.radius);
+      const outside = firstInside < 0 ? road : road.slice(0, firstInside);
+      // Once a road is inside, it ends there.
+      if (firstInside >= 0) for (const p of road.slice(firstInside)) expect(dist(p, wreck.pos)).toBeLessThan(wreck.radius);
+      for (let i = 1; i < outside.length; i++) expect(segmentDist(wreck.pos, outside[i - 1], outside[i])).toBeGreaterThanOrEqual(wreck.radius);
     }
   });
 

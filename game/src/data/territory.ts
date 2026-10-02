@@ -2,18 +2,14 @@
 // A territory is a location of kind "territory" in src/data/region.ts, keyed here by its id.
 
 import type { PropKind } from '../sim/terrain';
+import type { Vec } from '../sim/vec';
 
-export type SpotTable = 'landmark' | 'hullScrap' | 'roadWreck' | 'farmStores' | 'armyStores';
-export type DebrisRule = {
-  look: PropKind;
-  count: number;
-  radius: [number, number];
-  around: { look: PropKind; reach: number } | null; // when set, each prop lies within reach tiles of a spot of that look
-};
+export type SpotTable = 'landmark' | 'hullScrap';
+export type DebrisRule = { look: PropKind; count: number; radius: [number, number] };
 export type SpotRule = {
   look: PropKind; // the prop kind that is a loot spot
   count: number;
-  ring: [number, number]; // inner and outer edge of the band, as shares of the territory radius
+  band: [number, number]; // inner and outer distance from the crash line, as shares of crashLine.band
   radius: [number, number]; // tiles, the prop's footprint
   table: SpotTable; // the SALVAGE table each spot rolls
 };
@@ -22,52 +18,95 @@ export type Hazard = {
   healthPerTurn: number;
   floor: number; // driver health the hazard never takes anyone below
 };
-export type GroveRule = {
-  look: PropKind; // the tree prop
-  blocks: number; // rectangular blocks of rows
-  ring: [number, number]; // band of block centres, as shares of the territory radius
-  rows: [number, number]; // rows per block
-  trees: [number, number]; // trees per row
-  rowGap: number; // tiles between rows, so the lane between two rows is rowGap tiles wide
-  treeGap: number; // tiles between trees along a row
-  missing: number; // share of trees left out
-  radius: number; // tiles, a tree's footprint
-  maxTrees: number; // cap over all blocks, for the prop budget
+// A tilted rectangle of hull a truck drives up. Its low end meets the ground and it climbs evenly to its high end.
+export type HullSection = {
+  id: string;
+  at: Vec; // tiles from the territory centre to the deck's middle
+  yaw: number; // radians from map +x toward +y, pointing from the low end to the high end
+  length: number; // tiles from the low end to the high end
+  width: number; // tiles across
+  rise: number; // height units of the high end above the ground at the low end
+  ribStep: number | null; // tiles between ribs along the deck, from the low end; null for a deck without ribs
+  bays: number[]; // shares of the length from the low end where a loot spot stands
 };
-export type FarmRules = {
-  road: { width: number }; // tiles, the Old World access road through the centre
-  groves: GroveRule;
+// A straight piece of plating standing on its side. It is cover, not a deck.
+export type HullWall = {
+  at: Vec; // tiles from the territory centre to the wall's middle
+  yaw: number; // radians, along the wall
+  length: number; // tiles
 };
 export type TerritoryRules = {
-  seed: number; // offset from the territory seed block, fixed so adding a territory shifts no other
-  farm: FarmRules | null; // a farm layout: access road and tree rows
+  sections: HullSection[];
+  walls: HullWall[];
+  ribInset: number; // tiles from a deck side in to a rib leg, so a leg stands on the deck and not on its dropping edge
+  crashLine: { from: Vec; to: Vec; band: number }; // tiles from the centre; band is the tiles to each side of the line
   debris: DebrisRule[];
-  spots: SpotRule[];
+  spots: SpotRule[]; // field spots, drawn in the band
+  bayTable: SpotTable; // the SALVAGE table a loot spot in a deck bay rolls
+  bayRadius: number; // tiles, the footprint of a deck bay's loot spot
   spotGap: number; // tiles between the centres of two loot spots
   debrisGap: number; // tiles of open ground kept between debris and every loot spot, so a truck can park beside one
   reactor: { look: PropKind; radius: number } | null; // the prop at the centre
   hazard: Hazard | null;
 };
 
+// The Fallen Sun broke its back along one line from the north-west rim to the south-east rim.
+const SUN_CRASH = { from: { x: -40, y: -18 }, to: { x: 40, y: 18 } };
+const SUN_HEADING = Math.atan2(SUN_CRASH.to.y - SUN_CRASH.from.y, SUN_CRASH.to.x - SUN_CRASH.from.x);
+
+// A point s tiles along the crash line from the centre (toward the south-east) and c tiles across it (toward the
+// south-west side), in tiles from the centre.
+function onSunLine(s: number, c: number): Vec {
+  const [cos, sin] = [Math.cos(SUN_HEADING), Math.sin(SUN_HEADING)];
+  return { x: s * cos - c * sin, y: s * sin + c * cos };
+}
+
 export const TERRITORIES: Record<string, TerritoryRules> = {
   'fallen-sun': {
-    seed: 0,
-    farm: null,
-    // Debris is about twice the spot count. It gives cover, ambush lines and places to hide.
+    // Read from north-west to south-east. Sections keep 10 tiles from the centre, 2 past the hazard, and leave
+    // the floor to the south-west and north-east open for the roads.
+    sections: [
+      // The bow is nose-up: its broken aft end is buried, its torn bow end is 8 m up over the north-west floor. The
+      // floor climbs about 1 unit toward the rim under it, so the rise is 3.
+      { id: 'bow', at: onSunLine(-32, -2), yaw: SUN_HEADING + Math.PI, length: 22, width: 9, rise: 3, ribStep: 4, bays: [0.3, 0.6, 0.85] },
+      // The forward hull slid off the line to the south-west. It is nearly flat and overlooks the reactor pit.
+      { id: 'forward', at: onSunLine(-17, 9.5), yaw: SUN_HEADING, length: 14, width: 8, rise: 0.6, ribStep: 4, bays: [0.3, 0.7] },
+      // The aft hull tilts up toward the south-east. The bank climbs up to 2 units under it, so its rise of 3.6 keeps
+      // the deck clear of the bank and its high end 5 to 7 m over it. Its bays sit between ribs, since a bay under a
+      // rib leaves no way past between the rib legs and the cliff sides.
+      { id: 'aft', at: onSunLine(19, -2), yaw: SUN_HEADING, length: 16, width: 8, rise: 3.6, ribStep: 4, bays: [0.375, 0.625] },
+      // Two plates thrown off the line, small ramps that climb back toward it: sniper perches. They are 7 tiles wide,
+      // so a truck passes the bay in the middle and drives on up to the top.
+      { id: 'plate-ne', at: onSunLine(4, -26), yaw: SUN_HEADING + Math.PI / 2, length: 8, width: 7, rise: 1, ribStep: null, bays: [0.6] },
+      { id: 'plate-sw', at: onSunLine(-4, 26), yaw: SUN_HEADING - Math.PI / 2, length: 8, width: 7, rise: 1, ribStep: null, bays: [0.6] },
+    ],
+    // The stern: plating rolled onto its side in a broken wall past the aft hull.
+    walls: [
+      { at: onSunLine(30, 2), yaw: SUN_HEADING + 0.15, length: 2 },
+      { at: onSunLine(32.2, 1.2), yaw: SUN_HEADING - 0.1, length: 2 },
+      { at: onSunLine(34.4, 2.2), yaw: SUN_HEADING + 0.2, length: 2 },
+      { at: onSunLine(36.6, 1), yaw: SUN_HEADING, length: 2 },
+      { at: onSunLine(38.8, 2.4), yaw: SUN_HEADING - 0.15, length: 2 },
+      { at: onSunLine(40.8, 1.4), yaw: SUN_HEADING + 0.1, length: 2 },
+    ],
+    ribInset: 0.5,
+    crashLine: { ...SUN_CRASH, band: 14 },
+    // Debris gives cover, ambush lines and places to hide. Tanks are the stern's thruster housings.
     debris: [
-      { look: 'hullChunk', count: 22, radius: [1.2, 2], around: null },
-      { look: 'hullRib', count: 8, radius: [0.8, 1.2], around: null },
-      { look: 'carWreck', count: 18, radius: [0.6, 0.8], around: null },
+      { look: 'hullChunk', count: 30, radius: [1.2, 2] },
+      { look: 'hullRib', count: 8, radius: [0.8, 1.2] },
+      { look: 'carWreck', count: 10, radius: [0.6, 0.8] },
+      { look: 'tank', count: 3, radius: [1.2, 1.6] },
     ],
-    spots: [
-      // Inner spots lie near the reactor and roll the old landmark table, the whole site's stock before.
-      { look: 'coreWreck', count: 6, ring: [0.25, 0.45], radius: [1.2, 1.6], table: 'landmark' },
-      // Outer spots roll a scrap-heavy table at road-wreck size.
-      { look: 'shipCache', count: 18, ring: [0.45, 0.95], radius: [0.6, 0.8], table: 'hullScrap' },
-    ],
+    // Field spots roll a scrap-heavy table at road-wreck size. With the 9 deck bays the Fallen Sun keeps 24 spots.
+    spots: [{ look: 'shipCache', count: 15, band: [0.3, 1], radius: [0.6, 0.8], table: 'hullScrap' }],
+    // Deck bays are exposed on high ground, so they roll the rich landmark table, the whole site's stock before.
+    bayTable: 'landmark',
+    // A bay is a stack of crates the size of a field spot, small enough that a truck drives round it on the deck.
+    bayRadius: 0.7,
     spotGap: 6,
     debrisGap: 3,
-    reactor: { look: 'reactor', radius: 1 },
+    reactor: { look: 'reactor', radius: 3 },
     hazard: {
       radius: 8,
       // The starving rule (RULES.starveDamage 5 per turn, floor RULES.starveFloor 30) anchors both numbers: it is the
@@ -75,48 +114,5 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       healthPerTurn: 5,
       floor: 30,
     },
-  },
-  orchard: {
-    // The farm's seed block follows the Fallen Sun's.
-    seed: 1,
-    farm: {
-      road: { width: 3 }, // an old two-lane asphalt strip: one truck wide with room to pass
-      groves: {
-        look: 'deadTree',
-        blocks: 6,
-        ring: [0.2, 0.85],
-        rows: [4, 5],
-        trees: [8, 11],
-        rowGap: 4, // lanes 16 m wide, room for a truck to turn
-        treeGap: 2, // 8 m between trunks, so a row reads as a row
-        missing: 0.15, // dead rows thin out, and the gaps read as age
-        radius: 0.35,
-        maxTrees: 240, // keeps the props near the orchard inside the perf budget
-      },
-    },
-    // Debris stands outside debrisGap of its host spot, so each reach is an outer limit, wide enough to clear the gap.
-    debris: [
-      // Sandbags show the military takeover on every building and depot.
-      { look: 'sandbags', count: 4, radius: [0.8, 1.2], around: { look: 'farmhouse', reach: 9 } },
-      { look: 'sandbags', count: 5, radius: [0.8, 1.2], around: { look: 'armyCache', reach: 7 } },
-      { look: 'sandbags', count: 3, radius: [0.8, 1.2], around: { look: 'bunker', reach: 9 } },
-      { look: 'silo', count: 2, radius: [1.2, 1.6], around: { look: 'farmhouse', reach: 12 } },
-      { look: 'waterTower', count: 1, radius: [1.2, 1.6], around: { look: 'farmhouse', reach: 12 } },
-      { look: 'junk', count: 5, radius: [0.6, 1], around: { look: 'barn', reach: 8 } },
-      { look: 'tank', count: 3, radius: [1.4, 1.8], around: { look: 'armyCache', reach: 10 } },
-      { look: 'carWreck', count: 4, radius: [0.6, 0.8], around: null },
-    ],
-    spots: [
-      // The farmhouse near the middle rolls the old landmark table, the old orchard's whole stock.
-      { look: 'farmhouse', count: 1, ring: [0, 0.2], radius: [1.6, 2], table: 'landmark' },
-      { look: 'barn', count: 5, ring: [0.2, 0.7], radius: [1.4, 1.8], table: 'farmStores' },
-      { look: 'armyCache', count: 5, ring: [0.45, 0.92], radius: [0.8, 1], table: 'armyStores' },
-      { look: 'bunker', count: 3, ring: [0.6, 0.95], radius: [1.4, 1.8], table: 'armyStores' },
-      { look: 'armyTruck', count: 6, ring: [0.2, 0.95], radius: [0.6, 0.8], table: 'roadWreck' },
-    ],
-    spotGap: 6,
-    debrisGap: 3,
-    reactor: null,
-    hazard: null,
   },
 };

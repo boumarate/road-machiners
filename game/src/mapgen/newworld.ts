@@ -46,6 +46,8 @@ import {
 export const BUILT_SCRUB = 3;
 export const BUILT_DIRTY_WATER = 4;
 export const BUILT_TOXIC = 5;
+// The territory layer's mark for hull deck tiles. It comes after the new world's codes.
+export const BUILT_HULL = 6;
 
 // A squatter camp: its center and the radius of its fence ring.
 export type Camp = { pos: Vec; radius: number };
