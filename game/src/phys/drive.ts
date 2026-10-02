@@ -64,10 +64,10 @@ export type Drive = {
 // Collider handles of one deck and its two rails.
 export type DeckColliders = { deck: number; rails: number[] };
 
-export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry }; // b is a vehicle id, an obstacle id, 'edge', 'rail' or 'ground'; impact in m/s
+export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry; step: number }; // b is a vehicle id, an obstacle id, 'edge', 'rail' or 'ground'; impact in m/s
 export type Break = { prop: string; vehicle: string; step: number }; // a breakable prop the vehicle smashed through at this physics step
 export type VehicleResult = { passed: boolean; arrived: boolean };
-export type Landing = { vehicle: string; impact: number }; // wheels touching down after a jump, impact in m/s downward
+export type Landing = { vehicle: string; impact: number; step: number }; // wheels touching down after a jump, impact in m/s downward
 export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; breaks: Break[]; landings: Landing[]; results: Record<string, VehicleResult> };
 
 export type DriveSnapshot = Omit<Drive, "world"> & { snapshot: Uint8Array };
@@ -254,7 +254,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
     const before = new Map(cars.map((c) => [c.v.id, captureImpactMotion(c.body)]));
     for (const c of cars) driveStep(c, w.terrain);
     for (const c of cars) c.ctl.updateVehicle(DT);
-    landings.note(cars, before);
+    landings.note(cars, before, i);
     world.step(events);
     events.drainCollisionEvents((h1, h2, started) => {
       if (started) contacts.add(crashOf(h1, h2, owner, obstacleOf, d, before, world, w), i);
@@ -271,21 +271,21 @@ function run(d: Drive, w: World, steps: number): TurnResult {
 
 // The hardest landing of each truck this turn: its wheels touch the ground after a step with every wheel in the air.
 class Landings {
-  private readonly hardest = new Map<string, number>();
+  private readonly hardest = new Map<string, { impact: number; step: number }>();
 
-  note(cars: Car[], before: Map<string, ImpactMotion>): void {
-    for (const c of cars) this.noteCar(c, before.get(c.v.id)!);
+  note(cars: Car[], before: Map<string, ImpactMotion>, step: number): void {
+    for (const c of cars) this.noteCar(c, before.get(c.v.id)!, step);
   }
 
-  private noteCar(c: Car, motion: ImpactMotion): void {
+  private noteCar(c: Car, motion: ImpactMotion, step: number): void {
     const touching = wheelsTouch(c.ctl);
     const impact = Math.max(0, -motion.velocity.y);
-    if (c.mem.airborne && touching && impact > (this.hardest.get(c.v.id) ?? 0)) this.hardest.set(c.v.id, impact);
+    if (c.mem.airborne && touching && impact > (this.hardest.get(c.v.id)?.impact ?? 0)) this.hardest.set(c.v.id, { impact, step });
     c.mem.airborne = !touching;
   }
 
   all(): Landing[] {
-    return [...this.hardest].map(([vehicle, impact]) => ({ vehicle, impact }));
+    return [...this.hardest].map(([vehicle, h]) => ({ vehicle, ...h }));
   }
 }
 
@@ -307,8 +307,9 @@ class Contacts {
     this.breakable = new Set(w.obstacles.filter(isBreakable).map((o) => o.id));
   }
 
-  add(crash: Crash | null, step: number): void {
-    if (!crash || this.isBroken(crash.b)) return;
+  add(found: Omit<Crash, 'step'> | null, step: number): void {
+    if (!found || this.isBroken(found.b)) return;
+    const crash = { ...found, step };
     if (this.breakable.has(crash.b) && crash.impact >= BREAKABLE.breakSpeed) {
       const b = { prop: crash.b, vehicle: crash.a, step };
       this.breaks.push(b);
@@ -349,7 +350,7 @@ function smashOne(world: RAPIER.World, d: Drive, b: Break, cars: Car[], before: 
   car.body.setAngvel(motion.spin, true);
 }
 
-function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf: Map<number, string>, d: Drive, before: Map<string, ImpactMotion>, physics: RAPIER.World, state: World): Crash | null {
+function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf: Map<number, string>, d: Drive, before: Map<string, ImpactMotion>, physics: RAPIER.World, state: World): Omit<Crash, 'step'> | null {
   const a = owner.get(h1) ?? owner.get(h2);
   if (a === undefined) return null;
   const [first, other] = owner.get(h1) === a ? [h1, h2] : [h2, h1];
@@ -364,7 +365,7 @@ function crashTarget(other: number, owner: Map<number, string>, obstacleOf: Map<
   return owner.get(other) ?? obstacleOf.get(other) ?? (d.decks.some((c) => c.rails.includes(other)) ? RAIL : EDGE);
 }
 
-function captureCrash(physics: RAPIER.World, state: World, before: Map<string, ImpactMotion>, pair: { a: string; b: string; first: number; other: number }, va: ImpactMotion): Crash | null {
+function captureCrash(physics: RAPIER.World, state: World, before: Map<string, ImpactMotion>, pair: { a: string; b: string; first: number; other: number }, va: ImpactMotion): Omit<Crash, 'step'> | null {
   const vb = before.get(pair.b) ?? { velocity: { x: 0, y: 0, z: 0 }, spin: { x: 0, y: 0, z: 0 }, heading: 0 };
   const vehicle = state.vehicles.find((v) => v.id === pair.a);
   if (!vehicle) throw new Error(`Unknown crash vehicle ${pair.a}`);
@@ -374,7 +375,7 @@ function captureCrash(physics: RAPIER.World, state: World, before: Map<string, I
 }
 
 // The truck's body, not its wheels, hitting the ground: a flip, a nose dive off a jump or a slam into a steep bank.
-function captureGroundCrash(physics: RAPIER.World, state: World, a: string, first: number, ground: number, motion: ImpactMotion): Crash | null {
+function captureGroundCrash(physics: RAPIER.World, state: World, a: string, first: number, ground: number, motion: ImpactMotion): Omit<Crash, 'step'> | null {
   const vehicle = state.vehicles.find((v) => v.id === a);
   if (!vehicle) throw new Error(`Unknown crash vehicle ${a}`);
   const hits: { impact: number; contact: CrashGeometry }[] = [];
