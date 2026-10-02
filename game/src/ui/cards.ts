@@ -9,7 +9,7 @@ import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
 import { maxHp, partValue, wornDef } from "../sim/wear";
 import type { PartInstance, Vehicle } from "../sim/types";
 import { el } from "./dom";
-import { conditionStatus, conditionTier, wearLabel } from "./format";
+import { conditionStatus, conditionTier, showsCondition, wearLabel } from "./format";
 import { fuelLiters, hp, kph, meters, mps2 } from "./units";
 
 const ART = {
@@ -219,14 +219,16 @@ export function conditionMeter(part: PartInstance): HTMLElement {
   );
 }
 
-// A part's wear in its tier color. Only a pristine part gets the star.
-export function conditionTag(part: PartInstance): HTMLElement {
+// A part's wear in its tier color. Only a pristine part gets the star. Null for a built-in part.
+export function conditionTag(part: PartInstance): HTMLElement | null {
+  if (!showsCondition(part)) return null;
   const tier = conditionTier(part);
   return el("span", { class: `cond cond-${tier}` }, ...(tier === "pristine" ? [createIcon("star")] : []), wearLabel(part));
 }
 
-// The row under a part's head: its wear on the left, whether it works on the right.
-export function conditionRow(part: PartInstance): HTMLElement {
+// The row under a part's head: its wear on the left, whether it works on the right. Null for a built-in part.
+export function conditionRow(part: PartInstance): HTMLElement | null {
+  if (!showsCondition(part)) return null;
   const status = conditionStatus(part);
   return el("div", { class: "card-cond" }, conditionTag(part), el("span", { class: status.tone }, status.text));
 }

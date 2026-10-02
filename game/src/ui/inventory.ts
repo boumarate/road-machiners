@@ -1017,8 +1017,9 @@ function shopOnlyPatch(part: PartInstance): HTMLElement | null {
 function partDetails(me: Vehicle, part: PartInstance, mounted: boolean): HTMLElement[] {
   const kind = partDef(part.defId).kind;
   const base = mounted ? null : baselinePart(me, kind);
+  const row = conditionRow(part);
   return [
-    conditionRow(part),
+    ...(row ? [row] : []),
     conditionMeter(part),
     statGrid(diffStats(partStats(part), base ? partStats(base) : null)),
     base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name} `, conditionTag(base)) : el("span"),

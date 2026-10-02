@@ -109,6 +109,11 @@ export function conditionTier(part: PartInstance): ConditionTier {
   return `w${part.wear}`;
 }
 
+// Built-in parts are never swapped, bought or sold, so their wear decides no choice.
+export function showsCondition(part: PartInstance): boolean {
+  return partDef(part.defId).kind !== 'core';
+}
+
 // Whether the part works, apart from its wear: scrap only, broken, or its HP.
 export function conditionStatus(part: PartInstance): { text: string; tone: 'dim' | 'bad' } {
   if (isJunk(part)) return { text: 'scrap only', tone: 'dim' };
