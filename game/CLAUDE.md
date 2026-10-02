@@ -30,7 +30,7 @@ Run these from `game/`. The repo-wide quality gate and pre-commit hook run from 
 - `npm test` runs every Vitest test in `src/`. `npm run typecheck` runs tsc.
 - `npm run playtest` plays turns in headless Chromium and fails on errors or low FPS. It needs the dev server. Use `--cpu` on machines without a GPU.
 - `npm run stuck` records a trader bot for 3 seeds of 1000 turns and fails on any stall from any truck. Run it after changes to NPC goals, services or tows.
-- `npm run econ`, `npm run combat`, `npm run loadouts` and `npm run progression:record` / `progression:report` measure balance.
+- `npm run combat`, `npm run loadouts` and `npm run progression:record` / `progression:report` measure balance. The recorder covers economy, progression and combat at the macro level.
 - `npm run perf` fails on a miss against `scripts/perf-budgets.json`.
 - `npm run map:bake` writes `public/maps/icarus.bin`. Commit it after a change to map rules.
 - `npm run models:shapes`, `npm run wiki` and `npm run save:shape` regenerate checked files. A test fails when they are stale.
