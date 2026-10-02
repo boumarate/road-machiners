@@ -3,10 +3,11 @@ import { join } from 'node:path';
 import { buildAndDeploy, recordBuild } from '../deploy';
 import { readEvidence, type Evidence } from '../evidence';
 import { postWithEvidence } from '../evidence-post';
-import { updateState } from '../state';
+import { readState, updateState } from '../state';
 import { GAME_DIR, OUT_DIR, type Ctx } from '../types';
+import { bundleOf } from './bundle';
 import { agentHome, fillPrompt, readOutput, resetOutputs } from './common';
-import { candidateDir, changeLines, featureLine, openReleaseTasks, releaseFeatures, releaseLog, requireRelease, trackingLink } from './release-common';
+import { candidateDir, changeLines, featureLine, openReleaseTasks, releaseFeatures, releaseLog, requireRelease, trackingLink, type Feature } from './release-common';
 
 // The build of the candidate lives under this web folder, kept while the tracking card waits in Approval.
 export const CANDIDATE_SCOPE = 'rc';
@@ -48,7 +49,7 @@ export async function candidate(ctx: Ctx, issue: number): Promise<void> {
   await ctx.repo.prepareWorkClone(release.branch, release.branch, dir);
   const home = agentHome(dir, GAME_DIR);
   resetOutputs(home);
-  writeFileSync(join(home, OUT_DIR, 'changelog.md'), `${features.map(featureLine).join('\n')}\n`);
+  writeFileSync(join(home, OUT_DIR, 'changelog.md'), await changelogInput(ctx, features));
   const log = releaseLog(ctx, 'candidate');
   await ctx.container.shell(dir, PLAYTEST_SCRIPT, log);
   await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt: fillPrompt('release', {}), log });
@@ -81,6 +82,17 @@ async function candidateEvidence(ctx: Ctx, issue: number, home: string, branch: 
     ctx.log('candidate', issue, `evidence manifest ignored: ${error instanceof Error ? error.message : String(error)}`);
     return { images: [{ path: join(home, OUT_DIR, 'screenshot.png'), description: '', covers: [], sheet: false }] };
   }
+}
+
+// One line per change, with the issues bundled into it indented under it, so the changelog sums up a bundle in one line.
+async function changelogInput(ctx: Ctx, features: Feature[]): Promise<string> {
+  const state = readState(ctx.statePath);
+  const lines: string[] = [];
+  for (const feature of features) {
+    lines.push(featureLine(feature));
+    for (const bundled of bundleOf(state, feature.issue)) lines.push(`  bundled: #${bundled} ${(await ctx.github.issue(bundled)).title}`);
+  }
+  return `${lines.join('\n')}\n`;
 }
 
 // The candidate post. Commands act on it alone, so it says to reply to it, not to the changelog under it.
