@@ -5,10 +5,17 @@ The request is in `.factory/request.md`.
 Rules:
 
 - Follow `CLAUDE.md`.
-- Use the repo harnesses to get numbers: `npm run combat`, `npm run econ`, `npm run loadouts` and `npm run progression:*`.
+- For a game question, use the repo harnesses to get numbers: `npm run combat`, `npm run econ`, `npm run loadouts` and `npm run progression:*`.
 - Run the playtest with `--cpu` only. This machine has no GPU.
 - Read the project skills in `.agents/skills` that fit the request. For a balance question, read `evaluating-gameplay-balance`.
 - Do not change game code. Do not commit. This is investigation only.
+
+The factory's own records are mounted read only:
+
+- `{{state}}/state.json` is the factory state: running jobs, failures, queued actions and recent job starts.
+- `{{logs}}` holds the job logs, one per issue and stage, like `issue-12-design.log`. An agent log is Claude's stream-json output. Its last line is the `result` event, with the run's duration, token usage and cost.
+
+You may build any tool you need for the work, outside the game code. Node and npm are available.
 
 When done, write the answer to `.factory/report.md`:
 
@@ -18,5 +25,7 @@ When done, write the answer to `.factory/report.md`:
 - Then the limits of the measurement.
 - Use plain, short sentences.
 - Keep it under 3500 characters.
+
+When charts or long tables help, also write `.factory/report.html`. It must be one self-contained file that opens offline, with all scripts and data inline. The member gets it as a file under the report.
 
 This is ad hoc task {{issue}}.

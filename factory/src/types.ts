@@ -132,12 +132,14 @@ export type InlineButton = { text: string; data: string };
 export interface Telegram {
   sendMessage(chat: string, text: string, replyTo?: number): Promise<number>;
   sendPhoto(chat: string, pngPath: string, caption: string, buttons?: InlineButton[][]): Promise<number>;
+  sendDocument(chat: string, path: string, replyTo?: number): Promise<number>;
   editCaption(chat: string, messageId: number, caption: string): Promise<void>; // replaces a photo's caption and drops its buttons
 }
 
 // `dir` is the repo folder the agent works in, `game` or `factory`. The container starts it there.
 // `openNetwork` runs the container on the normal network with no proxy. Absent means the restricted network.
-export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean };
+// `readOnly` maps host folders to container paths, mounted read only.
+export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; readOnly?: Record<string, string> };
 
 export interface Container {
   // Runs Claude Code headless in the clone. Throws on a nonzero exit.

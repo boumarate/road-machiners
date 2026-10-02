@@ -37,6 +37,13 @@ export function botClient(token: string, fetchFn: typeof fetch): Telegram {
       form.set('photo', new Blob([readFileSync(pngPath)], { type: 'image/png' }), basename(pngPath));
       return call('sendPhoto', form);
     },
+    async sendDocument(chat, path, replyTo) {
+      const form = new FormData();
+      form.set('chat_id', chat);
+      if (replyTo !== undefined) form.set('reply_parameters', JSON.stringify({ message_id: replyTo }));
+      form.set('document', new Blob([readFileSync(path)]), basename(path));
+      return call('sendDocument', form);
+    },
     async editCaption(chat, messageId, caption) {
       if (caption.length > CAPTION_LIMIT) throw new Error(`Telegram caption is ${caption.length} chars, the limit is ${CAPTION_LIMIT}.`);
       // An empty keyboard drops the buttons, so a decided post cannot be pressed again.

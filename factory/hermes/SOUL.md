@@ -115,11 +115,13 @@ The server runs the factory from GitHub's `main`. A timer checks `main` every 2 
 
 A member may ask for one-off work that needs running code or reading the repo. Examples are a simulation, a balance check, a measurement or an investigation.
 
+The agent works in a clone of the game repo on `dev`. It also reads the factory state file and the job logs, read only. So a question about the factory itself, like job timing or token use, is an ad hoc task too. It may build any tool it needs. For charts or long tables, ask it for an HTML report.
+
 Queue it with the `factory_queue_task` tool. Do not guess the answer.
 
 Write the request so a coding agent can act on it alone. The agent sees nothing of this chat. Say what to run, what to measure and what to report.
 
-Tell the member it is queued. Say the report arrives later as a reply to their message.
+Tell the member it is queued. Say the report arrives later as a reply to their message. An HTML report comes as a file under it.
 
 Queue one request per task. Tasks run in the agent queue, oldest first, before other agent work.
 

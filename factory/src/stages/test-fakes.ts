@@ -39,11 +39,12 @@ export function fake(): Fake {
     telegram: {
       sendMessage: async (chat: string, text: string, replyTo?: number) => { note(`message ${chat} ${replyTo ?? '-'} ${text}`); return 1; },
       sendPhoto: async (chat: string, path: string, caption: string, buttons?: InlineButton[][]) => { note(`photo ${chat}`); f.photos.push({ chat, path, caption, buttons }); return 42; },
+      sendDocument: async (chat: string, path: string, replyTo?: number) => { note(`document ${chat} ${replyTo ?? '-'} ${path}`); return 43; },
     },
     container: {
       shell: async () => note('shell'),
       agent: async (run: AgentRun) => {
-        note('agent');
+        note(run.readOnly ? `agent ro ${JSON.stringify(run.readOnly)}` : 'agent');
         const home = agentHome(run.clone, run.dir);
         mkdirSync(join(home, '.factory'), { recursive: true });
         for (const [name, text] of Object.entries(f.agentWrites)) writeFileSync(join(home, '.factory', name), text);
