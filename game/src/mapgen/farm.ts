@@ -28,6 +28,7 @@ const STRAY_FRAY = 4; // tiles past a block's edge where its stray trees stand
 const ROW_LINE = 0.1;
 const ROW_TURN = 0.02;
 const ROW_NUDGE = 0.06;
+const SEGMENT_CLEAR = 0.05; // tiles two segment props must keep apart unless their ends meet
 
 // Whether a circle at pos with radius r touches something.
 type Touch = (pos: Vec, r: number) => boolean;
@@ -48,11 +49,13 @@ export function fillFarm(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, fa
   const spots = placeBuildings(d, t, frame, farm, onRoad, rng);
   d.props.push(...spots);
   const marked: Touch = (pos, r) => onRoad(pos, r) || touchesMarks(d, pos, r);
-  const runs = placeRuns(d, t, farm.runs, marked, rng);
+  const runs = placeRuns(d, t, farm.runs, spots, marked, rng);
   d.props.push(...runs);
   // Blocks mark their field first, so clutter keeps out of the groves.
   const blocks = farm.blocks.map((block) => fieldOf(d, t, frame, block));
-  const offField: Touch = (pos, r) => !marked(pos, r) && !touchedTiles(d.size, pos, r).some((tile) => d.built[tile] === BUILT_FIELD);
+  // Clutter keeps a tree's room off the field, so the trees at a block's edge still stand.
+  const fieldClear = farm.groves.radius + REGION.obstacles.gap;
+  const offField: Touch = (pos, r) => !marked(pos, r) && !touchedTiles(d.size, pos, r + fieldClear).some((tile) => d.built[tile] === BUILT_FIELD);
   const clutter = placeClutter(d, t, spots, rules.debrisGap, farm.clutter, offField, rng);
   d.props.push(...clutter);
   // Trees keep a parking gap round every building, and keep clear of the run segments as the lines they are.
@@ -155,16 +158,41 @@ function building(d: MapDraft, t: TerritoryDef, frame: Frame, group: BuildingGro
 
 // Segment props, segment tiles long, along each run's polyline. A share of segments is broken off, the rest turn and
 // shift a little, and segments on bad ground, roads or marks are left out. A run's points lie inside the territory.
-function placeRuns(d: MapDraft, t: TerritoryDef, runs: readonly Run[], marked: Touch, rng: Rng): BakedProp[] {
+function placeRuns(d: MapDraft, t: TerritoryDef, runs: readonly Run[], spots: readonly BakedProp[], marked: Touch, rng: Rng): BakedProp[] {
   const placed: BakedProp[] = [];
+  // A segment keeps off marks and out of every building, and never crosses another segment.
+  const fits = (seg: BakedProp): boolean =>
+    !lineTouches(seg, marked) && spots.every((o) => lineDist(seg, o.pos) >= o.r) && placed.every((o) => !segmentsCross(seg, o)) && !formsRow(seg, placed);
   for (const run of runs) {
     for (const seg of runSegments(t, run, rng)) {
-      if (!standsOnFarm(d, t, seg.pos, seg.r) || lineTouches(seg, marked)) continue;
-      const turned = [seg, { ...seg, yaw: seg.yaw + ROW_NUDGE }, { ...seg, yaw: seg.yaw - ROW_NUDGE }].find((p) => !formsRow(p, placed) && !lineTouches(p, marked));
+      if (!standsOnFarm(d, t, seg.pos, seg.r)) continue;
+      const turned = [seg, { ...seg, yaw: seg.yaw + ROW_NUDGE }, { ...seg, yaw: seg.yaw - ROW_NUDGE }].find(fits);
       if (turned) placed.push(turned);
     }
   }
   return placed;
+}
+
+// The two ends of a segment prop, a line seg.r tiles to each side of its centre.
+function segmentEnds(seg: BakedProp): [Vec, Vec] {
+  const half = { x: Math.cos(seg.yaw) * seg.r, y: Math.sin(seg.yaw) * seg.r };
+  return [{ x: seg.pos.x - half.x, y: seg.pos.y - half.y }, { x: seg.pos.x + half.x, y: seg.pos.y + half.y }];
+}
+
+function lineDist(seg: BakedProp, p: Vec): number {
+  const [a, b] = segmentEnds(seg);
+  return segmentDist(p, a, b);
+}
+
+// Whether two segment props cross or lie on each other. Ends that meet are not a crossing.
+function segmentsCross(s: BakedProp, o: BakedProp): boolean {
+  const [a, b] = segmentEnds(s);
+  const [c, e] = segmentEnds(o);
+  const side = (p: Vec, q: Vec, r: Vec) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  const [d1, d2, d3, d4] = [side(a, b, c), side(a, b, e), side(c, e, a), side(c, e, b)];
+  if (d1 * d2 < 0 && d3 * d4 < 0) return true;
+  // Near-parallel pieces lying along each other also overlap.
+  return Math.min(segmentDist(c, a, b), segmentDist(e, a, b), segmentDist(a, c, e), segmentDist(b, c, e)) < SEGMENT_CLEAR && dist(s.pos, o.pos) < s.r + o.r - SEGMENT_CLEAR;
 }
 
 // Whether a prop would stand in a ruled row with two placed props of its look: on one line at one turn. A segment
@@ -260,7 +288,8 @@ function plantBlocks(t: TerritoryDef, groves: GroveRule, fields: readonly Field[
     const grid = blockGrid(yaw, groves, block, centre, rng);
     // The block's plan is its grid points that are not left empty; ground that rejects too many of them is bad data.
     const planned = grid.filter((p) => !p.gone);
-    const standing = planned.filter((p) => keep(p.pos, groves.radius));
+    // A tree of a neighbouring block may stand near this block's edge.
+    const standing = planned.filter((p) => keep(p.pos, groves.radius) && clearOf(trees, p.pos, groves.radius, 0));
     const kept = standing.slice(0, Math.max(0, groves.maxTrees - trees.length)).map((p) => prop(groves.look, p.pos, groves.radius, p.turn));
     if (kept.length < groves.keep * planned.length) throw new Error(`${t.id} grove block at ${at(centre)} keeps ${kept.length} of ${planned.length} planned trees, under ${groves.keep}`);
     trees.push(...kept);
@@ -357,11 +386,9 @@ function lineTouches(seg: BakedProp, touch: Touch): boolean {
   return Array.from({ length: steps + 1 }, (_, k) => -seg.r + (2 * seg.r * k) / steps).some((o) => touch({ x: seg.pos.x + Math.cos(seg.yaw) * o, y: seg.pos.y + Math.sin(seg.yaw) * o }, 0));
 }
 
-// Whether a circle keeps the obstacle gap from a run segment, a line seg.r tiles to each side of its centre.
+// Whether a circle keeps the obstacle gap from a run segment.
 function clearOfSegment(seg: BakedProp, pos: Vec, r: number): boolean {
-  const half = { x: Math.cos(seg.yaw) * seg.r, y: Math.sin(seg.yaw) * seg.r };
-  const [a, b] = [{ x: seg.pos.x - half.x, y: seg.pos.y - half.y }, { x: seg.pos.x + half.x, y: seg.pos.y + half.y }];
-  return segmentDist(pos, a, b) >= r + REGION.obstacles.gap;
+  return lineDist(seg, pos) >= r + REGION.obstacles.gap;
 }
 
 // A mark goes only on a tile no earlier mark took, so the old road wins over tracks, tracks over pads and so on.

@@ -23,7 +23,7 @@ import { propReach } from './mapgen';
 import { dist, type Vec } from './vec';
 import { maxHp } from './wear';
 import { canVehicleSee, grayRadius } from './vision';
-import { sitePads } from './sites';
+import { siteGap, sitePads } from './sites';
 import { isLootSpot, spotTable, territoryAt, territoryOfStock } from './territory';
 import { freeCells } from './grid';
 import { endTurn } from './world';
@@ -750,7 +750,7 @@ describe('territory loot spots', () => {
   it('gives every orchard spot its own stock from the table of its look, and the orchard no stock of its own', async () => {
     const w = await realWorld();
     const orchard = REGION.locations.find((site) => site.id === 'orchard')!;
-    const spots = spotsOf(w).filter((o) => dist(o.pos, orchard.pos) < orchard.radius);
+    const spots = spotsOf(w).filter((o) => siteGap(orchard, o.pos) < 0);
     const farm = TERRITORIES.orchard.farm!;
     expect(spots).toHaveLength(farm.buildings.reduce((n, b) => n + b.poses.length, 0) + TERRITORIES.orchard.spots.reduce((n, s) => n + s.count, 0));
     for (const o of spots) {

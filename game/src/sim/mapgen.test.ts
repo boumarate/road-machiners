@@ -6,7 +6,7 @@ import { PHYSICS } from '../data/physics';
 import { boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propPose, propReach, propShape, segmentCrossesBox } from './mapgen';
 import { ROAD_INDEX } from './road-index';
 import type { Obstacle } from './types';
-import { dist, type Vec } from './vec';
+import { dist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
 import { PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
@@ -123,7 +123,20 @@ describe('world from the baked map', () => {
     // reaches under a sixth of r each way. Other props stand under the arch between them.
     const ground = (o: Obstacle): { pos: Vec; r: number }[] =>
       o.kind === 'landmark' && o.look === 'hullRib' ? [1, -1].map((k) => ({ pos: { x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) }, r: o.r / 6 })) : [{ pos: o.pos, r: o.r }];
-    const overlap = (a: Obstacle, b: Obstacle) => ground(a).some((p) => ground(b).some((q) => dist(p.pos, q.pos) < p.r + q.r - 1e-6));
+    // A segment prop is a line r to each side of its centre, not a disc: it overlaps a disc that reaches its line, and
+    // another segment that its line crosses.
+    const line = (o: Obstacle): [Vec, Vec] | null => (ends(o).length === 2 ? (ends(o) as [Vec, Vec]) : null);
+    const crosses = ([a, b]: [Vec, Vec], [c, e]: [Vec, Vec]) => {
+      const side = (p: Vec, q: Vec, r: Vec) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+      return side(a, b, c) * side(a, b, e) < 0 && side(c, e, a) * side(c, e, b) < 0;
+    };
+    const overlap = (a: Obstacle, b: Obstacle) => {
+      const [la, lb] = [line(a), line(b)];
+      if (la && lb) return crosses(la, lb);
+      if (la) return ground(b).some((q) => segmentDist(q.pos, la[0], la[1]) < q.r - 1e-6);
+      if (lb) return ground(a).some((p) => segmentDist(p.pos, lb[0], lb[1]) < p.r - 1e-6);
+      return ground(a).some((p) => ground(b).some((q) => dist(p.pos, q.pos) < p.r + q.r - 1e-6));
+    };
     const overlaps = baked.flatMap((o) => all.filter((other) => other.id !== o.id && overlap(o, other) && !touching(o, other)).map((other) => `${o.id} ${other.id}`));
     expect(overlaps).toEqual([]);
   });
@@ -187,18 +200,25 @@ describe('prop poses', () => {
   });
 
   it('draws each orchard look with its own model, at full size at the radius it is built to', () => {
+    // Footprint radii in meters, from each model's tools/blender script.
     const cases: [Landmark['look'], number, string][] = [
-      ['farmhouse', 3, 'farmhouse'],
-      ['barn', 2.6, 'barn'],
-      ['quonset', 2.2, 'quonset'],
-      ['bunker', 2.6, 'bunker'],
-      ['guardPost', 0.8, 'guard_post'],
-      ['armyTruck', 1.1, 'army_truck'],
-      ['barrier', 0.5, 'barrier'],
-      ['fence', 0.5, 'fence'],
+      ['farmhouse', 16, 'farmhouse'],
+      ['barn', 14.7, 'barn'],
+      ['quonset', 12.9, 'quonset'],
+      ['bunker', 15.6, 'bunker'],
+      ['guardPost', 3.2, 'guard_post'],
+      ['armyTruck', 4.4, 'army_truck'],
+      ['barrier', 2, 'barrier'],
+      ['fence', 2, 'fence'],
+      ['drums', 1.75, 'drums'],
+      ['woodpile', 2.6, 'woodpile'],
     ];
 
-    for (const [look, r, model] of cases) expect(propPose(landmark(look, r)), look).toEqual({ model, pos: { x: 12, y: 34 }, yaw: 0.5, scale: even(1) });
+    for (const [look, meters, model] of cases) {
+      const pose = propPose(landmark(look, meters / PHYSICS.metersPerTile));
+      expect({ ...pose, scale: undefined }, look).toEqual({ model, pos: { x: 12, y: 34 }, yaw: 0.5, scale: undefined });
+      for (const axis of ['x', 'y', 'z'] as const) expect(pose.scale[axis], `${look} ${axis}`).toBeCloseTo(1, 9);
+    }
   });
 
   it('turns a power pole a quarter turn off its line, so its crossbar lies across it', () => {

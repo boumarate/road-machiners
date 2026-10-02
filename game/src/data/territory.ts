@@ -127,11 +127,11 @@ const pose = (s: number, c: number, r: number, turn: number) => ({ at: onOrchard
 const FENCE = { look: 'fence' as const, segment: 1, broken: 0.3, jitter: { turn: 0.12, shift: 0.15 } };
 // Concrete road barriers the army dragged into place: a third gone, each one shoved askew.
 const BARRIER = { look: 'barrier' as const, segment: 1, broken: 0.35, jitter: { turn: 0.25, shift: 0.3 } };
-// The sandbag L a guard built at a post: a front of three bags 1.8 tiles out toward its road, which lies in the
-// direction (ds, dc), and a leg of two round the corner. The post stands at (s, c).
+// The sandbag L a guard built at a post: a front of bags 2 tiles out toward its road, which lies in the direction
+// (ds, dc), and a leg round the corner back along the post's side, clear of its hut. The post stands at (s, c).
 function sandbagL(s: number, c: number, ds: number, dc: number): Run {
-  const [fs, fc] = [s + ds * 1.8, c + dc * 1.8];
-  const [ps, pc] = [-dc * 1.5, ds * 1.5];
+  const [fs, fc] = [s + ds * 2, c + dc * 2];
+  const [ps, pc] = [-dc * 1.8, ds * 1.8];
   return {
     look: 'sandbags',
     points: [AT(fs - ps, fc - pc), AT(fs + ps, fc + pc), AT(fs + ps - ds * 2, fc + pc - dc * 2)],
@@ -332,7 +332,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       ],
       runs: [
         // Wooden fences the farmer kept round the outer edges of the blocks.
-        { ...FENCE, points: [AT(-25, -5), AT(-25, -23)] },
+        { ...FENCE, points: [AT(-25, -9.5), AT(-25, -23)] },
         { ...FENCE, points: [AT(71.6, 11), AT(71.6, 39)] },
         { ...FENCE, points: [AT(-1, 32.75), AT(8.7, 32.75)] },
         { ...FENCE, points: [AT(12.8, 33), AT(21, 33)] },
