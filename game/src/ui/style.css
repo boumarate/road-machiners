@@ -1892,6 +1892,9 @@ canvas.view {
 }
 /* The truck's portrait beside its grid, as tall as the grid, so nose and tail line up. */
 .truck-pics {
+  --map-cell: 10px;
+  --map-gap: 1px;
+  --map-pad: 3px;
   display: flex;
   gap: 6px;
   align-self: flex-start;
@@ -1899,8 +1902,8 @@ canvas.view {
 .chassis-portrait {
   display: block;
   flex: none;
-  /* The grid's height: --rows cells of 10px with 1px gaps, inside 3px padding. Keep in step with .chassis-map. */
-  height: calc(var(--rows) * 11px + 5px);
+  /* The grid's height, from the same cell, gap and padding sizes as .chassis-map. */
+  height: calc(var(--rows) * (var(--map-cell) + var(--map-gap)) - var(--map-gap) + 2 * var(--map-pad));
 }
 .chassis-portrait svg {
   display: block;
@@ -1909,15 +1912,15 @@ canvas.view {
 }
 .chassis-map {
   display: grid;
-  gap: 1px;
+  gap: var(--map-gap);
   align-self: flex-start;
   width: max-content;
-  padding: 3px;
+  padding: var(--map-pad);
   background: #1a2125;
 }
 .chassis-map i {
-  width: 10px; /* .chassis-portrait height follows this size */
-  height: 10px;
+  width: var(--map-cell); /* .chassis-portrait height follows this size */
+  height: var(--map-cell);
 }
 .chassis-map .hole {
   background: none;

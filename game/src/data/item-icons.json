@@ -5,6 +5,7 @@
   },
   "margin": 0.1,
   "outline": 4,
+  "portraitWidth": 0.52,
   "cols": {
     "items": 16,
     "chassis": 8

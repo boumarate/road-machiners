@@ -40,6 +40,7 @@ type Manifest = {
   cell: Record<Sheet, number>;
   margin: number;
   outline: number;
+  portraitWidth: number;
   cols: Record<Sheet, number>;
   views: Record<Sheet, IconView>;
   items: Record<string, { index: number; hash: string }>;
@@ -102,7 +103,35 @@ function manifestOf(rendered: readonly Rendered[], bytes: Map<ModelName, Uint8Ar
   };
   const entries = (sheet: Sheet): Manifest['items'] =>
     Object.fromEntries(inSheet(rendered, sheet).map((r, index) => [r.entry.id, { index, hash: iconHash(r.entry, ICON_VIEWS[sheet], read) }]));
-  return { cell: CELL, margin: MARGIN, outline: OUTLINE_PX, cols: COLS, views: ICON_VIEWS, items: entries('items'), chassis: entries('chassis') };
+  return {
+    cell: CELL,
+    margin: MARGIN,
+    outline: OUTLINE_PX,
+    portraitWidth: portraitWidth(inSheet(rendered, 'chassis')),
+    cols: COLS,
+    views: ICON_VIEWS,
+    items: entries('items'),
+    chassis: entries('chassis'),
+  };
+}
+
+// Share of a chassis cell's width, centered, that holds every drawn pixel of the widest truck, so the shop's portrait
+// crop never cuts a truck off.
+function portraitWidth(chassis: readonly Rendered[]): number {
+  const cell = CELL.chassis;
+  const half = Math.max(
+    ...chassis.map((r) => {
+      const { data } = context(r.views[ICON_VIEWS.chassis]).getImageData(0, 0, cell, cell);
+      let reach = 0;
+      for (let i = 3; i < data.length; i += 4) {
+        if (data[i] === 0) continue;
+        const x = ((i - 3) / 4) % cell;
+        reach = Math.max(reach, cell / 2 - x, x + 1 - cell / 2);
+      }
+      return reach;
+    }),
+  );
+  return Math.min(1, Math.ceil(((2 * half) / cell) * 100) / 100);
 }
 
 // Every weapon's barrel must read from lower left to upper right in the diagonal view, by its sockets and its pixels.

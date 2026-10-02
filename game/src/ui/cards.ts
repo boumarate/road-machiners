@@ -198,15 +198,13 @@ export function itemIconEl(item: GridItem): HTMLElement {
   return item.kind === "good" ? createItemIcon(item.good) : partIconEl(item.part);
 }
 
-// Share of a chassis cell's width a top view portrait shows. The widest truck, the hauler, fills about 0.47 of it.
-const PORTRAIT_TOP_W = 0.56;
-
 // A truck seen as the shop shows it, beside its grid. Seen from above it is cropped to the truck, so its nose and
 // tail line up with the grid's first and last rows.
 export function chassisPortrait(chassisId: string): HTMLElement {
   const edge = ICONS.margin - ICONS.outline / ICONS.cell.chassis;
   const top = ICONS.views.chassis === "top";
-  const crop = top ? { x: (1 - PORTRAIT_TOP_W) / 2, y: edge, w: PORTRAIT_TOP_W, h: 1 - 2 * edge } : undefined;
+  const w = ICONS.portraitWidth; // the widest truck's share of the cell, measured by npm run icons
+  const crop = top ? { x: (1 - w) / 2, y: edge, w, h: 1 - 2 * edge } : undefined;
   const portrait = sheetIcon(chassisPortraitCell(chassisId), "chassis-portrait", crop);
   portrait.style.aspectRatio = crop ? `${crop.w} / ${crop.h}` : "1";
   return portrait;
