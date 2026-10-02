@@ -11,7 +11,7 @@ import { continueRoute, keepRoute, route, routeLength, straightClear, type Block
 import { nextRandom } from './rng';
 import { isCliff, tileAt, tileSlope, type Terrain } from './terrain';
 import type { Obstacle, World } from './types';
-import { siteGates } from './sites';
+import { siteGap, siteGates } from './sites';
 import { editableTerrain, emptyWorld, npcBrain } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
@@ -352,7 +352,8 @@ namespace Ref {
     const tile = tileAt(t, p);
     const type = t.types[tile];
     const c = { x: Math.floor(p.x) + 0.5, y: Math.floor(p.y) + 0.5 };
-    const bySite = [...REGION.towns, ...REGION.locations].some((s) => dist(c, s.pos) < s.radius + REGION.roadWidth);
+    // A territory has no edge to keep near.
+    const bySite = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')].some((s) => siteGap(s, c) < REGION.roadWidth);
     const s = tileSlope(t, tile);
     const slope = flat ? 1 : 1 + REGION.navigation.slopeCost * (Math.hypot(s.x, s.y) / TERRAIN.drive.maxSlope) ** 2;
     return ((type === 'road' || bySite ? 1 : REGION.navigation.offRoadCost) / TERRAIN_TYPES[type].speed) * slope;
