@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
-import { SALVAGE } from '../data/salvage';
+import { ECONOMY, GOODS } from '../data/goods';
+import { SALVAGE, type LootTable } from '../data/salvage';
 import { TERRITORIES } from '../data/territory';
 import { ROAD_INDEX } from './road-index';
 import { bayPoints, deckAlongAt, deckGap, deckPlane, hazardZones, hullDecks, isLootSpot, ribPoses, spotTable, territoryAt, territoryEntries, territoryGrounds, type HullDeck } from './territory';
+import type { PropKind } from './terrain';
+import type { LandmarkLook, Obstacle } from './types';
 import { dist, lerp, type Vec } from './vec';
 
 const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
+const orchard = REGION.locations.find((l) => l.id === 'orchard')!;
 const DECK_EDGE = 1; // tiles beside a deck where its side drops to the floor; roads keep clear of it
 
 // Points over a deck's footprint, from its corners: low left, high left, high right, low right.
@@ -68,6 +72,67 @@ describe('territory queries', () => {
     expect(spotTable(bay)).toBe(SALVAGE[TERRITORIES['fallen-sun'].hull!.bayTable]);
     expect(spotTable({ ...bay, look: 'shipCache' })).toBe(SALVAGE.hullScrap);
     expect(() => spotTable({ ...bay, pos: { x: 1, y: 1 } })).toThrow(/not a loot spot/);
+  });
+});
+
+function landmarkAt(look: PropKind, pos: Vec): Obstacle {
+  return { id: `${look}-0`, pos, r: 1, kind: 'landmark', look: look as LandmarkLook, yaw: 0 };
+}
+
+// What a fresh roll of the table sells for at the middle of every range.
+function midValue(table: LootTable): number {
+  const mid = ([lo, hi]: [number, number]) => (lo + hi) / 2;
+  const goods = Object.entries(table.goods).reduce((sum, [id, range]) => sum + mid(range) * GOODS[id].value, 0);
+  return goods + mid(table.parts) * GOODS.parts.value + mid(table.fuel) * ECONOMY.supplyPrice.fuel + mid(table.supplies) * ECONOMY.supplyPrice.supplies;
+}
+
+// The summed mid value of every loot spot a territory's rules place.
+function territoryValue(id: string): number {
+  const rules = TERRITORIES[id];
+  const bays = rules.hull ? rules.hull.sections.reduce((n, s) => n + s.bays.length, 0) * midValue(SALVAGE[rules.hull.bayTable]) : 0;
+  const buildings = (rules.farm ? rules.farm.buildings : []).reduce((sum, b) => sum + b.poses.length * midValue(SALVAGE[b.table]), 0);
+  const field = rules.spots.reduce((sum, s) => sum + s.count * midValue(SALVAGE[s.table]), 0);
+  return bays + buildings + field;
+}
+
+describe('the Old Orchard', () => {
+  const farm = TERRITORIES.orchard.farm!;
+
+  it('is a territory with an authored farm and no hull, reactor or hazard', () => {
+    expect(orchard.kind).toBe('territory');
+    expect(TERRITORIES.orchard.hull).toBeNull();
+    expect(TERRITORIES.orchard.reactor).toBeNull();
+    expect(TERRITORIES.orchard.hazard).toBeNull();
+    expect(farm.buildings.length).toBeGreaterThan(0);
+  });
+
+  it('holds no more loot than the Fallen Sun', () => {
+    expect(territoryValue('orchard')).toBeGreaterThan(0);
+    expect(territoryValue('orchard')).toBeLessThanOrEqual(territoryValue('fallen-sun'));
+  });
+
+  it('rolls each farm building look from one table', () => {
+    const looks = farm.buildings.map((b) => b.look);
+    expect(new Set(looks).size).toBe(looks.length);
+    for (const b of farm.buildings) {
+      expect(spotTable(landmarkAt(b.look, orchard.pos)), b.look).toBe(SALVAGE[b.table]);
+      for (const rule of TERRITORIES.orchard.spots) if (rule.look === b.look) expect(rule.table, b.look).toBe(b.table);
+    }
+  });
+
+  it('knows a farm building as a loot spot only inside the orchard', () => {
+    for (const b of farm.buildings) {
+      expect(isLootSpot(landmarkAt(b.look, orchard.pos)), b.look).toBe(true);
+      expect(isLootSpot(landmarkAt(b.look, { x: 1, y: 1 })), b.look).toBe(false);
+      expect(isLootSpot(landmarkAt(b.look, fallenSun.pos)), b.look).toBe(false);
+    }
+  });
+
+  it('is entered by one road, at the south end of its spine', () => {
+    const entries = territoryEntries(orchard as never);
+    const south = { x: orchard.pos.x + TERRITORIES.orchard.spine.from.x, y: orchard.pos.y + TERRITORIES.orchard.spine.from.y };
+    expect(entries).toHaveLength(1);
+    expect(dist(entries[0], south)).toBeLessThan(1);
   });
 });
 

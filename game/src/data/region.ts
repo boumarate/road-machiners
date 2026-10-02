@@ -61,6 +61,23 @@ const FALLEN_SUN_POS = scalePoint({ x: 64, y: 54 });
 const FALLEN_SUN_RADIUS = 44;
 const ORCHARD_POS = { x: 114, y: 284 }; // region (22.8, 56.8), in the flat basin west of the north trunk road
 const ORCHARD_RADIUS = 32;
+// Old Orchard's old road runs straight through its centre, in radians from map +x toward +y, pointing to its north
+// end. It is set so the gameplay camera shows the road at the concept image's 25 degrees above screen right.
+// The camera looks 30 degrees down from map +x +y (src/three/render/camera.ts): screen right is map (1, -1) / sqrt 2
+// and screen up is map (-1, -1) / sqrt 2, foreshortened by sin 30 = 0.5. A screen direction (cos 25, sin 25) is
+// cos 25 = 0.906 along screen right and 2 sin 25 = 0.845 along screen up on the ground, so on the map it is
+// (0.906 - 0.845, -0.906 - 0.845) / sqrt 2: north, 2 degrees toward east.
+const ORCHARD_SCREEN_ANGLE = (25 * Math.PI) / 180;
+const ORCHARD_SIN_ELEVATION = 0.5;
+export const ORCHARD_HEADING = Math.atan2(
+  -Math.cos(ORCHARD_SCREEN_ANGLE) - Math.sin(ORCHARD_SCREEN_ANGLE) / ORCHARD_SIN_ELEVATION,
+  Math.cos(ORCHARD_SCREEN_ANGLE) - Math.sin(ORCHARD_SCREEN_ANGLE) / ORCHARD_SIN_ELEVATION,
+);
+// A point on the line of the old road, past its south end and beyond the rim, that the spur road aims at.
+const ORCHARD_SOUTH = {
+  x: ORCHARD_POS.x - Math.cos(ORCHARD_HEADING) * 2 * ORCHARD_RADIUS,
+  y: ORCHARD_POS.y - Math.sin(ORCHARD_HEADING) * 2 * ORCHARD_RADIUS,
+};
 
 // The point toward from that lies just inside the circle's edge, where a spur road ends. The road crosses the
 // edge a hair before its end, so floating-point error cannot leave it short of the edge.
@@ -291,7 +308,8 @@ export const REGION = {
       { x: 88, y: 84 },
     ]),
     // Short straight spurs lead from a road point to each location beside it, so through traffic passes by.
-    [scalePoint({ x: 28, y: 64 }), rimPoint(scalePoint({ x: 28, y: 64 }), ORCHARD_POS, ORCHARD_RADIUS)],
+    // The orchard's spur ends at the south end of its old road.
+    [scalePoint({ x: 28, y: 64 }), rimPoint(ORCHARD_SOUTH, ORCHARD_POS, ORCHARD_RADIUS)],
     scaleRoad([{ x: 37, y: 32 }, { x: 33.8, y: 32 }], [0]),
     scaleRoad([{ x: 50, y: 36 }, { x: 50, y: 32.8 }], [0]),
     scaleRoad([{ x: 63, y: 20 }, { x: 60, y: 18.8 }], [0]),

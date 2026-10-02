@@ -3,6 +3,7 @@
 
 import type { PropKind } from '../sim/terrain';
 import type { Vec } from '../sim/vec';
+import { ORCHARD_HEADING } from './region';
 
 export type SpotTable = 'landmark' | 'hullScrap' | 'roadWreck' | 'farmStores' | 'armyStores';
 export type DebrisRule = { look: PropKind; count: number; radius: [number, number] };
@@ -99,6 +100,18 @@ function onSunLine(s: number, c: number): Vec {
   return { x: s * cos - c * sin, y: s * sin + c * cos };
 }
 
+// A point s tiles along the Old Orchard's road from the centre (toward its north end) and c tiles across it (toward
+// screen up, the map's west side), in tiles from the centre. Positions are measured from the concept image,
+// docs/concepts/old-orchard-issue-111.jpg, at about 0.27 m per image pixel in the road's frame.
+export function onOrchardRoad(s: number, c: number): Vec {
+  const [cos, sin] = [Math.cos(ORCHARD_HEADING), Math.sin(ORCHARD_HEADING)];
+  return { x: s * cos + c * sin, y: s * sin - c * cos };
+}
+const ALONG = 0; // a turn that keeps a building's front along the road, toward its north end
+const ACROSS = Math.PI / 2; // a turn that sets a building's front across the road
+const AT = onOrchardRoad; // short for the many authored points below
+const pose = (s: number, c: number, r: number, turn: number) => ({ at: onOrchardRoad(s, c), r, turn, shoulder: false });
+
 export const TERRITORIES: Record<string, TerritoryRules> = {
   'fallen-sun': {
     seed: 0,
@@ -156,5 +169,102 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       healthPerTurn: 5,
       floor: 30,
     },
+  },
+  orchard: {
+    seed: 1,
+    // The old road, rim to rim. Field spots and debris are drawn along it.
+    spine: { from: onOrchardRoad(-32, 0), to: onOrchardRoad(32, 0), band: 26 },
+    hull: null,
+    farm: {
+      road: { width: 3 },
+      buildings: [
+        // The ruined two-storey farmhouse above the road at the middle, its long side to the road.
+        { look: 'farmhouse', table: 'landmark', poses: [pose(10, 11, 3, ALONG)] },
+        // The gabled barn far left above the road, and its shed just right of it.
+        { look: 'barn', table: 'farmStores', poses: [pose(-10, 25, 2.6, ALONG), pose(-4, 24, 1.8, ALONG)] },
+        // Three Quonset huts side by side right of centre, below the road, their ends to the road.
+        { look: 'quonset', table: 'armyStores', poses: [pose(22, -9, 2.2, ACROSS), pose(25, -14, 2.2, ACROSS), pose(28, -19, 2.2, ACROSS)] },
+        // The sandbagged blockhouse just below the road at the middle.
+        { look: 'bunker', table: 'armyStores', poses: [pose(2, -8, 2.6, ALONG)] },
+        // Guard huts: at the motor pool, at the checkpoint by the road on the upper right, and the concrete hut by the
+        // road on the left.
+        { look: 'guardPost', table: 'armyStores', poses: [pose(-15, 5, 0.8, ALONG), pose(20, -3.5, 0.8, ALONG), pose(-8, 5, 0.8, ALONG)] },
+        {
+          look: 'armyTruck',
+          table: 'roadWreck',
+          poses: [
+            // The motor pool: two rows of three army trucks, 3 tiles apart along the road and 4 across.
+            ...[-22, -19, -16].flatMap((s) => [11, 15].map((c) => pose(s, c, 1.1, ALONG))),
+            // The derelict jeep on the lower-left shoulder, and the army truck on the upper-right shoulder.
+            { at: onOrchardRoad(-28, -1), r: 1.1, turn: ALONG, shoulder: true },
+            { at: onOrchardRoad(17, 1), r: 1.1, turn: Math.PI, shoulder: true },
+          ],
+        },
+      ],
+      // The concrete motor pool under the army trucks.
+      pads: [{ at: AT(-19, 13), size: { x: 10, y: 7 }, turn: ALONG }],
+      // Light dirt tracks off the road.
+      tracks: [
+        // Up to the farmhouse yard.
+        { points: [AT(4, 1.5), AT(7, 5), AT(10, 7.5)], width: 2 },
+        // Up past the motor pool to the barn.
+        { points: [AT(-11, 1.5), AT(-13, 8), AT(-12, 18), AT(-9, 21.5)], width: 2 },
+        // Down round the blockhouse and on to the Quonset huts.
+        { points: [AT(-3, -1.5), AT(-2, -11), AT(3, -12.5), AT(19, -12.5)], width: 2 },
+        // Down into the south-east block.
+        { points: [AT(-16, -1.5), AT(-19, -7), AT(-22, -11)], width: 2 },
+      ],
+      // Blue-grey irrigation ditches along four block edges.
+      ditches: [
+        // Under the centre-west block, beside the road.
+        { points: [AT(-4, 4.5), AT(3, 4.5)], width: 1 },
+        // Along the road side of the block east of the road.
+        { points: [AT(7, -3.5), AT(17, -3.5)], width: 1 },
+        // Along the top of the east block.
+        { points: [AT(-7, -15.5), AT(7, -15.5)], width: 1 },
+        // Along the north end of the south-east block.
+        { points: [AT(-13.5, -5), AT(-13.5, -19)], width: 1 },
+      ],
+      groves: { look: 'deadTree', rowGap: 2.5, treeGap: 1.5, jitter: 0.2, missing: 0.1, radius: 0.35, maxTrees: 320, keep: 0.7 },
+      // Six blocks of dead orchard trees on both sides of the road.
+      blocks: [
+        // The big block upper left, above the farmhouse.
+        { at: AT(8, 21), size: { x: 16, y: 12 }, rows: 'along' },
+        // The block upper right, above the road past the farmhouse.
+        { at: AT(25, 10), size: { x: 10, y: 10 }, rows: 'across' },
+        // The small block left of the farmhouse, between the road and the barn track.
+        { at: AT(0, 8), size: { x: 8, y: 6 }, rows: 'along' },
+        // The block just below the road right of the blockhouse.
+        { at: AT(12, -7), size: { x: 10, y: 6 }, rows: 'across' },
+        // The block below the blockhouse.
+        { at: AT(0, -22), size: { x: 14, y: 12 }, rows: 'along' },
+        // The big block lower left, below the road.
+        { at: AT(-22, -12), size: { x: 16, y: 14 }, rows: 'across' },
+      ],
+      runs: [
+        // Wooden fences along the outer edges of four blocks, open where the track enters.
+        { look: 'fence', points: [AT(-0.5, 15), AT(-0.5, 27)], segment: 2, gaps: [] },
+        { look: 'fence', points: [AT(20, 4.5), AT(30, 4.5)], segment: 2, gaps: [] },
+        { look: 'fence', points: [AT(-7, -28.5), AT(7, -28.5)], segment: 2, gaps: [] },
+        { look: 'fence', points: [AT(-14, -4.5), AT(-30, -4.5)], segment: 2, gaps: [1, 2] },
+        // Concrete barriers along both road edges near the middle, open where the tracks cross.
+        { look: 'barrier', points: [AT(-6, 2), AT(6, 2)], segment: 1, gaps: [9, 10, 11] },
+        { look: 'barrier', points: [AT(-6, -2), AT(6, -2)], segment: 1, gaps: [2, 3, 4] },
+        // Sandbags at the checkpoint and before the motor-pool guard hut.
+        { look: 'sandbags', points: [AT(18.5, -5), AT(21.5, -5)], segment: 1, gaps: [] },
+        { look: 'sandbags', points: [AT(-17, 3.5), AT(-14, 3.5)], segment: 1, gaps: [] },
+      ],
+    },
+    // Debris spills along the road band: loose junk and old car wrecks.
+    debris: [
+      { look: 'junk', count: 4, radius: [0.8, 1.2] },
+      { look: 'carWreck', count: 3, radius: [0.6, 0.8] },
+    ],
+    // Crate stacks the army left in the road band.
+    spots: [{ look: 'armyCache', count: 4, band: [0.3, 1], radius: [0.8, 1], table: 'armyStores' }],
+    spotGap: 6,
+    debrisGap: 3,
+    reactor: null,
+    hazard: null,
   },
 };

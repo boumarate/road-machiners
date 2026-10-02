@@ -145,7 +145,7 @@ export type PropPose = { model: PropModel; pos: Vec; yaw: number; scale: PropSca
 export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
-type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'hull_rib' | 'crates' | 'reactor' | 'hull_wall';
+type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'hull_rib' | 'crates' | 'reactor' | 'hull_wall' | 'dead_tree' | 'bunker' | 'sandbags';
 
 const M = PHYSICS.metersPerTile;
 const TURN = Math.PI * 2;
@@ -171,6 +171,17 @@ const LANDMARK_MODELS: Record<LandmarkLook, PropModel> = {
   reactor: 'reactor',
   hullWall: 'hull_wall',
   deckBay: 'crates',
+  deadTree: 'dead_tree',
+  armyCache: 'crates',
+  bunker: 'bunker',
+  sandbags: 'sandbags',
+  // Stand-ins until the farm's own models are built.
+  farmhouse: 'ruin_house',
+  barn: 'shack',
+  armyTruck: 'wreck',
+  quonset: 'shack',
+  guardPost: 'shack',
+  barrier: 'fence',
 };
 // Footprint radius in meters each model is built at, for models that scale evenly to their obstacle radius. A
 // fence segment is 4 m long and a hull wall segment 8 m, so each radius is half that: both are one straight
