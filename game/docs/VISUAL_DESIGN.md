@@ -7,7 +7,7 @@ Recognizable destinations interrupt long stretches of damaged farmland and rough
 - One tile is four metres. The pickup body is 5.2 metres long. Buildings and destinations use that scale rather than growing the vehicle to fill the screen.
 - Bowl occupies a 224-metre-wide footprint and Nose a 256-metre-wide footprint. Both contain inhabited blocks with one- and two-storey houses, doors, windows, rooftop water tanks, and clear road approaches. Town interiors remain non-drivable service areas.
 - Houses measure 10.8 by 8.4 metres on 20-metre blocks. Old Orchard contains eleven rows of eleven trees, spaced eight metres apart, beside a ruined farm building.
-- Fallen Sun's main hull is about 230 metres long. Nose's hull section is 88 metres long with a projecting bow. Ship fragments remain larger than the buildings built around them. Broken Wing is one ship section: a 54-metre faceted fuselage lies beside the road and a swept wing grows from its top, 44 metres along the road at the root and tapering to a buried tip. The wing's underside is about 8 metres up over the near road edge and 5 metres over the far one, so it spans the whole 24-metre road.
+- Fallen Sun's main hull is about 230 metres long. Nose's hull section is 88 metres long with a projecting bow. Ship fragments remain larger than the buildings built around them. Broken Wing is a crashed ship's wing: a 156-metre by 24-metre deck of light plating with rust patches and a dirt track, an edge beam with a bent lip, dark X-braced lattice reaching 8 metres down and five slanted plated pylons on each side. At its root a hoop about 35 metres across and 31 metres high, the wing's torn root, is plated on the outside with dark ribs and lattice inside.
 
 ## Materials and shapes
 
