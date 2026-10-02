@@ -166,4 +166,37 @@ describe('triage stage', () => {
     await expect(runStage(fakeCtx(text), 7)).rejects.toThrow(message);
     expect(calls.filter((call) => /^(comment|move|close|addLabel)/.test(call))).toEqual([]);
   });
+
+  describe('visual-reference gate for a new location', () => {
+    const ask = verdict({ verdict: 'unclear', reason: 'A new location needs a reference image.', questions: ['Can you upload a reference image of the junkyard on this issue?'] });
+
+    it('tells the agent to ask for an image when a new location has none, without wont-do', async () => {
+      await runStage(fakeCtx(ask), 7);
+      expect(prompt).toContain('Visual-reference gate.');
+      expect(prompt).toContain('NEW authored gameplay location or landmark');
+      expect(prompt).toContain('the verdict is `unclear`. Ask one short question');
+      expect(prompt).toContain('Never pick `wont-do` only because the image is missing.');
+      expect(prompt).toContain('upload it again');
+    });
+
+    it('comments the question, labels needs-info and keeps the card in Triage', async () => {
+      await runStage(fakeCtx(ask), 7);
+      expect(calls.find((call) => call.startsWith('comment 7 ## Questions from the factory'))).toContain('1. Can you upload a reference image of the junkyard on this issue?');
+      expect(calls).toContain('addLabel 7 needs-info');
+      expect(calls.filter((call) => /^(move|close)/.test(call))).toEqual([]);
+    });
+
+    it('proceeds to Design with normal triage once an image exists, and never asks again', async () => {
+      await runStage(fakeCtx(verdict({})), 7);
+      expect(prompt).toContain('never ask for one again');
+      expect(calls.at(-1)).toBe('move 7 Design');
+      expect(calls).not.toContain('addLabel 7 needs-info');
+    });
+
+    it('leaves repairs, biome changes and unrelated requests out of the gate', async () => {
+      await runStage(fakeCtx(verdict({})), 7);
+      expect(prompt).toContain('It does not apply to a repair or adjustment of an existing location, a generic biome or procedural-system change, or any other request.');
+      expect(calls.at(-1)).toBe('move 7 Design');
+    });
+  });
 });

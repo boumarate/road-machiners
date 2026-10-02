@@ -33,6 +33,19 @@ Pick one verdict.
 
 Lean toward `ready`.
 When in doubt, pick `ready`.
+The visual-reference gate below is the one exception.
+
+Visual-reference gate.
+It applies only to a request to create a NEW authored gameplay location or landmark in ROAM.
+It does not apply to a repair or adjustment of an existing location, a generic biome or procedural-system change, or any other request.
+For a new location, look in the issue body and in every comment for a reference image of the requested place.
+A usable reference image is one in the image list at the end of this prompt that is not marked NOT AVAILABLE.
+A verbal description or a link you cannot open is not a reference image.
+- No usable image: the verdict is `unclear`. Ask one short question that asks the author to upload a reference image of the location on the GitHub issue.
+- An image the list marks NOT AVAILABLE: the verdict is `unclear`. Ask one short question that asks the author to upload it again. Never go on with the text alone.
+- A usable image exists, also from an earlier answer: never ask for one again. Score the issue with the normal rubric.
+Never pick `wont-do` only because the image is missing.
+This question counts toward the cap of three questions.
 
 The author may have answered earlier questions.
 Look in the comments under the heading "Questions from the factory".
