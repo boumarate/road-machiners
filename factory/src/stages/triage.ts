@@ -1,5 +1,5 @@
 import { BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, ROUTING_MARK, WONT_DO_LABEL, type Ctx } from '../types';
-import { BASE_BRANCH, agentHome, askAuthor, fillPrompt, readOutput, resetOutputs, runAgent, workDir, writeIssueInput } from './common';
+import { BASE_BRANCH, agentHome, askAuthor, fillPrompt, prepareOutputs, readOutput, runAgent, workDir, writeIssueInput } from './common';
 
 type Complexity = 'trivial' | 'intermediate' | 'hard';
 type Routing = { complexity: Complexity; why: string };
@@ -11,9 +11,9 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await ctx.repo.fetch();
   await ctx.repo.prepareWorkClone(BRANCH(issue), BASE_BRANCH, clone);
   const home = agentHome(clone, GAME_DIR);
-  resetOutputs(home);
+  prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
-  await runAgent(ctx, issue, 'triage', fillPrompt('triage', { issue: String(issue) }));
+  await runAgent(ctx, issue, 'triage', 'triage', fillPrompt('triage', { issue: String(issue) }));
   const result = parseVerdict(readOutput(home, 'triage.json'));
   if (result.verdict === 'unclear') return askAuthor(ctx, issue, result.questions, 'triage');
   if (result.verdict === 'ready') return pass(ctx, issue, result.reason, result.hotfix, result.routing);

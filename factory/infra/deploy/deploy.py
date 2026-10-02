@@ -10,7 +10,7 @@ from io import StringIO
 
 from pyinfra.operations import files, server, systemd
 
-from factory_infra import CODE_DIR, FACTORY_ROOT, FACTORY_UID, FACTORY_USER, HERMES_DIR, HOME_DIR, INFRA_DIR, read_factory_env, settings
+from factory_infra import CODE_DIR, FACTORY_ENV, FACTORY_ROOT, FACTORY_UID, FACTORY_USER, HERMES_DIR, HOME_DIR, INFRA_DIR, REPO_DIR, read_factory_env, settings
 
 FILES = INFRA_DIR / "files"
 factory_env = read_factory_env(settings.factory_env_file)
@@ -19,47 +19,47 @@ tick_minutes = factory_env["FACTORY_TICK_MINUTES"]
 # ITCH_TARGET is "user/game", and its page is https://user.itch.io/game. The bare domain redirects there.
 itch_user, itch_game = factory_env["ITCH_TARGET"].split("/")
 itch_url = f"https://{itch_user}.itch.io/{itch_game}"
-factory_dir = f"{CODE_DIR}/factory"
-env_path = f"{factory_dir}/.env"
-settings_path = f"{factory_dir}/settings.env"
+settings_path = f"{CODE_DIR}/factory/settings.env"
 as_factory = {"_sudo": True, "_sudo_user": FACTORY_USER}
 UPDATE_SCRIPT = f"{FACTORY_ROOT}/factory-update.sh"
+LAYOUT_SCRIPT = f"{FACTORY_ROOT}/factory-layout.sh"
 UPDATE_MINUTES = 2
 
-server.shell(
-    name="The factory user owns the code dir",
-    commands=[f"mkdir -p {CODE_DIR}", f"chown {FACTORY_USER}:{FACTORY_USER} {CODE_DIR}"],
-    _sudo=True,
-)
-# The code dir is a clone of GitHub's main. The first run also turns a copy from the old rsync deploy into a clone.
-# Main's files replace the copy's. Ignored files, like node_modules and .env, stay.
+# The repo dir is the git clone of GitHub's main. A server that still has a real code folder keeps it, and factory-layout.sh moves it to the repo dir.
 repo_url = f"https://github.com/{factory_env['FACTORY_REPO']}.git"
 server.shell(
-    name="Clone main into the code dir once",
+    name="Clone main into the repo dir once",
     commands=[
-        f"cd {CODE_DIR} && {{ test -d .git || {{ git init -q -b main && git remote add origin {repo_url} "
-        "&& timeout 300 git fetch -q origin main && git reset -q --hard origin/main && git clean -fdq; }; }",
+        f"test -d {REPO_DIR}/.git || test -d {CODE_DIR}/.git || {{ mkdir -p {REPO_DIR} && git clone -q {repo_url} {REPO_DIR}; }}",
     ],
     **as_factory,
+)
+
+files.put(
+    name="Push the layout script",
+    src=str(FILES / "factory-layout.sh"),
+    dest=LAYOUT_SCRIPT,
+    mode="755",
+    _sudo=True,
+)
+# It makes the first release, the links and the migration of an older server. It runs before the env push, so a migration finds the old .env in the code folder.
+server.shell(
+    name="Code folders: repo, releases and the code link",
+    commands=[f"timeout 1800 {LAYOUT_SCRIPT} {FACTORY_ROOT} {FACTORY_USER}"],
+    _sudo=True,
 )
 
 # The GitHub token joins the server-only env as GH_TOKEN. gh and git read it from there, so the server needs no gh login.
 factory_env_text = Path(settings.factory_env_file).read_text().rstrip("\n") + f"\nGH_TOKEN={settings.factory_gh_token}\n"
 files.put(
-    name="Push the server-only factory .env with the GitHub token",
+    name="Push the server-only factory env with the GitHub token",
     src=StringIO(factory_env_text),
-    dest=env_path,
+    dest=FACTORY_ENV,
     user=FACTORY_USER,
     group=FACTORY_USER,
     mode="600",
     add_deploy_dir=False,
     _sudo=True,
-)
-
-server.shell(
-    name="npm ci in factory",
-    commands=[f"cd {factory_dir} && timeout 900 npm ci"],
-    **as_factory,
 )
 
 # git asks gh for credentials, and gh answers with GH_TOKEN. The token stays in the env, never on a command line.
@@ -133,23 +133,18 @@ server.shell(
 )
 
 # Hermes takes its paths from env. The server layout differs from the Mac default.
-hermes_env = f"FACTORY_HERMES_DIR={HERMES_DIR} FACTORY_UID={FACTORY_UID}"
+# It mounts the factory root at the same path, so the code link resolves inside its container.
+hermes_env = f"FACTORY_HERMES_DIR={HERMES_DIR} FACTORY_UID={FACTORY_UID} FACTORY_CODE_SOURCE={FACTORY_ROOT} FACTORY_CODE_TARGET={FACTORY_ROOT}"
 server.shell(
     name="compose up: hermes",
     commands=[
-        f"cd {CODE_DIR} && {hermes_env} timeout 900 docker compose -f factory/hermes/compose.yaml --env-file {settings_path} --env-file {env_path} "
+        f"cd -P {CODE_DIR} && {hermes_env} timeout 900 docker compose -f factory/hermes/compose.yaml --env-file {settings_path} --env-file {FACTORY_ENV} "
         "up -d --build --remove-orphans --wait --wait-timeout 180",
     ],
     _sudo=True,
 )
 
-# factory-update deploys each main past this commit. Set only once, so a later deploy never hides an update it did not run.
-server.shell(
-    name="Record the deployed commit once",
-    commands=[f"test -f {HOME_DIR}/deployed || git -C {CODE_DIR} rev-parse HEAD > {HOME_DIR}/deployed"],
-    **as_factory,
-)
-# The script lives outside the checkout, so a checkout never rewrites it while it runs.
+# The script lives outside the releases, so a deploy never rewrites it while it runs.
 files.put(
     name="Push the update script",
     src=str(FILES / "factory-update.sh"),
@@ -164,6 +159,7 @@ files.template(
     mode="644",
     service_user=FACTORY_USER,
     script=UPDATE_SCRIPT,
+    factory_root=FACTORY_ROOT,
     home_dir=HOME_DIR,
     _sudo=True,
 )

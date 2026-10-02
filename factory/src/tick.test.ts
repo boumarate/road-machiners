@@ -195,7 +195,7 @@ function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: 
   const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', stageTimeoutMinutes: 30, ...CFG };
   const repo = { fetch: async () => {},headHash: async (branch: string) => { if (branch !== 'dev') throw new Error(`unexpected branch ${branch}`); return devHead; } };
   const ctx = { cfg, github, telegram, repo, statePath, now: () => NOW, log: () => undefined } as unknown as Ctx;
-  const deps: TickDeps = { isAlive: () => alive, inContainer: async () => true, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, spawn: (args, _cwd, _log, id) => { spawned.push([...args, id]); return 77; } };
+  const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, removeContainers: async (_run, id) => { killed.push(`containers ${id}`); }, spawn: (args, _cwd, _log, id) => { spawned.push([...args, id]); return 77; } };
   return { ctx, sent, labels, removed, deps, killed, spawned };
 }
 
@@ -344,6 +344,90 @@ describe('tick', () => {
     const h = harness(job('2026-01-10T11:50:00Z', 'remove', 8), false);
     await tick(h.ctx, '/code', h.deps);
     expect(h.labels).toEqual([`8:${STUCK_LABEL}`]);
+  });
+
+  describe('a job whose process died', () => {
+    const IN_TIME = '2026-01-10T11:50:00Z';
+    const sessions = (h: Harness): string => join(h.ctx.cfg.home, 'sessions', 'issue-5');
+
+    it('resumes an agent job once: removes its containers, marks the issue, reports nothing and starts it again', async () => {
+      const h = harness(job(IN_TIME), false, [card(5, 'Design')]);
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME)], jobStarts: [IN_TIME] }));
+      await tick(h.ctx, '/code', h.deps);
+      expect(h.killed).toEqual(['containers design-job']);
+      expect(args(h)).toEqual([['design', '5']]);
+      const after = readState(h.ctx.statePath);
+      expect(after.interrupted).toEqual([5]);
+      expect(after.failures).toEqual([]);
+      expect(h.labels).toEqual([]);
+      expect(after.jobs.map((j) => j.pid)).toEqual([77]);
+    });
+
+    it('resumes a test job too', async () => {
+      const h = harness(job(IN_TIME, 'testing', 5), false);
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME, 'testing', 5)] }));
+      await tick(h.ctx, '/code', h.deps);
+      expect(readState(h.ctx.statePath)).toMatchObject({ interrupted: [5], failures: [], jobs: [] });
+    });
+
+    it('frees the cap slot of the dead job, so the restart does not count twice', async () => {
+      const h = harness(job(IN_TIME), false, [card(5, 'Design')]);
+      const other = starts(20, 1);
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME)], jobStarts: [other[0], IN_TIME, other[1]] }));
+      await tick(h.ctx, '/code', h.deps);
+      expect(readState(h.ctx.statePath).jobStarts).toEqual([other[0], other[1], NOW.toISOString()]);
+    });
+
+    it('takes no cap slot from an uncapped job that resumes', async () => {
+      const h = harness(job(IN_TIME, 'adhoc', 5), false);
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME, 'adhoc', 5)], jobStarts: [IN_TIME] }));
+      await tick(h.ctx, '/code', h.deps);
+      expect(readState(h.ctx.statePath).jobStarts).toEqual([IN_TIME]);
+      expect(readState(h.ctx.statePath).interrupted).toEqual([5]);
+    });
+
+    it('fails a second death, clears the mark and the sessions, and reports', async () => {
+      const h = harness(job(IN_TIME), false);
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME)], interrupted: [5, 6] }));
+      mkdirSync(sessions(h), { recursive: true });
+      await tick(h.ctx, '/code', h.deps);
+      expect(h.killed).toEqual([]);
+      expect(h.labels).toEqual([`5:${STUCK_LABEL}`]);
+      const after = readState(h.ctx.statePath);
+      expect(after.failures).toMatchObject([{ stage: 'design', issue: 5, error: 'job process died without finishing' }]);
+      expect(after.interrupted).toEqual([6]);
+      expect(after.jobs).toEqual([]);
+      expect(existsSync(sessions(h))).toBe(false);
+    });
+
+    it('fails a job past the timeout and never resumes it, dead or alive', async () => {
+      const late = '2026-01-10T11:00:00Z';
+      const alive = harness(job(late), true);
+      await tick(alive.ctx, '/code', alive.deps);
+      expect(readState(alive.ctx.statePath)).toMatchObject({ interrupted: [], failures: [{ error: 'timed out after 30 minutes' }] });
+      const dead = harness(job(late), false);
+      await tick(dead.ctx, '/code', dead.deps);
+      expect(readState(dead.ctx.statePath)).toMatchObject({ interrupted: [], failures: [{ error: 'job process died without finishing' }] });
+    });
+
+    it('clears a lingering mark and the sessions of a timed out job', async () => {
+      const h = harness(job('2026-01-10T11:00:00Z'), true);
+      writeState(h.ctx.statePath, state({ jobs: [job('2026-01-10T11:00:00Z')], interrupted: [5] }));
+      mkdirSync(sessions(h), { recursive: true });
+      await tick(h.ctx, '/code', h.deps);
+      expect(readState(h.ctx.statePath).interrupted).toEqual([]);
+      expect(existsSync(sessions(h))).toBe(false);
+    });
+
+    it('fails a dead branch job, and touches no mark or sessions of the issue that shares its number', async () => {
+      const h = harness(job(IN_TIME, 'change', 5), false);
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME, 'change', 5)], interrupted: [5] }));
+      mkdirSync(sessions(h), { recursive: true });
+      await tick(h.ctx, '/code', h.deps);
+      expect(h.killed).toEqual([]);
+      expect(readState(h.ctx.statePath)).toMatchObject({ interrupted: [5], failures: [{ stage: 'change' }], jobs: [] });
+      expect(existsSync(sessions(h))).toBe(true);
+    });
   });
 
   it('starts a queued ship without counting it against the cap', async () => {

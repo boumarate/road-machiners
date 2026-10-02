@@ -57,6 +57,24 @@ describe('dockerContainer', () => {
     expect(runCall(calls).args.filter((a) => a === '-v')).toHaveLength(3);
   });
 
+  it('mounts the session folder under the agent projects folder and starts the session by id', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', session: { dir: '/h/sessions/issue-7', id: 'abc', resume: false } });
+    const { args } = runCall(calls);
+    expect(args).toContain('/h/sessions/issue-7:/home/pwuser/.claude/projects');
+    expect(args.filter((a) => a === '-v')).toHaveLength(3);
+    expect(args.slice(args.indexOf('--verbose'))).toEqual(['--verbose', '--session-id', 'abc']);
+    expect(args).not.toContain('--resume');
+  });
+
+  it('continues the session by id when it resumes', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', session: { dir: '/h/s', id: 'abc', resume: true } });
+    const { args } = runCall(calls);
+    expect(args.slice(args.indexOf('--verbose'))).toEqual(['--verbose', '--resume', 'abc']);
+    expect(args).not.toContain('--session-id');
+  });
+
   it('puts a restricted agent on the internal network with the proxy env', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', openNetwork: false });

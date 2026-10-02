@@ -27,7 +27,6 @@ export type FactoryConfig = {
   committeeChat: string;
   publicChannel: string;
   stageTimeoutMinutes: number;
-  updateGraceMinutes: number; // minutes a factory update waits for agent and test jobs before it stops them
   releaseDays: number;
   itchTarget: string | null; // itch.io page as "user/game". Null until set, and then a release fails loud.
   butlerKey: string | null; // BUTLER_API_KEY, only ever in the env of the butler call
@@ -105,7 +104,7 @@ export type FactoryState = {
   postCaptions: Record<string, string>; // Telegram message id -> caption of an open approval or candidate post. Telegram cannot read a caption back, and a status line edits it.
   devBuild: string | null; // short hash of dev that /dev/ serves
   devFailed: string | null; // short hash of dev whose build failed. The tick skips it until dev moves or Hermes clears it.
-  interrupted: number[]; // issues whose job a factory update stopped. The next job on the issue tells its agent to continue, and its end clears the issue.
+  interrupted: number[]; // issues whose job process died and got one resume. The next job on the issue continues its agents' sessions, and its end clears the issue.
 };
 
 export interface GitHub {
@@ -147,7 +146,9 @@ export interface Telegram {
 // `openNetwork` runs the container on the normal network with no proxy. Absent means the restricted network.
 // `mediaDir` is a host folder of reference images. The agent sees it read only at /work/.factory-media.
 // `readOnly` maps host folders to container paths, mounted read only.
-export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string> };
+// `session` names the agent's Claude Code session. The container mounts `dir` as the agent's session store and starts the session with `id`, or continues it when `resume` is set.
+export type AgentSession = { dir: string; id: string; resume: boolean };
+export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; session?: AgentSession };
 
 export interface Container {
   // Runs Claude Code headless in the clone. Throws on a nonzero exit.

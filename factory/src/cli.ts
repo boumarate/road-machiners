@@ -4,7 +4,6 @@ import { realContext } from './context';
 import { drainInbox } from './inbox';
 import { intake } from './intake';
 import { runJob } from './job';
-import { pausedTick } from './paused-tick';
 import { pausedReason } from './pause';
 import { tick } from './tick';
 import { guardTick } from './tick-guard';
@@ -26,7 +25,7 @@ async function main(args: string[]): Promise<void> {
     const paused = pausedReason(ctx.cfg.home);
     if (paused !== null) {
       ctx.log('tick', null, `paused: ${paused}`);
-      return pausedTick(ctx);
+      return;
     }
     return guardTick(ctx, async () => {
       await drainInbox(ctx);

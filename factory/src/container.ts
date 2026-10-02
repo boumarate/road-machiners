@@ -17,6 +17,7 @@ const NO_PROXY = 'localhost,127.0.0.1';
 
 // The npm cache is shared across runs, so `npm ci` reuses downloads. npm checks every package against the lockfile's integrity hash, so a bad cache entry fails the install instead of slipping in.
 const NPM_CACHE = '/home/pwuser/.npm';
+const SESSIONS_MOUNT = '/home/pwuser/.claude/projects';
 
 function mountArgs(cfg: FactoryConfig, clone: string, dir: string, mediaDir?: string): string[] {
   const cache = `${cfg.home}/npm-cache`;
@@ -76,7 +77,7 @@ export function outputsNote(dir: string): string {
 // Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
 export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null): Container {
   return {
-    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {} }) {
+    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, session }) {
       if (!openNetwork) await ensureProxy(run, cfg);
       // A headless run ends when the agent ends its turn, and that kills anything it left in the background.
       // Agents ended turns to wait for background subagents, and the run died with their work, so background tasks are off.
@@ -85,9 +86,12 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
         CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1',
       };
       const readOnlyArgs = Object.entries(readOnly).flatMap(([host, path]) => ['-v', `${host}:${path}:ro`]);
+      // Only the projects folder is mounted, since the image keeps its skills in the rest of ~/.claude.
+      const sessionMount = session === undefined ? [] : ['-v', `${session.dir}:${SESSIONS_MOUNT}`];
+      const sessionArgs = session === undefined ? [] : [session.resume ? '--resume' : '--session-id', session.id];
       const args = [
-        ...baseArgs(jobId), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
-        'factory-agent', '-p', '--model', model, '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose',
+        ...baseArgs(jobId), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount, ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
+        'factory-agent', '-p', '--model', model, '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs,
       ];
       const result = await run('docker', args, { env, input: `${outputsNote(dir)}\n\n${prompt}`, logPath: log });
       must(result, `agent in ${clone}`);

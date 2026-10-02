@@ -5,7 +5,7 @@ import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
 import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type InlineButton } from '../types';
-import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir } from './common';
+import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir } from './common';
 
 // Each step logs its start time, so the log shows where the time goes.
 // The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
@@ -49,7 +49,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const item = await ctx.github.issue(issue);
   const base = baseBranchFor(ctx, item.labels);
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, workDir(ctx, issue));
-  resetOutputs(home);
+  prepareOutputs(ctx, issue, home);
   const merged = await mergeBase(ctx, issue, base, home);
   let evidence = await agentRound(ctx, issue, 'test', base);
   await requireBaseMerged(ctx, issue, base, merged);
@@ -103,7 +103,7 @@ async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: 
 
 // Returns the evidence of the round, checked against the branch head the round left. A round that changed code must capture again.
 async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'test-fix', base: string): Promise<Evidence> {
-  await runAgent(ctx, issue, 'testing', fillPrompt(prompt, { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
+  await runAgent(ctx, issue, 'testing', prompt, fillPrompt(prompt, { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   throwIfNeedsCommittee(home);
   readApproval(home);

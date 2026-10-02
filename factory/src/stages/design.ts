@@ -1,5 +1,5 @@
 import { BRANCH, GAME_DIR, TASK_FILE, WONT_DO_LABEL, type Ctx } from '../types';
-import { agentHome, askAuthor, baseBranchOf, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
+import { agentHome, askAuthor, baseBranchOf, fillPrompt, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 import { existsSync, readFileSync } from 'node:fs';
 
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
@@ -8,10 +8,10 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await ctx.repo.fetch();
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, clone);
   const home = agentHome(clone, GAME_DIR);
-  resetOutputs(home);
+  prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
   const prompt = fillPrompt('design', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) });
-  await runAgent(ctx, issue, 'design', prompt);
+  await runAgent(ctx, issue, 'design', 'design', prompt);
   throwIfNeedsCommittee(home);
   const questions = readOutput(home, 'questions.md');
   if (questions !== null) return askBack(ctx, issue, questions);

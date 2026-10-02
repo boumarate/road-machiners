@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { progressNote, runJob } from './job';
@@ -64,6 +64,45 @@ describe('runJob', () => {
     await runJob(ctx, 'design', 7);
     expect(events).toEqual(['label', 'comment 7 Design failed after 10 min. Hermes is looking into it.']);
     expect(readState(statePath).interrupted).toEqual([3]);
+  });
+
+  describe('sessions', () => {
+    const sessions = (issue: number) => join(ROOT, 'sessions', `issue-${issue}`);
+
+    // The design stage asks GitHub for the issue first, so the fake sees the sessions as the job starts.
+    async function run(stage: 'design' | 'change', issue: number, interrupted: number[]): Promise<boolean[]> {
+      rmSync(ROOT, { recursive: true, force: true });
+      mkdirSync(sessions(issue), { recursive: true });
+      mkdirSync(sessions(9), { recursive: true });
+      const statePath = join(ROOT, 'state.json');
+      writeState(statePath, { ...structuredClone(EMPTY_STATE), jobs: [{ id: 'a', stage, issue, pid: 1, startedAt: '', log: 'l' }], interrupted });
+      const seen: boolean[] = [];
+      const look = async () => { seen.push(existsSync(sessions(issue))); throw new Error('offline'); };
+      const ctx = {
+        cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c' } as FactoryConfig, statePath, now: () => new Date(), log: () => undefined,
+        repo: { fetch: look },
+        telegram: { sendMessage: async () => 1 },
+        github: { issue: look, cards: look, addLabel: async () => undefined, comment: async () => undefined },
+      } as unknown as Ctx;
+      await runJob(ctx, stage, issue);
+      return seen;
+    }
+
+    it('clears the sessions of an issue that starts with no mark, before the stage and at the end', async () => {
+      expect(await run('design', 7, [])).toEqual([false]);
+      expect(existsSync(sessions(9))).toBe(true);
+    });
+
+    it('keeps the sessions of a marked issue for the stage, and clears them with the mark at the end', async () => {
+      expect(await run('design', 7, [7])).toEqual([true]);
+      expect(existsSync(sessions(7))).toBe(false);
+      expect(readState(join(ROOT, 'state.json')).interrupted).toEqual([]);
+    });
+
+    it('never touches the sessions of an issue for a branch job that shares its number', async () => {
+      await run('change', 7, []);
+      expect(existsSync(sessions(7))).toBe(true);
+    });
   });
 
   it('writes a finished note with the stage time', () => {

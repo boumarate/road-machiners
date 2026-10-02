@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { fetchMedia, mediaSection, requireMedia } from '../media';
 import { changesSaveMajor } from '../save-guard';
 import { isAnswered } from '../questions';
+import { roundSession } from '../sessions';
 import { readState } from '../state';
 import { FACTORY_MARK, BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type CardStage, type Ctx, type FactoryConfig, type Stage } from '../types';
 
@@ -102,17 +103,30 @@ export async function acquireMedia(ctx: Ctx, issue: number, stage: CardStage): P
   return mediaSection(entries);
 }
 
-// A factory update stopped the last job on this issue. Its work clone stays, so the agent continues instead of starting over.
-export const INTERRUPTED_NOTE = 'A factory update stopped the previous run of this job. The work clone keeps its commits and changed files. Read them with git log and git status, then continue from there.';
+// A resumed round continues its own conversation, so it needs no prompt but this note. A round that had finished ends at once.
+export const RESUME_NOTE = 'A stop cut this job off. The work clone keeps your commits and changed files. Read them with git log and git status, then continue from there. If your task is already done, say so and stop.';
 
-export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, prompt: string): Promise<void> {
+// The job on this issue lost its process once, so its agents continue their sessions.
+export function isResuming(ctx: Ctx, issue: number): boolean {
+  return readState(ctx.statePath).interrupted.includes(issue);
+}
+
+// A resumed stage keeps the outputs of the dead run, since its agent may have written them already.
+export function prepareOutputs(ctx: Ctx, issue: number, home: string): void {
+  if (!isResuming(ctx, issue)) resetOutputs(home);
+  mkdirSync(`${home}/${OUT_DIR}`, { recursive: true });
+}
+
+// `round` names the agent run inside the job. A stage with two runs gives each its own, so a resume finds the right session.
+export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round: string, prompt: string): Promise<void> {
   const { labels } = await ctx.github.issue(issue);
   const model = modelFor(ctx.cfg, stage, labels);
   ctx.log(stage, issue, `agent model ${model}`);
   const openNetwork = await useOpenNetwork(ctx, stage, issue);
-  const media = await acquireMedia(ctx, issue, stage);
-  const resumed = readState(ctx.statePath).interrupted.includes(issue) ? `\n\n${INTERRUPTED_NOTE}` : '';
-  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: `${prompt}\n\n${media}${resumed}`, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue) });
+  const session = roundSession(ctx.cfg.home, issue, round, isResuming(ctx, issue));
+  if (session.resume) ctx.log(stage, issue, `resuming round ${round}, session ${session.id}`);
+  const full = session.resume ? RESUME_NOTE : `${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`;
+  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), session });
 }
 
 // Asks the issue author. The card stays where it is until a member answers on the issue.
