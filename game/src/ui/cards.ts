@@ -5,7 +5,7 @@
 import { RULES } from "../data/rules";
 import { chassisDef } from "../data/chassis";
 import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type FieldRepair } from "../data/parts";
-import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
+import { baseGrid, cellCount, itemSize, mountedParts, type Cell } from "../sim/grid";
 import { maxHp, partValue, wornDef } from "../sim/wear";
 import type { GridItem, PartInstance, Vehicle } from "../sim/types";
 import { GOODS } from "../data/goods";
@@ -176,11 +176,16 @@ function cellOf(sheet: Sheet, id: string, label: string): Omit<IconCell, "box" |
   return { sheet, label, col: icon.index % cols, row: Math.floor(icon.index / cols), cols, rows };
 }
 
-// How an item's icon fills its grid box: cropped to its drawing, and a top-down part laid sideways with rot 1 turned
-// a quarter counter-clockwise, so its nose points to the truck's left as the 3D part does. Goods are drawn diagonal
-// and never turn.
-export function gridIconFrame(cell: IconCell, rot: 0 | 1): { crop: Box; turn: 0 | 1 } {
-  return { crop: cell.box, turn: cell.view === "top" ? rot : 0 };
+// How an item lies in its grid box: rot, and for armor whether it lies tall, as a side plate does.
+export type GridLie = { rot: 0 | 1; plate: boolean; tall: boolean };
+
+// How an item's icon fills its grid box: cropped to its drawing, and a top-down part laid sideways turned a quarter
+// counter-clockwise, nose to the truck's left as the 3D part does. A part lies sideways with rot 1. Armor is drawn as
+// a front plate and the truck view lays it along the side it covers, so it turns when it lies tall, whatever its rot.
+// Goods are drawn diagonal and never turn.
+export function gridIconFrame(cell: IconCell, lie: GridLie): { crop: Box; turn: 0 | 1 } {
+  if (cell.view !== "top") return { crop: cell.box, turn: 0 };
+  return { crop: cell.box, turn: lie.plate ? (lie.tall ? 1 : 0) : lie.rot };
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -230,7 +235,9 @@ export function itemIconEl(item: GridItem): HTMLElement {
 export function gridItemIcon(item: GridItem): HTMLElement {
   if (item.kind === "part" && BODY_PARTS.has(item.part.defId)) return createIcon("cab");
   const cell = itemIconCell(item.kind === "good" ? item.good : item.part.defId);
-  const { crop, turn } = gridIconFrame(cell, item.rot);
+  const size = itemSize(item);
+  const plate = item.kind === "part" && partDef(item.part.defId).kind === "armor";
+  const { crop, turn } = gridIconFrame(cell, { rot: item.rot, plate, tall: size.h > size.w });
   return sheetIcon(cell, "icon item-icon", crop, turn);
 }
 
