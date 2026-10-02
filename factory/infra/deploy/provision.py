@@ -120,6 +120,13 @@ server.user(
     _sudo=True,
 )
 
+# The factory user owns the clone. Git refuses it for root without this entry, and that breaks admin commands run over ssh as root.
+server.shell(
+    name="git trusts the factory clone for every user",
+    commands=[f"git config --system --get-all safe.directory | grep -qxF {CODE_DIR} || git config --system --add safe.directory {CODE_DIR}"],
+    _sudo=True,
+)
+
 files.directory(name=f"dir {FACTORY_ROOT}", path=FACTORY_ROOT, mode="755", present=True, _sudo=True)
 for path in [CODE_DIR, HOME_DIR, WWW_DIR, f"{HOME_DIR}/logs", f"{HOME_DIR}/state"]:
     files.directory(name=f"dir {path}", path=path, user=FACTORY_USER, group=FACTORY_USER, mode="755", present=True, _sudo=True)
