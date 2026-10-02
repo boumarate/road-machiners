@@ -19,7 +19,9 @@ import { BUILT_HULL } from './newworld';
 import { prop, ruleRng, tileOf } from './oldworld';
 
 const TERRITORY_SEED_OFFSET = 9100; // one block of offsets per territory, so a new territory shifts no other
-const TRIES = 1000; // draws for one prop before the layer gives up: the orchard's groves leave little open band
+// Draws for one prop before the layer gives up: the orchard's groves leave little open band. The Fallen Sun's
+// draws succeed early, so its bake does not depend on this number.
+const TRIES = 1000;
 const REACTOR_MARGIN = 2; // tiles between the hazard's edge and any prop
 const DEBRIS_BAND: [number, number] = [0, 1.5]; // debris spills half a band past the field spots, toward the rim
 const DECK_EDGE = 1; // tiles beside a deck where its side drops to the floor; drawn props keep clear of it

@@ -297,6 +297,8 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { points: [AT(40, 12.6), AT(50.5, 12.6)], width: 1 },
         { points: [AT(38.75, -10), AT(38.75, -28)], width: 1 },
       ],
+      // treeGap and strays hold the tree count over the bake test's floor of 500. The fewest over map seeds 1-30 is
+      // 517, so a new road, canal or building in the groves needs the count checked again.
       groves: { look: 'deadTree', rowGap: 3, treeGap: 1.5, jitter: 0.3, missing: 0.12, radius: 0.35, maxTrees: 750, keep: 0.7, strays: 180 },
       // Blocks of dead orchard trees planted in rows on both sides of the road and in the north grounds, each over
       // s0..s1 along the road and c0..c1 across it. Each was planted a little off the road's line.

@@ -106,14 +106,15 @@ export function nearestTown(world: World): TownDef {
 
 // ---- The edge of a town or location. Every inside or outside test of a site goes through siteGap.
 
-// A site's outline on the map, or null when its edge is its circle.
-const OUTLINES = new Map<string, Vec[] | null>();
+// A site's outline on the map, or null when its edge is its circle. Keyed by the outline array, so a site built
+// with another outline never gets a cached polygon that is not its own.
+const OUTLINES = new WeakMap<readonly Vec[], Vec[]>();
 function outlineOf(site: Site): Vec[] | null {
   if (!('outline' in site) || !site.outline) return null;
-  let poly = OUTLINES.get(site.id);
+  let poly = OUTLINES.get(site.outline);
   if (!poly) {
     poly = site.outline.map((p) => ({ x: site.pos.x + p.x, y: site.pos.y + p.y }));
-    OUTLINES.set(site.id, poly);
+    OUTLINES.set(site.outline, poly);
   }
   return poly;
 }
@@ -123,7 +124,7 @@ export function siteGap(site: Site, pos: Vec): number {
   const poly = outlineOf(site);
   if (!poly) return dist(pos, site.pos) - site.radius;
   const edge = polygonEdgeDist(pos, poly);
-  // Past the bounding radius a point is outside, so the polygon test is skipped.
+  // Past the bounding radius a point is outside, so the inside test is skipped. The edge distance is always measured.
   return dist(pos, site.pos) <= site.radius && pointInPolygon(pos, poly) ? -edge : edge;
 }
 

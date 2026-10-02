@@ -142,4 +142,13 @@ describe('site edges', () => {
     expect(crossings[0].x).toBeLessThan(crossings[1].x);
     for (const p of crossings) expect(Math.abs(siteGap(orchard, p))).toBeLessThan(1e-9);
   });
+
+  it('measures a site with the same id but its own outline from that outline', () => {
+    if (orchard.kind !== 'territory') throw new Error('The orchard is not a territory');
+    siteGap(orchard, orchard.pos);
+    const square = [{ x: -5, y: -5 }, { x: 5, y: -5 }, { x: 5, y: 5 }, { x: -5, y: 5 }];
+    const small = { ...orchard, radius: Math.hypot(5, 5), outline: square };
+    expect(siteGap(small, orchard.pos)).toBeCloseTo(-5, 9);
+    expect(siteGap(small, { x: orchard.pos.x + 8, y: orchard.pos.y })).toBeCloseTo(3, 9);
+  });
 });
