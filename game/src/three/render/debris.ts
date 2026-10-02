@@ -35,9 +35,9 @@ const MAX_FLIGHT = 8 * PHYSICS.stepsPerSecond; // steps after which a piece free
 const WELD = 1000; // vertex positions closer than a millimeter join one part
 
 // One separate part of a model, in model meters around its own center. parts hold its triangles per material.
-type PieceSource = { parts: { geometry: THREE.BufferGeometry; material: THREE.Material }[]; center: THREE.Vector3; box: THREE.Box3 };
+export type PieceSource = { parts: { geometry: THREE.BufferGeometry; material: THREE.Material }[]; center: THREE.Vector3; box: THREE.Box3 };
 type Flying = { body: RAPIER.RigidBody; mesh: THREE.Object3D; still: number; age: number }; // still and age in steps
-type Burst = { pieces: Flying[]; fixed: RAPIER.Collider[] };
+type Burst = { group: THREE.Group; pieces: Flying[]; fixed: RAPIER.Collider[] };
 export type TruckBox = { id: string; chassisId: string; pos: V3; rot: Quat };
 
 const sources = new Map<ModelName, PieceSource[]>();
@@ -56,25 +56,42 @@ export class DebrisSim {
   // The prop's pieces at its pose, as a group of meshes in world meters. push: the breaking truck's velocity in m/s,
   // or null for a prop broken out of view, which topples over.
   burst(o: Obstacle, push: V3 | null, near: readonly Obstacle[]): THREE.Group {
-    const group = new THREE.Group();
     const pose = propPose(o);
     const origin = new THREE.Vector3(pose.pos.x * S, heightAt(this.terrain, pose.pos.x, pose.pos.y) * S, pose.pos.y * S);
     const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -pose.yaw);
     const scale = new THREE.Vector3(pose.scale.x, pose.scale.z, pose.scale.y);
-    const kick = push ?? topple(o.id);
-    const pieces = piecesOf(pose.model).map((src, i) => {
+    const others = near.filter((n) => n.id !== o.id && dist(n.pos, o.pos) * S <= FLY_REACH + 2 * S);
+    return this.fling(piecesOf(pose.model), { origin, turn, scale }, push ?? topple(o.id), o.id, o.pos, others);
+  }
+
+  // The pieces of a model flying from a pose. kick: the push in m/s every piece takes part of. key seeds each piece's
+  // launch. ground: the map point the ground patch is built around. near: the props pieces can hit.
+  fling(srcs: PieceSource[], pose: { origin: THREE.Vector3; turn: THREE.Quaternion; scale: THREE.Vector3 }, kick: V3, key: string, ground: { x: number; y: number }, near: readonly Obstacle[]): THREE.Group {
+    const { origin, turn, scale } = pose;
+    const group = new THREE.Group();
+    const pieces = srcs.map((src, i) => {
       const mesh = pieceMesh(src, scale);
       group.add(mesh);
       const at = src.center.clone().multiply(scale).applyQuaternion(turn).add(origin);
       const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(at.x, at.y, at.z).setRotation(turn).setCcdEnabled(true));
       this.world.createCollider(hull(src, scale), body);
-      launch(body, kick, `${o.id}:${i}`);
+      launch(body, kick, `${key}:${i}`);
       place(mesh, body);
       return { body, mesh, still: 0, age: 0 };
     });
-    const fixed = [groundPatch(this.terrain, o.pos), ...near.filter((n) => n.id !== o.id && dist(n.pos, o.pos) * S <= FLY_REACH + 2 * S).flatMap((n) => obstacleColliders(this.terrain, n))];
-    this.bursts.push({ pieces, fixed: fixed.map((desc) => this.world.createCollider(desc)) });
+    const fixed = [groundPatch(this.terrain, ground), ...near.flatMap((n) => obstacleColliders(this.terrain, n))];
+    this.bursts.push({ group, pieces, fixed: fixed.map((desc) => this.world.createCollider(desc)) });
     return group;
+  }
+
+  // Removes a burst that has not come to rest yet. A burst that already froze has nothing in the world.
+  drop(group: THREE.Group): void {
+    const burst = this.bursts.find((b) => b.group === group);
+    if (!burst) return;
+    for (const p of burst.pieces) this.world.removeRigidBody(p.body);
+    for (const c of burst.fixed) this.world.removeCollider(c, false);
+    this.bursts.splice(this.bursts.indexOf(burst), 1);
+    this.clearTrucks();
   }
 
   // Moves the truck boxes to their drawn poses. Trucks exist in this world only while pieces fly.
@@ -120,6 +137,11 @@ export class DebrisSim {
       for (const c of burst.fixed) this.world.removeCollider(c, false);
     }
     this.bursts.splice(0, this.bursts.length, ...this.bursts.filter((b) => b.pieces.length > 0));
+    this.clearTrucks();
+  }
+
+  // Trucks exist in this world only while pieces fly.
+  private clearTrucks(): void {
     if (this.bursts.length > 0) return;
     for (const body of this.trucks.values()) this.world.removeRigidBody(body);
     this.trucks.clear();
@@ -213,7 +235,7 @@ function groundPatch(t: Terrain, at: { x: number; y: number }): RAPIER.ColliderD
 
 // The model's separate parts. Triangles that share a vertex position form one part, and a part mostly inside
 // another joins it, like a rim inside its tire.
-function piecesOf(name: ModelName): PieceSource[] {
+export function piecesOf(name: ModelName): PieceSource[] {
   const cached = sources.get(name);
   if (cached) return cached;
   const root = model(name);

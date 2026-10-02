@@ -186,7 +186,7 @@ function velocityAt(frames: VehicleFrame[] | undefined, step: number): V3 {
   return { x: (b.x - a.x) * k, y: (b.y - a.y) * k, z: (b.z - a.z) * k };
 }
 
-function disposeTree(obj: THREE.Object3D): void {
+export function disposeTree(obj: THREE.Object3D): void {
   obj.traverse((o) => {
     if (o instanceof THREE.Mesh) {
       o.geometry.dispose();
