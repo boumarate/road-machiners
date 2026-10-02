@@ -5,7 +5,7 @@
 import { RULES } from "../data/rules";
 import { chassisDef } from "../data/chassis";
 import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type FieldRepair } from "../data/parts";
-import { baseGrid, cellCount, mountedParts, plateSide, type Cell } from "../sim/grid";
+import { baseGrid, cellCount, mountedParts, plateSide, type Cell, type SideLetter } from "../sim/grid";
 import { maxHp, partValue, wornDef } from "../sim/wear";
 import type { GridItem, PartInstance, Vehicle } from "../sim/types";
 import { GOODS } from "../data/goods";
@@ -176,26 +176,31 @@ function cellOf(sheet: Sheet, id: string, label: string): Omit<IconCell, "box" |
   return { sheet, label, col: icon.index % cols, row: Math.floor(icon.index / cols), cols, rows };
 }
 
-// How an item lies in its grid box: rot, and for armor whether the truck lays it along the left or right side.
-export type GridLie = { rot: 0 | 1; plate: boolean; alongSide: boolean };
+// How an item lies in its grid box: rot, and for armor the side the truck lays it on, from plateSide().
+export type GridLie = { rot: 0 | 1; side: SideLetter | null };
+// Quarter turns counter-clockwise.
+export type Turn = 0 | 1 | 2 | 3;
+
+// Armor is drawn as a front plate, outer face up. The truck view yaws it to its side (SIDE_YAW in
+// src/three/render/vehicle.ts), so its icon turns to face the same way.
+const SIDE_TURN: Record<SideLetter, Turn> = { F: 0, L: 1, B: 2, R: 3 };
 
 // How an item's icon fills its grid box: cropped to its drawing, and a top-down part laid sideways turned a quarter
-// counter-clockwise, nose to the truck's left as the 3D part does. A part lies sideways with rot 1. Armor is drawn as
-// a front plate and the truck view lays it along the side it covers, so it turns on the left or right, whatever its rot.
-// Goods are drawn diagonal and never turn.
-export function gridIconFrame(cell: IconCell, lie: GridLie): { crop: Box; turn: 0 | 1 } {
+// counter-clockwise, nose to the truck's left as the 3D part does. A part lies sideways with rot 1. Armor turns to the
+// side it covers, whatever its rot. Goods are drawn diagonal and never turn.
+export function gridIconFrame(cell: IconCell, lie: GridLie): { crop: Box; turn: Turn } {
   if (cell.view !== "top") return { crop: cell.box, turn: 0 };
-  return { crop: cell.box, turn: lie.plate ? (lie.alongSide ? 1 : 0) : lie.rot };
+  return { crop: cell.box, turn: lie.side ? SIDE_TURN[lie.side] : lie.rot };
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 // The cell drawn into an SVG. A nested svg clips to the cell, and the outer one fits it to any box like the glyphs.
-// crop: the share of the cell to show. turn 1 draws it a quarter turn counter-clockwise.
-function sheetIcon(cell: IconCell, cls: string, crop = WHOLE, turn: 0 | 1 = 0): HTMLElement {
+// crop: the share of the cell to show. turn: quarter turns counter-clockwise.
+function sheetIcon(cell: IconCell, cls: string, crop = WHOLE, turn: Turn = 0): HTMLElement {
   const icon = el("span", { class: cls, role: "img", "aria-label": cell.label, title: cell.label });
   const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("viewBox", turn ? `0 0 ${crop.h} ${crop.w}` : `0 0 ${crop.w} ${crop.h}`);
+  svg.setAttribute("viewBox", turn % 2 ? `0 0 ${crop.h} ${crop.w}` : `0 0 ${crop.w} ${crop.h}`);
   svg.setAttribute("focusable", "false");
   const clip = document.createElementNS(SVG_NS, "svg");
   clip.setAttribute("viewBox", `${cell.col + crop.x} ${cell.row + crop.y} ${crop.w} ${crop.h}`);
@@ -207,9 +212,10 @@ function sheetIcon(cell: IconCell, cls: string, crop = WHOLE, turn: 0 | 1 = 0): 
   image.setAttribute("preserveAspectRatio", "none");
   clip.append(image);
   if (turn) {
-    // The cell's top edge, the nose, lands on the left.
+    // The cell's top edge, the nose, lands on the left, the bottom or the right.
+    const shift = [`0 ${crop.w}`, `${crop.w} ${crop.h}`, `${crop.h} 0`][turn - 1];
     const group = document.createElementNS(SVG_NS, "g");
-    group.setAttribute("transform", `translate(0 ${crop.w}) rotate(-90)`);
+    group.setAttribute("transform", `translate(${shift}) rotate(${-90 * turn})`);
     group.append(clip);
     svg.append(group);
   } else svg.append(clip);
@@ -237,8 +243,7 @@ export function gridItemIcon(item: GridItem, chassisId: string): HTMLElement {
   if (item.kind === "part" && BODY_PARTS.has(item.part.defId)) return createIcon("cab");
   const cell = itemIconCell(item.kind === "good" ? item.good : item.part.defId);
   const plate = item.kind === "part" && partDef(item.part.defId).kind === "armor";
-  const alongSide = plate && ["L", "R"].includes(plateSide(chassisId, item));
-  const { crop, turn } = gridIconFrame(cell, { rot: item.rot, plate, alongSide });
+  const { crop, turn } = gridIconFrame(cell, { rot: item.rot, side: plate ? plateSide(chassisId, item) : null });
   return sheetIcon(cell, "icon item-icon", crop, turn);
 }
 
