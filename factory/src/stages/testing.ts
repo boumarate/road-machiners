@@ -5,6 +5,7 @@ import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
 import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type InlineButton } from '../types';
+import { reviewGate } from './review';
 import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir } from './common';
 
 // Each step logs its start time, so the log shows where the time goes.
@@ -53,6 +54,8 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const merged = await mergeBase(ctx, issue, base, home);
   let evidence = await agentRound(ctx, issue, 'test', base);
   await requireBaseMerged(ctx, issue, base, merged);
+  // A fix round changes the code, so its evidence replaces the first round's.
+  await reviewGate(ctx, issue, base, async () => { evidence = await agentRound(ctx, issue, 'test-fix', base); });
   let build = await ctx.repo.headHash(BRANCH(issue));
   const failure = await runChecks(ctx, issue, base, build);
   // The agent gets one round to fix what the factory's own checks found. A second failure stops the card.

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pngBytes } from '../photo-fixtures';
 import { EMPTY_STATE, readState, writeState } from '../state';
@@ -21,10 +21,16 @@ let bases: string[] = [];
 const queued = (): Record<string, string> => readState(`${home}/state.json`).pendingApprovals;
 let conflicts: string[] = [];
 let merged = true;
+// The review agent's outputs in order. A null means it wrote no file. Rounds past the list get a clean review.
+let reviews: (string | null)[] = [];
+const CLEAN_REVIEW = JSON.stringify({ findings: [] });
+const finding = (over: Record<string, unknown>): Record<string, unknown> => ({ class: 'P1', introduced: true, incidents: [], file: 'game/src/sim/vision.ts', line: 29, text: 'Scans every prop per check.', ...over });
+const review = (...findings: Record<string, unknown>[]): string => JSON.stringify({ findings });
 
 beforeEach(() => {
   albums = [];
   albumFails = false;
+  reviews = [];
   conflicts = [];
   merged = true;
   mkdirSync('tmp', { recursive: true });
@@ -63,7 +69,12 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
       editCaption: async (_chat: string, id: number, caption: string) => { calls.push(`editCaption ${id} ${caption}`); },
     },
     container: {
-      agent: async (run: AgentRun) => agent(run),
+      agent: async (run: AgentRun) => {
+        if (!run.prompt.includes('review round')) return agent(run);
+        calls.push(`review ${run.model}`);
+        const output = reviews.length > 0 ? reviews.shift() : CLEAN_REVIEW;
+        if (typeof output === 'string') writeFileSync(`${run.clone}/${run.dir}/.factory/review.json`, output);
+      },
       shell: async (_dir: string, script: string, _log: string, env?: Record<string, string>) => {
         shellScript = script;
         shellEnv = env;
@@ -201,6 +212,86 @@ describe('testing stage', () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })), 2);
     await expect(runStage(ctx, 7)).rejects.toThrow('The factory checks failed twice');
     expect(calls).not.toContain('move 7 Approval');
+  });
+
+  describe('review round', () => {
+    const outputs = (run: AgentRun): void => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' }));
+
+    it('runs one review on the design model after the test round and before the checks', async () => {
+      await runStage(fakeCtx(outputs), 7);
+      expect(calls.filter((call) => call.startsWith('review'))).toEqual(['review opus']);
+      expect(calls.indexOf('review opus')).toBeLessThan(calls.indexOf('checks'));
+      expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+
+    it('passes with debt, a lone P2, any number of P3 and a non-introduced P1', async () => {
+      reviews = [review(finding({ introduced: false }), finding({ class: 'P2' }), finding({ class: 'P3' }), finding({ class: 'P3' }))];
+      await runStage(fakeCtx(outputs), 7);
+      expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(1);
+    });
+
+    it('blocks on an introduced P1, runs one fix round with the findings, then passes a second review', async () => {
+      reviews = [review(finding({ text: 'Scans every prop per check.' }))];
+      const prompts: string[] = [];
+      let seen = '';
+      const ctx = fakeCtx((run) => {
+        prompts.push(run.prompt);
+        if (run.prompt.includes('second round')) seen = readFileSync(`${run.clone}/${run.dir}/.factory/review-findings.md`, 'utf8');
+        outputs(run);
+      });
+      await runStage(ctx, 7);
+      expect(prompts).toHaveLength(2);
+      expect(prompts[1]).toContain('second round');
+      expect(seen).toBe('- P1 game/src/sim/vision.ts:29 Scans every prop per check.\n');
+      expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(2);
+      expect(existsSync(`${home}/work/issue-7/game/.factory/review-findings.md`)).toBe(false);
+      expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+
+    it('blocks on two introduced P2, and counts a P3 that cites an incident as P2', async () => {
+      reviews = [review(finding({ class: 'P2' }), finding({ class: 'P3', incidents: ['R3'] }))];
+      await runStage(fakeCtx(outputs), 7);
+      expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(2);
+    });
+
+    it('does not count a P2 on the base as a block', async () => {
+      reviews = [review(finding({ class: 'P2' }), finding({ class: 'P2', introduced: false }))];
+      await runStage(fakeCtx(outputs), 7);
+      expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(1);
+    });
+
+    it('throws when the second review blocks again, before the checks and the post', async () => {
+      reviews = [review(finding({})), review(finding({ class: 'P2' }), finding({ class: 'P2', line: 40 }))];
+      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('The review blocked the change twice.\n- P2 game/src/sim/vision.ts:29');
+      expect(calls).not.toContain('checks');
+      expect(calls).not.toContain('move 7 Approval');
+    });
+
+    it('throws when review.json is missing', async () => {
+      reviews = [null];
+      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('wrote no .factory/review.json');
+      expect(calls).not.toContain('checks');
+    });
+
+    it.each([
+      ['not json', 'Unexpected token'],
+      ['{"findings": "none"}', 'needs a findings list'],
+      [review(finding({ class: 'P0' })), 'unknown class: P0'],
+      [review(finding({ introduced: 'yes' })), 'needs introduced as true or false'],
+      [review(finding({ incidents: ['J1'] })), 'needs incidents as a list of ids like R1'],
+      [review(finding({ line: 0 })), 'needs a line of 1 or more'],
+      [review(finding({ file: '' })), 'needs a file'],
+      [review(finding({ text: ' ' })), 'needs text'],
+    ])('throws on a malformed review.json: %s', async (output, message) => {
+      reviews = [output];
+      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow(message);
+      expect(calls).not.toContain('checks');
+    });
+
+    it('does not reuse the first review file for the second review', async () => {
+      reviews = [review(finding({})), null];
+      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('wrote no .factory/review.json');
+    });
   });
 
   it('works on the release branch for a release task and merges there', async () => {

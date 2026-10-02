@@ -118,10 +118,13 @@ export function prepareOutputs(ctx: Ctx, issue: number, home: string): void {
   mkdirSync(`${home}/${OUT_DIR}`, { recursive: true });
 }
 
+// What a stage may set beyond its stage's defaults. `model` replaces the model the labels pick, like the review's design model.
+export type AgentExtras = { model?: string };
+
 // `round` names the agent run inside the job. A stage with two runs gives each its own, so a resume finds the right session.
-export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round: string, prompt: string): Promise<void> {
+export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round: string, prompt: string, extras: AgentExtras = {}): Promise<void> {
   const { labels } = await ctx.github.issue(issue);
-  const model = modelFor(ctx.cfg, stage, labels);
+  const model = extras.model ?? modelFor(ctx.cfg, stage, labels);
   ctx.log(stage, issue, `agent model ${model}`);
   const openNetwork = await useOpenNetwork(ctx, stage, issue);
   const session = roundSession(ctx.cfg.home, issue, round, isResuming(ctx, issue));
