@@ -37,7 +37,8 @@ export const PAL = {
   flash: 0xfff0a0,
   lamp: { on: 0xfff2c8, off: 0x8a8470 }, // headlight glass, lit at night
   truckGlow: 0xffffff, // faint white light over the player truck at night
-  reactorGlow: 0x7cff5a, // the Fallen Sun reactor core and the light it throws
+  reactorGlow: 0x5cf0b4, // the Fallen Sun reactor core and the light it throws, green-teal as in the level concept
+  hull: { light: 0xd6cfbf, grey: 0x9c978c, dark: 0x6e6a62 }, // the Fallen Sun's off-white and grey hull metal
   text: '#f0e0b8',
   textDim: '#b8a888',
   damageText: '#ff4a3a', // damage popups over a hit truck
