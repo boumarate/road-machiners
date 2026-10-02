@@ -9,6 +9,7 @@ import FORMAT_2_3 from './save-fixtures/format-2-3.json';
 import FORMAT_2_4 from './save-fixtures/format-2-4.json';
 import FORMAT_2_5 from './save-fixtures/format-2-5.json';
 import FORMAT_2_6 from './save-fixtures/format-2-6.json';
+import FORMAT_2_7 from './save-fixtures/format-2-7.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS } from './save-migrations';
@@ -168,5 +169,11 @@ describe('save migration 6 to 7', () => {
     expect(knocked.defeat?.gaveUp).toBe(false);
     expect(retreating.defeat?.gaveUp).toBe(false);
     expect(free).toEqual(FORMAT_2_6.vehicles[3]);
+  });
+});
+
+describe('save migration 7 to 8', () => {
+  it('keeps the saved salvage stock and every other field', () => {
+    expect(MIGRATIONS[7](FORMAT_2_7)).toEqual(FORMAT_2_7);
   });
 });
