@@ -9,6 +9,8 @@ import FORMAT_2_3 from './save-fixtures/format-2-3.json';
 import FORMAT_2_4 from './save-fixtures/format-2-4.json';
 import FORMAT_2_5 from './save-fixtures/format-2-5.json';
 import FORMAT_2_6 from './save-fixtures/format-2-6.json';
+import FORMAT_2_7 from './save-fixtures/format-2-7.json';
+import FORMAT_2_8 from './save-fixtures/format-2-8.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS } from './save-migrations';
@@ -168,5 +170,33 @@ describe('save migration 6 to 7', () => {
     expect(knocked.defeat?.gaveUp).toBe(false);
     expect(retreating.defeat?.gaveUp).toBe(false);
     expect(free).toEqual(FORMAT_2_6.vehicles[3]);
+  });
+});
+
+describe('save migration 7 to 8', () => {
+  const next = MIGRATIONS[7](FORMAT_2_7) as { salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
+
+  it('drops the Fallen Sun stock and its searched mark, and keeps every other stock', () => {
+    expect(next.salvage.map((stock) => stock.id)).toEqual(['wreck3']);
+    expect(next.player.scavenged).toEqual(['wreck3']);
+  });
+
+  it('ends a search of the old stock and keeps other searches', () => {
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[1]).toEqual(FORMAT_2_7.vehicles[1]);
+  });
+});
+
+describe('save migration 8 to 9', () => {
+  const next = MIGRATIONS[8](FORMAT_2_8) as { salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
+
+  it('drops the Old Orchard stock and its searched mark, and keeps every other stock', () => {
+    expect(next.salvage.map((stock) => stock.id)).toEqual(['wreck3']);
+    expect(next.player.scavenged).toEqual(['wreck3']);
+  });
+
+  it('ends a search of the old stock and keeps other searches', () => {
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[1]).toEqual(FORMAT_2_8.vehicles[1]);
   });
 });

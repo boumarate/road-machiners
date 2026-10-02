@@ -18,7 +18,8 @@ import { corePart, mountedParts } from './grid';
 import { addGoods, stowPart } from './inventory';
 import { generateNpcLoadout } from './npc-loadout';
 import { grantXp, isPerkId, pickedFromPair } from './progress';
-import { nearestPad, type Site } from './sites';
+import { isTerritory, nearestPad, type Site } from './sites';
+import { territoryEntries } from './territory';
 import { isFree, spawnAt } from './spawn';
 import { addState, settleStates, stateOf } from './states';
 import { isTowed } from './tow';
@@ -213,12 +214,15 @@ export function noclipMove(world: World, target: Vec): World {
   });
 }
 
-// Where a place's services work, nearest the truck: the pad of its nearest gate.
+// Where a place's services work, nearest the truck: the pad of its nearest gate, or a territory's nearest road end.
 export function placeSpot(world: World, id: string): Vec {
   const places: Site[] = [...REGION.towns, ...REGION.locations];
   const place = places.find((p) => p.id === id);
   if (!place) throw new CheatError(`Unknown place ${id}. Places: ${places.map((p) => p.id).join(', ')}`);
-  return { ...nearestPad(place, playerVehicle(world).pos) };
+  const from = playerVehicle(world).pos;
+  // A territory has no pads: its nearest road end is where its ground starts.
+  if (isTerritory(place)) return { ...territoryEntries(place).reduce((a, b) => (dist(from, a) <= dist(from, b) ? a : b)) };
+  return { ...nearestPad(place, from) };
 }
 
 export function skipToHour(world: World, hour: number): World {

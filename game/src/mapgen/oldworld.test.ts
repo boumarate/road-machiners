@@ -5,6 +5,8 @@ import { deckAlong } from '../sim/bridge';
 import { ROAD_INDEX } from '../sim/road-index';
 import { hashRandom } from '../sim/rng';
 import type { BakedProp } from '../sim/terrain';
+import { siteGap } from '../sim/sites';
+import { padReach } from '../test/sites';
 import { bearing, dist, polylineDist, segmentDist, type Vec } from '../sim/vec';
 import { newDraft, tileSteepness, type MapDraft } from './bake';
 import {
@@ -36,7 +38,7 @@ const SEED = 1337;
 function expectOffBuilt(p: BakedProp): void {
   const bridge = TERRAIN.features.bridge;
   expect(ROAD_INDEX.nearestWithin(p.pos.x, p.pos.y, Infinity)).toBeGreaterThanOrEqual(HALF + p.r);
-  for (const site of SITES) expect(dist(p.pos, site.pos)).toBeGreaterThan(site.radius + O.siteClearance + p.r);
+  for (const site of SITES) expect(siteGap(site, p.pos)).toBeGreaterThan(O.siteClearance + p.r);
   expect(segmentDist(p.pos, bridge.from, bridge.to)).toBeGreaterThanOrEqual(bridge.width / 2 + p.r);
 }
 
@@ -416,7 +418,7 @@ describe('old-world layer', () => {
       expect(ROAD_INDEX.nearestWithin(c.x, c.y, Infinity)).toBeGreaterThanOrEqual(HALF);
       expect(deckAlong(c.x, c.y)).toBeNull();
       // The far corners of a pad reach this far from the site center.
-      for (const site of SITES) expect(dist(c, site.pos)).toBeGreaterThan(Math.hypot(site.radius + REGION.sites.pad.length, REGION.sites.pad.width / 2));
+      for (const site of SITES) expect(siteGap(site, c)).toBeGreaterThan(padReach(site));
     }
     expect(d.built.every((b) => b === BUILT_NONE || b === BUILT_OLD_ROAD || b === BUILT_FIELD)).toBe(true);
   });

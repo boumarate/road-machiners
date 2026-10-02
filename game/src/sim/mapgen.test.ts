@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
+import { TERRITORIES } from '../data/territory';
 import { START_KITS } from '../data/start';
 import { PHYSICS } from '../data/physics';
 import { boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propPose, propReach, propShape, segmentCrossesBox } from './mapgen';
 import { ROAD_INDEX } from './road-index';
 import type { Obstacle } from './types';
-import { dist } from './vec';
+import { dist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
 import { PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
@@ -67,7 +68,7 @@ describe('baked map obstacles', () => {
 });
 
 describe('breakable props', () => {
-  it('only fences and junk piles break', () => {
+  it('only fences, junk piles and dead trees break', () => {
     const landmarks = mapObstacles(mapWith(PROP_KINDS.filter((k) => k !== 'rock').map((kind, i) => prop(kind, 10 + i * 10))));
     const others: Obstacle[] = [
       { id: 'rock0', pos: { x: 10, y: 50 }, r: 1, kind: 'rock' },
@@ -77,7 +78,7 @@ describe('breakable props', () => {
       { id: 'site-a', pos: { x: 10, y: 50 }, r: 1, kind: 'site' },
     ];
 
-    expect(landmarks.filter(isBreakable).map((o) => (o as Landmark).look).sort()).toEqual(['fence', 'junk']);
+    expect(landmarks.filter(isBreakable).map((o) => (o as Landmark).look).sort()).toEqual(['deadTree', 'fence', 'junk']);
     expect(others.filter(isBreakable)).toEqual([]);
   });
 });
@@ -99,7 +100,8 @@ describe('world from the baked map', () => {
   });
 
   it('keeps every baked landmark off every road surface and out of every site', () => {
-    const sites = [...REGION.towns, ...REGION.locations];
+    // A territory's own props stand inside it.
+    const sites = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
     const landmarks = baked.filter((o): o is Landmark => o.kind === 'landmark');
     expect(landmarks.length).toBeGreaterThan(0);
     for (const o of landmarks) {
@@ -111,11 +113,31 @@ describe('world from the baked map', () => {
 
   it('overlaps no baked prop with any other obstacle', () => {
     const all = world.obstacles.filter((o) => o.kind !== 'site');
-    // Fence segments of a line meet end to end. On a camp ring they meet at an angle, so their circles overlap a
-    // little, but the segments only touch. The map stores positions as float32, off by up to 6e-5 tiles at x = 600.
-    const ends = (o: Obstacle) => (o.kind === 'landmark' && o.look === 'fence' ? [1, -1].map((k) => ({ x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) })) : []);
+    // Fence segments of a line, and the segments of a territory farm's runs, meet end to end. On a camp ring they
+    // meet at an angle, so their circles overlap a little, but the segments only touch. The map stores positions as
+    // float32, off by up to 6e-5 tiles at x = 600.
+    const segmentLooks = new Set<string>(['fence', ...Object.values(TERRITORIES).flatMap((t) => t.farm?.runs.map((run) => run.look) ?? [])]);
+    const ends = (o: Obstacle) => (o.kind === 'landmark' && segmentLooks.has(o.look) ? [1, -1].map((k) => ({ x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) })) : []);
     const touching = (a: Obstacle, b: Obstacle) => ends(a).some((p) => ends(b).some((q) => dist(p, q) < 1e-4));
-    const overlaps = baked.flatMap((o) => all.filter((other) => other.id !== o.id && dist(o.pos, other.pos) < o.r + other.r - 1e-6 && !touching(o, other)).map((other) => `${o.id} ${other.id}`));
+    // A hull rib is an arch: only its two legs stand on the ground, r to each side along its yaw, and the model's leg
+    // reaches under a sixth of r each way. Other props stand under the arch between them.
+    const ground = (o: Obstacle): { pos: Vec; r: number }[] =>
+      o.kind === 'landmark' && o.look === 'hullRib' ? [1, -1].map((k) => ({ pos: { x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) }, r: o.r / 6 })) : [{ pos: o.pos, r: o.r }];
+    // A segment prop is a line r to each side of its centre, not a disc: it overlaps a disc that reaches its line, and
+    // another segment that its line crosses.
+    const line = (o: Obstacle): [Vec, Vec] | null => (ends(o).length === 2 ? (ends(o) as [Vec, Vec]) : null);
+    const crosses = ([a, b]: [Vec, Vec], [c, e]: [Vec, Vec]) => {
+      const side = (p: Vec, q: Vec, r: Vec) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+      return side(a, b, c) * side(a, b, e) < 0 && side(c, e, a) * side(c, e, b) < 0;
+    };
+    const overlap = (a: Obstacle, b: Obstacle) => {
+      const [la, lb] = [line(a), line(b)];
+      if (la && lb) return crosses(la, lb);
+      if (la) return ground(b).some((q) => segmentDist(q.pos, la[0], la[1]) < q.r - 1e-6);
+      if (lb) return ground(a).some((p) => segmentDist(p.pos, lb[0], lb[1]) < p.r - 1e-6);
+      return ground(a).some((p) => ground(b).some((q) => dist(p.pos, q.pos) < p.r + q.r - 1e-6));
+    };
+    const overlaps = baked.flatMap((o) => all.filter((other) => other.id !== o.id && overlap(o, other) && !touching(o, other)).map((other) => `${o.id} ${other.id}`));
     expect(overlaps).toEqual([]);
   });
 
@@ -175,6 +197,28 @@ describe('prop poses', () => {
     ];
 
     for (const [look, r, model, scale] of cases) expect(propPose(landmark(look, r)), look).toEqual({ model, pos: { x: 12, y: 34 }, yaw: 0.5, scale: even(scale) });
+  });
+
+  it('draws each orchard look with its own model, at full size at the radius it is built to', () => {
+    // Footprint radii in meters, from each model's tools/blender script.
+    const cases: [Landmark['look'], number, string][] = [
+      ['farmhouse', 16, 'farmhouse'],
+      ['barn', 14.7, 'barn'],
+      ['quonset', 12.9, 'quonset'],
+      ['bunker', 15.6, 'bunker'],
+      ['guardPost', 3.2, 'guard_post'],
+      ['armyTruck', 4.4, 'army_truck'],
+      ['barrier', 2, 'barrier'],
+      ['fence', 2, 'fence'],
+      ['drums', 1.75, 'drums'],
+      ['woodpile', 2.6, 'woodpile'],
+    ];
+
+    for (const [look, meters, model] of cases) {
+      const pose = propPose(landmark(look, meters / PHYSICS.metersPerTile));
+      expect({ ...pose, scale: undefined }, look).toEqual({ model, pos: { x: 12, y: 34 }, yaw: 0.5, scale: undefined });
+      for (const axis of ['x', 'y', 'z'] as const) expect(pose.scale[axis], `${look} ${axis}`).toBeCloseTo(1, 9);
+    }
   });
 
   it('turns a power pole a quarter turn off its line, so its crossbar lies across it', () => {
