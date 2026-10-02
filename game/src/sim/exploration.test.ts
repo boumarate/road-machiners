@@ -18,7 +18,8 @@ const original = [
 
 describe('Icarus exploration distances', () => {
   it('multiplies every pairwise destination distance by five', () => {
-    const sites = [...REGION.towns, ...REGION.locations];
+    // Broken Wing is newer than the five-fold scaling, so it has no original position.
+    const sites = [...REGION.towns, ...REGION.locations].filter((s) => s.id !== 'broken-wing');
     expect(sites).toHaveLength(original.length);
     for (let i = 0; i < sites.length; i++) for (let j = i + 1; j < sites.length; j++) {
       expect(dist(sites[i].pos, sites[j].pos)).toBeCloseTo(Math.hypot(original[i][0] - original[j][0], original[i][1] - original[j][1]) * 5);
