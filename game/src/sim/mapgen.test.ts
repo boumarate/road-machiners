@@ -261,6 +261,10 @@ describe('Broken Wing on the baked map', () => {
     }
   }
 
+  it('draws the ship section at its authored size, so the boxes keep their pass-under heights', () => {
+    expect(propPose(wing).scale).toEqual({ x: 1, y: 1, z: 1 });
+  });
+
   it('lies over the road: the wing covers road samples', () => {
     const under = samples.filter((p) => boxes.some((b) => boxDistance(b, p) === 0));
     expect(under.length).toBeGreaterThan(samples.length / 2);
