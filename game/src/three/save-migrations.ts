@@ -224,6 +224,9 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   // 7 to 8: Broken Wing joins the salvage sites of a new map. A save keeps the stock of the map it was made on, and
   // a save of another map does not load, so no stock needs adding. The step only marks the new shape.
   (world) => world,
+  // 8 to 9: the rebaked Broken Wing map stocks other salvage parts. A save keeps the stock of the map it was made on,
+  // and a save of another map does not load, so nothing needs adding. The step only marks the new shape.
+  (world) => world,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

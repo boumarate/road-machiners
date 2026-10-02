@@ -1,0 +1,14 @@
+{
+  "turn": 1000,
+  "salvage": [
+    {
+      "id": "fallen-sun",
+      "pos": { "x": 320, "y": 270 },
+      "radius": 44,
+      "fuel": 20,
+      "supplies": 5,
+      "goods": { "scrap": 12, "parts": 3 },
+      "parts": []
+    }
+  ]
+}
