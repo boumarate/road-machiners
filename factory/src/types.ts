@@ -137,7 +137,8 @@ export interface Telegram {
 
 // `dir` is the repo folder the agent works in, `game` or `factory`. The container starts it there.
 // `openNetwork` runs the container on the normal network with no proxy. Absent means the restricted network.
-export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean };
+// `mediaDir` is a host folder of reference images. The agent sees it read only at /work/.factory-media.
+export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string };
 
 export interface Container {
   // Runs Claude Code headless in the clone. Throws on a nonzero exit.
@@ -193,6 +194,7 @@ export type Ctx = {
   repo: HostRepo;
   statePath: string;
   now: () => Date;
+  fetch?: typeof fetch; // the host's HTTP client for reference images. Absent means the global one.
   log: (stage: Stage, issue: number | null, msg: string) => void;
 };
 
@@ -206,6 +208,8 @@ export const TASK_DIR = '.factory-tasks';
 export const TASK_FILE = (issue: number): string => `${TASK_DIR}/issue-${issue}.md`;
 export const WORK_DIR = (home: string, issue: number): string => `${home}/work/issue-${issue}`;
 export const OUT_DIR = '.factory';
+// Reference images mount here inside the clone. The folder never reaches a commit.
+export const MEDIA_DIR = '.factory-media';
 export const STUCK_LABEL = 'factory-stuck';
 export const WONT_DO_LABEL = 'wont-do';
 export const MAINTENANCE_LABEL = 'maintenance';

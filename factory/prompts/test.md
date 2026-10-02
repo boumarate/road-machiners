@@ -18,6 +18,24 @@ Commit the fixes on the current branch.
 
 This machine has no GPU and is slow. Keep checks focused.
 
+Reference images from the issue are listed at the end of this prompt.
+Read every available image with the Read tool.
+When the issue or the task file wants the result to look like an image, a gameplay test is not enough.
+Then run the visual comparison.
+Take a screenshot of the finished game from the view of the image.
+Put it next to the reference image in one file, `.factory/comparison.png`, and read that file with the Read tool.
+List every mismatch you see in plain words, like "the cab is half as tall as in the image" or "the roof color is brown, the image has green".
+Fix what does not match, rebuild, take the screenshot again and compare again.
+Do this up to three rounds, and commit each fix.
+Write the last comparison under "Visual comparison" in the Conclusion of {{taskFile}}.
+It lists what matches, each mismatch that remains and why you left it.
+The testing stage is not done until that section exists.
+An image marked NOT AVAILABLE was not seen.
+When the comparison depends on it, write that to `.factory/needs-committee.md` and stop.
+The skill `blender-image-to-3d` has a compare sheet script, `compose_review.py`, for model renders.
+Use it when the change is a Blender model.
+Its overlap number is a diagnostic only.
+
 Take a screenshot of the core feature.
 Write a Playwright script in `tmp/`.
 Launch Chromium without GPU flags.

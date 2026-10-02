@@ -22,6 +22,10 @@ Run all the checks yourself until they pass.
 Never run the playtest without `--cpu`.
 This machine has no GPU.
 
+Reference images from the issue are listed at the end of this prompt.
+If your fixes change what a player sees and the issue wants the result to look like an image, redo the visual comparison.
+Read the image, take a screenshot, compare, and update "Visual comparison" in the Conclusion of {{taskFile}}.
+
 Update `.factory/approval.json` and `.factory/screenshot.png` if your fixes change what a player sees.
 Commit on the current branch.
 Never push.
