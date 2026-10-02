@@ -27,7 +27,7 @@ if (one !== null) {
   const { soak, formatSoak } = await import('../src/test/stuck-soak.ts');
   const report = soak(Number(one), turns);
   writeFileSync(`tmp/stuck/seed-${one}.txt`, formatSoak([report]));
-  process.exit(report.stalls.length > 0 || report.error ? 1 : 0);
+  process.exit(report.stalls.length > 0 || report.dryMajority || report.error ? 1 : 0);
 }
 
 mkdirSync('tmp/stuck', { recursive: true });

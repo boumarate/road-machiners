@@ -22,13 +22,14 @@ export type SoakReport = {
   turns: number;
   stalls: string[];
   error: string | null;
+  dryMajority: string | null; // set when more than half the NPCs held an empty tank at once
   npcs: number;
   maxDry: number; // the most NPCs with an empty tank at once
   longestDryStreak: DryStreak; // the longest run of turns one NPC held an empty tank
 };
 
-const emptyReport = (seed: number, turns: number, stalls: string[], error: string | null): SoakReport => ({
-  seed, turns, stalls, error, npcs: 0, maxDry: 0, longestDryStreak: { vehicle: '-', turns: 0 },
+const emptyReport = (seed: number, turns: number, stalls: string[], error: string | null, dryMajority: string | null = null): SoakReport => ({
+  seed, turns, stalls, error, dryMajority, npcs: 0, maxDry: 0, longestDryStreak: { vehicle: '-', turns: 0 },
 });
 
 // The player stays parked at its start town in god mode, so the world plays on around it.
@@ -40,7 +41,7 @@ export function soak(seed: number, turns: number): SoakReport {
   let longest: DryStreak = { vehicle: '-', turns: 0 };
   let maxDry = 0;
   let npcs = 0;
-  let majority = false;
+  let dryMajority: string | null = null;
   let played = 0;
   try {
     for (; played < turns; played++) {
@@ -59,15 +60,14 @@ export function soak(seed: number, turns: number): SoakReport {
         dry.set(v.id, turnsDry);
         if (turnsDry > longest.turns) longest = { vehicle: v.id, turns: turnsDry };
       }
-      if (dryNow.length * 2 > drivers.length && !majority) {
-        majority = true;
-        stalls.push(`turn ${w.turn}: ${dryNow.length} of ${drivers.length} NPCs are dry at once, a majority`);
+      if (dryNow.length * 2 > drivers.length && !dryMajority) {
+        dryMajority = `turn ${w.turn}: ${dryNow.length} of ${drivers.length} NPCs are dry at once, a majority`;
       }
     }
   } catch (err) {
-    return emptyReport(seed, played, stalls, err instanceof Error ? (err.stack ?? err.message) : String(err));
+    return emptyReport(seed, played, stalls, err instanceof Error ? (err.stack ?? err.message) : String(err), dryMajority);
   }
-  return { ...emptyReport(seed, played, stalls, null), npcs, maxDry, longestDryStreak: longest };
+  return { ...emptyReport(seed, played, stalls, null, dryMajority), npcs, maxDry, longestDryStreak: longest };
 }
 
 function moveAllFar(w: World): void {
@@ -112,6 +112,6 @@ function vehicleLine(w: World, v: Vehicle): string {
 export function formatSoak(reports: SoakReport[]): string {
   return reports.map((r) => {
     const head = `seed ${r.seed}: ${r.turns} turns, ${r.stalls.length} stalls, ${r.npcs} NPCs, most dry at once ${r.maxDry}, longest dry streak ${r.longestDryStreak.turns} turns (${r.longestDryStreak.vehicle})${r.error ? ', ERROR' : ''}`;
-    return [head, ...r.stalls, ...(r.error ? [r.error] : [])].join('\n');
+    return [head, ...r.stalls, ...(r.dryMajority ? [`DRY MAJORITY ${r.dryMajority}`] : []), ...(r.error ? [r.error] : [])].join('\n');
   }).join('\n\n');
 }
