@@ -1,0 +1,338 @@
+{
+  "cell": {
+    "items": 128,
+    "chassis": 192
+  },
+  "cols": {
+    "items": 16,
+    "chassis": 8
+  },
+  "views": {
+    "items": "diagonal",
+    "chassis": "top"
+  },
+  "items": {
+    "mg": {
+      "index": 0,
+      "hash": "c9169ac5"
+    },
+    "shotgun": {
+      "index": 1,
+      "hash": "0ed8a410"
+    },
+    "longRifle": {
+      "index": 2,
+      "hash": "e53bf1f9"
+    },
+    "flamer": {
+      "index": 3,
+      "hash": "4d8ae830"
+    },
+    "pneumobolter": {
+      "index": 4,
+      "hash": "cf3418a2"
+    },
+    "slugCannon": {
+      "index": 5,
+      "hash": "9f8e7f46"
+    },
+    "heavyMg": {
+      "index": 6,
+      "hash": "302bdd2b"
+    },
+    "cannon": {
+      "index": 7,
+      "hash": "efab2f08"
+    },
+    "amRifle": {
+      "index": 8,
+      "hash": "f7e6ce20"
+    },
+    "autocannon": {
+      "index": 9,
+      "hash": "50c0c32d"
+    },
+    "recoilless": {
+      "index": 10,
+      "hash": "639f255c"
+    },
+    "battleRifle": {
+      "index": 11,
+      "hash": "7e118f56"
+    },
+    "gatling": {
+      "index": 12,
+      "hash": "609da26e"
+    },
+    "rocketRack": {
+      "index": 13,
+      "hash": "5fb293d9"
+    },
+    "sniperCannon": {
+      "index": 14,
+      "hash": "00be00cd"
+    },
+    "grenadeLauncher": {
+      "index": 15,
+      "hash": "8f06d1c2"
+    },
+    "tankGun": {
+      "index": 16,
+      "hash": "dc48f04b"
+    },
+    "flechette": {
+      "index": 17,
+      "hash": "def0b272"
+    },
+    "stockEngine": {
+      "index": 18,
+      "hash": "79008a59"
+    },
+    "tunedEngine": {
+      "index": 19,
+      "hash": "a6980eb5"
+    },
+    "flatFour": {
+      "index": 20,
+      "hash": "2fda2167"
+    },
+    "workhorseDiesel": {
+      "index": 21,
+      "hash": "3bb429a9"
+    },
+    "racingV6": {
+      "index": 22,
+      "hash": "a13d8a32"
+    },
+    "heavyDiesel": {
+      "index": 23,
+      "hash": "b8fd22f2"
+    },
+    "turbine": {
+      "index": 24,
+      "hash": "eea2cf0f"
+    },
+    "plates": {
+      "index": 25,
+      "hash": "c532bd8f"
+    },
+    "cage": {
+      "index": 26,
+      "hash": "dbf31f13"
+    },
+    "ram": {
+      "index": 27,
+      "hash": "3761b350"
+    },
+    "scrapPanels": {
+      "index": 28,
+      "hash": "e19419c3"
+    },
+    "ceramicPlates": {
+      "index": 29,
+      "hash": "57bb26bf"
+    },
+    "spacedArmor": {
+      "index": 30,
+      "hash": "b372a98e"
+    },
+    "reinforcedCage": {
+      "index": 31,
+      "hash": "7a364dba"
+    },
+    "plowRam": {
+      "index": 32,
+      "hash": "7608860a"
+    },
+    "steelPlate": {
+      "index": 33,
+      "hash": "dde82281"
+    },
+    "scrapSheet": {
+      "index": 34,
+      "hash": "dfc07633"
+    },
+    "ceramicTile": {
+      "index": 35,
+      "hash": "6d26bc14"
+    },
+    "rack": {
+      "index": 36,
+      "hash": "acd8a432"
+    },
+    "trailerBox": {
+      "index": 37,
+      "hash": "c274ba76"
+    },
+    "panniers": {
+      "index": 38,
+      "hash": "608eeb15"
+    },
+    "flatbed": {
+      "index": 39,
+      "hash": "8f5cc695"
+    },
+    "lightFrame": {
+      "index": 40,
+      "hash": "1efab764"
+    },
+    "enclosedFrame": {
+      "index": 41,
+      "hash": "32303826"
+    },
+    "heavyFrame": {
+      "index": 42,
+      "hash": "7c08017c"
+    },
+    "jerrycans": {
+      "index": 43,
+      "hash": "6b00cc1a"
+    },
+    "supplyLocker": {
+      "index": 44,
+      "hash": "ceaeaf98"
+    },
+    "transmission": {
+      "index": 45,
+      "hash": "74cebd94"
+    },
+    "transmissionMid": {
+      "index": 46,
+      "hash": "f28276df"
+    },
+    "transmissionHeavy": {
+      "index": 47,
+      "hash": "682a7ae2"
+    },
+    "wheel": {
+      "index": 48,
+      "hash": "59740737"
+    },
+    "wheelMid": {
+      "index": 49,
+      "hash": "da022e7c"
+    },
+    "wheelHeavy": {
+      "index": 50,
+      "hash": "d4ee57b9"
+    },
+    "tank": {
+      "index": 51,
+      "hash": "5fb6eafd"
+    },
+    "tankLong": {
+      "index": 52,
+      "hash": "10e6d99e"
+    },
+    "tankMid": {
+      "index": 53,
+      "hash": "bf656f0b"
+    },
+    "tankHeavy": {
+      "index": 54,
+      "hash": "ad16109c"
+    },
+    "scanner": {
+      "index": 55,
+      "hash": "6b2e8a61"
+    },
+    "scrap": {
+      "index": 56,
+      "hash": "e1bd19c6"
+    },
+    "salt": {
+      "index": 57,
+      "hash": "34a13cb5"
+    },
+    "meds": {
+      "index": 58,
+      "hash": "76d99592"
+    },
+    "grain": {
+      "index": 59,
+      "hash": "e8b6e884"
+    },
+    "textiles": {
+      "index": 60,
+      "hash": "5120a22e"
+    },
+    "tools": {
+      "index": 61,
+      "hash": "a2da8eba"
+    },
+    "batteries": {
+      "index": 62,
+      "hash": "bb670ce4"
+    },
+    "electronics": {
+      "index": 63,
+      "hash": "c20f48b6"
+    },
+    "parts": {
+      "index": 64,
+      "hash": "36286d63"
+    },
+    "fuelDrums": {
+      "index": 65,
+      "hash": "f09ee4d5"
+    },
+    "water": {
+      "index": 66,
+      "hash": "16c9647c"
+    }
+  },
+  "chassis": {
+    "scout": {
+      "index": 0,
+      "hash": "6b2a58fc"
+    },
+    "hauler": {
+      "index": 1,
+      "hash": "0ad908ab"
+    },
+    "buggy": {
+      "index": 2,
+      "hash": "a92b270b"
+    },
+    "wagon": {
+      "index": 3,
+      "hash": "2923ac81"
+    },
+    "courier": {
+      "index": 4,
+      "hash": "e0212ac6"
+    },
+    "van": {
+      "index": 5,
+      "hash": "d07f36ad"
+    },
+    "longbed": {
+      "index": 6,
+      "hash": "bc2905bb"
+    },
+    "carrier": {
+      "index": 7,
+      "hash": "0255d023"
+    },
+    "tractor": {
+      "index": 8,
+      "hash": "91c4b0d2"
+    },
+    "jeep": {
+      "index": 9,
+      "hash": "d2499fe9"
+    },
+    "convertible": {
+      "index": 10,
+      "hash": "6b23751f"
+    },
+    "bus": {
+      "index": 11,
+      "hash": "6d5da7c7"
+    },
+    "loader": {
+      "index": 12,
+      "hash": "34fb4a1e"
+    }
+  }
+}
