@@ -1,8 +1,22 @@
 import { describe, expect, it } from 'vitest';
+import { GOODS } from '../data/goods';
 import { REGION } from '../data/region';
+import { SALVAGE, type LootTable } from '../data/salvage';
 import { TERRITORIES } from '../data/territory';
 import { hazardZones, isLootSpot, territoryAt, territoryEntries } from './territory';
 import { dist } from './vec';
+
+const mid = ([lo, hi]: [number, number]): number => (lo + hi) / 2;
+
+// Expected money value of one stock from a table's midpoints. Spare parts and supplies are left out of both sides.
+function tableValue(t: LootTable): number {
+  const goods = Object.entries(t.goods).reduce((sum, [id, range]) => sum + mid(range) * GOODS[id].value, 0);
+  return goods + mid(t.parts) * GOODS.parts.value + mid(t.fuel) * GOODS.fuelDrums.value;
+}
+
+function territoryValue(id: string): number {
+  return TERRITORIES[id].spots.reduce((sum, s) => sum + s.count * tableValue(SALVAGE[s.table]), 0);
+}
 
 const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
 
@@ -27,5 +41,9 @@ describe('territory queries', () => {
     expect(isLootSpot(spot)).toBe(true);
     expect(isLootSpot({ ...spot, pos: { x: 1, y: 1 } })).toBe(false);
     expect(isLootSpot({ ...spot, look: 'carWreck' })).toBe(false);
+  });
+
+  it('holds no more expected loot in the orchard than in the Fallen Sun', () => {
+    expect(territoryValue('orchard')).toBeLessThanOrEqual(territoryValue('fallen-sun'));
   });
 });
