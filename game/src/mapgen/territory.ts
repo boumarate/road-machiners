@@ -1,10 +1,10 @@
 // Territory layer: hull decks, ribs, deck bays, walls, the reactor, field spots and debris inside each territory,
 // placed by the rules in TERRITORIES. It runs after the new-world layer, so ground rules read these props and the
-// stamped deck heights. Decks, ribs, bays and walls are authored; field spots and debris are drawn along the crash
-// line from the map seed and the territory's own seed offset, on open ground off the decks and roads.
+// stamped deck heights. Decks, ribs, bays and walls are authored; field spots and debris are drawn along the spine
+// from the map seed and the territory's own seed offset, on open ground off the decks and roads.
 
 import { REGION, type TerritoryDef } from '../data/region';
-import { TERRITORIES, type TerritoryRules } from '../data/territory';
+import { TERRITORIES, type HullRules, type TerritoryRules } from '../data/territory';
 import { TERRAIN } from '../data/terrain';
 import { ROAD_INDEX } from '../sim/road-index';
 import { randRange, type Rng } from '../sim/rng';
@@ -22,7 +22,10 @@ const DEBRIS_BAND: [number, number] = [0, 1.5]; // debris spills half a band pas
 const DECK_EDGE = 1; // tiles beside a deck where its side drops to the floor; drawn props keep clear of it
 
 export function territoryLayer(seed: number, d: MapDraft): MapDraft {
-  REGION.locations.filter(isTerritory).forEach((t, k) => fill(d, t, TERRITORIES[t.id], ruleRng(seed, TERRITORY_SEED_OFFSET + k)));
+  for (const t of REGION.locations.filter(isTerritory)) {
+    const rules = TERRITORIES[t.id];
+    fill(d, t, rules, ruleRng(seed, TERRITORY_SEED_OFFSET + rules.seed));
+  }
   return d;
 }
 
@@ -30,12 +33,9 @@ type Ground = { d: MapDraft; t: TerritoryDef; rules: TerritoryRules; rng: Rng; f
 
 function fill(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, rng: Rng): void {
   const decks = hullDecks().filter((deck) => deck.territory === t.id);
-  stampDecks(d, decks);
+  if (rules.hull) stampDecks(d, decks);
   if (rules.reactor) d.props.push(prop(rules.reactor.look, { ...t.pos }, rules.reactor.radius, 0));
-  for (const deck of decks) for (const rib of ribPoses(deck)) d.props.push(prop('hullRib', rib.pos, rib.r, rib.yaw));
-  const bays = decks.flatMap((deck) => bayPoints(deck).map((p) => prop(DECK_BAY, p, rules.bayRadius, deck.section.yaw)));
-  d.props.push(...bays);
-  for (const wall of rules.walls) d.props.push(prop('hullWall', { x: t.pos.x + wall.at.x, y: t.pos.y + wall.at.y }, wall.length / 2, wall.yaw));
+  const bays = rules.hull ? placeHull(d, t, rules.hull, decks) : [];
   const hazard = rules.hazard ? rules.hazard.radius + REACTOR_MARGIN : 0;
   // Inside the territory, outside the hazard and off every deck and its dropping edge.
   const free = (pos: Vec, r: number): boolean => {
@@ -44,6 +44,15 @@ function fill(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, rng: Rng): vo
   };
   const g: Ground = { d, t, rules, rng, free };
   placeDebris(g, placeSpots(g, bays));
+}
+
+// Ribs over the decks, a loot spot in each bay and the walls. Returns the bays.
+function placeHull(d: MapDraft, t: TerritoryDef, hull: HullRules, decks: readonly HullDeck[]): BakedProp[] {
+  for (const deck of decks) for (const rib of ribPoses(deck)) d.props.push(prop('hullRib', rib.pos, rib.r, rib.yaw));
+  const bays = decks.flatMap((deck) => bayPoints(deck).map((p) => prop(DECK_BAY, p, hull.bayRadius, deck.section.yaw)));
+  d.props.push(...bays);
+  for (const wall of hull.walls) d.props.push(prop('hullWall', { x: t.pos.x + wall.at.x, y: t.pos.y + wall.at.y }, wall.length / 2, wall.yaw));
+  return bays;
 }
 
 // Each deck's corners rise to its plane over the ground at its low end, wherever the ground lies lower, and its
@@ -111,11 +120,11 @@ function draw(g: Ground, look: BakedProp['kind'], pick: () => Vec, radius: [numb
   throw new Error(`Territory ${g.t.id} has no room for a ${look}`);
 }
 
-// A point along the crash line, to either side of it between shares of the band.
+// A point along the spine, to either side of it between shares of the band.
 function bandPoint({ t, rules, rng }: Ground, band: [number, number]): Vec {
-  const { from, to } = rules.crashLine;
+  const { from, to } = rules.spine;
   const share = randRange(rng, 0, 1);
-  const off = rules.crashLine.band * randRange(rng, band[0], band[1]) * (randRange(rng, 0, 1) < 0.5 ? -1 : 1);
+  const off = rules.spine.band * randRange(rng, band[0], band[1]) * (randRange(rng, 0, 1) < 0.5 ? -1 : 1);
   const length = dist(from, to);
   return {
     x: t.pos.x + from.x + (to.x - from.x) * share - ((to.y - from.y) / length) * off,

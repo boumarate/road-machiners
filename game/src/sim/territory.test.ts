@@ -65,7 +65,7 @@ describe('territory queries', () => {
 
   it('rolls a deck bay from the bay table and a field spot from its rule', () => {
     const bay = { id: 'deckBay-1', pos: fallenSun.pos, r: 1, kind: 'landmark', look: 'deckBay', yaw: 0 } as const;
-    expect(spotTable(bay)).toBe(SALVAGE[TERRITORIES['fallen-sun'].bayTable]);
+    expect(spotTable(bay)).toBe(SALVAGE[TERRITORIES['fallen-sun'].hull!.bayTable]);
     expect(spotTable({ ...bay, look: 'shipCache' })).toBe(SALVAGE.hullScrap);
     expect(() => spotTable({ ...bay, pos: { x: 1, y: 1 } })).toThrow(/not a loot spot/);
   });
@@ -75,7 +75,7 @@ describe('hull decks', () => {
   const decks = hullDecks();
 
   it('builds one deck per hull section', () => {
-    expect(decks.map((d) => d.section.id)).toEqual(TERRITORIES['fallen-sun'].sections.map((s) => s.id));
+    expect(decks.map((d) => d.section.id)).toEqual(TERRITORIES['fallen-sun'].hull!.sections.map((s) => s.id));
     for (const deck of decks) expect(deck.territory).toBe('fallen-sun');
   });
 

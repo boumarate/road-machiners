@@ -17,9 +17,10 @@ import { territoryLayer } from './territory';
 
 const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
 const rules = TERRITORIES['fallen-sun'];
+const hull = rules.hull!;
 const decks = hullDecks().filter((d) => d.territory === 'fallen-sun');
 const inside = TEST_MAP.props.filter((p) => dist(p.pos, fallenSun.pos) < fallenSun.radius);
-const bayCount = rules.sections.reduce((n, s) => n + s.bays.length, 0);
+const bayCount = hull.sections.reduce((n, s) => n + s.bays.length, 0);
 const fieldCount = rules.spots.reduce((n, s) => n + s.count, 0);
 
 // A draft over the whole region with rolling ground, so decks meet ground both below and above their plane.
@@ -56,6 +57,22 @@ describe('the territory layer', () => {
     expect(a.props).not.toEqual(territoryLayer(8, rollingDraft()).props);
   });
 
+  it('bakes the Fallen Sun as it would alone', () => {
+    const alone = REGION.locations.filter((l) => l.kind !== 'territory' || l.id === 'fallen-sun');
+    const all = REGION.locations.splice(0, REGION.locations.length, ...alone);
+    let solo: MapDraft;
+    try {
+      solo = territoryLayer(7, rollingDraft());
+    } finally {
+      REGION.locations.splice(0, REGION.locations.length, ...all);
+    }
+    const full = territoryLayer(7, rollingDraft());
+    const ofSun = (props: readonly BakedProp[]) => props.filter((p) => dist(p.pos, fallenSun.pos) < fallenSun.radius);
+    expect(ofSun(full.props).length).toBeGreaterThan(0);
+    expect(ofSun(full.props)).toEqual(ofSun(solo.props));
+    expect(full.heights).toEqual(solo.heights);
+  });
+
   it('raises every corner on a deck to the higher of the ground and the deck plane, and leaves the rest alone', () => {
     const before = rollingDraft();
     const ground = terrainOf(before.size, before.heights);
@@ -86,7 +103,7 @@ describe('the territory layer', () => {
     for (const rule of [...rules.spots, ...rules.debris]) {
       expect(inside.filter((p) => p.kind === rule.look).length, rule.look).toBeGreaterThanOrEqual(rule.count);
     }
-    expect(inside.filter((p) => p.kind === 'hullWall')).toHaveLength(rules.walls.length);
+    expect(inside.filter((p) => p.kind === 'hullWall')).toHaveLength(hull.walls.length);
     expect(inside.filter((p) => p.kind === 'deckBay')).toHaveLength(bayCount);
     expect(inside.filter((p) => p.kind === rules.reactor!.look)).toHaveLength(1);
   });

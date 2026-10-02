@@ -4,7 +4,7 @@
 
 import { REGION, type TerritoryDef } from '../data/region';
 import { SALVAGE, type LootTable } from '../data/salvage';
-import { TERRITORIES, type Hazard, type HullSection, type SpotTable } from '../data/territory';
+import { TERRITORIES, type Hazard, type HullRules, type HullSection, type SpotTable, type TerritoryRules } from '../data/territory';
 import { edgeCrossings, isTerritory } from './sites';
 import { randInt } from './rng';
 import type { PropKind } from './terrain';
@@ -13,7 +13,7 @@ import { dist, lerp, type Vec } from './vec';
 
 export { isTerritory };
 
-const GROUND_POINTS = 8; // hunting grounds beside a territory's crash line, half on each side
+const GROUND_POINTS = 8; // hunting grounds beside a territory's spine, half on each side
 
 export type HazardZone = Hazard & { id: string; pos: Vec };
 
@@ -23,19 +23,27 @@ export function territoryAt(pos: Vec): TerritoryDef | null {
   return TERRITORY_DEFS.find((t) => dist(pos, t.pos) < t.radius) ?? null;
 }
 
-// The prop kind of a loot spot in a deck bay. Field spots take their kinds from TERRITORIES spot rules.
+// The prop kind of a loot spot in a deck bay. Field spots and farm buildings take their kinds from TERRITORIES.
 export const DECK_BAY: PropKind = 'deckBay';
 
 // The SALVAGE table a prop of this kind at pos rolls as a loot spot of its territory, or null when it is none.
 function spotTableAt(kind: string, pos: Vec): SpotTable | null {
   const t = territoryAt(pos);
-  if (!t) return null;
-  const rules = TERRITORIES[t.id];
-  if (kind === DECK_BAY && rules.sections.some((s) => s.bays.length > 0)) return rules.bayTable;
-  return rules.spots.find((s) => s.look === kind)?.table ?? null;
+  return t ? tableOfKind(TERRITORIES[t.id], kind) : null;
 }
 
-// A baked prop of a spot kind inside the territory that makes that kind a spot: a deck bay or a field spot.
+function tableOfKind(rules: TerritoryRules, kind: string): SpotTable | null {
+  if (kind === DECK_BAY) return bayTableOf(rules.hull);
+  const spots: readonly { look: PropKind; table: SpotTable }[] = [...(rules.farm ? rules.farm.buildings : []), ...rules.spots];
+  return spots.find((s) => s.look === kind)?.table ?? null;
+}
+
+function bayTableOf(hull: HullRules | null): SpotTable | null {
+  return hull && hull.sections.some((s) => s.bays.length > 0) ? hull.bayTable : null;
+}
+
+// A baked prop of a spot kind inside the territory that makes that kind a spot: a deck bay, a farm building or a
+// field spot.
 export function isLootSpot(o: Obstacle): boolean {
   return o.kind === 'landmark' && spotTableAt(o.look, o.pos) !== null;
 }
@@ -63,11 +71,11 @@ export function territoryEntries(t: TerritoryDef): Vec[] {
 }
 
 // Open points inside a territory where raiders and vultures wait for scavengers: its entries, and points spread
-// along both sides of its crash line, through the band of its outermost field spots. They lie clear of the hazard.
+// along both sides of its spine, through the band of its outermost field spots. They lie clear of the hazard.
 export function territoryGrounds(t: TerritoryDef): Vec[] {
   const rules = TERRITORIES[t.id];
   const [lo, hi] = rules.spots.reduce((a, b) => (b.band[1] > a.band[1] ? b : a)).band;
-  const { from, to, band } = rules.crashLine;
+  const { from, to, band } = rules.spine;
   const off = (band * (lo + hi)) / 2;
   const length = dist(from, to);
   const across = { x: -(to.y - from.y) / length, y: (to.x - from.x) / length };
@@ -104,7 +112,8 @@ function buildDeck(t: TerritoryDef, section: HullSection): HullDeck {
   return { section, territory: t.id, corners: [at(-a, l), at(a, l), at(a, -l), at(-a, -l)], low: at(-a, 0), high: at(a, 0) };
 }
 
-const HULL_DECKS: readonly HullDeck[] = TERRITORY_DEFS.flatMap((t) => TERRITORIES[t.id].sections.map((s) => buildDeck(t, s)));
+// A territory without a hull has no decks.
+const HULL_DECKS: readonly HullDeck[] = TERRITORY_DEFS.flatMap((t) => (TERRITORIES[t.id].hull?.sections ?? []).map((s) => buildDeck(t, s)));
 
 export function hullDecks(): readonly HullDeck[] {
   return HULL_DECKS;
@@ -139,7 +148,9 @@ export function deckPlane(deck: HullDeck, lowGround: number, along: number): num
 export function ribPoses(deck: HullDeck): RibPose[] {
   const step = deck.section.ribStep;
   if (step === null) return [];
-  const r = deck.section.width / 2 - TERRITORIES[deck.territory].ribInset;
+  const hull = TERRITORIES[deck.territory].hull;
+  if (!hull) throw new Error(`Territory ${deck.territory} has a deck but no hull`);
+  const r = deck.section.width / 2 - hull.ribInset;
   const count = Math.floor((deck.section.length - step / 2) / step);
   return Array.from({ length: count }, (_, i) => {
     const share = ((i + 1) * step) / deck.section.length;
