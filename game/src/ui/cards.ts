@@ -424,7 +424,7 @@ function armorStats(part: PartInstance): Stat[] {
 }
 
 const FIELD_REPAIR: Record<FieldRepair, { rank: number; text: string; label: string }> = {
-  none: { rank: 0, text: "town", label: "Repair: town only" },
+  none: { rank: 0, text: "shop", label: "Repair: shop only" },
   capped: { rank: 1, text: "cap", label: "Field repair: partial" },
   full: { rank: 2, text: "full", label: "Field repair: full" },
 };

@@ -1,5 +1,5 @@
-// Paid services. Goods and part trade happen at any shop (src/sim/market.ts owns shop state). Supplies,
-// repairs, mounting and chassis need a town. Raider camps service raiders.
+// Paid services. Goods and part trade happen at any shop (src/sim/market.ts owns shop state). Supplies and
+// repairs are sold at any shop. Mounting, rebuilds, storage and chassis need a town. Raider camps service raiders.
 // Invalid requests throw: the UI only offers valid ones.
 
 import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
@@ -20,7 +20,7 @@ import { inTowReach } from "./tow";
 import { addCoreParts } from "./factory";
 import { practice, skillEffect, vehicleHasPerk } from "./progress";
 import { addStockPart, goodPrice, lotPrice, recordTrade, shopAt, shopState, siteOf, takeStockPart } from "./market";
-import { canUseSite, requireTown, townNear } from "./sites";
+import { canUseSite, requireTown, townAt, townNear } from "./sites";
 import { corePart, coreParts, freeCells, goodsCount, mountedParts } from "./grid";
 import { addGoods, cargoRoom, mountPart, removeGoods, spareParts, stowPart } from "./inventory";
 import type { NpcState, PartInstance, Vehicle, World } from "./types";
@@ -232,7 +232,7 @@ export function cargoSaleValue(world: World, vehicle: Vehicle, buyerId: string):
   }, 0);
 }
 
-// A roadside stall buys an NPC's cargo that it trades and sells the fuel or supplies it stocks. It does no repairs.
+// A roadside stall buys an NPC's cargo that it trades, then fuels, resupplies and repairs it like a town garage. Raiders use camps only.
 export function serviceAtStall(
   world: World,
   vehicle: Vehicle,
@@ -240,8 +240,9 @@ export function serviceAtStall(
   retainedParts: number,
 ): void {
   if (shopDef(shopId).kind !== "stall") throw new Error(`${shopId} is no stall`);
+  if (vehicle.faction === "raiders") throw new Error("Only non-raiders use stall services");
   sellVehicleCargo(world, vehicle, shopId, retainedParts);
-  topUp(world, vehicle, shopDef(shopId).supplies);
+  refuelAndRepair(world, vehicle);
 }
 
 // A driver in debt buys nothing.
@@ -457,7 +458,7 @@ export function partRepairCost(world: World, part: PartInstance): number {
 
 export function repairPart(world: World, partId: string): World {
   return playerCommand(world, (w) => {
-    requireTown(w);
+    requireShop(w);
     const part = allParts(playerVehicle(w)).find((p) => p.id === partId);
     if (!part) throw new Error(`No truck part ${partId}`);
     pay(w, partRepairCost(w, part), "repairs");
@@ -465,9 +466,9 @@ export function repairPart(world: World, partId: string): World {
   });
 }
 
-// The Rebuild perk lets the town garage rebuild a player's junk part once.
+// The Rebuild perk lets a town garage rebuild a player's junk part once.
 export function canRebuild(world: World, part: PartInstance): boolean {
-  return isJunk(part) && !part.rebuilt && vehicleHasPerk(world, playerVehicle(world), "rebuild");
+  return townAt(world) !== null && isJunk(part) && !part.rebuilt && vehicleHasPerk(world, playerVehicle(world), "rebuild");
 }
 
 // Full HP for a repairable part, or a rebuild for junk. partRepairCost already refused junk that cannot be rebuilt.
@@ -478,7 +479,7 @@ function garageRepair(part: PartInstance): void {
 
 function repairParts(world: World, pick: (w: World, v: Vehicle) => PartInstance[]): World {
   return playerCommand(world, (w) => {
-    requireTown(w);
+    requireShop(w);
     const parts = pick(w, playerVehicle(w));
     pay(w, costOf(w, parts), "repairs");
     for (const p of parts) garageRepair(p);

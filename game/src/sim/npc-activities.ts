@@ -19,7 +19,7 @@ import { route } from './path';
 import {
   tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot,
+  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -166,7 +166,7 @@ function pointsAway(from: Vec, to: Vec, threat: Vec): boolean {
 // ---- Goal builders.
 
 // Why an NPC needs service, whether low supplies are its only need, and whether it needs repairs.
-type ServiceNeed = { reason: string; suppliesOnly: boolean; damaged: boolean };
+type ServiceNeed = { reason: string; suppliesOnly: boolean };
 
 // A truck with no engine or a junk one stays stranded for good. No patch fixes it, only a refit. See serveStranded.
 function isStrandedForGood(vehicle: Vehicle): boolean {
@@ -191,16 +191,16 @@ function servingSiteIds(profile: NpcProfile): string[] {
   return profile.bases.length > 0 ? profile.bases : REGION.towns.map((t) => t.id);
 }
 
-// Where a driver buys fuel. A raider fuels at its camps, any other driver in its towns or at a stall that sells fuel. A broke driver
+// Where a driver buys fuel. A raider fuels at its camps, any other driver in its towns or at a service stall. A broke driver
 // counts only the sites that serve it, since a stall gives it nothing.
 function pumpsOf(vehicle: Vehicle, profile: NpcProfile, broke: boolean): string[] {
   if (broke) return servingSiteIds(profile);
   if (profile.bases.length > 0) return profile.bases;
   if (profile.towns.length === 0) throw new Error(`${vehicle.id} knows no pump`);
-  return [...profile.towns, ...FUEL_STALLS];
+  return [...profile.towns, ...SERVICE_STALLS];
 }
 
-const FUEL_STALLS: readonly string[] = Object.values(SHOPS).filter((s) => s.kind === 'stall' && s.supplies.includes('fuel')).map((s) => s.id);
+const SERVICE_STALLS: readonly string[] = Object.values(SHOPS).filter((s) => s.kind === 'stall').map((s) => s.id);
 
 // The fuel a driver thinks the way to its nearest pump takes: the straight line at the heat where it stands.
 function fuelToPump(world: World, vehicle: Vehicle, profile: NpcProfile): number {
@@ -228,7 +228,7 @@ function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): Servi
   const lowSupplies = resources.supplies <= suppliesCap(vehicle) * NPC_UPKEEP.lowSupplies;
   const damaged = isDamaged(vehicle);
   if (!lowFuel && !lowSupplies && !damaged) return null;
-  return { reason: serviceReason(lowFuel, lowSupplies), suppliesOnly: lowSupplies && !lowFuel && !damaged, damaged };
+  return { reason: serviceReason(lowFuel, lowSupplies), suppliesOnly: lowSupplies && !lowFuel && !damaged };
 }
 
 function isBroke(world: World, vehicle: Vehicle): boolean {
@@ -253,15 +253,15 @@ function brokeServiceGoal(world: World, vehicle: Vehicle, profile: NpcProfile, n
 }
 
 function serviceTrip(world: World, vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): NpcActivity {
-  const stop = chooseNearestSite(vehicle, serviceStops(world, vehicle, profile, need));
+  const stop = chooseNearestSite(vehicle, serviceStops(world, vehicle, profile));
   if (!stop) throw new Error(`${vehicle.id} knows no service stop`);
   return createSiteActivity('resupply', stop.id, need.reason);
 }
 
-// A raider is served at its camps. For anyone else only a town repairs, and fuel alone also comes from a fuel stall.
-function serviceStops(world: World, vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): string[] {
+// A raider is served at its camps. Anyone else is fuelled and repaired in a town or at a stall, a broke driver only in a town.
+function serviceStops(world: World, vehicle: Vehicle, profile: NpcProfile): string[] {
   if (profile.bases.length > 0) return profile.bases;
-  return need.damaged ? profile.towns : pumpsOf(vehicle, profile, isBroke(world, vehicle));
+  return pumpsOf(vehicle, profile, isBroke(world, vehicle));
 }
 
 // The market that pays most for the carried cargo, of the driver's markets. Nearest wins a tie.
@@ -371,11 +371,30 @@ function heldTow(world: World, vehicle: Vehicle): NpcState | null {
 // Why a goal of one kind can no longer run, or null while it can.
 type GoalCheck = (world: World, vehicle: Vehicle, goal: NpcActivity, contacts: Contact[]) => string | null;
 
+const GAVE_UP_ROBBERY = 'stranded, gave up the robbery';
+
+// A stranded driver ends each robbery feud whose target is not fighting it and backs off that target, as a robbery
+// that went quiet does.
+function giveUpStrandedRobberies(world: World, vehicle: Vehicle): void {
+  if (!isStranded(world, vehicle)) return;
+  for (const s of statesHeld(world, vehicle.id).filter(isRobberyFeud)) {
+    const other = world.vehicles.find((v) => v.id === s.other);
+    if (!other || !holdsOffRobbery(world, vehicle, other)) continue;
+    endState(world, s, 'broken');
+    addState(world, 'backedOff', vehicle.id, s.other, { kind: 'none' });
+  }
+}
+
+function isRobberyFeud(s: NpcState): boolean {
+  return s.kind === 'feud' && s.data.kind === 'feud' && s.data.robbery;
+}
+
 // A fight holds while the driver sees or detects its target, and hunts it for NPC_BEHAVIOR.fightSearchTurns turns
 // after it last did.
 function fightInvalid(world: World, vehicle: Vehicle, goal: NpcActivity, contacts: Contact[]): string | null {
   const target = world.vehicles.find((v) => v.id === goal.targetId);
   if (!target || !isHostile(world, vehicle, target)) return 'lost the target';
+  if (holdsOffRobbery(world, vehicle, target)) return GAVE_UP_ROBBERY;
   if (vehicleStats(world, vehicle).weapons.length === 0) return 'no gun left to fight with';
   return fightTargetLost(world, vehicle, goal, target, contacts) ? 'lost the target' : null;
 }
@@ -415,7 +434,8 @@ function fleeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity, contacts
 
 function investigateInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   const target = world.vehicles.find((v) => v.id === goal.targetId);
-  return target && isHostile(world, vehicle, target) ? null : 'the contact is gone';
+  if (!target || !isHostile(world, vehicle, target)) return 'the contact is gone';
+  return holdsOffRobbery(world, vehicle, target) ? GAVE_UP_ROBBERY : null;
 }
 
 // A wreck or a loot pile is an opportunity only while it remains observable. A known site stays one.
@@ -859,6 +879,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   forget(world, vehicle, contacts);
   pruneAttackers(world, vehicle);
   breakOffDeals(world, vehicle);
+  giveUpStrandedRobberies(world, vehicle);
   dropInvalidGoals(world, vehicle, contacts);
   serveStranded(world, vehicle, profile);
   if (isDefeated(vehicle)) return retreatHome(world, vehicle);
@@ -1200,7 +1221,7 @@ function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity):
   finishGoal(world, vehicle, 'finished service');
 }
 
-// An oasis fills supplies, a camp serves raiders, a stall sells what it stocks and a town garage serves in full.
+// An oasis fills supplies, a camp serves raiders, a stall and a town garage serve in full.
 function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
   const kind = 'kind' in site ? site.kind : null;
   if (kind === 'oasis') getResources(world, vehicle).supplies = suppliesCap(vehicle);

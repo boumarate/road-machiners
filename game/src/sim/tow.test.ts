@@ -32,6 +32,10 @@ function withTower(w: World, templateId: string, faction: Vehicle['faction'], ch
 }
 
 // A player with an empty tank and a trader in sight.
+const FAR: Vec = { x: 80, y: 200 };
+const MID_NEAR: Vec = { x: 80, y: 420 };
+const MID_FAR: Vec = { x: 80, y: 330 };
+
 function stranded(playerPos: Vec = { x: 30, y: 30 }, traderPos: Vec = { x: 40, y: 30 }): Setup {
   const w = emptyWorld(playerPos);
   w.player.fuel = 0;
@@ -102,7 +106,19 @@ describe('tow offer', () => {
     const town = REGION.towns.find((t) => t.id === 'bowl')!;
     const pad = sitePads(town).reduce((a, b) => (dist(me.pos, a) <= dist(me.pos, b) ? a : b));
     const length = routeLength(me.pos, route(w, me.pos, pad, vehicleStats(w, find(w, s.trader.id)).radius, []));
-    expect(feeOf(w)).toBe(Math.round(TOW.base + TOW.perTile * length));
+    expect(feeOf(w)).toBe(Math.round(Math.min(TOW.maxFee, TOW.base + TOW.perTile * length)));
+  });
+
+  it('caps a long tow at TOW.maxFee', () => {
+    const w = offered(stranded(FAR, { x: FAR.x + 10, y: FAR.y }));
+    expect(feeOf(w)).toBe(Math.round(TOW.maxFee));
+  });
+
+  it('a longer tow costs more below the cap', () => {
+    const near = feeOf(offered(stranded(MID_NEAR, { x: MID_NEAR.x + 10, y: MID_NEAR.y })));
+    const mid = feeOf(offered(stranded(MID_FAR, { x: MID_FAR.x + 10, y: MID_FAR.y })));
+    expect(near).toBeLessThan(mid);
+    expect(mid).toBeLessThan(Math.round(TOW.maxFee));
   });
 
   it('refusing stops that NPC from offering again while the player stays in sight', () => {
@@ -773,7 +789,13 @@ describe('social on tow fees', () => {
     const pad = sitePads(town).reduce((a, b) => (dist(me.pos, a) <= dist(me.pos, b) ? a : b));
     const length = routeLength(me.pos, route(w, me.pos, pad, vehicleStats(w, find(w, s.trader.id)).radius, []));
     const cut = 1 - 5 * SKILL_EFFECTS.social.towFee;
-    expect(feeOf(w)).toBe(Math.round((TOW.base + TOW.perTile * length) * cut));
+    expect(feeOf(w)).toBe(Math.round(Math.min(TOW.maxFee, TOW.base + TOW.perTile * length) * cut));
+  });
+
+  it('cuts a capped fee too', () => {
+    const s = stranded(FAR, { x: FAR.x + 10, y: FAR.y });
+    s.w.player.skills.social = XP_TO_REACH[5];
+    expect(feeOf(offered(s))).toBe(Math.round(TOW.maxFee * (1 - 5 * SKILL_EFFECTS.social.towFee)));
   });
 });
 
