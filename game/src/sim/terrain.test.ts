@@ -139,6 +139,22 @@ describe("terrain grid", () => {
     }
   });
 
+  it('enters the Old Orchard by its spur alone, which ends on the rim, and keeps the trunk roads outside', () => {
+    const orchard = REGION.locations.find((site) => site.id === 'orchard')!;
+    const entering = REGION.roads.filter((road) => road.some((p) => dist(p, orchard.pos) < orchard.radius));
+    expect(entering).toHaveLength(1);
+    const [spur] = entering;
+    // A spur is one straight piece from a trunk point, and its end is the territory exception for road access.
+    expect(spur).toHaveLength(2);
+    expect(dist(spur[0], orchard.pos)).toBeGreaterThan(orchard.radius);
+    expect(dist(spur[1], orchard.pos)).toBeLessThan(orchard.radius);
+    expect(dist(spur[1], orchard.pos)).toBeGreaterThan(orchard.radius - 0.5);
+    expect(REGION.roads.some((road) => road !== spur && road.some((p) => dist(p, spur[0]) < 0.01))).toBe(true);
+    for (const road of REGION.roads.filter((r) => r !== spur)) {
+      for (let i = 1; i < road.length; i++) expect(segmentDist(orchard.pos, road[i - 1], road[i])).toBeGreaterThanOrEqual(orchard.radius);
+    }
+  });
+
   it('carves a canyon and a dry river below the surrounding hills', () => {
     const t = TEST_MAP.terrain;
     const canyon = TERRAIN.features.canyon;

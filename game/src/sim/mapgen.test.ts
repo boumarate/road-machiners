@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
+import { TERRITORIES } from '../data/territory';
 import { START_KITS } from '../data/start';
 import { PHYSICS } from '../data/physics';
 import { boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propPose, propReach, propShape, segmentCrossesBox } from './mapgen';
@@ -112,9 +113,11 @@ describe('world from the baked map', () => {
 
   it('overlaps no baked prop with any other obstacle', () => {
     const all = world.obstacles.filter((o) => o.kind !== 'site');
-    // Fence segments of a line meet end to end. On a camp ring they meet at an angle, so their circles overlap a
-    // little, but the segments only touch. The map stores positions as float32, off by up to 6e-5 tiles at x = 600.
-    const ends = (o: Obstacle) => (o.kind === 'landmark' && o.look === 'fence' ? [1, -1].map((k) => ({ x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) })) : []);
+    // Fence segments of a line, and the segments of a territory farm's runs, meet end to end. On a camp ring they
+    // meet at an angle, so their circles overlap a little, but the segments only touch. The map stores positions as
+    // float32, off by up to 6e-5 tiles at x = 600.
+    const segmentLooks = new Set<string>(['fence', ...Object.values(TERRITORIES).flatMap((t) => t.farm?.runs.map((run) => run.look) ?? [])]);
+    const ends = (o: Obstacle) => (o.kind === 'landmark' && segmentLooks.has(o.look) ? [1, -1].map((k) => ({ x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) })) : []);
     const touching = (a: Obstacle, b: Obstacle) => ends(a).some((p) => ends(b).some((q) => dist(p, q) < 1e-4));
     // A hull rib is an arch: only its two legs stand on the ground, r to each side along its yaw, and the model's leg
     // reaches under a sixth of r each way. Other props stand under the arch between them.
@@ -181,6 +184,21 @@ describe('prop poses', () => {
     ];
 
     for (const [look, r, model, scale] of cases) expect(propPose(landmark(look, r)), look).toEqual({ model, pos: { x: 12, y: 34 }, yaw: 0.5, scale: even(scale) });
+  });
+
+  it('draws each orchard look with its own model, at full size at the radius it is built to', () => {
+    const cases: [Landmark['look'], number, string][] = [
+      ['farmhouse', 3, 'farmhouse'],
+      ['barn', 2.6, 'barn'],
+      ['quonset', 2.2, 'quonset'],
+      ['bunker', 2.6, 'bunker'],
+      ['guardPost', 0.8, 'guard_post'],
+      ['armyTruck', 1.1, 'army_truck'],
+      ['barrier', 0.5, 'barrier'],
+      ['fence', 0.5, 'fence'],
+    ];
+
+    for (const [look, r, model] of cases) expect(propPose(landmark(look, r)), look).toEqual({ model, pos: { x: 12, y: 34 }, yaw: 0.5, scale: even(1) });
   });
 
   it('turns a power pole a quarter turn off its line, so its crossbar lies across it', () => {

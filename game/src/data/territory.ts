@@ -250,11 +250,12 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       ],
       runs: [
         // Wooden fences along the outer edges of four blocks, open where the track enters. The upper-right block's
-        // fence moved with it from s 20..30 to 17..25, and the lower-left block's ends at s -27, not -30.
-        { look: 'fence', points: [AT(-0.5, 15), AT(-0.5, 27)], segment: 2, gaps: [] },
-        { look: 'fence', points: [AT(17, 4.5), AT(25, 4.5)], segment: 2, gaps: [] },
-        { look: 'fence', points: [AT(-7, -28.5), AT(7, -28.5)], segment: 2, gaps: [] },
-        { look: 'fence', points: [AT(-14, -4.5), AT(-27, -4.5)], segment: 2, gaps: [1, 2] },
+        // fence moved with it from s 20..30 to 17..25, and the lower-left block's ends at s -27, not -30. A segment is
+        // one 4 m fence model, like the old world's fence lines, so the model draws at its own size.
+        { look: 'fence', points: [AT(-0.5, 15), AT(-0.5, 27)], segment: 1, gaps: [] },
+        { look: 'fence', points: [AT(17, 4.5), AT(25, 4.5)], segment: 1, gaps: [] },
+        { look: 'fence', points: [AT(-7, -28.5), AT(7, -28.5)], segment: 1, gaps: [] },
+        { look: 'fence', points: [AT(-14, -4.5), AT(-27, -4.5)], segment: 1, gaps: [2, 3, 4, 5] },
         // Concrete barriers along both road edges near the middle, open where the tracks cross.
         { look: 'barrier', points: [AT(-6, 2), AT(6, 2)], segment: 1, gaps: [9, 10, 11] },
         { look: 'barrier', points: [AT(-6, -2), AT(6, -2)], segment: 1, gaps: [2, 3, 4] },

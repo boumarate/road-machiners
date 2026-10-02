@@ -34,6 +34,16 @@ const PROP_LOOKS = {
   reactor: { color: 0xff40ff, shape: 'disc' },
   hullWall: { color: 0xd0d0d0, shape: 'rail' },
   deckBay: { color: 0xf0f040, shape: 'disc' },
+  deadTree: { color: 0x4a3420, shape: 'disc' },
+  farmhouse: { color: 0xb04a30, shape: 'box' },
+  barn: { color: 0x902418, shape: 'box' },
+  armyCache: { color: 0x80c040, shape: 'disc' },
+  bunker: { color: 0xa0a090, shape: 'box' },
+  armyTruck: { color: 0x4e6a2a, shape: 'long' },
+  sandbags: { color: 0xc0b070, shape: 'rail' },
+  quonset: { color: 0xb87838, shape: 'long' },
+  guardPost: { color: 0xd8d8c8, shape: 'box' },
+  barrier: { color: 0x8aa0b0, shape: 'rail' },
 };
 const DRAW_ORDER = Object.keys(PROP_LOOKS);
 const COLORS = TYPE_IDS.map((id) => TERRAIN_TYPES[id].color);

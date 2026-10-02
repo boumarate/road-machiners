@@ -5,7 +5,7 @@ import { START_KITS } from '../data/start';
 import { TERRAIN } from '../data/terrain';
 import { onOrchardRoad, TERRITORIES } from '../data/territory';
 import { bayPoints, deckAlongAt, deckPlane, hullDecks, isLootSpot, ribPoses, territoryEntries, type HullDeck } from '../sim/territory';
-import { propReach } from '../sim/mapgen';
+import { propPose, propReach } from '../sim/mapgen';
 import { route } from '../sim/path';
 import { ROAD_INDEX } from '../sim/road-index';
 import { groundAt, heightAt, isCliff, tileAt, type BakedProp, type Terrain } from '../sim/terrain';
@@ -176,7 +176,7 @@ describe('the territory layer', () => {
 
   it('lets a truck drive from each approach road up every deck and to the side of every spot', () => {
     const w = newWorld(1337, START_KITS.standard, TEST_MAP);
-    const spots = w.obstacles.filter(isLootSpot);
+    const spots = w.obstacles.filter((o) => isLootSpot(o) && dist(o.pos, fallenSun.pos) < fallenSun.radius);
     expect(spots.length).toBe(fieldCount + bayCount);
     const reach = (o: (typeof spots)[number]) => (propReach(o) + ECONOMY.useRange) * ECONOMY.interactionScale;
     for (const entry of territoryEntries(fallenSun as never)) {
@@ -299,6 +299,29 @@ describe('the orchard farm', () => {
       for (let k = 1; k < rows.length; k++) expect(rows[k] - rows[k - 1] - 2 * groves.radius).toBeGreaterThanOrEqual(groves.rowGap - 2 * groves.radius - 1e-6);
     }
   });
+
+  it('draws each fence and barrier segment at the size of its model', () => {
+    for (const look of ['fence', 'barrier'] as const) {
+      const segments = props.filter((p) => p.kind === look);
+      expect(segments.length, look).toBeGreaterThan(0);
+      for (const p of segments) {
+        const pose = propPose({ id: `${look}-test`, pos: p.pos, r: p.r, kind: 'landmark', look, yaw: p.yaw });
+        expect(pose.scale.x, `${look} at ${p.pos.x},${p.pos.y}`).toBeCloseTo(1, 6);
+      }
+    }
+  });
+
+  it('lets a truck drive from the spur road to the side of every orchard spot', () => {
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const spots = w.obstacles.filter((o) => isLootSpot(o) && dist(o.pos, orchard.pos) < orchard.radius);
+    expect(spots.length).toBe(farm.buildings.reduce((n, b) => n + b.poses.length, 0) + rules.spots.reduce((n, s) => n + s.count, 0));
+    const reach = (o: (typeof spots)[number]) => (propReach(o) + ECONOMY.useRange) * ECONOMY.interactionScale;
+    const [entry] = territoryEntries(orchard);
+    for (const spot of spots) {
+      const end = route(w, entry, spot.pos, 0.6, []).at(-1)!;
+      expect(dist(end, spot.pos), spot.id).toBeLessThanOrEqual(reach(spot));
+    }
+  }, 60_000);
 
   it('throws on a building outside the circle', () => {
     const moved = structuredClone(rules);
