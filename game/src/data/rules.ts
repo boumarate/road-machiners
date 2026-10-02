@@ -160,10 +160,10 @@ export const CHEATS = {
   searchRings: 20, // rings searched around a target before giving up
 };
 
-// Props a truck smashes through: fences and junk piles. Every other prop holds like a wall. See breakProp() in
+// Props a truck smashes through: fences, junk piles and dead trees. Every other prop holds like a wall. See breakProp() in
 // src/sim/salvage.ts.
 export const BREAKABLE = {
-  kinds: ['fence', 'junk'] as readonly LandmarkLook[], // landmark looks that break; a fence is planks and a junk pile loose scrap
+  kinds: ['fence', 'junk', 'deadTree'] as readonly LandmarkLook[], // landmark looks that break; a fence is planks, a junk pile loose scrap and a dead tree brittle wood
   breakSpeed: 3, // m/s, about 11 km/h: a truck rolling faster than walking pace breaks through, a creeping one stops
   slowdown: 0.3, // share of its speed a truck loses breaking through, so smashing a fence costs time
   damage: 2, // HP a break deals to the part that hit before armor: a scrape, a third of the softest wall crash (ramDamage × crashDamage × collisionMinImpact², about 6)

@@ -11,9 +11,11 @@ import { ROAD_INDEX } from '../sim/road-index';
 import { chance, randRange, type Rng } from '../sim/rng';
 import { heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
 import { clearOfSites, onDeck } from '../sim/mapgen';
+import { siteGap } from '../sim/sites';
 import { dist, polylineDist, type Vec } from '../sim/vec';
-import { BUILT_DIRTY_WATER, BUILT_SCRUB, BUILT_TOXIC, newWorldLayer } from './newworld';
+import { BUILT_CANAL, BUILT_PAD, BUILT_DIRTY_WATER, BUILT_HULL, BUILT_SCRUB, BUILT_TOXIC, BUILT_TRACK, newWorldLayer } from './newworld';
 import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer } from './oldworld';
+import { territoryLayer } from './territory';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
 
 export function bakeMap(seed: number): MapDraft {
@@ -22,6 +24,7 @@ export function bakeMap(seed: number): MapDraft {
   d = timed('finish', () => finishLayer(seed, d));
   d = timed('old world', () => oldWorldLayer(seed, d));
   d = timed('new world', () => newWorldLayer(seed, d));
+  d = timed('territories', () => territoryLayer(seed, d));
   d = timed('ground', () => groundLayer(seed, d));
   return timed('rocks', () => rockLayer(seed, d));
 }
@@ -108,7 +111,8 @@ export function finishLayer(seed: number, d: MapDraft): MapDraft {
 // tile marks, then the first geology rule that holds for the tile, then hardpan. Geology marks live on
 // corners, so each rule reads the tile's four corners.
 
-const SITES = [...REGION.towns, ...REGION.locations];
+// Territories keep their natural ground.
+const SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 const T = TERRAIN.types;
 const G = GEOLOGY.ground;
 
@@ -123,13 +127,17 @@ export function groundLayer(seed: number, d: MapDraft): MapDraft {
   return d;
 }
 
-// Ground types for old-world tile marks.
+// Ground types for tile marks of the old world, the new world and territories.
 const MARKED_TYPES: Record<number, TerrainTypeId> = {
   [BUILT_OLD_ROAD]: 'asphalt',
   [BUILT_FIELD]: 'field',
   [BUILT_SCRUB]: 'scrub',
   [BUILT_DIRTY_WATER]: 'dirtyWater',
   [BUILT_TOXIC]: 'toxic',
+  [BUILT_HULL]: 'hull',
+  [BUILT_TRACK]: 'track',
+  [BUILT_CANAL]: 'canal',
+  [BUILT_PAD]: 'concrete',
 };
 
 function pickType(g: GroundInput, x: number, y: number): TerrainTypeId {
@@ -165,15 +173,7 @@ function drainChannels(pond: Float32Array, size: number): Float32Array {
 function builtType(c: Vec): TerrainTypeId | null {
   if (deckAt(c.x, c.y) !== null) return 'road';
   if (ROAD_INDEX.nearestWithin(c.x, c.y, REGION.roadWidth / 2) < REGION.roadWidth / 2) return 'road';
-  return SITES.some((s) => nearSite(s.pos, s.radius, c)) ? 'hardpan' : null;
-}
-
-function nearSite(pos: Vec, radius: number, c: Vec): boolean {
-  const dx = pos.x - c.x;
-  const dy = pos.y - c.y;
-  // One tile past the margin keeps this cheap skip clear of rounding.
-  if (dx * dx + dy * dy > (radius + T.siteMargin + 1) ** 2) return false;
-  return Math.hypot(dx, dy) < radius + T.siteMargin;
+  return SITES.some((s) => siteGap(s, c) < T.siteMargin) ? 'hardpan' : null;
 }
 
 // Steep ground and ground where soil slumped are scree.

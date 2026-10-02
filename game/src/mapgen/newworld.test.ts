@@ -4,6 +4,8 @@ import { GEOLOGY, NEW_WORLD, TERRAIN } from '../data/terrain';
 import { deckAt, deckById } from '../sim/bridge';
 import { ROAD_INDEX } from '../sim/road-index';
 import type { BakedProp } from '../sim/terrain';
+import { siteGap } from '../sim/sites';
+import { padReach } from '../test/sites';
 import { dist, segmentDist, type Vec } from '../sim/vec';
 import { baseLayer, finishLayer, newDraft, tileSteepness, type MapDraft } from './bake';
 import { dunes, rain, slump, wind } from './geology';
@@ -33,7 +35,7 @@ const SEED = 1337;
 function expectOffBuilt(p: BakedProp): void {
   const bridge = deckById('canyon-bridge');
   expect(ROAD_INDEX.nearestWithin(p.pos.x, p.pos.y, Infinity)).toBeGreaterThanOrEqual(HALF + p.r);
-  for (const site of SITES) expect(dist(p.pos, site.pos)).toBeGreaterThan(site.radius + O.siteClearance + p.r);
+  for (const site of SITES) expect(siteGap(site, p.pos)).toBeGreaterThan(O.siteClearance + p.r);
   expect(segmentDist(p.pos, bridge.from, bridge.to)).toBeGreaterThanOrEqual(bridge.width / 2 + p.r);
 }
 
@@ -41,7 +43,7 @@ function expectOffBuilt(p: BakedProp): void {
 // hypot(radius + pad length, pad width / 2) from the site center.
 function onBuilt(c: Vec): boolean {
   if (ROAD_INDEX.nearestWithin(c.x, c.y, HALF) < HALF || deckAt(c.x, c.y) !== null) return true;
-  return SITES.some((site) => dist(c, site.pos) <= Math.hypot(site.radius + REGION.sites.pad.length, REGION.sites.pad.width / 2));
+  return SITES.some((site) => siteGap(site, c) <= padReach(site));
 }
 
 function setCorners(d: MapDraft, what: 'heights' | 'flow' | 'sand', value: (i: number, j: number) => number): void {

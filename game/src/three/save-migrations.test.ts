@@ -174,13 +174,29 @@ describe('save migration 6 to 7', () => {
 });
 
 describe('save migration 7 to 8', () => {
-  it('keeps the saved salvage stock and every other field', () => {
-    expect(MIGRATIONS[7](FORMAT_2_7)).toEqual(FORMAT_2_7);
+  const next = MIGRATIONS[7](FORMAT_2_7) as { salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
+
+  it('drops the Fallen Sun stock and its searched mark, and keeps every other stock', () => {
+    expect(next.salvage.map((stock) => stock.id)).toEqual(['wreck3']);
+    expect(next.player.scavenged).toEqual(['wreck3']);
+  });
+
+  it('ends a search of the old stock and keeps other searches', () => {
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[1]).toEqual(FORMAT_2_7.vehicles[1]);
   });
 });
 
 describe('save migration 8 to 9', () => {
-  it('keeps the saved salvage stock and every other field', () => {
-    expect(MIGRATIONS[8](FORMAT_2_8)).toEqual(FORMAT_2_8);
+  const next = MIGRATIONS[8](FORMAT_2_8) as { salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
+
+  it('drops the Old Orchard stock and its searched mark, and keeps every other stock', () => {
+    expect(next.salvage.map((stock) => stock.id)).toEqual(['wreck3']);
+    expect(next.player.scavenged).toEqual(['wreck3']);
+  });
+
+  it('ends a search of the old stock and keeps other searches', () => {
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[1]).toEqual(FORMAT_2_8.vehicles[1]);
   });
 });

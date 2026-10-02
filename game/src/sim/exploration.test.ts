@@ -1,17 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { REGION } from '../data/region';
+import { onOrchardRoad, REGION } from '../data/region';
 import { TERRAIN } from '../data/terrain';
 import { PHYSICS } from '../data/physics';
 import { START_KITS } from '../data/start';
 import { cloneWorld, newWorld, setMoveOrder } from './world';
-import { dist, polylineDist } from './vec';
+import { dist, polylineDist, type Vec } from './vec';
+import { siteGap } from './sites';
 import { discoverSites } from './locations';
 import { refreshVision } from './vision';
 import { bodyOf } from './body';
 import { TEST_MAP } from '../test/map';
 
+// Old Orchard stands at (22.8, 56.8), north of its first place.
 const original = [
-  [16, 94], [102, 35], [23.2, 62], [33.8, 32], [50, 32.8], [60, 18.8], [78.2, 21],
+  [16, 94], [102, 35], [22.8, 56.8], [33.8, 32], [50, 32.8], [60, 18.8], [78.2, 21],
   [106.2, 70], [90.3, 86.3], [71.8, 89], [56.8, 94], [41, 90.2], [40.7, 51.7], [64, 54], [82, 52.2],
   [22, 14], [66, 76],
 ];
@@ -39,7 +41,7 @@ describe('Icarus exploration distances', () => {
     // Driving straight ahead crosses the road.
     const ahead = { x: player.pos.x + Math.cos(player.heading) * gray, y: player.pos.y + Math.sin(player.heading) * gray };
     expect(polylineDist(ahead, REGION.roads[REGION.playerStart.road])).toBeLessThan(gray - toRoad + REGION.roadWidth);
-    for (const site of [...REGION.towns, ...REGION.locations]) expect(dist(player.pos, site.pos) - site.radius).toBeGreaterThan(TERRAIN.vision.radius);
+    for (const site of [...REGION.towns, ...REGION.locations]) expect(siteGap(site, player.pos)).toBeGreaterThan(TERRAIN.vision.radius);
   }, 15_000);
 
   it('gives settlements human-scale footprints and an outside starting point', () => {
@@ -60,5 +62,27 @@ describe('Icarus exploration distances', () => {
     expect(next.player).not.toBe(world.player);
     expect(next.vehicles).not.toBe(world.vehicles);
     expect(world.vehicles[0].order).toBeNull();
+  }, 15_000);
+});
+
+describe('discovering an outlined territory', () => {
+  const orchard = REGION.locations.find((l) => l.id === 'orchard')!;
+  const tileAt = (size: number, p: Vec): number => Math.floor(p.y) * size + Math.floor(p.x);
+  const at = (s: number, c: number): Vec => ({ x: orchard.pos.x + onOrchardRoad(s, c).x, y: orchard.pos.y + onOrchardRoad(s, c).y });
+
+  it('discovers the orchard from one seen tile of its north-west pocket', () => {
+    const world = cloneWorld(newWorld(1337, START_KITS.standard, TEST_MAP));
+    world.player.visible = [tileAt(world.terrain.size, at(60, 30))];
+    discoverSites(world);
+    expect(world.player.discovered).toEqual(['orchard']);
+  }, 15_000);
+
+  it('does not discover it from a tile inside its bounding radius but past its outline', () => {
+    const world = cloneWorld(newWorld(1337, START_KITS.standard, TEST_MAP));
+    const beyond = at(-30, 44);
+    expect(dist(beyond, orchard.pos)).toBeLessThan(orchard.radius);
+    world.player.visible = [tileAt(world.terrain.size, beyond)];
+    discoverSites(world);
+    expect(world.player.discovered).toEqual([]);
   }, 15_000);
 });

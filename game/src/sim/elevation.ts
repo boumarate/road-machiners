@@ -10,7 +10,8 @@ import { INDEX_CELL, ROAD_INDEX, RoadIndex } from './road-index';
 import { heightFromElevation } from './terrain';
 import type { Vec } from './vec';
 
-const SITES = [...REGION.towns, ...REGION.locations];
+// Territories keep their own ground: nothing flattens them.
+const SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 // Squared distance past which a site is sure to lie beyond flattenMargin. The extra tile keeps
 // the cheap test clear of rounding, so the exact test decides every near case.
 const SITE_SKIP2 = SITES.map((site) => (site.radius + TERRAIN.flattenMargin + 1) ** 2);

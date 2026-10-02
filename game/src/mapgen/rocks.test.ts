@@ -4,6 +4,7 @@ import { GEOLOGY, MAPGEN, TERRAIN } from '../data/terrain';
 import { deckById } from '../sim/bridge';
 import { ROAD_INDEX } from '../sim/road-index';
 import { decodeMap, isCliff, tileAt, type BakedMap, type BakedProp } from '../sim/terrain';
+import { siteGap } from '../sim/sites';
 import { dist, segmentDist } from '../sim/vec';
 import { newDraft, rockLayer, type MapDraft } from './bake';
 
@@ -18,7 +19,7 @@ function expectClear(rocks: BakedProp[]): void {
     const { x, y } = rock.pos;
     expect(Math.min(x, y, SIZE - x, SIZE - y)).toBeGreaterThanOrEqual(O.edgeMargin);
     expect(ROAD_INDEX.nearestWithin(x, y, Infinity)).toBeGreaterThanOrEqual(REGION.roadWidth / 2 + O.roadClearance + rock.r);
-    for (const site of SITES) expect(dist(rock.pos, site.pos)).toBeGreaterThan(site.radius + O.siteClearance + rock.r);
+    for (const site of SITES) expect(siteGap(site, rock.pos)).toBeGreaterThan(O.siteClearance + rock.r);
     expect(segmentDist(rock.pos, bridge.from, bridge.to)).toBeGreaterThanOrEqual(bridge.width / 2 + rock.r);
   }
   for (let a = 0; a < rocks.length; a++) for (let b = a + 1; b < rocks.length; b++) {

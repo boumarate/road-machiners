@@ -2,7 +2,7 @@
 // so nothing here blocks. Blender models come from tools/blender/; each script's docstring gives its size.
 
 import * as THREE from 'three';
-import { REGION, type LocationDef, type SiteEdge, type TownDef } from '../../data/region';
+import { REGION, type SiteLocationDef, type SiteEdge, type TownDef } from '../../data/region';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
@@ -14,9 +14,7 @@ import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
 
 const S = PHYSICS.metersPerTile;
-type Site = TownDef | LocationDef;
-// The Fallen Sun hull model fits a 20 m radius around its origin, so it scales to fill the site edge.
-const HULL_RADIUS = 20;
+type Site = TownDef | SiteLocationDef;
 // Nose's 48 m bow from the 12 m cone.
 const NOSE_SCALE = 4;
 // The bridge model's 32 m by 7 m deck is stretched to the sim deck. Its trusses stand 2.4 m over the
@@ -108,17 +106,6 @@ class SiteBuilder {
       throw new Error(`Site prop at ${x},${z} of ${this.site.id} stands on a road`);
     }
   }
-  // A dead orchard tree: bare trunk, two branches and a fallen limb.
-  addDeadTree(x: number, z: number, index: number): void {
-    const lean = (hash2(index, 19) - 0.5) * 0.35;
-    const trunk = this.addBox(x, z, 0.16, 1.5, 0.18, PAL.trunk);
-    trunk.rotation.z = lean;
-    for (const sign of [-1, 1]) {
-      const branch = this.addBox(x + sign * 0.24, z, 0.1, 0.95, 0.12, PAL.trunk, 0.85);
-      branch.rotation.z = sign * 0.75;
-    }
-    this.addBox(x + 0.35, z, 0.7, 0.13, 0.18, PAL.trunk, 0.03, lean);
-  }
   addRuin(x: number, z: number, width: number, depth: number): void {
     this.addBox(x, z, width, 0.12, depth, PAL.wall.dark);
     this.addBox(x - width / 2, z, 0.2, 1.2, depth, PAL.wall.side);
@@ -148,24 +135,6 @@ class SiteBuilder {
       this.addBox(x + i * length * 0.3, z - width * 0.6, length * 0.12, 0.12, width * 0.3, PAL.metalLight, 0.15, yaw + i * 0.4);
     }
   }
-}
-
-function buildOrchard(b: SiteBuilder): void {
-  const { orchardRows: rows, orchardSpacing: spacing } = REGION.settlement;
-  const half = (rows - 1) / 2;
-  const living: { x: number; z: number; yaw: number }[] = [];
-  for (let row = 0; row < rows; row++) {
-    const x = (row - half) * spacing;
-    b.addBox(x - 0.65, 0, 0.18, 0.06, rows * spacing, PAL.wall.dark);
-    for (let col = 0; col < rows; col++) {
-      const index = row * rows + col;
-      const z = (col - half) * spacing;
-      if (index % 4 === 0) b.addDeadTree(x, z, index);
-      else living.push({ x, z, yaw: hash2(index, 29) * Math.PI * 2 });
-    }
-  }
-  b.addInstances('orchard_tree', living);
-  b.addRuin(0, 12.5, 6, 4);
 }
 
 function buildSettlement(b: SiteBuilder, site: Site): void {
@@ -504,18 +473,12 @@ const settlement: SiteDecor = (b, site) => buildSettlement(b, site);
 
 // How each site is dressed, by site id.
 const SITE_DECOR: Record<string, SiteDecor> = {
-  orchard: (b) => buildOrchard(b),
   granary: (b) => buildGranary(b),
   'pump-station': (b) => buildPump(b),
   'south-lock': (b) => buildLock(b),
   'canyon-bridge': (b, _site, t) => buildBridge(b, t),
   dustwell: (b) => buildOasis(b, true),
   'green-pit': (b) => buildOasis(b, false),
-  'fallen-sun': (b, site) => {
-    b.addModel('ship_hull', 0, 0, -0.2, (site.radius * S) / HULL_RADIUS);
-    b.addBox(-10, 16, 25, 0.3, 15, PAL.metalLight, 0.6, 0.3);
-    for (const z of [-8, 8]) b.addTank(-33, z, 3, 5, PAL.rust.dark);
-  },
   'broken-wing': (b) => buildWingSalvage(b),
   'glass-flats': (b) => b.addModel('glass_flats', 0, 0),
   nose: settlement,
@@ -543,18 +506,20 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
+// A territory has no edge, gates or models of its own: its props are baked.
+const SITES = [...REGION.towns, ...REGION.locations.filter((l): l is SiteLocationDef => l.kind !== 'territory')];
 
 // Every site model under one group, for inspection.
 export function buildSites(t: Terrain): THREE.Group {
   const group = new THREE.Group();
-  for (const site of [...REGION.towns, ...REGION.locations]) group.add(buildSite(t, site));
+  for (const site of SITES) group.add(buildSite(t, site));
   group.add(buildWingDeck(t));
   return group;
 }
 
 // Registers every site model with the scope at its site.
 export function addSites(t: Terrain, scope: RenderScope): void {
-  for (const site of [...REGION.towns, ...REGION.locations]) scope.add(buildSite(t, site), site.pos, site.radius);
+  for (const site of SITES) scope.add(buildSite(t, site), site.pos, site.radius);
   const deck = deckById('broken-wing');
   scope.add(buildWingDeck(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
 }

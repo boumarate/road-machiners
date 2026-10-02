@@ -73,7 +73,7 @@ def ladder(kit: Kit, name: str, base: Vec3, top_z: float, width: float, facing: 
         kit.box(f"{name}_rung{i}", (0.05, width, 0.05), (bx, by, bz + i * height / (rungs + 1)), mat, rot=(0, 0, facing))
 
 
-def prism(kit: Kit, name: str, profile: list[tuple[float, float]], y0: float, y1: float, mat: str, lean: float = 0.0) -> None:
+def prism(kit: Kit, name: str, profile: list[tuple[float, float]], y0: float, y1: float, mat: str, lean: float = 0.0) -> bpy.types.Object:
     """Extrudes a closed XZ profile from Blender Y y0 to y1 as one mesh. lean shifts each vertex by -lean * z in Y."""
     mesh = bpy.data.meshes.new(name)
     bm = bmesh.new()
@@ -90,7 +90,7 @@ def prism(kit: Kit, name: str, profile: list[tuple[float, float]], y0: float, y1
     bm.free()
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.scene.collection.objects.link(obj)
-    kit._add(obj, name, mat, 0.0)
+    return kit._add(obj, name, mat, 0.0)
 
 
 def mound(kit: Kit, name: str, radius: float, height: float, at: tuple[float, float]) -> None:
