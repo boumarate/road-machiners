@@ -9,7 +9,7 @@ import { RULES } from '../data/rules';
 import { MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, NPCS, TRAITS, type TraitId } from '../data/npcs';
 import { SHOPS } from '../data/market';
 import { optionChances, optionWeights, visibleDowned, visibleSalvage } from './npc-decisions';
-import { endTurn } from './world';
+import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods } from './inventory';
@@ -19,9 +19,13 @@ import { knockOutNpc } from './defeat';
 import { chassisDef } from '../data/chassis';
 import { cloneWorld } from './world';
 import { canUseSite, siteGates, sitePads } from './sites';
+import { bayPoints, deckAlongAt, hullDecks, territoryEntries, territoryOfStock, territorySpots } from './territory';
+import { heightAt, isCliff, tileAt } from './terrain';
+import { START_KITS } from '../data/start';
+import { TEST_MAP } from '../test/map';
 import { fuelCap, vehicleStats } from './stats';
 import { heatAt } from './sun';
-import { dist } from './vec';
+import { dist, type Vec } from './vec';
 import { advanceFar } from './far';
 import type { NpcActivity, Vehicle, World } from './types';
 import { addState } from './states';
@@ -291,7 +295,104 @@ describe('NPC activities', () => {
     const { w, npc } = createScavenger();
     planNpcOrders(w);
     expect(topGoal(npc)?.kind).toBe('scavenge');
-    expect(TRAITS.scavenger.salvageSites).toContain(topGoal(npc)?.targetId);
+    const target = topGoal(npc)?.targetId;
+    // A territory is searched at one of its loot spots.
+    const spotOf = w.salvage.find((stock) => stock.id === target && territoryOfStock(stock));
+    expect(spotOf ? 'fallen-sun' : target).toSatisfy((id: string) => TRAITS.scavenger.salvageSites.includes(id));
+  });
+
+  describe('in a territory', () => {
+    // A scavenger that knows only the Fallen Sun, with the player far away.
+    function fallenSunScavenger(at: { x: number; y: number }) {
+      const { w, npc } = createScavenger();
+      npc.pos = { ...at };
+      npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+      const traits = TRAITS.scavenger as { salvageSites: string[] };
+      const saved = traits.salvageSites;
+      traits.salvageSites = ['fallen-sun'];
+      return { w, npc, restore: () => void (traits.salvageSites = saved) };
+    }
+    const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
+    const entry = () => territoryEntries(sun as never)[0];
+
+    it('targets one of its loot spots, and keeps the goal while the spot is out of sight', () => {
+      const { w, npc, restore } = fallenSunScavenger({ x: 10, y: 10 });
+      try {
+        planNpcOrders(w);
+        const goal = topGoal(npc)!;
+        expect(goal.kind).toBe('scavenge');
+        const spot = territorySpots(w, 'fallen-sun').find((s) => s.id === goal.targetId)!;
+        expect(spot).toBeDefined();
+        expect(goal.destination).toEqual(spot.pos);
+        planNpcOrders(w);
+        expect(topGoal(npc)).toBe(goal);
+      } finally {
+        restore();
+      }
+    });
+
+    it('parks beside the spot, searches it and takes its loot', () => {
+      const { w, npc, restore } = fallenSunScavenger({ x: 10, y: 10 });
+      try {
+        planNpcOrders(w);
+        const spot = territorySpots(w, 'fallen-sun').find((s) => s.id === topGoal(npc)!.targetId)!;
+        npc.pos = { x: spot.pos.x + spot.radius + 4, y: spot.pos.y };
+        let next = w;
+        let took = false;
+        for (let turn = 0; turn < 80 && !took; turn++) {
+          next = endTurn(next, testDrive);
+          const me = next.vehicles.find((v) => v.id === npc.id)!;
+          took = (goodsCount(me).scrap ?? 0) > 0;
+        }
+        expect(took).toBe(true);
+      } finally {
+        restore();
+      }
+    });
+
+    it('drives up a hull deck by its low end to the bay at its top, searches it and takes its loot', () => {
+      // The real map, with the decks stamped into the ground, and the scavenger on the floor before the bow's low end.
+      const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+      w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
+      const bow = hullDecks().find((d) => d.section.id === 'bow')!;
+      const back = { x: bow.low.x - (bow.high.x - bow.low.x) / bow.section.length * 3, y: bow.low.y - (bow.high.y - bow.low.y) / bow.section.length * 3 };
+      const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], back);
+      npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+      const top = bayPoints(bow).at(-1)!;
+      const bay = w.salvage.find((s) => dist(s.pos, top) < 1e-3)!;
+      expect(bay.id).toMatch(/^deckBay-/);
+      npc.brain.goals = [{ kind: 'scavenge', targetId: bay.id, destination: { ...bay.pos }, phase: 'travel', reason: 'search a loot spot' }];
+      const moveFar = (next: World) => next.vehicles.forEach((v) => v.brain && advanceFar(next, v));
+      // The lower bays on the way would pull the driver off the top one.
+      forceOption('salvageSeen', 'keep');
+      const scrapIn = (world: World) => world.salvage.find((s) => s.id === bay.id)!.goods.scrap ?? 0;
+      const before = scrapIn(w);
+
+      let next = w;
+      const path: Vec[] = [{ ...npc.pos }];
+      let took: Vehicle | null = null;
+      for (let turn = 0; turn < 40 && !took; turn++) {
+        next = endTurn(next, moveFar);
+        const me = next.vehicles.find((v) => v.id === npc.id)!;
+        path.push(...me.trail.map((p) => ({ x: p.x, y: p.y })));
+        if ((goodsCount(me).scrap ?? 0) > 0) took = me;
+      }
+
+      expect(took).not.toBeNull();
+      expect(scrapIn(next)).toBeLessThan(before);
+      const t = next.terrain;
+      expect(path.filter((p) => isCliff(t, tileAt(t, p)))).toEqual([]);
+      const firstOnDeck = path.map((p) => deckAlongAt(bow, p)).find((a) => a !== null)!;
+      expect(firstOnDeck).toBeLessThan(0.25);
+      expect(deckAlongAt(bow, took!.pos)).toBeGreaterThan(0.6);
+      expect(heightAt(t, took!.pos.x, took!.pos.y) - heightAt(t, back.x, back.y)).toBeGreaterThan(bow.section.rise / 2);
+    });
+
+    it('ends a trip to a territory at its road end, not at its centre', () => {
+      const { w, npc } = createScavenger();
+      const goal: NpcActivity = { kind: 'travel', targetId: sun.id, destination: { ...entry() }, phase: 'travel', reason: 'make a trip to another site' };
+      expect(getActivityDestination(w, npc, goal)).toEqual(entry());
+    });
   });
 
   it('interrupts work for low fuel', () => {

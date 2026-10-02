@@ -8,6 +8,7 @@ NPC behavior has three layers. Traits in `brain.traits` are permanent and replac
 - `holdsOffRobbery()` in `npc-decisions.ts` owns the stranded robbery rule: option availability, wanting loot, and the give-up step in `thinkNpc()` all call it.
 - `src/sim/npc-activities.ts` owns the goal stack and fires the decision points in `thinkNpc()`.
 - `src/sim/npc-repair.ts` picks the part, the shady spot and the jobs for field repair goals.
+- A scavenge goal at a territory targets one loot spot stock, not the territory, and a trip to one ends at the road end that enters it, never a pad. Hunting grounds hold a ring inside each territory. No NPC goal destination lies in a hazard zone, since `src/sim/nav/layer.ts` blocks zones for routes and the grounds lie outside them.
 - `src/data/npcs.ts` holds traits, decision weights, state durations, thresholds and weighted spawn equipment tables.
 - `src/sim/npc-loadout.ts` rolls each NPC a gear level from `GEAR_LEVELS`, from poor to loaded, and fills the truck within its budget and rated mass, using world RNG. Each free deck spot rolls that level's fill chance times the template's `gunFill` for one more gun, and armor targets that level's share of edge cells. Armor fills whole sides, the cab lanes first, and extra guns go where they cover sides the others miss. Equipment budgets do not spend driver wallets.
 - NPCs know fixed places but perceive current vehicles only through their own sight and detection. `src/sim/detect.ts` gives player and NPCs the same sound, dust and scanner contacts.

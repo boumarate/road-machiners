@@ -27,6 +27,25 @@ const PROP_LOOKS = {
   fence: { color: 0xf4ecd0, shape: 'rail' },
   junk: { color: 0xc03890, shape: 'disc' },
   carWreck: { color: 0x2a2a70, shape: 'long' },
+  hullChunk: { color: 0x909090, shape: 'long' },
+  hullRib: { color: 0xb07050, shape: 'box' },
+  shipCache: { color: 0x40d040, shape: 'disc' },
+  coreWreck: { color: 0xf0f040, shape: 'disc' },
+  reactor: { color: 0xff40ff, shape: 'disc' },
+  hullWall: { color: 0xd0d0d0, shape: 'rail' },
+  deckBay: { color: 0xf0f040, shape: 'disc' },
+  deadTree: { color: 0x4a3420, shape: 'disc' },
+  farmhouse: { color: 0xb04a30, shape: 'box' },
+  barn: { color: 0x902418, shape: 'box' },
+  armyCache: { color: 0x80c040, shape: 'disc' },
+  bunker: { color: 0xa0a090, shape: 'box' },
+  armyTruck: { color: 0x4e6a2a, shape: 'long' },
+  sandbags: { color: 0xc0b070, shape: 'rail' },
+  quonset: { color: 0xb87838, shape: 'long' },
+  guardPost: { color: 0xd8d8c8, shape: 'box' },
+  barrier: { color: 0x8aa0b0, shape: 'rail' },
+  drums: { color: 0xc04820, shape: 'disc' },
+  woodpile: { color: 0xa07040, shape: 'box' },
 };
 const DRAW_ORDER = Object.keys(PROP_LOOKS);
 const COLORS = TYPE_IDS.map((id) => TERRAIN_TYPES[id].color);
@@ -39,7 +58,10 @@ export function paintMap(d, area, pxPerTile) {
     const y = area.y + (py + 0.5) / pxPerTile;
     put(pic, px, py, groundColor(d, x, y));
   }
-  for (const site of [...REGION.towns, ...REGION.locations]) paintDisc(pic, area, pxPerTile, site.pos, site.radius, SITE_EDGE, site.radius - 1 / pxPerTile);
+  for (const site of [...REGION.towns, ...REGION.locations]) {
+    if (site.outline) paintOutline(pic, area, pxPerTile, site.outline.map((p) => ({ x: site.pos.x + p.x, y: site.pos.y + p.y })), SITE_EDGE);
+    else paintDisc(pic, area, pxPerTile, site.pos, site.radius, SITE_EDGE, site.radius - 1 / pxPerTile);
+  }
   const props = [...d.props].sort((a, b) => DRAW_ORDER.indexOf(a.kind) - DRAW_ORDER.indexOf(b.kind));
   for (const prop of props) paintProp(pic, area, pxPerTile, prop);
   return pic;
@@ -95,6 +117,19 @@ function paintDisc(pic, area, pxPerTile, center, radius, color, inner) {
 
 // Fills the pixels whose centers lie in the box around center, halfAlong tiles along the facing yaw and
 // halfAcross tiles across it.
+// A one-pixel line round a closed polygon of map points.
+function paintOutline(pic, area, pxPerTile, poly, color) {
+  poly.forEach((a, i) => {
+    const b = poly[(i + 1) % poly.length];
+    const steps = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * pxPerTile * 2);
+    for (let k = 0; k <= steps; k++) {
+      const px = Math.floor((a.x + ((b.x - a.x) * k) / steps - area.x) * pxPerTile);
+      const py = Math.floor((a.y + ((b.y - a.y) * k) / steps - area.y) * pxPerTile);
+      if (px >= 0 && py >= 0 && px < pic.width && py < pic.height) put(pic, px, py, color);
+    }
+  });
+}
+
 function paintBox(pic, area, pxPerTile, center, yaw, halfAlong, halfAcross, color) {
   const cos = Math.cos(yaw);
   const sin = Math.sin(yaw);
