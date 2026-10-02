@@ -56,6 +56,12 @@ const NAMES = [
   'shack',
   'fence',
   'junk',
+  'farmhouse',
+  'barn',
+  'quonset',
+  'guard_post',
+  'army_truck',
+  'barrier',
 
   'bumper_front',
   'bumper_rear',

@@ -8,6 +8,9 @@ import { fnv1a, formatShapes, loadTriangles, shapeOf } from './shape-lib.mjs';
 // Every model a static prop view draws: landmark looks, buildings, wrecks, rocks and junk piles.
 // Site decor keeps its circle, so its models are not here.
 const PROP_MODELS = [
+  'army_truck',
+  'barn',
+  'barrier',
   'billboard',
   'bridge_broken',
   'building',
@@ -15,13 +18,16 @@ const PROP_MODELS = [
   'crag',
   'crates',
   'dead_tree',
+  'farmhouse',
   'fence',
   'gas_station',
+  'guard_post',
   'hull_chunk',
   'hull_rib',
   'hull_wall',
   'junk',
   'power_pole',
+  'quonset',
   'reactor',
   'rock',
   'sandbags',
