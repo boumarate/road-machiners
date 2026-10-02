@@ -3,8 +3,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fetchMedia, mediaSection, requireMedia } from '../media';
 import { changesSaveMajor } from '../save-guard';
+import { isAnswered } from '../questions';
 import { readState } from '../state';
-import { BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type CardStage, type Ctx, type FactoryConfig, type Stage } from '../types';
+import { FACTORY_MARK, BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type CardStage, type Ctx, type FactoryConfig, type Stage } from '../types';
 
 export const BASE_BRANCH = 'dev';
 export const HOTFIX_BASE = 'main';
@@ -111,12 +112,18 @@ export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, prompt
 }
 
 // Asks the issue author. The card stays where it is until a member answers on the issue.
-export async function askAuthor(ctx: Ctx, issue: number, questions: string[]): Promise<void> {
-  const { author } = await ctx.github.issue(issue);
+// The committee chat hears of a question set once. A set asked while an earlier one is still open, like a retry, adds no notice.
+// The notice names the stage and links the issue and never quotes the questions, since they come from an agent that read untrusted text.
+export async function askAuthor(ctx: Ctx, issue: number, questions: string[], stage: 'triage' | 'design'): Promise<void> {
+  const [{ author }, earlier] = await Promise.all([ctx.github.issue(issue), ctx.github.comments(issue)]);
+  const stillOpen = earlier.some((comment) => comment.body.includes(FACTORY_MARK) && comment.body.startsWith(QUESTIONS_HEADING)) && !isAnswered(earlier);
   const numbered = questions.map((question, index) => `${index + 1}. ${question}`);
   const body = [QUESTIONS_HEADING, `@${author}`, numbered.join('\n'), 'The work continues once someone answers here.'].join('\n\n');
   await ctx.github.comment(issue, body);
   await ctx.github.addLabel(issue, NEEDS_INFO_LABEL);
+  if (stillOpen) return;
+  const text = `❓ ${stage === 'triage' ? 'Triage' : 'Design'} needs answers on #${issue}. The questions are on the GitHub issue: https://github.com/${ctx.cfg.repo}/issues/${issue}\nAnswer there. Replies in this chat do not reach the stage.`;
+  await ctx.telegram.sendMessage(ctx.cfg.committeeChat, text).catch((error: unknown) => ctx.log(stage, issue, `could not notify the committee of the questions: ${error instanceof Error ? error.message : String(error)}`));
 }
 
 // The agent may stop early and ask the committee for a decision.

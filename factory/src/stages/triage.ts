@@ -15,7 +15,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await writeIssueInput(ctx, issue, home);
   await runAgent(ctx, issue, 'triage', fillPrompt('triage', { issue: String(issue) }));
   const result = parseVerdict(readOutput(home, 'triage.json'));
-  if (result.verdict === 'unclear') return askAuthor(ctx, issue, result.questions);
+  if (result.verdict === 'unclear') return askAuthor(ctx, issue, result.questions, 'triage');
   if (result.verdict === 'ready') return pass(ctx, issue, result.reason, result.hotfix, result.routing);
   await ctx.github.comment(issue, result.reason);
   await ctx.github.addLabel(issue, WONT_DO_LABEL);

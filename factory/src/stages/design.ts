@@ -26,7 +26,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
 async function askBack(ctx: Ctx, issue: number, text: string): Promise<void> {
   const questions = text.split('\n').map((line) => line.trim()).filter((line) => line !== '');
   if (questions.length === 0) throw new Error('The design stage wrote an empty questions.md');
-  await askAuthor(ctx, issue, questions);
+  await askAuthor(ctx, issue, questions, 'design');
   await ctx.github.move(issue, 'Triage');
 }
 
