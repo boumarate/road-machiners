@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
+import { propPose } from '../sim/mapgen';
 import { baseGrid, isMounted, placementError } from '../sim/grid';
-import type { Vehicle } from '../sim/types';
+import type { Obstacle, Vehicle } from '../sim/types';
 import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
 import FORMAT_2_2 from './save-fixtures/format-2-2.json';
@@ -11,6 +12,7 @@ import FORMAT_2_5 from './save-fixtures/format-2-5.json';
 import FORMAT_2_6 from './save-fixtures/format-2-6.json';
 import FORMAT_2_7 from './save-fixtures/format-2-7.json';
 import FORMAT_2_8 from './save-fixtures/format-2-8.json';
+import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS } from './save-migrations';
@@ -198,5 +200,21 @@ describe('save migration 8 to 9', () => {
   it('ends a search of the old stock and keeps other searches', () => {
     expect(next.vehicles[0].job).toBeNull();
     expect(next.vehicles[1]).toEqual(FORMAT_2_8.vehicles[1]);
+  });
+});
+
+describe('save migration 9 to 10', () => {
+  const next = MIGRATIONS[9](FORMAT_2_9) as { obstacles: Obstacle[] };
+
+  it('keeps the world as it was', () => {
+    expect(next).toEqual(FORMAT_2_9);
+  });
+
+  it('leaves an old kill wreck without a hulk, so it draws as the generic wreck', () => {
+    const kill = next.obstacles.find((o) => o.id === 'wreck-npc7');
+
+    expect(kill).toBeDefined();
+    expect(kill && 'hulk' in kill).toBe(false);
+    expect(kill && propPose(kill).model).toBe('wreck');
   });
 });
