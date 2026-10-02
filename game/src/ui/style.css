@@ -1087,23 +1087,6 @@ body {
 .inv-cell.c-X {
   background: #20292e;
 }
-.inv-item-star {
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  display: inline-flex;
-  color: var(--cond-pristine);
-  pointer-events: none;
-}
-.inv-item-star .icon,
-.inv-item-star .icon svg {
-  width: 10px;
-  height: 10px;
-}
-.inv-item-star .icon svg {
-  fill: var(--cond-pristine);
-  stroke: var(--cond-pristine);
-}
 .inv-item {
   position: absolute;
   box-sizing: border-box;

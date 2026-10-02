@@ -8,7 +8,7 @@ import { itemCells, itemSize, type Cell, type Grid } from "../sim/grid";
 import type { GridItem, PartInstance, RefitJob, RefitMove, Vehicle, World } from "../sim/types";
 import { playerVehicle } from "../sim/damage";
 import { el } from "./dom";
-import { conditionTier, wearLabel } from "./format";
+import { wearLabel } from "./format";
 import { createIcon, goodIcon, partIcon, type IconName } from "./cards";
 import { hp, kg } from "./units";
 
@@ -61,12 +61,6 @@ export function cellEl(c: Cell, x: number, y: number, cell: number): HTMLElement
   return el("div", { class: `inv-cell c-${c === "." ? "plain" : c}`, style: pos(x, y, 1, 1, cell), title: CELL_TITLE[c] }, c === "." || c === "X" ? "" : c);
 }
 
-// What a part's grid box adds to the icon and name: its condition bar and, when pristine, a corner star.
-function partBoxExtras(part: PartInstance): HTMLElement[] {
-  const star = conditionTier(part) === "pristine" ? [el("span", { class: "inv-item-star", "aria-hidden": "true" }, createIcon("star"))] : [];
-  return [conditionBar(part), ...star];
-}
-
 // The box an item draws on a grid: its kind color, icon, name and condition bar.
 export function itemBox(it: GridItem, mounted: boolean, cell: number): HTMLElement {
   const cells = itemCells(it);
@@ -82,7 +76,7 @@ export function itemBox(it: GridItem, mounted: boolean, cell: number): HTMLEleme
     createIcon(getItemIcon(it)),
     el("span", { class: "inv-item-name" }, itemLabel(it).short),
   );
-  if (it.kind === "part") node.append(...partBoxExtras(it.part));
+  if (it.kind === "part") node.append(conditionBar(it.part));
   return node;
 }
 

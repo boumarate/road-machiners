@@ -53,8 +53,4 @@ describe("condition colors", () => {
   it("fills the pristine star", () => {
     expect(css).toMatch(/\.cond-pristine \.icon svg\s*\{[^}]*fill:/);
   });
-
-  it("colors the grid star from the pristine color", () => {
-    expect(css).toMatch(/\.inv-item-star[^{]*\{[^}]*var\(--cond-pristine\)/);
-  });
 });
