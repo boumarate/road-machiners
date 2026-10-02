@@ -79,8 +79,10 @@ function tileScatter(t: Terrain, x: number, y: number): ScatterKind | null {
 
 type Chances = { pebbles: number; scrub: number };
 
-// Shares of tiles of a ground type with a pebble cluster and with a scrub tuft. Shoulders raise both.
+// Shares of tiles of a ground type with a pebble cluster and with a scrub tuft. Shoulders raise both. Hull plating
+// lies over the ground, so nothing grows there and pebbles would poke through it.
 function chances(type: TerrainTypeId, shoulder: boolean): Chances {
+  if (type === 'hull') return { pebbles: 0, scrub: 0 };
   const scrub = type === 'scrub' ? SCRUB_ON_SCRUB : SCRUB_ELSEWHERE;
   return shoulder ? { pebbles: PEBBLE_ON_SHOULDER, scrub: Math.max(scrub, SCRUB_ON_SHOULDER) } : { pebbles: PEBBLE_CHANCE, scrub };
 }

@@ -5,6 +5,7 @@
 
 import { REGION } from "../data/region";
 import { bridgeCut, deckAlong } from "../sim/bridge";
+import { siteGap } from "../sim/sites";
 import { dist, type Vec } from "../sim/vec";
 import type { PaintCanvas } from "./groundPaint";
 import { hash2 } from "./noise";
@@ -58,7 +59,7 @@ function drawnRuns(points: Vec[]): Vec[][] {
 
 function drawn(p: Vec): boolean {
   if (deckAlong(p.x, p.y) !== null || bridgeCut(p.x, p.y) > 0) return false;
-  return !SITES.some((site) => dist(site.pos, p) < site.radius);
+  return !SITES.some((site) => siteGap(site, p) < 0);
 }
 
 // Points every STEP tiles along a road from its start, and its end.

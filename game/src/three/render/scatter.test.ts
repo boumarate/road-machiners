@@ -43,6 +43,12 @@ describe('scatterPlacements', () => {
     expect(onShoulder / shoulderTiles).toBeGreaterThan(1.5 * (onOpen / openTiles));
   });
 
+  it('keeps hull plating bare, even on a road shoulder', () => {
+    const types = t.types.map(() => 'hull' as const);
+    const bare = scatterPlacements({ ...t, types }, []).flatMap((c) => [...c.pebbles, ...c.scrub]);
+    expect(bare).toEqual([]);
+  });
+
   it('places the same scatter on every load', () => {
     const again = scatterPlacements(t, world.obstacles).flatMap((c) => [...c.pebbles, ...c.scrub]);
     expect(again.map((p) => p.matrix.elements)).toEqual(placed.map((p) => p.matrix.elements));
