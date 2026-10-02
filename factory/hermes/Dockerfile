@@ -11,6 +11,12 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends gh jq \
  && apt-get clean
 
+# The idle session reset plugin, at the commit the Hermes plugin catalog pins (v0.2.0). The start script copies it into the Hermes home.
+ARG SESSION_RESET_POLICY_REF=bb618e0
+RUN git clone https://github.com/fastfinge/hermes-session-reset-policy.git /opt/factory/hermes-session-reset-policy \
+ && git -C /opt/factory/hermes-session-reset-policy checkout --detach "$SESSION_RESET_POLICY_REF" \
+ && rm -rf /opt/factory/hermes-session-reset-policy/.git
+
 COPY config.yaml /opt/factory/config.yaml
 COPY SOUL.md /opt/factory/SOUL.md
 COPY --chmod=755 factory-incidents.sh /opt/factory/factory-incidents.sh
@@ -30,6 +36,8 @@ cp /opt/factory/factory-incidents.sh "$HERMES_HOME/scripts/factory-incidents.sh"
 rm -rf "$HERMES_HOME/plugins/factory"
 mkdir -p "$HERMES_HOME/plugins"
 cp -r /opt/factory/plugin "$HERMES_HOME/plugins/factory"
+rm -rf "$HERMES_HOME/plugins/hermes-session-reset-policy"
+cp -r /opt/factory/hermes-session-reset-policy "$HERMES_HOME/plugins/hermes-session-reset-policy"
 python3 "$HERMES_HOME/plugins/factory/allowlist.py"
 # Hermes never passes GH_TOKEN to its shell, since a model provider uses that name. So gh saves the login in the Hermes home, and git asks gh.
 printenv GH_TOKEN | env -u GH_TOKEN gh auth login --with-token

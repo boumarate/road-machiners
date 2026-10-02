@@ -129,17 +129,23 @@ export interface GitHub {
 // One inline keyboard button. `data` comes back as the callback data of a press.
 export type InlineButton = { text: string; data: string };
 
+// One photo of an album, with its own caption.
+export type AlbumPhoto = { path: string; caption: string };
+
 export interface Telegram {
   sendMessage(chat: string, text: string, replyTo?: number): Promise<number>;
   sendPhoto(chat: string, pngPath: string, caption: string, buttons?: InlineButton[][]): Promise<number>;
+  // Sends 1 to 10 photos as one photo or one album, with no buttons, optionally as a reply. Returns the message ids in order.
+  sendPhotos(chat: string, photos: AlbumPhoto[], replyTo?: number): Promise<number[]>;
   sendDocument(chat: string, path: string, replyTo?: number): Promise<number>;
   editCaption(chat: string, messageId: number, caption: string): Promise<void>; // replaces a photo's caption and drops its buttons
 }
 
 // `dir` is the repo folder the agent works in, `game` or `factory`. The container starts it there.
 // `openNetwork` runs the container on the normal network with no proxy. Absent means the restricted network.
+// `mediaDir` is a host folder of reference images. The agent sees it read only at /work/.factory-media.
 // `readOnly` maps host folders to container paths, mounted read only.
-export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; readOnly?: Record<string, string> };
+export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string> };
 
 export interface Container {
   // Runs Claude Code headless in the clone. Throws on a nonzero exit.
@@ -161,6 +167,8 @@ export interface HostRepo {
   revertIssueMerge(issue: number, branch: string): Promise<boolean>;
   deleteBranch(branch: string): Promise<void>; // on GitHub, if it is there
   prepareWorkClone(branch: string, base: string, dir: string): Promise<void>;
+  // Agent skills expect their task file in git and commit it. This commits its removal, keeps it on disk, and returns the removed paths.
+  untrackFactoryFiles(dir: string): Promise<string[]>;
   // Brings the work clone's branch head into the host clone, without pushing it, and returns its full hash.
   fetchFromWork(dir: string, branch: string): Promise<string>;
   push(commit: string, branch: string): Promise<void>; // sets `branch` on GitHub to `commit`, which must hold the branch's current head
@@ -193,6 +201,7 @@ export type Ctx = {
   repo: HostRepo;
   statePath: string;
   now: () => Date;
+  fetch?: typeof fetch; // the host's HTTP client for reference images. Absent means the global one.
   log: (stage: Stage, issue: number | null, msg: string) => void;
 };
 
@@ -206,6 +215,8 @@ export const TASK_DIR = '.factory-tasks';
 export const TASK_FILE = (issue: number): string => `${TASK_DIR}/issue-${issue}.md`;
 export const WORK_DIR = (home: string, issue: number): string => `${home}/work/issue-${issue}`;
 export const OUT_DIR = '.factory';
+// Reference images mount here inside the clone. The folder never reaches a commit.
+export const MEDIA_DIR = '.factory-media';
 export const STUCK_LABEL = 'factory-stuck';
 export const WONT_DO_LABEL = 'wont-do';
 export const MAINTENANCE_LABEL = 'maintenance';
@@ -224,4 +235,8 @@ export const FEEDBACK_HEADING = '## Committee feedback';
 export const AGENT_NETWORK = 'roam-factory-agents';
 export const PROXY_NAME = 'roam-factory-proxy';
 export const PROXY_PORT = 8888;
+// Model routing. Baseline: design Opus, implementation and testing Sonnet. Explicit labels beat anything triage decided.
+export const DESIGN_SONNET_LABEL = 'design-sonnet'; // design runs on the build (Sonnet) model
+export const IMPLEMENTATION_OPUS_LABEL = 'implementation-opus'; // implementation and every testing pass run on the design (Opus) model
+export const ROUTING_MARK = 'Model routing from triage:'; // triage's routing comment. Its presence means triage decided once and never relabels.
 export const OPEN_NETWORK_LABEL = 'open-network';

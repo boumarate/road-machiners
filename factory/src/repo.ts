@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { must } from './exec';
 import { withLock } from './lock';
-import { MergeConflictError, OUT_DIR, TASK_DIR, type FactoryConfig, type HostRepo, type MergeStep, type Run } from './types';
+import { MEDIA_DIR, MergeConflictError, OUT_DIR, TASK_DIR, type FactoryConfig, type HostRepo, type MergeStep, type Run } from './types';
 
 // Hooks are switched off on every call, so no git command here runs code from a repository.
 // The identity names the factory on its merge commits, the same one the agent image uses.
@@ -128,8 +128,16 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
       await gitIn(dir, ['config', 'remote.origin.fetch', '+refs/remotes/origin/*:refs/remotes/origin/*']);
       await gitIn(dir, ['fetch', '--quiet', 'origin']);
       // The clone ignores the factory's own files, whatever the branch's .gitignore says.
-      appendFileSync(join(dir, '.git', 'info', 'exclude'), `\n${OUT_DIR}/\n${TASK_DIR}/\n`);
+      appendFileSync(join(dir, '.git', 'info', 'exclude'), `\n${OUT_DIR}/\n${TASK_DIR}/\n${MEDIA_DIR}/\n`);
       await checkoutBranch(dir, branch, base);
+    },
+    async untrackFactoryFiles(dir) {
+      const tracked = lines(await gitIn(dir, ['ls-files', '--', `:(glob)**/${TASK_DIR}/**`, `:(glob)**/${OUT_DIR}/**`, `:(glob)**/${MEDIA_DIR}/**`]));
+      if (tracked.length === 0) return [];
+      await gitIn(dir, ['rm', '-r', '-q', '--cached', '--', ...tracked]);
+      // A path list would commit the file from disk again, so the commit takes the index.
+      await gitIn(dir, ['commit', '-q', '-m', 'Keep factory task files out of the branch']);
+      return tracked;
     },
     async fetchFromWork(dir, branch) {
       const head = (await gitIn(dir, ['rev-parse', `refs/heads/${branch}`])).trim();

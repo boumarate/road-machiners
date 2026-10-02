@@ -1,9 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fetchMedia, mediaSection, requireMedia } from '../media';
 import { changesSaveMajor } from '../save-guard';
+import { isAnswered } from '../questions';
 import { readState } from '../state';
-import { BRANCH, GAME_DIR, HOTFIX_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type CardStage, type Ctx, type Stage } from '../types';
+import { FACTORY_MARK, BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type CardStage, type Ctx, type FactoryConfig, type Stage } from '../types';
 
 export const BASE_BRANCH = 'dev';
 export const HOTFIX_BASE = 'main';
@@ -70,18 +72,58 @@ export async function useOpenNetwork(ctx: Ctx, stage: Stage, issue: number | nul
   return open;
 }
 
-export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, model: string, prompt: string): Promise<void> {
+// The model of a stage comes from the issue's labels at the moment the agent starts, so a label changed by hand takes effect on the next agent run.
+// design-sonnet moves design to the build model. implementation-opus moves implementation and every testing pass (conflict merge, check fix, retry) to the design model.
+// Triage always runs on the build model. The model ids come from settings.env: FACTORY_DESIGN_MODEL is the Opus id, FACTORY_BUILD_MODEL the Sonnet id.
+export function modelFor(cfg: Pick<FactoryConfig, 'designModel' | 'buildModel'>, stage: CardStage, labels: string[]): string {
+  if (stage === 'design') return labels.includes(DESIGN_SONNET_LABEL) ? cfg.buildModel : cfg.designModel;
+  if (stage === 'implement' || stage === 'testing') return labels.includes(IMPLEMENTATION_OPUS_LABEL) ? cfg.designModel : cfg.buildModel;
+  return cfg.buildModel;
+}
+
+export function mediaDir(ctx: Ctx, issue: number): string {
+  return join(ctx.cfg.home, 'media', `issue-${issue}`);
+}
+
+// The host's own gh login, used only for the first request to github.com. Empty when gh has none, which public attachments do not need.
+async function githubToken(ctx: Ctx): Promise<string | undefined> {
+  const out = await ctx.run('gh', ['auth', 'token']).catch(() => null);
+  return out !== null && out.code === 0 && out.stdout.trim() !== '' ? out.stdout.trim() : undefined;
+}
+
+// Fetches the images of the issue body and every comment, feedback included, into the issue's media folder.
+// A failed image throws before the agent starts. Returns the prompt part that lists the images.
+export async function acquireMedia(ctx: Ctx, issue: number, stage: CardStage): Promise<string> {
+  const [item, comments] = await Promise.all([ctx.github.issue(issue), ctx.github.comments(issue)]);
+  const texts = [{ source: 'issue body', text: item.body }, ...comments.map((c) => ({ source: `comment by ${c.login}`, text: c.body }))];
+  const entries = await fetchMedia({ fetch: ctx.fetch ?? fetch, dir: mediaDir(ctx, issue), texts, token: texts.some((t) => t.text.includes('/user-attachments/')) ? await githubToken(ctx) : undefined });
+  for (const entry of entries) ctx.log(stage, issue, `reference image ${entry.url}: ${entry.status}${entry.reason ? `, ${entry.reason}` : ''}`);
+  requireMedia(issue, entries);
+  return mediaSection(entries);
+}
+
+export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, prompt: string): Promise<void> {
+  const { labels } = await ctx.github.issue(issue);
+  const model = modelFor(ctx.cfg, stage, labels);
+  ctx.log(stage, issue, `agent model ${model}`);
   const openNetwork = await useOpenNetwork(ctx, stage, issue);
-  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt, log: agentLog(ctx, issue, stage), openNetwork });
+  const media = await acquireMedia(ctx, issue, stage);
+  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: `${prompt}\n\n${media}`, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue) });
 }
 
 // Asks the issue author. The card stays where it is until a member answers on the issue.
-export async function askAuthor(ctx: Ctx, issue: number, questions: string[]): Promise<void> {
-  const { author } = await ctx.github.issue(issue);
+// The committee chat hears of a question set once. A set asked while an earlier one is still open, like a retry, adds no notice.
+// The notice names the stage and links the issue and never quotes the questions, since they come from an agent that read untrusted text.
+export async function askAuthor(ctx: Ctx, issue: number, questions: string[], stage: 'triage' | 'design'): Promise<void> {
+  const [{ author }, earlier] = await Promise.all([ctx.github.issue(issue), ctx.github.comments(issue)]);
+  const stillOpen = earlier.some((comment) => comment.body.includes(FACTORY_MARK) && comment.body.startsWith(QUESTIONS_HEADING)) && !isAnswered(earlier);
   const numbered = questions.map((question, index) => `${index + 1}. ${question}`);
   const body = [QUESTIONS_HEADING, `@${author}`, numbered.join('\n'), 'The work continues once someone answers here.'].join('\n\n');
   await ctx.github.comment(issue, body);
   await ctx.github.addLabel(issue, NEEDS_INFO_LABEL);
+  if (stillOpen) return;
+  const text = `❓ ${stage === 'triage' ? 'Triage' : 'Design'} needs answers on #${issue}. The questions are on the GitHub issue: https://github.com/${ctx.cfg.repo}/issues/${issue}\nAnswer there. Replies in this chat do not reach the stage.`;
+  await ctx.telegram.sendMessage(ctx.cfg.committeeChat, text).catch((error: unknown) => ctx.log(stage, issue, `could not notify the committee of the questions: ${error instanceof Error ? error.message : String(error)}`));
 }
 
 // The agent may stop early and ask the committee for a decision.
@@ -92,15 +134,17 @@ export function throwIfNeedsCommittee(home: string): void {
 
 // Paths an agent branch must never carry: agent messages, task files, and GitHub workflows,
 // which GitHub would run with the repo's secrets as soon as the factory pushes them.
-const FORBIDDEN_PATH = /^\.github\/|(^|\/)\.factory(-tasks)?\//;
+const FORBIDDEN_PATH = /^\.github\/|(^|\/)\.factory(-tasks|-media)?\//;
 
 export function factoryPaths(diff: string): string[] {
   const paths = [...diff.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)].flatMap((match) => [match[1], match[2]]);
   return [...new Set(paths)].filter((path) => FORBIDDEN_PATH.test(path));
 }
 
-// Nothing of the agent's work reaches GitHub before this check.
-export async function guardAndPush(ctx: Ctx, issue: number, base: string): Promise<void> {
+// Nothing of the agent's work reaches GitHub before this check. A committed task file only leaves the branch, so the stage goes on.
+export async function guardAndPush(ctx: Ctx, issue: number, base: string, stage: CardStage): Promise<void> {
+  const untracked = await ctx.repo.untrackFactoryFiles(workDir(ctx, issue));
+  if (untracked.length > 0) ctx.log(stage, issue, `took factory files out of the branch: ${untracked.join(', ')}`);
   const head = await ctx.repo.fetchFromWork(workDir(ctx, issue), BRANCH(issue));
   const diff = await ctx.repo.diff(base, head);
   const leaked = factoryPaths(diff);

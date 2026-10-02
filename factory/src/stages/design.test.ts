@@ -9,6 +9,7 @@ let calls: string[] = [];
 let diff = '';
 let labels: string[] = [];
 let bases: string[] = [];
+let earlier: string[] = [];
 
 beforeEach(() => {
   mkdirSync('tmp', { recursive: true });
@@ -17,6 +18,7 @@ beforeEach(() => {
   diff = '';
   labels = [];
   bases = [];
+  earlier = [];
   writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [] } });
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
@@ -24,17 +26,18 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 function fakeCtx(agent: (run: AgentRun) => void): Ctx {
   const record = (name: string) => async (...args: unknown[]) => { calls.push(`${name} ${args.join(' ')}`); };
   const fake = {
-    cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r' },
+    cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat' },
+    telegram: { sendMessage: record('message') },
     log: () => undefined,
     statePath: `${home}/state.json`,
     github: {
       issue: async () => ({ number: 7, title: 'Big horn', body: 'Add a horn', labels, createdAt: '', state: 'OPEN', author: 'anna', thumbsUp: [] }),
-      comments: async () => [{ login: 'a', body: 'yes please' }],
+      comments: async () => [{ login: 'a', body: 'yes please' }, ...earlier.map((body) => ({ login: 'bot', body }))],
       comment: record('comment'), addLabel: record('addLabel'), close: record('close'), move: record('move'),
     },
     container: { agent: async (run: AgentRun) => { calls.push('agent'); agent(run); } },
     repo: {
-      fetch: record('fetch'), push: record('push'), fetchFromWork: async () => 'w1',
+      fetch: record('fetch'), push: record('push'), fetchFromWork: async () => 'w1', untrackFactoryFiles: async () => [],
       prepareWorkClone: async (_b: string, base: string, dir: string) => { bases.push(`prepare ${base}`); mkdirSync(dir, { recursive: true }); },
       diff: async (base: string) => { bases.push(`diff ${base}`); return diff; },
     },
@@ -45,6 +48,17 @@ function fakeCtx(agent: (run: AgentRun) => void): Ctx {
 const PLAN = '# Task\n\n## Plan\n- step one\n\n## Verify\n';
 
 describe('design stage', () => {
+  it.each([
+    [[], 'opus'],
+    [['design-sonnet'], 'sonnet'],
+    [['implementation-opus'], 'opus'],
+  ])('designs with the model of labels %j: %s', async (set, model) => {
+    labels = set;
+    const models: string[] = [];
+    await runStage(fakeCtx((run) => { models.push(run.model); writeFileSync(`${run.clone}/${run.dir}/.factory/wont-do.md`, 'No.\n'); }), 7);
+    expect(models).toEqual([model]);
+  });
+
   it('comments, labels, closes and moves to Done on won\'t do', async () => {
     await runStage(fakeCtx((run) => writeFileSync(`${run.clone}/${run.dir}/.factory/wont-do.md`, 'Against the design.\n')), 7);
     expect(calls).toContain('comment 7 Against the design.');
@@ -63,6 +77,23 @@ describe('design stage', () => {
     expect(calls).toContain('addLabel 7 needs-info');
     expect(calls.at(-1)).toBe('move 7 Triage');
     expect(calls.filter((call) => call.startsWith('push'))).toEqual([]);
+  });
+
+  it('notifies the committee once about design questions, with the issue link and reply place', async () => {
+    await runStage(fakeCtx((run) => writeFileSync(`${run.clone}/${run.dir}/.factory/questions.md`, 'Which horn?')), 7);
+    const messages = calls.filter((call) => call.startsWith('message'));
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toContain('Design needs answers on #7');
+    expect(messages[0]).toContain('https://github.com/o/r/issues/7');
+    expect(messages[0]).toContain('Replies in this chat do not reach the stage.');
+    expect(messages[0]).not.toContain('Which horn?');
+  });
+
+  it('adds no duplicate notice when a retry asks while the earlier set is open', async () => {
+    earlier = ['## Questions from the factory\n\n1. Old?\n\n<!-- roam-factory -->'];
+    await runStage(fakeCtx((run) => writeFileSync(`${run.clone}/${run.dir}/.factory/questions.md`, 'Which horn?')), 7);
+    expect(calls).toContain('addLabel 7 needs-info');
+    expect(calls.filter((call) => call.startsWith('message'))).toEqual([]);
   });
 
   it('checks questions before wont-do and the plan', async () => {

@@ -18,10 +18,45 @@ Commit the fixes on the current branch.
 
 This machine has no GPU and is slow. Keep checks focused.
 
-Take a screenshot of the core feature.
+Reference images from the issue are listed at the end of this prompt.
+Read every available image with the Read tool.
+When the issue or the task file wants the result to look like an image, a gameplay test is not enough.
+Then run the visual comparison.
+Take a screenshot of the finished game from the view of the image.
+Put it next to the reference image in one file, `.factory/comparison.png`, and read that file with the Read tool.
+List every mismatch you see in plain words, like "the cab is half as tall as in the image" or "the roof color is brown, the image has green".
+Fix what does not match, rebuild, take the screenshot again and compare again.
+Do this up to three rounds, and commit each fix.
+Write the last comparison under "Visual comparison" in the Conclusion of {{taskFile}}.
+It lists what matches, each mismatch that remains and why you left it.
+The testing stage is not done until that section exists.
+An image marked NOT AVAILABLE was not seen.
+When the comparison depends on it, write that to `.factory/needs-committee.md` and stop.
+The skill `blender-image-to-3d` has a compare sheet script, `compose_review.py`, for model renders.
+Use it when the change is a Blender model.
+Its overlap number is a diagnostic only.
+
+Take screenshots of the finished game that together show EVERY visible change of this task, not one hero shot.
 Write a Playwright script in `tmp/`.
 Launch Chromium without GPU flags.
-Save the screenshot as `.factory/screenshot.png`.
+Capture only from the final build of the final commit. If you change code afterwards, capture again.
+Save the primary view as `.factory/screenshot.png`. Save the others next to it in `.factory/`, like `.factory/view-gate.png`.
+Every image must be a real screenshot of the game, or a labeled contact sheet built from real screenshots. Never draw or invent art.
+No duplicates, no blurry or irrelevant views, no dump of many shots.
+- A new large or drivable lootable location needs at least three different views: its layout and landmarks, the approach, and the traversal through it.
+- N new items need every item shown, one view each or one clearly legible combined image.
+- A change across a whole system, like a grid on all vehicle types, needs one legible labeled contact sheet of real screenshots of representative affected cases, plus detail views if needed. Mark it with `"sheet": true`.
+- One screenshot is enough only when it covers the whole change.
+At most 10 images in total, the primary included. Choose or composite to fit.
+Read each image with the Read tool before you list it.
+
+Write `.factory/evidence.json`, the ordered list of images. The first is `screenshot.png`.
+`{"commit": "<output of git rev-parse HEAD>", "features": [{"name": "Salvage yard", "kind": "location"}], "images": [{"file": "screenshot.png", "description": "Gate and landmarks", "covers": ["Salvage yard"], "sheet": false}]}`
+List each visible change under `features`. The kind is `location`, `item`, `system` or `other`.
+Each image has a description of up to 200 characters and `covers`, the exact feature names it shows. Every feature needs an image.
+A `location` needs three images. A `system` needs an image with `"sheet": true`.
+Files are plain relative names inside `.factory/`, PNG, JPEG or WebP, under 10 MB, and a PNG's sides add up to under 10000 pixels.
+The factory rejects the manifest when `commit` is not the final head of the branch, so write it last, after your final commit.
 
 Write `.factory/approval.json` with this shape.
 `{"description": "...", "howToTry": "..."}`

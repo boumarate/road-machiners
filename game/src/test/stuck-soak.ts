@@ -5,6 +5,7 @@
 
 import { START_KITS } from '../data/start';
 import { isHostile } from '../sim/combat';
+import { hangUp } from '../sim/dialogue';
 import { advanceFar } from '../sim/far';
 import { canVehicleSee } from '../sim/vision';
 import { freeCells, goodsCount, mountedParts } from '../sim/grid';
@@ -25,6 +26,8 @@ export function soak(seed: number, turns: number): SoakReport {
   let played = 0;
   try {
     for (; played < turns; played++) {
+      // The parked player never answers a radio call an NPC opens, so it hangs up and the world plays on.
+      if (w.player.call) w = hangUp(w);
       const before = topGoals(w);
       w = endTurn(w, moveAllFar);
       for (const e of w.events) if (e.t === 'stall') stalls.push(describeStall(w, e, before.get(e.vehicle)));

@@ -31,14 +31,14 @@ describe('dockerContainer', () => {
     const call = runCall(calls);
     expect(call.args.join(' ')).not.toContain('secret-token');
     expect(call.args.join(' ')).not.toContain('sound-key');
-    expect(call.opts?.env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'secret-token', ELEVENLABS_API_KEY: 'sound-key', SFX_MAX_GENERATIONS: '6' });
+    expect(call.opts?.env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'secret-token', ELEVENLABS_API_KEY: 'sound-key', SFX_MAX_GENERATIONS: '6', CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' });
     expect(call.opts?.input).toBe('Your folder is /work/game. Write every .factory/ and .factory-tasks/ file under /work/game, even after you change directory.\n\ndo it');
     expect(call.opts?.logPath).toBe('/l.log');
     expect(call.args.filter((a) => a === '-v')).toHaveLength(2);
     expect(call.args).toContain('/w/c:/work');
     expect(call.args).toContain(`${HOME}/npm-cache:/home/pwuser/.npm`);
     expect(call.args.slice(call.args.indexOf('-w'), call.args.indexOf('-w') + 2)).toEqual(['-w', '/work/game']);
-    expect(call.args.filter((a) => a === '-e')).toHaveLength(9);
+    expect(call.args.filter((a) => a === '-e')).toHaveLength(10);
     expect(call.args.slice(call.args.indexOf('img:1'))).toEqual(['img:1', 'factory-agent', '-p', '--model', 'opus', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose']);
   });
 
@@ -48,6 +48,13 @@ describe('dockerContainer', () => {
     const args = runCall(calls).args;
     expect(args.filter((a) => a === '-v')).toHaveLength(3);
     expect(args).toContain('/h/state:/factory/state:ro');
+  });
+
+  it('mounts the reference images read only inside the clone, and only when the run has them', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', mediaDir: '/h/media/issue-7' });
+    expect(runCall(calls).args).toContain('/h/media/issue-7:/work/.factory-media:ro');
+    expect(runCall(calls).args.filter((a) => a === '-v')).toHaveLength(3);
   });
 
   it('puts a restricted agent on the internal network with the proxy env', async () => {

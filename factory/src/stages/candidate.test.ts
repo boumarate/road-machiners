@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { pngBytes } from '../photo-fixtures';
 import { EMPTY_STATE, readState, writeState } from '../state';
 import type { ReleaseState } from '../types';
 import { changeLines } from './release-common';
@@ -83,6 +84,44 @@ describe('candidate', () => {
     await expect(candidate(f.ctx, 11)).rejects.toThrow('release.md names #3, but the release holds #3, #5');
     expect(deployed).toEqual([]);
     expect(f.photos).toEqual([]);
+  });
+});
+
+describe('candidate evidence', () => {
+  // The fake agent writes into the clone's .factory, and the fake shell leaves the screenshot there.
+  function setup(commit = 'abc1234'): ReturnType<typeof fake> {
+    const f = fake();
+    f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': pngBytes(0).toString('latin1'), 'view1.png': pngBytes(1).toString('latin1'), 'evidence.json': JSON.stringify({ commit, features: [{ name: '#3', kind: 'other' }, { name: '#5', kind: 'other' }], images: [{ file: 'screenshot.png', description: 'Faster trucks', covers: ['#3'] }, { file: 'view1.png', description: 'Louder horn', covers: ['#5'] }] }) };
+    return f;
+  }
+
+  it('posts the Ship post alone, then the extra view as a reply to it, then the changelog', async () => {
+    const f = setup();
+    await candidate(f.ctx, 11);
+    expect(f.photos).toHaveLength(1);
+    expect(f.photos[0].buttons).toEqual([[{ text: 'Ship', data: 'factory:ship:11' }]]);
+    expect(f.albums).toEqual([{ chat: 'committee', paths: [expect.stringContaining('view1.png')], captions: ['2/2 Louder horn'], replyTo: 42 }]);
+    const posts = f.calls.filter((call) => /^(photo|album|message)/.test(call));
+    expect(posts).toEqual(['photo committee', 'album committee 1 42', expect.stringContaining('message committee 42')]);
+    expect(readState(f.ctx.statePath).release?.postId).toBe(42);
+  });
+
+  it('falls back to the one screenshot when the manifest is for another commit', async () => {
+    const f = setup('ffffff0');
+    await candidate(f.ctx, 11);
+    expect(f.albums).toEqual([]);
+    expect(f.photos).toHaveLength(1);
+  });
+
+  it('clears the post id and fails when the album fails, so no dead Ship post stays current', async () => {
+    const f = setup();
+    f.albumFails = true;
+    await expect(candidate(f.ctx, 11)).rejects.toThrow('boom');
+    expect(readState(f.ctx.statePath).release?.postId).toBeNull();
+    expect(readState(f.ctx.statePath).postCaptions).toEqual({});
+    expect(f.calls.some((call) => call.startsWith('editCaption 42 Superseded'))).toBe(true);
+    expect(f.calls.some((call) => call.startsWith('message committee 42'))).toBe(false);
   });
 });
 

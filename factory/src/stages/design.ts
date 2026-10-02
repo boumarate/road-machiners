@@ -11,14 +11,14 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   resetOutputs(home);
   await writeIssueInput(ctx, issue, home);
   const prompt = fillPrompt('design', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) });
-  await runAgent(ctx, issue, 'design', ctx.cfg.designModel, prompt);
+  await runAgent(ctx, issue, 'design', prompt);
   throwIfNeedsCommittee(home);
   const questions = readOutput(home, 'questions.md');
   if (questions !== null) return askBack(ctx, issue, questions);
   const reason = readOutput(home, 'wont-do.md');
   if (reason !== null) return refuse(ctx, issue, reason);
   requirePlan(home, TASK_FILE(issue));
-  await guardAndPush(ctx, issue, base);
+  await guardAndPush(ctx, issue, base, 'design');
   await postDesign(ctx, issue, readFileSync(`${home}/${TASK_FILE(issue)}`, 'utf8'));
   await ctx.github.move(issue, 'Implementation');
 }
@@ -26,7 +26,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
 async function askBack(ctx: Ctx, issue: number, text: string): Promise<void> {
   const questions = text.split('\n').map((line) => line.trim()).filter((line) => line !== '');
   if (questions.length === 0) throw new Error('The design stage wrote an empty questions.md');
-  await askAuthor(ctx, issue, questions);
+  await askAuthor(ctx, issue, questions, 'design');
   await ctx.github.move(issue, 'Triage');
 }
 

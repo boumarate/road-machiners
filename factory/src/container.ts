@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { must } from './exec';
+import { MEDIA_MOUNT } from './media';
 import { jobLabel } from './jobs';
 import { withLock } from './lock';
 import { AGENT_NETWORK, GAME_DIR, PROXY_NAME, PROXY_PORT, type Container, type FactoryConfig, type Run } from './types';
@@ -17,10 +18,12 @@ const NO_PROXY = 'localhost,127.0.0.1';
 // The npm cache is shared across runs, so `npm ci` reuses downloads. npm checks every package against the lockfile's integrity hash, so a bad cache entry fails the install instead of slipping in.
 const NPM_CACHE = '/home/pwuser/.npm';
 
-function mountArgs(cfg: FactoryConfig, clone: string, dir: string): string[] {
+function mountArgs(cfg: FactoryConfig, clone: string, dir: string, mediaDir?: string): string[] {
   const cache = `${cfg.home}/npm-cache`;
   mkdirSync(cache, { recursive: true });
-  return ['-v', `${clone}:/work`, '-v', `${cache}:${NPM_CACHE}`, '-w', `/work/${dir}`];
+  // The reference images mount read only inside the clone's mount. The clone's exclude file keeps them out of its commits.
+  const media = mediaDir === undefined ? [] : ['-v', `${mediaDir}:${MEDIA_MOUNT}:ro`];
+  return ['-v', `${clone}:/work`, '-v', `${cache}:${NPM_CACHE}`, ...media, '-w', `/work/${dir}`];
 }
 
 function envArgs(env: Record<string, string>): string[] {
@@ -73,12 +76,17 @@ export function outputsNote(dir: string): string {
 // Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
 export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null): Container {
   return {
-    async agent({ clone, dir, model, prompt, log, openNetwork, readOnly = {} }) {
+    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {} }) {
       if (!openNetwork) await ensureProxy(run, cfg);
-      const env = { CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken, ELEVENLABS_API_KEY: cfg.elevenlabsKey, SFX_MAX_GENERATIONS: String(cfg.sfxMaxGenerations) };
+      // A headless run ends when the agent ends its turn, and that kills anything it left in the background.
+      // Agents ended turns to wait for background subagents, and the run died with their work, so background tasks are off.
+      const env = {
+        CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken, ELEVENLABS_API_KEY: cfg.elevenlabsKey, SFX_MAX_GENERATIONS: String(cfg.sfxMaxGenerations),
+        CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1',
+      };
       const readOnlyArgs = Object.entries(readOnly).flatMap(([host, path]) => ['-v', `${host}:${path}:ro`]);
       const args = [
-        ...baseArgs(jobId), '-i', ...mountArgs(cfg, clone, dir), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
+        ...baseArgs(jobId), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
         'factory-agent', '-p', '--model', model, '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose',
       ];
       const result = await run('docker', args, { env, input: `${outputsNote(dir)}\n\n${prompt}`, logPath: log });
