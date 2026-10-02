@@ -12,7 +12,7 @@ export type LocationDef = {
   edge: SiteEdge;
 };
 // What closes a location on its collision edge. Towns always have a town wall.
-export type SiteEdge = "palisade" | "camp" | "stone" | "fence" | "wrecks";
+export type SiteEdge = "palisade" | "camp" | "stone" | "fence" | "wrecks" | "fortress";
 export const MAP_SCALE = 5;
 
 export function scalePoint(p: Vec): Vec {
@@ -104,7 +104,7 @@ export const REGION = {
     },
     {
       id: "dustwell",
-      edge: "stone",
+      edge: "fortress",
       name: "Dustwell",
       kind: "oasis",
       pos: scalePoint({ x: 33.8, y: 32 }),
@@ -112,7 +112,7 @@ export const REGION = {
     },
     {
       id: "granary",
-      edge: "palisade",
+      edge: "fortress",
       name: "The Granary",
       kind: "landmark",
       pos: scalePoint({ x: 50, y: 32.8 }),
@@ -152,7 +152,7 @@ export const REGION = {
     },
     {
       id: "green-pit",
-      edge: "stone",
+      edge: "fortress",
       name: "Green Pit",
       kind: "oasis",
       pos: scalePoint({ x: 71.8, y: 89 }),
@@ -160,7 +160,7 @@ export const REGION = {
     },
     {
       id: "south-lock",
-      edge: "fence",
+      edge: "fortress",
       name: "South Lock",
       kind: "landmark",
       pos: scalePoint({ x: 56.8, y: 94 }),
@@ -176,7 +176,7 @@ export const REGION = {
     },
     {
       id: "pump-station",
-      edge: "fence",
+      edge: "fortress",
       name: "Pump Station",
       kind: "landmark",
       pos: scalePoint({ x: 40.7, y: 51.7 }),
@@ -192,7 +192,7 @@ export const REGION = {
     },
     {
       id: "salvage-yard",
-      edge: "palisade",
+      edge: "fortress",
       name: "Salvage Yard",
       kind: "convoy",
       pos: scalePoint({ x: 82, y: 52.2 }),
@@ -201,7 +201,7 @@ export const REGION = {
     // Raider camps. Raiders spawn at their gates and service there. Their gate guns shoot every outsider in range.
     {
       id: "scrapjaw",
-      edge: "camp",
+      edge: "fortress",
       name: "Scrapjaw Camp",
       kind: "camp",
       pos: scalePoint({ x: 22, y: 14 }),
@@ -209,7 +209,7 @@ export const REGION = {
     },
     {
       id: "kiln",
-      edge: "camp",
+      edge: "fortress",
       name: "Kiln Camp",
       kind: "camp",
       pos: scalePoint({ x: 66, y: 76 }),

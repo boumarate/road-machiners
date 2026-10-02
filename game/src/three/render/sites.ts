@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import { REGION, type LocationDef, type SiteEdge, type TownDef } from '../../data/region';
+import { FORTRESS_SITES } from '../../data/fortress';
 import { TERRAIN } from '../../data/terrain';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
@@ -219,7 +220,7 @@ type WallStyle = {
 
 const SET = REGION.settlement;
 const PALISADE: WallStyle = { height: SET.palisadeHeight, thickness: SET.palisadeThickness, segment: SET.palisadeSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.trunk], postColor: PAL.rust.side, doorColor: PAL.trunk, guarded: false };
-const EDGE_STYLES: Record<SiteEdge | 'town', WallStyle> = {
+const EDGE_STYLES: Record<Exclude<SiteEdge, 'fortress'> | 'town', WallStyle> = {
   town: { height: SET.wallHeight, thickness: SET.wallThickness, segment: SET.wallSegment, towerEvery: SET.wallTowerEvery, ragged: false, fence: false, colors: [PAL.wall.side], postColor: PAL.wall.top, doorColor: PAL.rust.side, guarded: true },
   palisade: PALISADE,
   // Raider camps hide behind rusted scrap, with a gun tower on each side of every gate.
@@ -232,7 +233,9 @@ const SINK = 0.3; // tiles each edge piece reaches below the ground, so slopes l
 const DOOR_THICKNESS = 0.4; // door leaves as a share of the wall thickness
 
 function edgeStyle(site: Site): WallStyle {
-  return EDGE_STYLES['kind' in site ? site.edge : 'town'];
+  const edge = 'kind' in site ? site.edge : 'town';
+  if (edge === 'fortress') throw new Error(`Site ${site.id} has a fortress curtain and no edge style`);
+  return EDGE_STYLES[edge];
 }
 
 // The edge circle cut into straight sections whose outer corners lie on the collision edge. Sections near a
@@ -461,6 +464,12 @@ function buildCamp(b: SiteBuilder, id: string): void {
   b.addModel('crates', Math.cos(turn + 5.2) * 3.5, Math.sin(turn + 5.2) * 3.5, turn);
 }
 
+// Fortress sites stand behind baked curtain pieces and need no edge of their own.
+function closeEdge(b: SiteBuilder, site: Site): void {
+  if (site.id in FORTRESS_SITES) return;
+  addWall(b, site, edgeStyle(site));
+}
+
 function buildSite(t: Terrain, site: Site): THREE.Group {
   const b = new SiteBuilder(t, site);
   switch (site.id) {
@@ -482,7 +491,7 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
     case 'scrapjaw': case 'kiln': buildCamp(b, site.id); break;
     default: throw new Error(`Missing landmark model for ${site.id}`);
   }
-  addWall(b, site, edgeStyle(site));
+  closeEdge(b, site);
   // Site models never move after they are built.
   b.root.traverse((o) => {
     o.updateMatrix();
