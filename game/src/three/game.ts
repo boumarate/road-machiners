@@ -52,6 +52,7 @@ import { Fx3D, TruckFx } from "./render/fx";
 import { CollisionCues, collisionSteps, playCrashes, playDryGuns, playShotFx, type CombatHost } from "./volley";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
+import { playBreaks } from "./render/partDebris";
 import { PathView } from "./render/path";
 import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
@@ -700,6 +701,8 @@ export class Game {
     const searched = this.world.events.find((e) => e.t === "searched");
     if (searched) this.inventory.openLoot(searched.stock);
     this.uiStale = true;
+    // Last, so a failed lookup in the cosmetic effects cannot skip the rest of the landing.
+    playBreaks(this.world, this.obstacles.parts, this.fx, this.views, (id) => this.eventPoint(id));
   }
 
   private finishPlayback(): void {

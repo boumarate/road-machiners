@@ -14,8 +14,9 @@ import type { BrokenProp, Obstacle, SalvageStock, World } from '../../sim/types'
 import { dist } from '../../sim/vec';
 import type { V3, VehicleFrame } from '../../phys/frames';
 import type { TurnResult } from '../../phys/drive';
-import { DebrisSim, FLY_REACH } from './debris';
+import { DebrisSim, disposeTree, FLY_REACH, truckBoxes } from './debris';
 import { instancedModel, model, socket } from './models';
+import { PartDebris } from './partDebris';
 import type { RenderScope } from './scope';
 import { TERRAIN_CHUNK } from './terrain';
 
@@ -30,10 +31,13 @@ export class ObstacleViews {
   private readonly piles = new Map<string, { obj: THREE.Object3D; units: number }>();
   private readonly debris = new Map<string, THREE.Object3D>();
   private readonly flying: DebrisSim;
+  // The scrap of broken truck parts shares the prop scope and the truck boxes.
+  readonly parts: PartDebris;
   private obstacles: readonly Obstacle[] = [];
 
   constructor(private readonly scope: RenderScope, private readonly terrain: Terrain) {
     this.flying = new DebrisSim(terrain);
+    this.parts = new PartDebris(scope, terrain);
   }
 
   sync(obstacles: Obstacle[], salvage: SalvageStock[], broken: readonly BrokenProp[]): void {
@@ -77,8 +81,10 @@ export class ObstacleViews {
   // dt: seconds since the last drawn frame.
   play(anim: { result: TurnResult } | null, step: number | null, world: World, frames: Record<string, VehicleFrame>, dt: number): void {
     if (anim) this.smash(anim.result, step ?? Infinity, world.broken);
-    this.flying.moveTrucks(world.vehicles.filter((v) => frames[v.id]).map((v) => ({ id: v.id, chassisId: v.chassisId, ...frames[v.id] })));
+    const trucks = truckBoxes(world.vehicles, frames);
+    this.flying.moveTrucks(trucks);
     this.flying.step(dt);
+    this.parts.play(trucks, dt);
   }
 
   // Each prop broken this turn bursts into flying pieces at its hit step. The standing view goes.
@@ -184,16 +190,6 @@ function velocityAt(frames: VehicleFrame[] | undefined, step: number): V3 {
   const b = frames[Math.min(frames.length - 1, step + 1)].pos;
   const k = PHYSICS.stepsPerSecond / (Math.min(frames.length - 1, step + 1) - Math.max(0, step - 1));
   return { x: (b.x - a.x) * k, y: (b.y - a.y) * k, z: (b.z - a.z) * k };
-}
-
-function disposeTree(obj: THREE.Object3D): void {
-  obj.traverse((o) => {
-    if (o instanceof THREE.Mesh) {
-      o.geometry.dispose();
-      const mats = Array.isArray(o.material) ? o.material : [o.material];
-      for (const m of mats) m.dispose();
-    }
-  });
 }
 
 function buildObstacle(t: Terrain, o: Obstacle): THREE.Object3D {
