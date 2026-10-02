@@ -35,7 +35,7 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
   let failuresLeft = shellFailures;
   const fake = {
-    cfg: { home, buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat' },
+    cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat' },
     log: () => undefined,
     statePath: `${home}/state.json`,
     github: {
@@ -150,6 +150,39 @@ describe('testing stage', () => {
     expect(readFileSync(`${home}/work/issue-7/game/.factory/check-failure.md`, 'utf8')).toContain('npm test failed');
     expect(calls.filter((call) => call === 'checks')).toHaveLength(2);
     expect(calls.at(-1)).toBe('move 7 Approval');
+  });
+
+  it('runs every testing round on the build model by default', async () => {
+    const models: string[] = [];
+    const ctx = fakeCtx((run) => { models.push(run.model); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); }, 1);
+    await runStage(ctx, 7);
+    expect(models).toEqual(['sonnet', 'sonnet']);
+  });
+
+  it('runs the test round and the check-fix retry on Opus with implementation-opus', async () => {
+    labels = ['implementation-opus'];
+    const models: string[] = [];
+    const ctx = fakeCtx((run) => { models.push(run.model); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); }, 1);
+    await runStage(ctx, 7);
+    expect(models).toEqual(['opus', 'opus']);
+  });
+
+  it('honors a label removed between the test round and the fix round', async () => {
+    labels = ['implementation-opus'];
+    const models: string[] = [];
+    const ctx = fakeCtx((run) => { models.push(run.model); labels = []; writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); }, 1);
+    await runStage(ctx, 7);
+    expect(models).toEqual(['opus', 'sonnet']);
+  });
+
+  it('keeps the selection when a conflict sends the card back to testing in a new job', async () => {
+    labels = ['implementation-opus'];
+    conflicts = ['game/src/a.ts'];
+    const models: string[] = [];
+    const ctx = fakeCtx((run) => { models.push(run.model); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); });
+    await runStage(ctx, 7);
+    await runStage(fakeCtx((run) => { models.push(run.model); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); }), 7);
+    expect(models).toEqual(['opus', 'opus']);
   });
 
   it('stops after the checks fail twice', async () => {

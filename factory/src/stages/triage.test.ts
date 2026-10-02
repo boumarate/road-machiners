@@ -15,15 +15,15 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
-function fakeCtx(verdict: string | null): Ctx {
+function fakeCtx(verdict: string | null, labels: string[] = [], earlier: string[] = []): Ctx {
   const record = (name: string) => async (...args: unknown[]) => { calls.push(`${name} ${args.join(' ')}`); };
   const fake = {
     cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat' },
     telegram: { sendMessage: record('message') },
     log: () => undefined,
     github: {
-      issue: async () => ({ number: 7, title: 'Big horn', body: 'Add a horn', labels: [], createdAt: '', state: 'OPEN', author: 'anna', thumbsUp: [] }),
-      comments: async () => [],
+      issue: async () => ({ number: 7, title: 'Big horn', body: 'Add a horn', labels, createdAt: '', state: 'OPEN', author: 'anna', thumbsUp: [] }),
+      comments: async () => earlier.map((body) => ({ login: 'bot', body })),
       comment: record('comment'), addLabel: record('addLabel'), close: record('close'), move: record('move'),
     },
     container: {
@@ -41,13 +41,13 @@ function fakeCtx(verdict: string | null): Ctx {
   return fake as unknown as Ctx;
 }
 
-const verdict = (over: Record<string, unknown>): string => JSON.stringify({ verdict: 'ready', reason: 'Clear goal', questions: [], hotfix: false, ...over });
+const verdict = (over: Record<string, unknown>): string => JSON.stringify({ verdict: 'ready', reason: 'Clear goal', questions: [], hotfix: false, complexity: 'intermediate', complexityReason: 'Touches the horn code and the audio module.', ...over });
 
 describe('triage stage', () => {
   it('comments and moves to Design when ready', async () => {
     await runStage(fakeCtx(verdict({})), 7);
     expect(calls).toContain('agent sonnet');
-    expect(calls).toContain('comment 7 Triage passed: Clear goal');
+    expect(calls.find((call) => call.startsWith('comment 7 Triage passed: Clear goal'))).toContain('Model routing from triage: intermediate, default models');
     expect(calls.at(-1)).toBe('move 7 Design');
     expect(prompt).not.toContain('{{');
     expect(calls.filter((call) => call.startsWith('push') || call.startsWith('message') || call.startsWith('addLabel'))).toEqual([]);
@@ -57,10 +57,46 @@ describe('triage stage', () => {
     await runStage(fakeCtx(verdict({ hotfix: true, reason: 'Saves from 0.3 fail to load.' })), 7);
     expect(calls.slice(-4)).toEqual([
       'addLabel 7 hotfix',
-      'comment 7 Triage passed as a hotfix: Saves from 0.3 fail to load.\n\nIt branches from main, and its approval ships it to main and itch.io at once.',
+      expect.stringContaining('comment 7 Triage passed as a hotfix: Saves from 0.3 fail to load.\n\nIt branches from main, and its approval ships it to main and itch.io at once.\n\nModel routing from triage:'),
       'message chat ⚠️ Triage marked #7 Big horn as a hotfix.\nSaves from 0.3 fail to load.\nIt skips dev. Its approval will merge into main and ship to itch.io at once. Remove the label hotfix on GitHub if it can wait for a release.',
       'move 7 Design',
     ]);
+  });
+
+  it('adds design-sonnet for a trivial task and records the rationale', async () => {
+    await runStage(fakeCtx(verdict({ complexity: 'trivial', complexityReason: 'One constant in one file.' })), 7);
+    expect(calls).toContain('addLabel 7 design-sonnet');
+    expect(calls.find((call) => call.startsWith('comment 7 Triage passed'))).toContain('Model routing from triage: trivial, label design-sonnet. One constant in one file.');
+  });
+
+  it('adds implementation-opus for a hard task', async () => {
+    await runStage(fakeCtx(verdict({ complexity: 'hard', complexityReason: 'Pathing, combat and saves interact.' })), 7);
+    expect(calls).toContain('addLabel 7 implementation-opus');
+    expect(calls).not.toContain('addLabel 7 design-sonnet');
+  });
+
+  it('adds no label for an intermediate task, and triage itself runs on the build model', async () => {
+    await runStage(fakeCtx(verdict({})), 7);
+    expect(calls.filter((call) => call.startsWith('addLabel'))).toEqual([]);
+    expect(calls).toContain('agent sonnet');
+  });
+
+  it('leaves labels a member set, even against its own rating', async () => {
+    await runStage(fakeCtx(verdict({ complexity: 'hard' }), ['design-sonnet']), 7);
+    expect(calls.filter((call) => call.startsWith('addLabel'))).toEqual([]);
+    expect(calls.find((call) => call.startsWith('comment 7 Triage passed'))).toContain('left as set on the issue (design-sonnet)');
+  });
+
+  it('does not relabel on a later run after a member removed the label', async () => {
+    await runStage(fakeCtx(verdict({ complexity: 'trivial' }), [], ['Triage passed: x\n\nModel routing from triage: trivial, label design-sonnet. y']), 7);
+    expect(calls.filter((call) => call.startsWith('addLabel'))).toEqual([]);
+  });
+
+  it.each([
+    [{ complexity: 'huge' }, 'complexity as trivial'],
+    [{ complexityReason: ' ' }, 'complexityReason'],
+  ])('throws on bad complexity %#', async (over, message) => {
+    await expect(runStage(fakeCtx(verdict(over)), 7)).rejects.toThrow(message);
   });
 
   it('refuses, labels, closes and moves to Done on wont-do', async () => {

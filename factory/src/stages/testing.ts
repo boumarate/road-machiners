@@ -100,7 +100,7 @@ async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: 
 }
 
 async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'test-fix', base: string): Promise<void> {
-  await runAgent(ctx, issue, 'testing', ctx.cfg.buildModel, fillPrompt(prompt, { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
+  await runAgent(ctx, issue, 'testing', fillPrompt(prompt, { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   throwIfNeedsCommittee(home);
   readApproval(home);

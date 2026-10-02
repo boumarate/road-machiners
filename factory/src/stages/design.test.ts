@@ -45,6 +45,17 @@ function fakeCtx(agent: (run: AgentRun) => void): Ctx {
 const PLAN = '# Task\n\n## Plan\n- step one\n\n## Verify\n';
 
 describe('design stage', () => {
+  it.each([
+    [[], 'opus'],
+    [['design-sonnet'], 'sonnet'],
+    [['implementation-opus'], 'opus'],
+  ])('designs with the model of labels %j: %s', async (set, model) => {
+    labels = set;
+    const models: string[] = [];
+    await runStage(fakeCtx((run) => { models.push(run.model); writeFileSync(`${run.clone}/${run.dir}/.factory/wont-do.md`, 'No.\n'); }), 7);
+    expect(models).toEqual([model]);
+  });
+
   it('comments, labels, closes and moves to Done on won\'t do', async () => {
     await runStage(fakeCtx((run) => writeFileSync(`${run.clone}/${run.dir}/.factory/wont-do.md`, 'Against the design.\n')), 7);
     expect(calls).toContain('comment 7 Against the design.');

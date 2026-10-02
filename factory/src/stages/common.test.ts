@@ -3,13 +3,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { AgentRun, Ctx } from '../types';
 import { EMPTY_STATE, writeState } from '../state';
 import { solidPng } from '../media-fixtures';
-import { agentHome, baseBranchFor, baseBranchOf, factoryPaths, fillPrompt, runAgent } from './common';
+import { agentHome, baseBranchFor, baseBranchOf, factoryPaths, fillPrompt, modelFor, runAgent } from './common';
 
 function agentCtx(labels: string[], body = '', comments: { login: string; body: string }[] = [], fetchFn?: typeof fetch): { ctx: Ctx; runs: AgentRun[]; logs: string[] } {
   const runs: AgentRun[] = [];
   const logs: string[] = [];
   const ctx = {
-    cfg: { home: 'tmp/factory-common-test' },
+    cfg: { home: 'tmp/factory-common-test', designModel: 'opus-id', buildModel: 'sonnet-id' },
     github: { issue: async () => ({ labels, body }), comments: async () => comments },
     fetch: fetchFn,
     run: async () => ({ code: 0, stdout: 'tok\n', stderr: '' }),
@@ -22,16 +22,47 @@ function agentCtx(labels: string[], body = '', comments: { login: string; body: 
 describe('runAgent network', () => {
   it('uses the restricted network without the open-network label', async () => {
     const { ctx, runs, logs } = agentCtx(['bug']);
-    await runAgent(ctx, 7, 'design', 'opus', 'p');
+    await runAgent(ctx, 7, 'design', 'p');
     expect(runs[0].openNetwork).toBe(false);
-    expect(logs).toEqual(['agent runs on the restricted network']);
+    expect(logs).toEqual(['agent model opus-id', 'agent runs on the restricted network']);
   });
 
   it('uses the open network with the open-network label', async () => {
     const { ctx, runs, logs } = agentCtx(['bug', 'open-network']);
-    await runAgent(ctx, 7, 'design', 'opus', 'p');
+    await runAgent(ctx, 7, 'design', 'p');
     expect(runs[0].openNetwork).toBe(true);
-    expect(logs[0]).toContain('open network');
+    expect(logs[1]).toContain('open network');
+  });
+});
+
+describe('model routing', () => {
+  const cfg = { designModel: 'opus-id', buildModel: 'sonnet-id' };
+  const stages = ['triage', 'design', 'implement', 'testing'] as const;
+  const pick = (labels: string[]) => stages.map((stage) => modelFor(cfg, stage, labels));
+
+  it('keeps the baseline with no label: triage Sonnet, design Opus, implementation and testing Sonnet', () => {
+    expect(pick([])).toEqual(['sonnet-id', 'opus-id', 'sonnet-id', 'sonnet-id']);
+  });
+
+  it('design-sonnet forces Sonnet for design only', () => {
+    expect(pick(['design-sonnet'])).toEqual(['sonnet-id', 'sonnet-id', 'sonnet-id', 'sonnet-id']);
+  });
+
+  it('implementation-opus forces Opus for implementation and testing, never triage', () => {
+    expect(pick(['implementation-opus'])).toEqual(['sonnet-id', 'opus-id', 'opus-id', 'opus-id']);
+  });
+
+  it('both labels apply independently', () => {
+    expect(pick(['design-sonnet', 'implementation-opus'])).toEqual(['sonnet-id', 'sonnet-id', 'opus-id', 'opus-id']);
+  });
+
+  it('runAgent reads the labels at each run, so a manual change counts on the next one', async () => {
+    const labels: string[] = ['implementation-opus'];
+    const { ctx, runs } = agentCtx(labels);
+    await runAgent(ctx, 7, 'testing', 'p');
+    labels.length = 0;
+    await runAgent(ctx, 7, 'testing', 'p');
+    expect(runs.map((run) => run.model)).toEqual(['opus-id', 'sonnet-id']);
   });
 });
 
@@ -46,7 +77,7 @@ describe('runAgent reference images', () => {
   it('puts the absolute image paths and the media folder in the prompt of every stage', async () => {
     for (const stage of ['triage', 'design', 'implement', 'testing'] as const) {
       const { ctx, runs } = agentCtx([], `look ${ASSET}`, [], hosted(200));
-      await runAgent(ctx, 7, stage, 'm', 'the prompt');
+      await runAgent(ctx, 7, stage, 'the prompt');
       expect(runs[0].prompt).toMatch(/^the prompt\n\n.*\/work\/\.factory-media\/ref-[0-9a-f]{12}\.png \(png, 2x2,/s);
       expect(runs[0].mediaDir).toBe('tmp/factory-common-test/media/issue-7');
     }
@@ -54,13 +85,13 @@ describe('runAgent reference images', () => {
 
   it('takes images from feedback comments too', async () => {
     const { ctx, runs } = agentCtx([], 'no image here', [{ login: 'ann', body: `## Committee feedback\n![](${ASSET})` }], hosted(200));
-    await runAgent(ctx, 7, 'design', 'm', 'p');
+    await runAgent(ctx, 7, 'design', 'p');
     expect(runs[0].prompt).toContain('from the comment by ann');
   });
 
   it('fails the stage before the agent starts when an image cannot be fetched', async () => {
     const { ctx, runs } = agentCtx([], ASSET, [], hosted(403));
-    await expect(runAgent(ctx, 7, 'design', 'm', 'p')).rejects.toThrow('could not fetch, so no agent ran');
+    await expect(runAgent(ctx, 7, 'design', 'p')).rejects.toThrow('could not fetch, so no agent ran');
     expect(runs).toHaveLength(0);
   });
 });
