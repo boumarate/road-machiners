@@ -1,6 +1,6 @@
-"""Deploy the game factory: sync code, push the env file, build the agent and proxy images, install the tick timer, start Hermes and Caddy.
+"""Set up the game factory: clone main once, push the server-only env file, build the agent and proxy images, install the tick and update timers, start Hermes and Caddy.
 
-Run after provision.py. Re-run to roll out changes.
+Run after provision.py. Re-run for a new secret or an infra change. It never sends code: factory-update deploys each new main from GitHub.
 """
 
 # pyright: reportMissingImports=false
@@ -10,7 +10,7 @@ from io import StringIO
 
 from pyinfra.operations import files, server, systemd
 
-from factory_infra import CODE_DIR, FACTORY_ROOT, FACTORY_UID, FACTORY_USER, HERMES_DIR, HOME_DIR, INFRA_DIR, REPO_ROOT, WWW_DIR, read_factory_env, settings
+from factory_infra import CODE_DIR, FACTORY_ROOT, FACTORY_UID, FACTORY_USER, HERMES_DIR, HOME_DIR, INFRA_DIR, read_factory_env, settings
 
 FILES = INFRA_DIR / "files"
 factory_env = read_factory_env(settings.factory_env_file)
@@ -21,27 +21,32 @@ itch_user, itch_game = factory_env["ITCH_TARGET"].split("/")
 itch_url = f"https://{itch_user}.itch.io/{itch_game}"
 factory_dir = f"{CODE_DIR}/factory"
 env_path = f"{factory_dir}/.env"
+settings_path = f"{factory_dir}/settings.env"
 as_factory = {"_sudo": True, "_sudo_user": FACTORY_USER}
+UPDATE_SCRIPT = f"{FACTORY_ROOT}/factory-update.sh"
+UPDATE_MINUTES = 2
 
-# rsync sends only changed files in one connection. A per-file sync took 15 minutes.
-# A pattern without a leading slash matches at any depth. --delete spares excluded paths, so the server keeps its node_modules and .env.
-SKIPPED = [".git/", "node_modules/", ".worktrees/", "tmp/", "dist/", ".playtest/", ".claude/", "__pycache__/", ".pytest_cache/", ".venv/", ".env", ".DS_Store", "/factory/infra/"]
-files.rsync(
-    name="Sync the repo checkout",
-    src=f"{REPO_ROOT}/",
-    dest=CODE_DIR,
-    flags=["-rlpt", "--delete", *[f"--exclude={pattern}" for pattern in SKIPPED]],
-)
 server.shell(
-    name="The factory user owns the checkout",
-    commands=[f"chown -R {FACTORY_USER}:{FACTORY_USER} {CODE_DIR}"],
+    name="The factory user owns the code dir",
+    commands=[f"mkdir -p {CODE_DIR}", f"chown {FACTORY_USER}:{FACTORY_USER} {CODE_DIR}"],
     _sudo=True,
 )
+# The code dir is a clone of GitHub's main. The first run also turns a copy from the old rsync deploy into a clone.
+# Main's files replace the copy's. Ignored files, like node_modules and .env, stay.
+repo_url = f"https://github.com/{factory_env['FACTORY_REPO']}.git"
+server.shell(
+    name="Clone main into the code dir once",
+    commands=[
+        f"cd {CODE_DIR} && {{ test -d .git || {{ git init -q -b main && git remote add origin {repo_url} "
+        "&& timeout 300 git fetch -q origin main && git reset -q --hard origin/main && git clean -fdq; }; }",
+    ],
+    **as_factory,
+)
 
-# The GitHub token joins the factory env as GH_TOKEN. gh and git read it from there, so the server needs no gh login.
+# The GitHub token joins the server-only env as GH_TOKEN. gh and git read it from there, so the server needs no gh login.
 factory_env_text = Path(settings.factory_env_file).read_text().rstrip("\n") + f"\nGH_TOKEN={settings.factory_gh_token}\n"
 files.put(
-    name="Push the factory .env with the GitHub token",
+    name="Push the server-only factory .env with the GitHub token",
     src=StringIO(factory_env_text),
     dest=env_path,
     user=FACTORY_USER,
@@ -132,9 +137,50 @@ hermes_env = f"FACTORY_HERMES_DIR={HERMES_DIR} FACTORY_UID={FACTORY_UID}"
 server.shell(
     name="compose up: hermes",
     commands=[
-        f"cd {CODE_DIR} && {hermes_env} timeout 900 docker compose -f factory/hermes/compose.yaml --env-file {env_path} "
+        f"cd {CODE_DIR} && {hermes_env} timeout 900 docker compose -f factory/hermes/compose.yaml --env-file {settings_path} --env-file {env_path} "
         "up -d --build --remove-orphans --wait --wait-timeout 180",
     ],
+    _sudo=True,
+)
+
+# factory-update deploys each main past this commit. Set only once, so a later deploy never hides an update it did not run.
+server.shell(
+    name="Record the deployed commit once",
+    commands=[f"test -f {HOME_DIR}/deployed || git -C {CODE_DIR} rev-parse HEAD > {HOME_DIR}/deployed"],
+    **as_factory,
+)
+# The script lives outside the checkout, so a checkout never rewrites it while it runs.
+files.put(
+    name="Push the update script",
+    src=str(FILES / "factory-update.sh"),
+    dest=UPDATE_SCRIPT,
+    mode="755",
+    _sudo=True,
+)
+files.template(
+    name="update service unit",
+    src=str(FILES / "roam-factory-update.service.j2"),
+    dest="/etc/systemd/system/roam-factory-update.service",
+    mode="644",
+    service_user=FACTORY_USER,
+    script=UPDATE_SCRIPT,
+    home_dir=HOME_DIR,
+    _sudo=True,
+)
+files.template(
+    name="update timer unit",
+    src=str(FILES / "roam-factory-update.timer.j2"),
+    dest="/etc/systemd/system/roam-factory-update.timer",
+    mode="644",
+    update_minutes=UPDATE_MINUTES,
+    _sudo=True,
+)
+systemd.service(
+    name="update timer enabled",
+    service="roam-factory-update.timer",
+    running=True,
+    enabled=True,
+    daemon_reload=True,
     _sudo=True,
 )
 

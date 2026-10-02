@@ -10,12 +10,12 @@ export async function remove(ctx: Ctx, issue: number): Promise<void> {
   const removal = readState(ctx.statePath).pendingRemovals.find((item) => item.issue === issue);
   if (!removal) throw new Error(`No removal of issue #${issue} is queued`);
   const release = requireRelease(ctx);
-  await ctx.repo.sync(release.branch);
-  // Each branch is pushed right after its revert, so a later failure never leaves a local revert that a later push would carry.
-  const onRelease = await revertAndPush(ctx, issue, release.branch);
+  await ctx.repo.fetch();
+  // Each revert reaches GitHub at once, so a retry after a later failure skips the branch that has it.
+  const onRelease = await ctx.repo.revertIssueMerge(issue, release.branch);
   // The release branch changed, so the candidate post no longer matches it. Ship must not run on it, even if the dev revert fails.
   if (onRelease) updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null } }));
-  const onDev = await revertAndPush(ctx, issue, BASE_BRANCH);
+  const onDev = await ctx.repo.revertIssueMerge(issue, BASE_BRANCH);
   if (!onRelease && !onDev) throw new Error(`Neither ${release.branch} nor ${BASE_BRANCH} has a merge of issue #${issue}`);
   await deployDev(ctx, agentLog(ctx, issue, 'remove'));
   // The old branch would make git skip its reverted commits on a second merge, so a redo starts fresh from the base branch.
@@ -30,10 +30,4 @@ export async function remove(ctx: Ctx, issue: number): Promise<void> {
   // Ship reads postId, so the old candidate post can no longer ship this release.
   updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null, removed: [...state.release.removed, issue] } }));
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Issue #${issue} is out of release ${release.day} and back in design. A new candidate follows when the release tasks are done.`);
-}
-
-async function revertAndPush(ctx: Ctx, issue: number, branch: string): Promise<boolean> {
-  if (!(await ctx.repo.revertIssueMerge(issue, branch))) return false;
-  await ctx.repo.push(branch);
-  return true;
 }

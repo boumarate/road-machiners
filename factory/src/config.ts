@@ -1,4 +1,16 @@
+import { readFileSync } from 'node:fs';
+import { parseEnv } from 'node:util';
 import type { FactoryConfig } from './types';
+
+// Git tracks settings.env, so the server runs main's settings. `local` holds secrets and host paths and never leaves its host.
+// A key in both would leave one of them dead, so it stops the factory.
+export function readEnvFiles(settingsPath: string, localPath: string): Record<string, string> {
+  const settings = parseEnv(readFileSync(settingsPath, 'utf8'));
+  const local = parseEnv(readFileSync(localPath, 'utf8'));
+  const both = Object.keys(settings).filter((key) => key in local);
+  if (both.length > 0) throw new Error(`${both.join(', ')} set in both ${settingsPath} and ${localPath}. Keep each key in one file.`);
+  return { ...settings, ...local } as Record<string, string>;
+}
 
 // Every key is required, except the itch keys. A missing key stops the factory before it touches GitHub or Telegram.
 // Only the release uses the itch keys, so without them the release alone fails loud.
@@ -37,7 +49,7 @@ const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'sfxMaxGeneration
 
 export function loadConfig(env: Record<string, string | undefined>): FactoryConfig {
   const missing = Object.entries(KEYS).filter(([field, key]) => !RELEASE_ONLY.has(field as keyof FactoryConfig) && !env[key]?.trim()).map(([, key]) => key);
-  if (missing.length) throw new Error(`Factory config is missing ${missing.join(', ')}. See .env.example.`);
+  if (missing.length) throw new Error(`Factory config is missing ${missing.join(', ')}. See settings.env and .env.example.`);
   const entries = Object.entries(KEYS).map(([field, key]) => [field, read(field as keyof FactoryConfig, key, env[key]?.trim())]);
   return Object.fromEntries(entries) as FactoryConfig;
 }

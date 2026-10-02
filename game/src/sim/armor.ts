@@ -345,6 +345,25 @@ export function fireSpans(arc: number, sides: readonly Side[]): FireSpan[] {
   return joinAcrossBack(merged);
 }
 
+// Where a gun can point to cover a bearing off the heading: the bearing itself inside the spans, else the nearest span edge.
+// Degrees in and out, in (-180, 180]. A tie goes to the edge first in span order.
+export function aimWithin(spans: readonly FireSpan[], rel: number): number {
+  if (spans.length === 0) throw new Error('aimWithin needs at least one span');
+  if (spans.some((span) => spanHolds(span, rel) || spanHolds(span, rel + 360))) return rel;
+  const edges = spans.flatMap((span) => [span.from, span.to]);
+  const apart = (edge: number) => Math.abs(((edge - rel + 540) % 360) - 180);
+  const nearest = edges.reduce((best, edge) => (apart(edge) < apart(best) ? edge : best));
+  return wrapDegrees(nearest);
+}
+
+function spanHolds(span: FireSpan, angle: number): boolean {
+  return angle >= span.from && angle <= span.to;
+}
+
+function wrapDegrees(angle: number): number {
+  return angle > 180 ? angle - 360 : angle <= -180 ? angle + 360 : angle;
+}
+
 // The rear quarter crosses 180 degrees, so it splits into its right and left halves.
 function splitAtBack(from: number, to: number): FireSpan[] {
   return to <= 180 ? [{ from, to }] : [{ from, to: 180 }, { from: -180, to: to - 360 }];

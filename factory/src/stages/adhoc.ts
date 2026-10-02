@@ -8,7 +8,7 @@ export async function adhoc(ctx: Ctx, issue: number): Promise<void> {
   const reply = readState(ctx.statePath).adhocReplies[String(issue)];
   if (!reply) throw new Error(`No chat message recorded to answer for ad hoc issue #${issue}`);
   const item = await ctx.github.issue(issue);
-  await ctx.repo.sync();
+  await ctx.repo.fetch();
   const dir = `${ctx.cfg.home}/work/adhoc-${issue}`;
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone('dev', 'dev', dir);

@@ -146,30 +146,38 @@ export interface Container {
   shell(clone: string, script: string, log: string, env?: Record<string, string>): Promise<void>;
 }
 
+// Merge `branch` into `into` with a merge commit titled `message`.
+export type MergeStep = { branch: string; into: string; message: string };
+
+// Branch names in every call mean GitHub's branches. A write reaches GitHub at once or fails with nothing changed.
 export interface HostRepo {
   // The host's own clone. Git never runs hooks in it.
   path: string;
-  sync(...extra: string[]): Promise<void>; // fetch origin, fast-forward dev, main and the extra branches
+  fetch(): Promise<void>; // fetch GitHub, cloning first when the clone is missing
   createBranch(name: string, from: string): Promise<void>; // throws when the branch exists
-  // Reverts the newest first-parent merge `Merge issue #N:` in main..branch. False when the branch lacks it. A conflict aborts and throws.
+  // Reverts the newest first-parent merge `Merge issue #N:` in main..branch and pushes. False when the branch lacks it. A conflict throws.
   revertIssueMerge(issue: number, branch: string): Promise<boolean>;
-  deleteBranch(branch: string): Promise<void>; // locally if present, and on origin if it is there
+  deleteBranch(branch: string): Promise<void>; // on GitHub, if it is there
   prepareWorkClone(branch: string, base: string, dir: string): Promise<void>;
-  fetchFromWork(dir: string, branch: string): Promise<void>;
-  // Merges the host's `base` into the checked-out branch of a work clone. Returns the merged commit and the conflicted files, and leaves a conflicted merge open for an agent. No conflicts means it merged.
+  // Agent skills expect their task file in git and commit it. This commits its removal, keeps it on disk, and returns the removed paths.
+  untrackFactoryFiles(dir: string): Promise<string[]>;
+  // Brings the work clone's branch head into the host clone, without pushing it, and returns its full hash.
+  fetchFromWork(dir: string, branch: string): Promise<string>;
+  push(commit: string, branch: string): Promise<void>; // sets `branch` on GitHub to `commit`, which must hold the branch's current head
+  // Merges `base` into the checked-out branch of a work clone. Returns the merged commit and the conflicted files, and leaves a conflicted merge open for an agent. No conflicts means it merged.
   // Parallel jobs move `base` on, so a later check names the returned commit, not the branch.
   mergeBaseIntoWork(dir: string, base: string): Promise<{ commit: string; conflicts: string[] }>;
   isMerged(base: string, branch: string): Promise<boolean>; // whether `branch` holds every commit of `base`, a branch or a commit
-  push(branch: string): Promise<void>;
   headHash(branch: string): Promise<string>; // short hash
   diff(base: string, branch: string): Promise<string>;
   changedFiles(base: string, branch: string): Promise<string[]>; // files `branch` changed since it split from `base`
   hasNewCommits(base: string, branch: string): Promise<boolean>;
-  merge(branch: string, into: string, message: string): Promise<void>; // throws MergeConflictError on a conflict, after it aborts the merge
+  // Runs the steps in order and pushes every changed branch in one atomic push. A conflict throws MergeConflictError before the push.
+  merge(steps: MergeStep[]): Promise<void>;
   mergeLog(from: string, to: string): Promise<string[]>; // first-parent merge subjects on `from` missing in `to`
 }
 
-// A merge that stopped on conflicting files. The host clone is clean again when this is thrown.
+// A merge that stopped on conflicting files. Nothing changed on GitHub when this is thrown.
 export class MergeConflictError extends Error {
   constructor(readonly branch: string, readonly into: string, readonly files: string[], reason: string) {
     super(`merge of ${branch} into ${into} failed. Conflicting files: ${files.join(', ')}. ${reason}`);

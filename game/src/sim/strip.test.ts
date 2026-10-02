@@ -156,7 +156,7 @@ describe('plain surrender to a stranded player', () => {
     for (let i = 0; i < 5; i++) {
       w = endTurn(w, testDrive);
       expect(shotsAtPlayer(w, lawman)).toEqual([]);
-      if (w.player.call?.topic === 'tow') w = hangUp(w); // a lawman at peace may offer the stranded player a tow
+      if (w.player.call?.topic === 'tow' || w.player.call?.topic === 'towFree') w = hangUp(w); // a lawman at peace may offer the stranded player a tow
     }
   });
 
