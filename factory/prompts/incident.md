@@ -42,3 +42,9 @@ Write `.factory/incident.json` with this shape.
 For a written entry, the id is the id you used.
 The reason is one or two plain sentences.
 When you skip, the reason says why the bug is below the bar.
+
+Read `docs/architecture/principles.md`.
+For a written entry, the reason also names the principle the bug broke, like "Principle 3".
+When no principle covers the bug, the reason proposes a new principle in one sentence.
+Never edit the principles file.
+A human decides on principles.

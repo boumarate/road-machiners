@@ -38,6 +38,12 @@ Judge the compare sheet by looking at it, and write each mismatch as a measureme
 Read CLAUDE.md and DESIGN.md first.
 Follow them.
 
+Read docs/architecture/principles.md.
+It holds this project's global principles.
+up:udesign treats them as its global principles.
+For each principle the change touches, answer its plan check in the task file, as an invariant or a design decision.
+A design that deviates from a principle names it and says why.
+
 Create or revise the task file {{taskFile}}.
 Set `Mode: hands-off` in it.
 Run up:udesign and then up:uplan in hands-off mode.

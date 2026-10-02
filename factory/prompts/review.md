@@ -19,7 +19,7 @@ Read these files before you judge anything.
 
 - `CLAUDE.md` and `docs/DESIGN.md`.
 - `../docs/incident-log.md`. It lists past bugs. Your first task is to stop their repetition.
-- `docs/architecture/principles.md`. It lists rules that came from those bugs.
+- `docs/architecture/principles.md`. It holds the global principles. The task file answers the plan check of each principle the change touches.
 
 Judge against `origin/{{base}}` only.
 Intermediate commits are no defence.
@@ -54,6 +54,12 @@ Cite an incident only when the finding repeats the same failure or breaks the sa
 A loose analogy is no citation.
 List the ids of the cited incidents in `incidents`.
 An introduced finding with an incident citation is P2 at minimum, even when it would otherwise be P3.
+
+An introduced finding that breaks a principle is P2 at minimum too.
+Name the principle by its number in the text, like "Principle 4".
+Check the code against the task file's answers to the plan checks.
+A deviation the task file names and explains is no finding by itself.
+A principle the change breaks without naming it is.
 
 You do not write the verdict.
 The factory counts introduced findings.
