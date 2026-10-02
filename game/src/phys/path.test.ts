@@ -44,8 +44,9 @@ it('the player drives from Bowl to Nose without a serious hit on a static obstac
     world.vehicles = world.vehicles.filter((v) => v.faction === 'player');
     world.player.engineHeat = 0; // this drive never stops to cool down
     for (const e of world.events)
-      // A route can graze a site's edge, which the game allows; a rock or building should not touch it.
-      if (e.t === 'collision' && e.a === me && !e.b.startsWith('v') && !e.b.startsWith('site-'))
+      // A route can graze a site's edge, which the game allows, and a cross-country leg can bottom out on a crest of
+      // the relief, which is terrain and not an obstacle; a rock or building should not touch it.
+      if (e.t === 'collision' && e.a === me && !e.b.startsWith('v') && !e.b.startsWith('site-') && e.b !== 'ground')
         staticDamage += e.hitsA.reduce((sum, h) => sum + h.damage, 0);
     return dist(world.vehicles[0].pos, nose.pos) <= nose.radius + 1.5;
   });

@@ -303,14 +303,12 @@ export const REGION = {
       { x: 70, y: 33 },
       { x: 82, y: 33 },
     ], [5, 6]), // the stretch under the Broken Wing hoop and along its deck stays straight
-    // At the Broken Wing road's east end, roads leave north to Podfield and south to Salvage Yard.
-    scaleRoad([
-      { x: 82, y: 33 },
-      { x: 77, y: 24 },
-    ]),
+    // From the Broken Wing road's east end, a road loops south to Salvage Yard and back north to Podfield.
     scaleRoad([
       { x: 82, y: 33 },
       { x: 82, y: 49 },
+      { x: 78, y: 36 },
+      { x: 77, y: 24 },
     ]),
     scaleRoad([
       { x: 50, y: 36 },
