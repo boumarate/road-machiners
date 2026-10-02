@@ -4,9 +4,10 @@
 
 import { REGION, type TerritoryDef } from '../data/region';
 import { SALVAGE, type LootTable } from '../data/salvage';
-import { TERRITORIES, type Hazard, type HullSection, type SpotRule } from '../data/territory';
+import { TERRITORIES, type Hazard, type HullSection, type SpotTable } from '../data/territory';
 import { edgeCrossings, isTerritory } from './sites';
 import { randInt } from './rng';
+import type { PropKind } from './terrain';
 import type { NpcActivity, Obstacle, SalvageStock, Vehicle, World } from './types';
 import { dist, lerp, type Vec } from './vec';
 
@@ -22,29 +23,33 @@ export function territoryAt(pos: Vec): TerritoryDef | null {
   return TERRITORY_DEFS.find((t) => dist(pos, t.pos) < t.radius) ?? null;
 }
 
-function spotRule(o: Obstacle): SpotRule | null {
-  if (o.kind !== 'landmark') return null;
-  const t = territoryAt(o.pos);
-  return (t && TERRITORIES[t.id].spots.find((s) => s.look === o.look)) || null;
+// The prop kind of a loot spot in a deck bay. Field spots take their kinds from TERRITORIES spot rules.
+export const DECK_BAY: PropKind = 'deckBay';
+
+// The SALVAGE table a prop of this kind at pos rolls as a loot spot of its territory, or null when it is none.
+function spotTableAt(kind: string, pos: Vec): SpotTable | null {
+  const t = territoryAt(pos);
+  if (!t) return null;
+  const rules = TERRITORIES[t.id];
+  if (kind === DECK_BAY && rules.sections.some((s) => s.bays.length > 0)) return rules.bayTable;
+  return rules.spots.find((s) => s.look === kind)?.table ?? null;
 }
 
-// A baked prop of a spot kind inside the territory that makes that kind a spot.
+// A baked prop of a spot kind inside the territory that makes that kind a spot: a deck bay or a field spot.
 export function isLootSpot(o: Obstacle): boolean {
-  return spotRule(o) !== null;
+  return o.kind === 'landmark' && spotTableAt(o.look, o.pos) !== null;
 }
 
 export function spotTable(o: Obstacle): LootTable {
-  const rule = spotRule(o);
-  if (!rule) throw new Error(`Obstacle ${o.id} is not a loot spot`);
-  return SALVAGE[rule.table];
+  const table = o.kind === 'landmark' ? spotTableAt(o.look, o.pos) : null;
+  if (!table) throw new Error(`Obstacle ${o.id} is not a loot spot`);
+  return SALVAGE[table];
 }
 
 // The territory whose loot spot holds this stock. Ids of baked props are <kind>-<k>, so the id tells a spot's kind.
 export function territoryOfStock(stock: SalvageStock): TerritoryDef | null {
-  const t = territoryAt(stock.pos);
-  if (!t) return null;
   const kind = stock.id.slice(0, stock.id.lastIndexOf('-'));
-  return TERRITORIES[t.id].spots.some((s) => s.look === kind) ? t : null;
+  return spotTableAt(kind, stock.pos) ? territoryAt(stock.pos) : null;
 }
 
 export function territorySpots(world: World, id: string): SalvageStock[] {
@@ -113,6 +118,15 @@ export function deckAlongAt(deck: HullDeck, pos: Vec): number | null {
   const along = ((pos.x - deck.low.x) * dx + (pos.y - deck.low.y) * dy) / len2;
   const across = ((pos.x - deck.low.x) * dy - (pos.y - deck.low.y) * dx) / Math.sqrt(len2);
   return along < 0 || along > 1 || Math.abs(across) > deck.section.width / 2 ? null : along;
+}
+
+// Tiles from pos to the nearest point of the deck's footprint, 0 on it.
+export function deckGap(deck: HullDeck, pos: Vec): number {
+  const { yaw, length, width } = deck.section;
+  const mid = { x: (deck.low.x + deck.high.x) / 2, y: (deck.low.y + deck.high.y) / 2 };
+  const along = (pos.x - mid.x) * Math.cos(yaw) + (pos.y - mid.y) * Math.sin(yaw);
+  const across = (pos.y - mid.y) * Math.cos(yaw) - (pos.x - mid.x) * Math.sin(yaw);
+  return Math.hypot(Math.max(0, Math.abs(along) - length / 2), Math.max(0, Math.abs(across) - width / 2));
 }
 
 // The deck's height at a share along it, over the ground height at its low end.

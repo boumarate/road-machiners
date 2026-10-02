@@ -1,42 +1,87 @@
-// Territory layer: debris, loot spots and the reactor inside each territory, placed by the rules in TERRITORIES.
-// It runs after the new-world layer, so ground rules read these props, and keeps every prop it places on open
-// ground inside its own territory. Every territory draws from the map seed and its own seed offset.
+// Territory layer: hull decks, ribs, deck bays, walls, the reactor, field spots and debris inside each territory,
+// placed by the rules in TERRITORIES. It runs after the new-world layer, so ground rules read these props and the
+// stamped deck heights. Decks, ribs, bays and walls are authored; field spots and debris are drawn along the crash
+// line from the map seed and the territory's own seed offset, on open ground off the decks and roads.
 
 import { REGION, type TerritoryDef } from '../data/region';
 import { TERRITORIES, type TerritoryRules } from '../data/territory';
 import { TERRAIN } from '../data/terrain';
 import { ROAD_INDEX } from '../sim/road-index';
 import { randRange, type Rng } from '../sim/rng';
-import { isTerritory } from '../sim/sites';
-import type { BakedProp } from '../sim/terrain';
+import { bayPoints, DECK_BAY, deckAlongAt, deckGap, deckPlane, hullDecks, isTerritory, ribPoses, type HullDeck } from '../sim/territory';
+import { groundAt, type BakedProp } from '../sim/terrain';
 import { dist, type Vec } from '../sim/vec';
 import { tileSteepness, type MapDraft } from './bake';
+import { BUILT_HULL } from './newworld';
 import { prop, ruleRng, tileOf } from './oldworld';
 
 const TERRITORY_SEED_OFFSET = 9100; // one block of offsets per territory, so a new territory shifts no other
 const TRIES = 200; // draws for one prop before the layer gives up
-const DEBRIS_RING: [number, number] = [0.1, 0.95]; // debris lies anywhere in the territory
 const REACTOR_MARGIN = 2; // tiles between the hazard's edge and any prop
+const DEBRIS_BAND: [number, number] = [0, 1.5]; // debris spills half a band past the field spots, toward the rim
+const DECK_EDGE = 1; // tiles beside a deck where its side drops to the floor; drawn props keep clear of it
 
 export function territoryLayer(seed: number, d: MapDraft): MapDraft {
   REGION.locations.filter(isTerritory).forEach((t, k) => fill(d, t, TERRITORIES[t.id], ruleRng(seed, TERRITORY_SEED_OFFSET + k)));
   return d;
 }
 
-type Ground = { d: MapDraft; t: TerritoryDef; rules: TerritoryRules; rng: Rng; outside: (pos: Vec, r: number) => boolean };
+type Ground = { d: MapDraft; t: TerritoryDef; rules: TerritoryRules; rng: Rng; free: (pos: Vec, r: number) => boolean };
 
 function fill(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, rng: Rng): void {
+  const decks = hullDecks().filter((deck) => deck.territory === t.id);
+  stampDecks(d, decks);
   if (rules.reactor) d.props.push(prop(rules.reactor.look, { ...t.pos }, rules.reactor.radius, 0));
+  for (const deck of decks) for (const rib of ribPoses(deck)) d.props.push(prop('hullRib', rib.pos, rib.r, rib.yaw));
+  const bays = decks.flatMap((deck) => bayPoints(deck).map((p) => prop(DECK_BAY, p, rules.bayRadius, deck.section.yaw)));
+  d.props.push(...bays);
+  for (const wall of rules.walls) d.props.push(prop('hullWall', { x: t.pos.x + wall.at.x, y: t.pos.y + wall.at.y }, wall.length / 2, wall.yaw));
   const hazard = rules.hazard ? rules.hazard.radius + REACTOR_MARGIN : 0;
-  const g: Ground = { d, t, rules, rng, outside: (pos, r) => dist(pos, t.pos) > hazard + r };
-  placeDebris(g, placeSpots(g));
+  // Inside the territory, outside the hazard and off every deck and its dropping edge.
+  const free = (pos: Vec, r: number): boolean => {
+    const from = dist(pos, t.pos);
+    return from + r < t.radius && from > hazard + r && decks.every((deck) => deckGap(deck, pos) > r + DECK_EDGE);
+  };
+  const g: Ground = { d, t, rules, rng, free };
+  placeDebris(g, placeSpots(g, bays));
 }
 
-// Spots go first, so debris never boxes one in.
-function placeSpots(g: Ground): BakedProp[] {
-  const spots: BakedProp[] = [];
+// Each deck's corners rise to its plane over the ground at its low end, wherever the ground lies lower, and its
+// tiles are marked as hull plating. Heights are read before any deck is stamped, so the decks never stack.
+function stampDecks(d: MapDraft, decks: readonly HullDeck[]): void {
+  const ground = { size: d.size, heights: Array.from(d.heights), types: [] };
+  for (const deck of decks) stampDeck(d, deck, groundAt(ground, deck.low.x, deck.low.y));
+}
+
+function stampDeck(d: MapDraft, deck: HullDeck, low: number): void {
+  const xs = deck.corners.map((c) => c.x);
+  const ys = deck.corners.map((c) => c.y);
+  const [i0, i1] = [Math.max(0, Math.floor(Math.min(...xs))), Math.min(d.size, Math.ceil(Math.max(...xs)))];
+  const [j0, j1] = [Math.max(0, Math.floor(Math.min(...ys))), Math.min(d.size, Math.ceil(Math.max(...ys)))];
+  for (let j = j0; j <= j1; j++) {
+    for (let i = i0; i <= i1; i++) {
+      raiseCorner(d, deck, low, i, j);
+      markHullTile(d, deck, i, j);
+    }
+  }
+}
+
+function raiseCorner(d: MapDraft, deck: HullDeck, low: number, i: number, j: number): void {
+  const along = deckAlongAt(deck, { x: i, y: j });
+  const k = j * (d.size + 1) + i;
+  if (along !== null) d.heights[k] = Math.max(d.heights[k], deckPlane(deck, low, along));
+}
+
+// A tile is plating when its centre lies on the deck.
+function markHullTile(d: MapDraft, deck: HullDeck, x: number, y: number): void {
+  if (x < d.size && y < d.size && deckAlongAt(deck, { x: x + 0.5, y: y + 0.5 }) !== null) d.built[y * d.size + x] = BUILT_HULL;
+}
+
+// Spots go first, so debris never boxes one in. Field spots keep the spot gap from the deck bays too.
+function placeSpots(g: Ground, bays: readonly BakedProp[]): BakedProp[] {
+  const spots: BakedProp[] = [...bays];
   for (const rule of g.rules.spots) {
-    const apart = (pos: Vec, r: number): boolean => g.outside(pos, r) && spots.every((o) => dist(o.pos, pos) >= g.rules.spotGap) && clearOf(g.d.props, pos, r, 0);
+    const apart = (pos: Vec, r: number): boolean => g.free(pos, r) && spots.every((o) => dist(o.pos, pos) >= g.rules.spotGap) && clearOf(g.d.props, pos, r, 0);
     for (let i = 0; i < rule.count; i++) {
       const p = draw(g, rule.look, () => bandPoint(g, rule.band), rule.radius, apart);
       spots.push(p);
@@ -48,8 +93,8 @@ function placeSpots(g: Ground): BakedProp[] {
 
 function placeDebris(g: Ground, spots: BakedProp[]): void {
   for (const rule of g.rules.debris) {
-    const open = (pos: Vec, r: number): boolean => g.outside(pos, r) && clearOf(g.d.props, pos, r, 0) && clearOf(spots, pos, r, g.rules.debrisGap);
-    for (let i = 0; i < rule.count; i++) g.d.props.push(draw(g, rule.look, () => ringPoint(g, DEBRIS_RING), rule.radius, open));
+    const open = (pos: Vec, r: number): boolean => g.free(pos, r) && clearOf(g.d.props, pos, r, 0) && clearOf(spots, pos, r, g.rules.debrisGap);
+    for (let i = 0; i < rule.count; i++) g.d.props.push(draw(g, rule.look, () => bandPoint(g, DEBRIS_BAND), rule.radius, open));
   }
 }
 
@@ -64,13 +109,6 @@ function draw(g: Ground, look: BakedProp['kind'], pick: () => Vec, radius: [numb
     return prop(look, pos, r, yaw);
   }
   throw new Error(`Territory ${g.t.id} has no room for a ${look}`);
-}
-
-// A point in a ring around the centre, between shares of the territory radius.
-function ringPoint({ t, rng }: Ground, ring: [number, number]): Vec {
-  const a = randRange(rng, 0, Math.PI * 2);
-  const at = t.radius * randRange(rng, ring[0], ring[1]);
-  return { x: t.pos.x + Math.cos(a) * at, y: t.pos.y + Math.sin(a) * at };
 }
 
 // A point along the crash line, to either side of it between shares of the band.

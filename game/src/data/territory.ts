@@ -43,6 +43,7 @@ export type TerritoryRules = {
   debris: DebrisRule[];
   spots: SpotRule[]; // field spots, drawn in the band
   bayTable: SpotTable; // the SALVAGE table a loot spot in a deck bay rolls
+  bayRadius: number; // tiles, the footprint of a deck bay's loot spot
   spotGap: number; // tiles between the centres of two loot spots
   debrisGap: number; // tiles of open ground kept between debris and every loot spot, so a truck can park beside one
   reactor: { look: PropKind; radius: number } | null; // the prop at the centre
@@ -71,9 +72,10 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       { id: 'forward', at: onSunLine(-17, 9.5), yaw: SUN_HEADING, length: 14, width: 8, rise: 0.6, ribStep: 4, bays: [0.3, 0.7] },
       // The aft hull tilts up toward the south-east.
       { id: 'aft', at: onSunLine(19, -2), yaw: SUN_HEADING, length: 16, width: 8, rise: 1.2, ribStep: 4, bays: [0.35, 0.75] },
-      // Two plates thrown off the line, small ramps that climb back toward it: sniper perches.
-      { id: 'plate-ne', at: onSunLine(4, -26), yaw: SUN_HEADING + Math.PI / 2, length: 8, width: 5, rise: 1, ribStep: null, bays: [0.6] },
-      { id: 'plate-sw', at: onSunLine(-4, 26), yaw: SUN_HEADING - Math.PI / 2, length: 8, width: 5, rise: 1, ribStep: null, bays: [0.6] },
+      // Two plates thrown off the line, small ramps that climb back toward it: sniper perches. They are 7 tiles wide,
+      // so a truck passes the bay in the middle and drives on up to the top.
+      { id: 'plate-ne', at: onSunLine(4, -26), yaw: SUN_HEADING + Math.PI / 2, length: 8, width: 7, rise: 1, ribStep: null, bays: [0.6] },
+      { id: 'plate-sw', at: onSunLine(-4, 26), yaw: SUN_HEADING - Math.PI / 2, length: 8, width: 7, rise: 1, ribStep: null, bays: [0.6] },
     ],
     // The stern: plating rolled onto its side in a broken wall past the aft hull.
     walls: [
@@ -97,6 +99,8 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
     spots: [{ look: 'shipCache', count: 15, band: [0.3, 1], radius: [0.6, 0.8], table: 'hullScrap' }],
     // Deck bays are exposed on high ground, so they roll the rich landmark table, the whole site's stock before.
     bayTable: 'landmark',
+    // A bay is a stack of crates the size of a field spot, small enough that a truck drives round it on the deck.
+    bayRadius: 0.7,
     spotGap: 6,
     debrisGap: 3,
     reactor: { look: 'reactor', radius: 3 },

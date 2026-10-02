@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
+import { SALVAGE } from '../data/salvage';
 import { TERRITORIES } from '../data/territory';
 import { ROAD_INDEX } from './road-index';
-import { bayPoints, deckAlongAt, deckPlane, hazardZones, hullDecks, isLootSpot, ribPoses, territoryAt, territoryEntries, territoryGrounds, type HullDeck } from './territory';
+import { bayPoints, deckAlongAt, deckGap, deckPlane, hazardZones, hullDecks, isLootSpot, ribPoses, spotTable, territoryAt, territoryEntries, territoryGrounds, type HullDeck } from './territory';
 import { dist, lerp, type Vec } from './vec';
 
 const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
@@ -60,6 +61,13 @@ describe('territory queries', () => {
     expect(isLootSpot(spot)).toBe(true);
     expect(isLootSpot({ ...spot, pos: { x: 1, y: 1 } })).toBe(false);
     expect(isLootSpot({ ...spot, look: 'carWreck' })).toBe(false);
+  });
+
+  it('rolls a deck bay from the bay table and a field spot from its rule', () => {
+    const bay = { id: 'deckBay-1', pos: fallenSun.pos, r: 1, kind: 'landmark', look: 'deckBay', yaw: 0 } as const;
+    expect(spotTable(bay)).toBe(SALVAGE[TERRITORIES['fallen-sun'].bayTable]);
+    expect(spotTable({ ...bay, look: 'shipCache' })).toBe(SALVAGE.hullScrap);
+    expect(() => spotTable({ ...bay, pos: { x: 1, y: 1 } })).toThrow(/not a loot spot/);
   });
 });
 
@@ -135,6 +143,18 @@ describe('hull decks', () => {
         expect(a, deck.section.id).not.toBeNull();
         expect(a).toBeCloseTo(b!, 9);
       }
+    }
+  });
+
+  it('measures the gap from a point to a deck: 0 on it, the distance past a side or an end off it', () => {
+    for (const deck of decks) {
+      const across = { x: -Math.sin(deck.section.yaw), y: Math.cos(deck.section.yaw) };
+      const mid = { x: lerp(deck.low.x, deck.high.x, 0.5), y: lerp(deck.low.y, deck.high.y, 0.5) };
+      const out = deck.section.width / 2 + 2;
+      expect(deckGap(deck, mid), deck.section.id).toBe(0);
+      expect(deckGap(deck, { x: mid.x + across.x * out, y: mid.y + across.y * out }), deck.section.id).toBeCloseTo(2, 9);
+      expect(deckGap(deck, { x: lerp(deck.low.x, deck.high.x, 1 + 3 / deck.section.length), y: lerp(deck.low.y, deck.high.y, 1 + 3 / deck.section.length) })).toBeCloseTo(3, 9);
+      expect(deckGap(deck, { x: deck.corners[1].x + (deck.high.x - deck.low.x) / deck.section.length * 3 + across.x * -4, y: deck.corners[1].y + (deck.high.y - deck.low.y) / deck.section.length * 3 + across.y * -4 })).toBeCloseTo(5, 9);
     }
   });
 
