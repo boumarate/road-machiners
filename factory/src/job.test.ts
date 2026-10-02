@@ -2,8 +2,9 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { progressNote, runJob } from './job';
+import { markResumed } from './sessions';
 import { EMPTY_STATE, readState, writeState } from './state';
-import type { Ctx, FactoryConfig } from './types';
+import type { Ctx, FactoryConfig, JobStage } from './types';
 
 const ROOT = resolve('tmp/factory-job-test');
 
@@ -70,10 +71,11 @@ describe('runJob', () => {
     const sessions = (issue: number) => join(ROOT, 'sessions', `issue-${issue}`);
 
     // The design stage asks GitHub for the issue first, so the fake sees the sessions as the job starts.
-    async function run(stage: 'design' | 'change', issue: number, interrupted: number[]): Promise<boolean[]> {
+    async function run(stage: 'design' | 'change', issue: number, interrupted: number[], died: JobStage | null = null): Promise<boolean[]> {
       rmSync(ROOT, { recursive: true, force: true });
       mkdirSync(sessions(issue), { recursive: true });
       mkdirSync(sessions(9), { recursive: true });
+      if (died !== null) markResumed(ROOT, issue, died);
       const statePath = join(ROOT, 'state.json');
       writeState(statePath, { ...structuredClone(EMPTY_STATE), jobs: [{ id: 'a', stage, issue, pid: 1, startedAt: '', log: 'l' }], interrupted });
       const seen: boolean[] = [];
@@ -93,10 +95,14 @@ describe('runJob', () => {
       expect(existsSync(sessions(9))).toBe(true);
     });
 
-    it('keeps the sessions of a marked issue for the stage, and clears them with the mark at the end', async () => {
-      expect(await run('design', 7, [7])).toEqual([true]);
+    it('keeps the sessions of a marked issue for the stage that died, and clears them with the mark at the end', async () => {
+      expect(await run('design', 7, [7], 'design')).toEqual([true]);
       expect(existsSync(sessions(7))).toBe(false);
       expect(readState(join(ROOT, 'state.json')).interrupted).toEqual([]);
+    });
+
+    it('starts new when the card moved on to another stage after the death', async () => {
+      expect(await run('design', 7, [7], 'implement')).toEqual([false]);
     });
 
     it('never touches the sessions of an issue for a branch job that shares its number', async () => {

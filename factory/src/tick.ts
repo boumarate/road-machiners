@@ -4,7 +4,7 @@ import { failureIssue, pruneFailures, reportFailure } from './fail';
 import { intake } from './intake';
 import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
-import { clearSessions } from './sessions';
+import { clearSessions, markResumed } from './sessions';
 import { readState, updateState } from './state';
 import { isAnswered } from './questions';
 import { ADHOC_LABEL, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
@@ -180,6 +180,7 @@ function forgetResume(ctx: Ctx, job: Job): void {
 // Its card stays where it is, so the next tick starts the stage again. The dead job's cap slot frees, since the restart takes a new one.
 async function resumeJob(ctx: Ctx, job: Job & { issue: number }, deps: TickDeps): Promise<void> {
   await deps.removeContainers(ctx.run, job.id);
+  markResumed(ctx.cfg.home, job.issue, job.stage);
   updateState(ctx.statePath, (state) => {
     // Jobs started by one tick share a start time, so only one of them goes.
     const start = countsAgainstCap(job.stage) ? state.jobStarts.indexOf(job.startedAt) : -1;

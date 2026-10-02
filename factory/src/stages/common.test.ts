@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { AgentRun, Ctx } from '../types';
+import { markResumed } from '../sessions';
 import { EMPTY_STATE, writeState } from '../state';
 import { solidPng } from '../media-fixtures';
 import { RESUME_NOTE, agentHome, baseBranchFor, baseBranchOf, factoryPaths, fillPrompt, modelFor, prepareOutputs, runAgent } from './common';
@@ -37,12 +38,10 @@ describe('runAgent network', () => {
 
 describe('runAgent sessions', () => {
   const HOME = 'tmp/factory-common-test';
+  // The tick marks the sessions of a job whose process died.
   const markedCtx = (issues: number[]) => {
-    mkdirSync(HOME, { recursive: true });
-    const statePath = `${HOME}/state.json`;
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), interrupted: issues });
-    const made = agentCtx(['bug']);
-    return { ...made, ctx: { ...made.ctx, statePath } as Ctx };
+    for (const issue of issues) markResumed(HOME, issue, 'testing');
+    return agentCtx(['bug']);
   };
   beforeEach(() => { rmSync(`${HOME}/sessions`, { recursive: true, force: true }); });
   // What Claude Code writes in the container once the run starts.
@@ -96,10 +95,9 @@ describe('runAgent sessions', () => {
 describe('prepareOutputs', () => {
   const HOME = 'tmp/factory-common-outputs';
   const outputs = (interrupted: number[]) => {
-    mkdirSync(HOME, { recursive: true });
-    const statePath = `${HOME}/state.json`;
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), interrupted });
-    return { statePath } as Ctx;
+    rmSync(`${HOME}/sessions`, { recursive: true, force: true });
+    for (const issue of interrupted) markResumed(HOME, issue, 'design');
+    return { cfg: { home: HOME } } as Ctx;
   };
   beforeEach(() => {
     rmSync(HOME, { recursive: true, force: true });

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { fetchMedia, mediaSection, requireMedia } from '../media';
 import { changesSaveMajor } from '../save-guard';
 import { isAnswered } from '../questions';
-import { roundSession } from '../sessions';
+import { resumedStage, roundSession } from '../sessions';
 import { readState } from '../state';
 import { FACTORY_MARK, BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type CardStage, type Ctx, type FactoryConfig, type Stage } from '../types';
 
@@ -107,8 +107,9 @@ export async function acquireMedia(ctx: Ctx, issue: number, stage: CardStage): P
 export const RESUME_NOTE = 'A stop cut this job off. The work clone keeps your commits and changed files. Read them with git log and git status, then continue from there. If your task is already done, say so and stop.';
 
 // The job on this issue lost its process once, so its agents continue their sessions.
+// runJob keeps the sessions only for a job of the stage that died, so their stage mark means this job resumes.
 export function isResuming(ctx: Ctx, issue: number): boolean {
-  return readState(ctx.statePath).interrupted.includes(issue);
+  return resumedStage(ctx.cfg.home, issue) !== null;
 }
 
 // A resumed stage keeps the outputs of the dead run, since its agent may have written them already.

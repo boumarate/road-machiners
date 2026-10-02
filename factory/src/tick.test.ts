@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { resumedStage } from './sessions';
 import { chooseJobs, tick, type TickDeps } from './tick';
 import { EMPTY_STATE, readState, writeState } from './state';
 import { FACTORY_MARK, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type ReleaseState, type Ctx, type IssueComment, type FactoryState, type Job } from './types';
@@ -356,6 +357,7 @@ describe('tick', () => {
       await tick(h.ctx, '/code', h.deps);
       expect(h.killed).toEqual(['containers design-job']);
       expect(args(h)).toEqual([['design', '5']]);
+      expect(resumedStage(h.ctx.cfg.home, 5)).toBe('design');
       const after = readState(h.ctx.statePath);
       expect(after.interrupted).toEqual([5]);
       expect(after.failures).toEqual([]);
