@@ -13,6 +13,7 @@ import { boxDistance, isBreakable, isDriveObstacle, propBoxes, propKey, propReac
 import { isCliff, tileSlope, type Terrain } from '../terrain';
 import { hashRandom } from '../rng';
 import type { Obstacle, Vehicle, World } from '../types';
+import { siteGap } from '../sites';
 import { dist, type Vec } from '../vec';
 import { ObstacleBuckets, type Blocker } from './buckets';
 
@@ -113,7 +114,7 @@ const SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'te
 
 // Within one road width of a site's edge.
 function nearSite(x: number, y: number): boolean {
-  return SITES.some((s) => (s.pos.x - x) ** 2 + (s.pos.y - y) ** 2 < (s.radius + REGION.roadWidth) ** 2);
+  return SITES.some((s) => siteGap(s, { x, y }) < REGION.roadWidth);
 }
 
 export function terrainNav(t: Terrain): TerrainNav {

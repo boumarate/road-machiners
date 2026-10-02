@@ -10,6 +10,7 @@ import { TERRAIN } from '../data/terrain';
 import { ROAD_INDEX } from '../sim/road-index';
 import { randRange, type Rng } from '../sim/rng';
 import { bayPoints, DECK_BAY, deckAlongAt, deckGap, deckPlane, hullDecks, isTerritory, ribPoses, type HullDeck } from '../sim/territory';
+import { siteGap } from '../sim/sites';
 import { groundAt, type BakedProp } from '../sim/terrain';
 import { dist, type Vec } from '../sim/vec';
 import { tileSteepness, type MapDraft } from './bake';
@@ -18,7 +19,7 @@ import { BUILT_HULL } from './newworld';
 import { prop, ruleRng, tileOf } from './oldworld';
 
 const TERRITORY_SEED_OFFSET = 9100; // one block of offsets per territory, so a new territory shifts no other
-const TRIES = 200; // draws for one prop before the layer gives up
+const TRIES = 1000; // draws for one prop before the layer gives up: the orchard's groves leave little open band
 const REACTOR_MARGIN = 2; // tiles between the hazard's edge and any prop
 const DEBRIS_BAND: [number, number] = [0, 1.5]; // debris spills half a band past the field spots, toward the rim
 const DECK_EDGE = 1; // tiles beside a deck where its side drops to the floor; drawn props keep clear of it
@@ -41,8 +42,7 @@ function fill(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, rng: Rng): vo
   const hazard = rules.hazard ? rules.hazard.radius + REACTOR_MARGIN : 0;
   // Inside the territory, outside the hazard and off every deck and its dropping edge.
   const free = (pos: Vec, r: number): boolean => {
-    const from = dist(pos, t.pos);
-    return from + r < t.radius && from > hazard + r && decks.every((deck) => deckGap(deck, pos) > r + DECK_EDGE);
+    return siteGap(t, pos) < -r && dist(pos, t.pos) > hazard + r && decks.every((deck) => deckGap(deck, pos) > r + DECK_EDGE);
   };
   const g: Ground = { d, t, rules, rng, free };
   // A farm's buildings are spots, so drawn spots keep the spot gap from them, and they keep the debris gap from its

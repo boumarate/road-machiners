@@ -13,7 +13,7 @@ import { heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
 import { clearOfSites, onBridge } from '../sim/mapgen';
 import { siteGap } from '../sim/sites';
 import { dist, polylineDist, type Vec } from '../sim/vec';
-import { BUILT_DIRTY_WATER, BUILT_HULL, BUILT_SCRUB, BUILT_TOXIC, BUILT_TRACK, newWorldLayer } from './newworld';
+import { BUILT_CANAL, BUILT_DIRTY_WATER, BUILT_HULL, BUILT_SCRUB, BUILT_TOXIC, BUILT_TRACK, newWorldLayer } from './newworld';
 import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer } from './oldworld';
 import { territoryLayer } from './territory';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
@@ -136,6 +136,7 @@ const MARKED_TYPES: Record<number, TerrainTypeId> = {
   [BUILT_TOXIC]: 'toxic',
   [BUILT_HULL]: 'hull',
   [BUILT_TRACK]: 'track',
+  [BUILT_CANAL]: 'canal',
 };
 
 function pickType(g: GroundInput, x: number, y: number): TerrainTypeId {

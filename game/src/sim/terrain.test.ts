@@ -156,11 +156,11 @@ describe("terrain grid", () => {
     }
   });
 
-  it('paints the Old Orchard tracks as dirt track, which drives like hardpan but shows apart from it', () => {
+  it('paints the Old Orchard dirt roads and tracks as dirt track, which drives like hardpan but shows apart from it', () => {
     const orchard = REGION.locations.find((site) => site.id === 'orchard')!;
-    for (const track of TERRITORIES.orchard.farm!.tracks) {
-      for (let i = 1; i < track.points.length; i++) {
-        const [a, b] = [track.points[i - 1], track.points[i]];
+    for (const road of TERRITORIES.orchard.farm!.roads.filter((r) => r.surface === 'track')) {
+      for (let i = 1; i < road.points.length; i++) {
+        const [a, b] = [road.points[i - 1], road.points[i]];
         const mid = { x: orchard.pos.x + (a.x + b.x) / 2, y: orchard.pos.y + (a.y + b.y) / 2 };
         expect(TEST_MAP.terrain.types[tileAt(TEST_MAP.terrain, mid)], `track at ${mid.x},${mid.y}`).toBe('track');
       }
@@ -169,6 +169,20 @@ describe("terrain grid", () => {
     expect([track.speed, track.wear, track.dust]).toEqual([hardpan.speed, hardpan.wear, hardpan.dust]);
     expect(track.color).not.toBe(hardpan.color);
     expect(track.color).not.toBe(sand.color);
+  });
+
+  it('paints the Old Orchard canals as canal, which drives like dirty water but shows blue-grey', () => {
+    const orchard = REGION.locations.find((site) => site.id === 'orchard')!;
+    for (const canal of TERRITORIES.orchard.farm!.canals) {
+      const [a, b] = canal.points;
+      const mid = { x: orchard.pos.x + (a.x + b.x) / 2, y: orchard.pos.y + (a.y + b.y) / 2 };
+      expect(TEST_MAP.terrain.types[tileAt(TEST_MAP.terrain, mid)], `canal at ${mid.x},${mid.y}`).toBe('canal');
+    }
+    const { canal, dirtyWater } = TERRAIN_TYPES;
+    expect([canal.speed, canal.wear, canal.dust]).toEqual([dirtyWater.speed, dirtyWater.wear, dirtyWater.dust]);
+    // Blue over red: the concrete and clear water of a canal, not an olive pool.
+    expect(canal.color & 0xff).toBeGreaterThan(canal.color >> 16);
+    expect(dirtyWater.color & 0xff).toBeLessThan(dirtyWater.color >> 16);
   });
 
   it('carves a canyon and a dry river below the surrounding hills', () => {

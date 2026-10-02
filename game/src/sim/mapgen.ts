@@ -146,7 +146,7 @@ export type PropPose = { model: PropModel; pos: Vec; yaw: number; scale: PropSca
 export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
-type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'hull_rib' | 'crates' | 'reactor' | 'hull_wall' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier';
+type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'hull_rib' | 'crates' | 'reactor' | 'hull_wall' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile';
 
 const M = PHYSICS.metersPerTile;
 const TURN = Math.PI * 2;
@@ -182,12 +182,16 @@ const LANDMARK_MODELS: Record<LandmarkLook, PropModel> = {
   quonset: 'quonset',
   guardPost: 'guard_post',
   barrier: 'barrier',
+  drums: 'drums',
+  woodpile: 'woodpile',
 };
 // Footprint radius in meters each model is built at, for models that scale evenly to their obstacle radius. A
 // fence or barrier segment is 4 m long and a hull wall segment 8 m, so each radius is half that: each is one
-// straight segment along their yaw. The orchard's buildings and army truck are built at their authored radius. A hull rib's legs stand at its radius. The building model stretches to its footprint
-// instead. The pole, billboard and tank stand at their real size.
-const MODEL_RADIUS: Partial<Record<PropModel, number>> = { crag: 1, silo: 2.5, water_tower: 2, ruin_house: 4.8, gas_station: 7.2, bridge_broken: 6, wreck: 0.7 * M, shack: 3.6, junk: 2.4, fence: 2, hull_chunk: 6, hull_rib: 3, crates: 1.5, reactor: 12, hull_wall: 4, farmhouse: 12, barn: 10.4, quonset: 8.8, bunker: 10.4, guard_post: 3.2, army_truck: 4.4, barrier: 2 };
+// straight segment along their yaw. The orchard's buildings, army truck and clutter are built at their size against
+// the 8.1 m army truck, and the orchard poses them at about these radii, so they draw near scale 1 (each radius is
+// stated in its tools/blender script). A hull rib's legs stand at its radius. The building model stretches to its
+// footprint instead. The pole, billboard and tank stand at their real size.
+const MODEL_RADIUS: Partial<Record<PropModel, number>> = { crag: 1, silo: 2.5, water_tower: 2, ruin_house: 4.8, gas_station: 7.2, bridge_broken: 6, wreck: 0.7 * M, shack: 3.6, junk: 2.4, fence: 2, hull_chunk: 6, hull_rib: 3, crates: 1.5, reactor: 12, hull_wall: 4, farmhouse: 16, barn: 14.7, quonset: 12.9, bunker: 15.6, guard_post: 3.2, army_truck: 4.4, barrier: 2, drums: 1.75, woodpile: 2.6 };
 const WRECK_RADIUS = 0.7; // tiles, the reference size of the wreck model
 const BUILDING_FILL = 0.78; // share of the obstacle radius a building's footprint fills
 const SHAPE_BOXES = new Map<string, readonly ShapeBox[]>(Object.entries(SHAPES).map(([name, shape]) => [name, shape.boxes]));

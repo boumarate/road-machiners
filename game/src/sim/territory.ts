@@ -71,10 +71,10 @@ export function territoryEntries(t: TerritoryDef): Vec[] {
 }
 
 // Open points inside a territory where raiders and vultures wait for scavengers: its entries, and points spread
-// along both sides of its spine, through the band of its outermost field spots. They lie clear of the hazard.
+// along both sides of its spine, through its grounds band, that lie inside it. They lie clear of the hazard.
 export function territoryGrounds(t: TerritoryDef): Vec[] {
   const rules = TERRITORIES[t.id];
-  const [lo, hi] = rules.spots.reduce((a, b) => (b.band[1] > a.band[1] ? b : a)).band;
+  const [lo, hi] = rules.grounds;
   const { from, to, band } = rules.spine;
   const off = (band * (lo + hi)) / 2;
   const length = dist(from, to);
@@ -86,7 +86,7 @@ export function territoryGrounds(t: TerritoryDef): Vec[] {
       return { x: t.pos.x + lerp(from.x, to.x, share) + across.x * off * side, y: t.pos.y + lerp(from.y, to.y, share) + across.y * off * side };
     }),
   );
-  return [...territoryEntries(t), ...sides];
+  return [...territoryEntries(t), ...sides.filter((p) => siteGap(t, p) < 0)];
 }
 
 export function hazardZones(): HazardZone[] {

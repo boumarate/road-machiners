@@ -19,7 +19,8 @@ export type TerrainTypeId =
   | "dirtyWater"
   | "toxic"
   | "hull"
-  | "track";
+  | "track"
+  | "canal";
 
 export type TerrainType = {
   id: TerrainTypeId;
@@ -57,6 +58,10 @@ export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   // looks paler than both hardpan and sand, so the tracks read from the camera. Last, so earlier type codes keep
   // their values.
   track: { id: "track", name: "Dirt track", speed: 0.9, wear: 1, dust: 1, color: 0xa88458 },
+  // Irrigation canals: shallow water in a concrete channel, the Old Orchard's canals. A truck in one drags and wears
+  // like dirty water. Its blue-grey shows the concrete and the clear water apart from the olive dirty pools. Last, so
+  // earlier type codes keep their values.
+  canal: { id: "canal", name: "Irrigation canal", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x5f6f7a },
 };
 
 export const TERRAIN = {
