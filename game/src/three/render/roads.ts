@@ -8,16 +8,13 @@
 import * as THREE from "three";
 import { PHYSICS } from "../../data/physics";
 import { REGION } from "../../data/region";
-import { TERRAIN_TYPES } from "../../data/terrain";
-import type { PaintCanvas } from "../../render/groundPaint";
+import { ROAD_GROUND, type PaintCanvas } from "../../render/groundPaint";
 import { sitePads } from "../../sim/sites";
-import { mix, PAL } from "../../render/palette";
+import { PAL } from "../../render/palette";
 import { paintRoadDetail, paintRoadMask, paintRoadTone, ROAD_DETAIL_SIDE, ROAD_TONE_PIXELS, ROAD_TONE_SIDE, type RoadImage } from "../../render/roadPaint";
 
 const S = PHYSICS.metersPerTile;
 const PIXEL_SPLIT = 3; // road pixels across one ground paint pixel
-// The ground paint under a road, before hillshade. The road takes the ground's shade relative to it.
-const GROUND_UNDER = mix(TERRAIN_TYPES.hardpan.color, PAL.sand[3], 0.1);
 const PAD_BORDER = 2; // road pixels across the pad outline
 const SHOULDER_FROM = 0.2; // road mask cover where the shoulder starts, out past the road edge near 0.5
 const SHOULDER_MIX = 0.6; // strongest mix toward the shoulder color, at the road edge
@@ -37,7 +34,7 @@ export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas
     roadMaskMeters: { value: (mask.size / mask.res) * S },
     roadDetailMeters: { value: ROAD_DETAIL_SIDE * pixel },
     roadToneMeters: { value: ROAD_TONE_SIDE * ROAD_TONE_PIXELS * pixel },
-    roadGroundLuma: { value: luma(new THREE.Color(GROUND_UNDER)) },
+    roadGroundLuma: { value: luma(new THREE.Color(ROAD_GROUND)) },
     shoulderFrom: { value: SHOULDER_FROM },
     shoulderMix: { value: SHOULDER_MIX },
     shoulderStones: { value: SHOULDER_STONES },

@@ -6,8 +6,9 @@ export const PAL = {
   bg: 0x1a1410,
   sand: [0xc9a878, 0xc2a070, 0xbb9868, 0xd0b080],
   sandFar: 0x8a7050,
-  ochre: 0xc68f55, // warm ochre patches on open desert ground
-  rustSoil: 0xa9704a, // rust-red soil patches on open desert ground
+  desertSand: 0xd9a064, // warm ochre base that open desert ground mixes toward
+  sandLight: 0xe7a566, // the light end of the slow sand patches on open desert
+  sandShade: 0xcd8954, // the deep end of the slow sand patches on open desert
   road: 0x966e4e, // rust-brown packed dirt of the road surface
   roadRut: 0x86603e,
   roadCrack: 0x7a5638, // cracks and potholes in the road texture
