@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fetchMedia, mediaSection, requireMedia } from '../media';
 import { changesSaveMajor } from '../save-guard';
 import { readState } from '../state';
 import { BRANCH, GAME_DIR, HOTFIX_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type CardStage, type Ctx, type Stage } from '../types';
@@ -70,9 +71,31 @@ export async function useOpenNetwork(ctx: Ctx, stage: Stage, issue: number | nul
   return open;
 }
 
+export function mediaDir(ctx: Ctx, issue: number): string {
+  return join(ctx.cfg.home, 'media', `issue-${issue}`);
+}
+
+// The host's own gh login, used only for the first request to github.com. Empty when gh has none, which public attachments do not need.
+async function githubToken(ctx: Ctx): Promise<string | undefined> {
+  const out = await ctx.run('gh', ['auth', 'token']).catch(() => null);
+  return out !== null && out.code === 0 && out.stdout.trim() !== '' ? out.stdout.trim() : undefined;
+}
+
+// Fetches the images of the issue body and every comment, feedback included, into the issue's media folder.
+// A failed image throws before the agent starts. Returns the prompt part that lists the images.
+export async function acquireMedia(ctx: Ctx, issue: number, stage: CardStage): Promise<string> {
+  const [item, comments] = await Promise.all([ctx.github.issue(issue), ctx.github.comments(issue)]);
+  const texts = [{ source: 'issue body', text: item.body }, ...comments.map((c) => ({ source: `comment by ${c.login}`, text: c.body }))];
+  const entries = await fetchMedia({ fetch: ctx.fetch ?? fetch, dir: mediaDir(ctx, issue), texts, token: texts.some((t) => t.text.includes('/user-attachments/')) ? await githubToken(ctx) : undefined });
+  for (const entry of entries) ctx.log(stage, issue, `reference image ${entry.url}: ${entry.status}${entry.reason ? `, ${entry.reason}` : ''}`);
+  requireMedia(issue, entries);
+  return mediaSection(entries);
+}
+
 export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, model: string, prompt: string): Promise<void> {
   const openNetwork = await useOpenNetwork(ctx, stage, issue);
-  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt, log: agentLog(ctx, issue, stage), openNetwork });
+  const media = await acquireMedia(ctx, issue, stage);
+  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: `${prompt}\n\n${media}`, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue) });
 }
 
 // Asks the issue author. The card stays where it is until a member answers on the issue.
@@ -92,7 +115,7 @@ export function throwIfNeedsCommittee(home: string): void {
 
 // Paths an agent branch must never carry: agent messages, task files, and GitHub workflows,
 // which GitHub would run with the repo's secrets as soon as the factory pushes them.
-const FORBIDDEN_PATH = /^\.github\/|(^|\/)\.factory(-tasks)?\//;
+const FORBIDDEN_PATH = /^\.github\/|(^|\/)\.factory(-tasks|-media)?\//;
 
 export function factoryPaths(diff: string): string[] {
   const paths = [...diff.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)].flatMap((match) => [match[1], match[2]]);
