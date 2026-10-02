@@ -24,6 +24,7 @@ const PROP_MODELS = [
   'junk',
   'power_pole',
   'reactor',
+  'rim_rock',
   'rock',
   'ruin_house',
   'shack',

@@ -21,9 +21,9 @@ from shapes import strut  # noqa: E402
 
 # Colors from src/render/palette.ts.
 COLORS = {
-    "hull_grey": 0x9C978C,  # PAL.hull.grey
+    "hull_grey": 0x8E887C,  # PAL.hull.grey
     "hull_dark": 0x6E6A62,  # PAL.hull.dark
-    "rust": 0x8A4A2A,  # PAL.rust.top
+    "rust": 0x7E5634,  # PAL.hull.rust
     "rust_side": 0x5E3420,  # PAL.rust.side
     "rust_dark": 0x3A2418,  # PAL.rust.dark
 }

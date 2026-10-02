@@ -3,6 +3,7 @@
 
 import { REGION } from "../data/region";
 import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from "../data/terrain";
+import { TERRITORIES } from "../data/territory";
 import { groundSlope, type Terrain } from "../sim/terrain";
 import { type Vec } from "../sim/vec";
 import { hash2 } from "./noise";
@@ -69,6 +70,7 @@ export function paintGroundCanvas(
   );
   stroke(c, dryRiver.path, dryRiver.width * 2, css(PAL.road, 0.65), 0);
   paintCraters(c);
+  paintScree(c);
 }
 
 // Each crater's bank is rust-tinted. A territory's crater floor is warm open sand, as in the Fallen Sun's level
@@ -77,6 +79,14 @@ function paintCraters(c: PaintCanvas): void {
   for (const crater of TERRAIN.features.craters) {
     disc(c, crater.center, crater.radius + crater.bank, css(PAL.rust.side, 0.18));
     disc(c, crater.center, crater.radius, holdsTerritory(crater.center) ? css(PAL.craterSand, 0.6) : css(PAL.rust.dark, 0.25));
+  }
+}
+
+// A territory's scree slope, red-brown over the sand.
+function paintScree(c: PaintCanvas): void {
+  for (const t of REGION.locations.filter((l) => l.kind === "territory")) {
+    const scree = TERRITORIES[t.id].scree;
+    if (scree) disc(c, { x: t.pos.x + scree.at.x, y: t.pos.y + scree.at.y }, scree.radius, css(PAL.rust.side, 0.55));
   }
 }
 

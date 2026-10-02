@@ -95,8 +95,8 @@ function smooth(s: number): number {
   return s * s * (3 - 2 * s);
 }
 
-// Rim rocks drawn on the arc of the bank, off roads and other props. They overlap each other by up to half, so they
-// read as one broken rock wall. They have their own kind, since the rock layer redraws every crag.
+// Rim rocks drawn on the arc of the bank, off roads and other props. They overlap each other by up to two thirds and run
+// along the rim, so they read as one broken rock wall.
 function placeRimRocks(g: Ground): void {
   const { from, to, radius, count, size } = g.rules.rimRocks;
   const pick = (): Vec => {
@@ -106,8 +106,12 @@ function placeRimRocks(g: Ground): void {
   };
   const others = drawn(g);
   const rocks: BakedProp[] = [];
-  const ok = (pos: Vec, r: number): boolean => clearOfPieces(g, pos, r) && clearOf(others, pos, r, 0) && rocks.every((o) => dist(o.pos, pos) >= (o.r + r) / 2);
-  for (let i = 0; i < count; i++) rocks.push(draw(g, 'rimRock', 'on the rim', pick, size, ok));
+  const ok = (pos: Vec, r: number): boolean => clearOfPieces(g, pos, r) && clearOf(others, pos, r, 0) && rocks.every((o) => dist(o.pos, pos) >= (o.r + r) / 3);
+  for (let i = 0; i < count; i++) {
+    // A chunk runs along the rim, its steep face toward the crater.
+    const rock = draw(g, 'rimRock', 'on the rim', pick, size, ok);
+    rocks.push({ ...rock, yaw: Math.atan2(rock.pos.y - g.t.pos.y, rock.pos.x - g.t.pos.x) + Math.PI / 2 });
+  }
   g.d.props.push(...rocks);
 }
 

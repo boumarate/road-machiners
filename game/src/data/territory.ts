@@ -24,7 +24,7 @@ export type Cache = { at: Vec };
 export type DebrisRule = { look: PropKind; count: number; radius: [number, number] };
 // A circle of drawn filler: debris and field spots picked inside it from the map seed.
 export type Patch = { at: Vec; radius: number; debris: DebrisRule[]; spots: number };
-// Rim rocks, crags drawn on an arc of the crater bank. Bearings in radians from map +x toward +y, distances in tiles.
+// Rim rocks, chunks of crater wall drawn on an arc of the crater bank. Bearings in radians from map +x toward +y, distances in tiles.
 export type RimRocks = { from: number; to: number; radius: [number, number]; count: number; size: [number, number] };
 // A twin-rut dirt track on the crater floor, a polyline in tiles from the centre. It is only drawn.
 export type Track = Vec[];
@@ -44,6 +44,7 @@ export type TerritoryRules = {
   debrisGap: number; // tiles of open ground kept between debris and every loot spot, so a truck can park beside one
   seatEase: number; // tiles over which the ground levelled under a piece eases back to the crater relief
   rimRocks: RimRocks;
+  scree: { at: Vec; radius: number } | null; // tiles from the centre; the ground there is painted red-brown scree
   tracks: Track[];
   reactor: Reactor | null;
 };
@@ -55,7 +56,7 @@ const DENSE: DebrisRule[] = [
   { look: 'hullChunk', count: 4, radius: [1, 1.6] },
   { look: 'hullGantry', count: 1, radius: [0.8, 1.1] },
   { look: 'carWreck', count: 3, radius: [0.6, 0.8] },
-  { look: 'junk', count: 2, radius: [0.5, 0.8] },
+  { look: 'junk', count: 4, radius: [0.5, 0.8] },
 ];
 // The sparse scatter of the concept's upper half.
 const LIGHT: DebrisRule[] = [
@@ -79,10 +80,11 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       // because the south-east drum, pulled in from the stretched foreground, took its place.
       { look: 'hullShard', at: { x: 0.4, y: -9.5 }, yaw: 0.9, r: 1.6 },
       { look: 'hullShard', at: { x: 17, y: 1.5 }, yaw: 2.4, r: 1.6 },
-      // Arch shells left of the hub: A (275,222)-(385,228); B (400,212)-(472,214), moved 2 tiles along its axis so
-      // a truck fits between the two.
-      { look: 'hullShell', at: { x: -21.1, y: 5.1 }, yaw: -0.686, r: 6 },
-      { look: 'hullShell', at: { x: -13.8, y: -5.9 }, yaw: -0.729, r: 4 },
+      // Arch shells left of the hub: A (275,222)-(385,228); B (400,212)-(472,214), moved 2 tiles along its axis and 2 north so
+      // a truck fits between the two. Both turn 25° toward east, so their dark open ends face the camera as in the
+      // concept's perspective.
+      { look: 'hullShell', at: { x: -21.1, y: 5.1 }, yaw: -0.2, r: 6 },
+      { look: 'hullShell', at: { x: -13.8, y: -7.9 }, yaw: -0.3, r: 4 },
       // Top centre: the tilted tower slab (548,168) and the lattice gantry (445,112)-(512,158), moved 1.5 tiles west
       // off the tower.
       { look: 'hullTower', at: { x: -13, y: -18.6 }, yaw: -0.785, r: 1.6 },
@@ -98,20 +100,20 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       { look: 'hullDrum', at: { x: -8.7, y: -36.6 }, yaw: -1.834, r: 5 },
       { look: 'hullDrum', at: { x: 31.5, y: -28.5 }, yaw: 0.3, r: 2.5 },
       { look: 'hullDrum', at: { x: 33, y: 5 }, yaw: -0.325, r: 8 },
-      // Shard clusters: bottom centre (505,545), far left (95,400) and right (885,385), the last moved 5 tiles
-      // north to (38,-17), past the east road's end.
-      { look: 'hullShard', at: { x: 28.7, y: 29.3 }, yaw: 0.4, r: 2.5 },
-      { look: 'hullShard', at: { x: -11.9, y: 38.7 }, yaw: 2.1, r: 2.5 },
-      { look: 'hullShard', at: { x: 38, y: -17 }, yaw: -1, r: 2.5 },
+      // Shard clusters: bottom centre (505,545), moved 2 tiles off the south-east road's end; far left (95,400); and
+      // right (885,385), moved 7 tiles north to (36.5,-19), past the east road's end.
+      { look: 'hullShard', at: { x: 27.5, y: 30.5 }, yaw: 0.4, r: 3.5 },
+      { look: 'hullShard', at: { x: -11.9, y: 38.7 }, yaw: 2.1, r: 3.5 },
+      { look: 'hullShard', at: { x: 36.5, y: -19 }, yaw: -1, r: 3.5 },
     ],
     // Inside hull pieces sight is short and an ambush waits at the open ends, so the rich loot lies there.
     caches: [
       // Inside the cage (330,410) and (420,360), moved toward its middle and against its east wall, where the lane
       // between the ribs stays widest beside them.
-      { at: { x: 6.2, y: 26.8 } },
-      { at: { x: 5.9, y: 20.8 } },
+      { at: { x: 5.9, y: 26.9 } },
+      { at: { x: 5.6, y: 20.9 } },
       { at: { x: -21.1, y: 5.1 } }, // inside shell A (325,222)
-      { at: { x: -13.8, y: -5.9 } }, // inside shell B (440,215)
+      { at: { x: -13.8, y: -7.9 } }, // inside shell B (440,215)
       { at: { x: -9.5, y: -1 } }, // west of the hub; the concept's (525,300) lies inside the hub
       { at: { x: 19.5, y: -2.5 } }, // past the spine's end at the bow's aft break, outside the hazard (590,320)
       { at: { x: -10.5, y: -22 } }, // behind the tower (560,185)
@@ -128,7 +130,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       { at: { x: -6.5, y: 32.4 }, radius: 10, debris: DENSE, spots: 3 }, // west of the cage (180,400)
       { at: { x: 14, y: 30 }, radius: 9, debris: DENSE, spots: 2 }, // the bottom centre (400,480)
       { at: { x: 21, y: 21 }, radius: 8.5, debris: DENSE, spots: 2 }, // the lower right (512,445)
-      { at: { x: 36, y: 17 }, radius: 7, debris: LIGHT, spots: 2 }, // south of the large drum (640,476)
+      { at: { x: 34, y: 16 }, radius: 7, debris: LIGHT, spots: 2 }, // south of the large drum (633,465)
       { at: { x: -24, y: 29 }, radius: 7, debris: LIGHT, spots: 2 }, // the lower left (146,301)
       // The sparse scatter of the upper half.
       { at: { x: 28, y: -11 }, radius: 6, debris: LIGHT, spots: 1 }, // below the bow (777,345)
@@ -145,8 +147,11 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
     debrisGap: 1.5,
     seatEase: 3,
     // Rock walls along the north rim: the concept's grey crags run from (620,40) to (1000,330), bearings -111° to
-    // -41°, and its red-brown hills on the north-west rim from (200,100) to (480,60), bearings -164° to -138°.
-    rimRocks: { from: -170 * DEG, to: -35 * DEG, radius: [46, 50], count: 28, size: [2.5, 4] },
+    // -41°, and its red-brown hills on the north-west rim from (200,100) to (480,60), bearings -164° to -138°. Their
+    // feet stand 37 to 45 tiles out, as at (700,120) and (950,300), so the walls close the crater floor in.
+    rimRocks: { from: -170 * DEG, to: -35 * DEG, radius: [40, 46], count: 28, size: [2.5, 4] },
+    // The red-brown scree slope of the concept's upper left, from (100,250) to (300,110).
+    scree: { at: { x: -38, y: 6 }, radius: 16 },
     // Twin-rut tracks traced from the concept, bent round the pieces. Each starts or ends at a road end or another
     // track.
     tracks: [

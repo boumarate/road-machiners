@@ -145,7 +145,7 @@ export type PropPose = { model: PropModel; pos: Vec; yaw: number; scale: PropSca
 export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
-type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'crates' | 'reactor' | 'ship_bow' | 'ship_cage' | 'ship_hub' | 'hull_shell' | 'hull_drum' | 'hull_shard' | 'hull_tower' | 'hull_gantry';
+type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'crates' | 'reactor' | 'ship_bow' | 'ship_cage' | 'ship_hub' | 'hull_shell' | 'hull_drum' | 'hull_shard' | 'hull_tower' | 'hull_gantry' | 'rim_rock';
 
 const M = PHYSICS.metersPerTile;
 const TURN = Math.PI * 2;
@@ -176,7 +176,7 @@ const LANDMARK_MODELS: Record<LandmarkLook, PropModel> = {
   hullShard: 'hull_shard',
   hullTower: 'hull_tower',
   hullGantry: 'hull_gantry',
-  rimRock: 'crag',
+  rimRock: 'rim_rock',
 };
 // Footprint radius in meters each model is built at, for models that scale evenly to their obstacle radius. A
 // fence segment is 4 m long, so its radius is half that: it is one straight segment along its yaw. The Fallen Sun's
@@ -204,6 +204,7 @@ const MODEL_RADIUS: Partial<Record<PropModel, number>> = {
   hull_shard: 10,
   hull_tower: 6,
   hull_gantry: 22,
+  rim_rock: 8,
 };
 const WRECK_RADIUS = 0.7; // tiles, the reference size of the wreck model
 const BUILDING_FILL = 0.78; // share of the obstacle radius a building's footprint fills
