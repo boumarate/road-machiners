@@ -28,6 +28,7 @@ import { cancelRefit, isParkedForWork, startRepair, startStrip, startWeld, strip
 import { vehicleHasPerk } from "../sim/progress";
 import { PERK_NUMBERS } from "../data/skills";
 import { repairPlan, type RepairPlan } from "../sim/repair";
+import { shopAt } from "../sim/market";
 import { townAt } from "../sim/sites";
 import { takeAllLoot, takeLoot, takeStores } from "../sim/locations";
 import { canLootTruck, hasStores, takeFromTruck } from "../sim/salvage";
@@ -414,7 +415,7 @@ export class InventoryView {
     if (item.kind !== "part") return this.goodActions(w, item.good);
     const buttons: (HTMLElement | null)[] = [
       mounted ? this.patchButton(w, playerVehicle(w), item.part) : null,
-      townAt(w) ? this.repairButton(w, item.part) : null,
+      shopAt(w) ? this.repairButton(w, item.part) : null,
       !mounted && partDef(item.part.defId).kind !== "core"
         ? this.stripButton(w, playerVehicle(w), item.part)
         : null,
@@ -429,7 +430,7 @@ export class InventoryView {
     part: PartInstance,
   ): HTMLElement | null {
     if (isJunk(part)) return null;
-    if (!fieldPatchable(part)) return townOnlyPatch(part);
+    if (!fieldPatchable(part)) return shopOnlyPatch(part);
     const plan = repairPlan(w, me, part.id);
     if (plan.needed === 0) return null;
     const reason = patchBlocker(w, me, plan);
@@ -1005,9 +1006,9 @@ function fieldPatchable(part: PartInstance): boolean {
   return def.kind !== "armor" || def.fieldRepair !== "none";
 }
 
-// Armor that only a town repairs shows a disabled Patch button while damaged, so the player learns why.
-function townOnlyPatch(part: PartInstance): HTMLElement | null {
-  return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true }, "Patch (town only)") : null;
+// Armor that only a shop repairs shows a disabled Patch button while damaged, so the player learns why.
+function shopOnlyPatch(part: PartInstance): HTMLElement | null {
+  return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true }, "Patch (shop only)") : null;
 }
 
 // A part's condition and stats. A spare shows the change against the mounted part of its kind.
