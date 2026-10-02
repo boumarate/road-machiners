@@ -1,5 +1,5 @@
 import { BRANCH, GAME_DIR, TASK_FILE, WONT_DO_LABEL, type Ctx } from '../types';
-import { agentHome, askAuthor, baseBranchOf, fillPrompt, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
+import { agentHome, askAuthor, baseBranchOf, fillPrompt, fitComment, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 import { existsSync, readFileSync } from 'node:fs';
 
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
@@ -52,11 +52,8 @@ function planText(task: string): string {
   return (end < 0 ? rest : rest.slice(0, end)).join('\n').trim();
 }
 
-// GitHub caps a comment at 65536 characters. The rest of the room holds the wrapper and the marker.
-const DESIGN_COMMENT_LIMIT = 60000;
-
 // The task file never reaches git, so the issue shows the design and plan to anyone who wants to read them.
 async function postDesign(ctx: Ctx, issue: number, taskFile: string): Promise<void> {
-  const body = taskFile.length > DESIGN_COMMENT_LIMIT ? `${taskFile.slice(0, DESIGN_COMMENT_LIMIT)}\n\n(cut here, the full file is in the factory work clone)` : taskFile;
+  const body = fitComment(taskFile, 'the factory work clone');
   await ctx.github.comment(issue, `<details>\n<summary>Design and plan</summary>\n\n${body}\n\n</details>`);
 }

@@ -77,7 +77,7 @@ export function outputsNote(dir: string): string {
 // Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
 export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null): Container {
   return {
-    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, session }) {
+    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, session, skill }) {
       if (!openNetwork) await ensureProxy(run, cfg);
       // A headless run ends when the agent ends its turn, and that kills anything it left in the background.
       // Agents ended turns to wait for background subagents, and the run died with their work, so background tasks are off.
@@ -93,7 +93,8 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
         ...baseArgs(jobId), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount, ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
         'factory-agent', '-p', '--model', model, '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs,
       ];
-      const result = await run('docker', args, { env, input: `${outputsNote(dir)}\n\n${prompt}`, logPath: log });
+      const input = [skill, outputsNote(dir), prompt].filter((part) => part !== undefined).join('\n\n');
+      const result = await run('docker', args, { env, input, logPath: log });
       must(result, `agent in ${clone}`);
     },
     async shell(clone, script, log, env = {}) {

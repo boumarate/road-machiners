@@ -75,6 +75,12 @@ describe('dockerContainer', () => {
     expect(args).not.toContain('--session-id');
   });
 
+  it('puts a skill command on the first line, before the outputs note', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'do it', log: '/l.log', skill: '/code-review' });
+    expect(runCall(calls).opts?.input).toBe('/code-review\n\nYour folder is /work/game. Write every .factory/ and .factory-tasks/ file under /work/game, even after you change directory.\n\ndo it');
+  });
+
   it('puts a restricted agent on the internal network with the proxy env', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', openNetwork: false });

@@ -118,8 +118,8 @@ export function prepareOutputs(ctx: Ctx, issue: number, home: string): void {
   mkdirSync(`${home}/${OUT_DIR}`, { recursive: true });
 }
 
-// What a stage may set beyond its stage's defaults. `model` replaces the model the labels pick, like the review's design model.
-export type AgentExtras = { model?: string };
+// What a stage may set beyond its stage's defaults. `model` replaces the model the labels pick, like the review's design model. `skill` is a slash command to run first.
+export type AgentExtras = { model?: string; skill?: string };
 
 // `round` names the agent run inside the job. A stage with two runs gives each its own, so a resume finds the right session.
 export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round: string, prompt: string, extras: AgentExtras = {}): Promise<void> {
@@ -130,7 +130,17 @@ export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round:
   const session = roundSession(ctx.cfg.home, issue, round, isResuming(ctx, issue));
   if (session.resume) ctx.log(stage, issue, `resuming round ${round}, session ${session.id}`);
   const full = session.resume ? RESUME_NOTE : `${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`;
-  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), session });
+  // A resumed round already ran its skill, so only the note goes in.
+  const skill = session.resume ? undefined : extras.skill;
+  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), session, skill });
+}
+
+// GitHub caps a comment at 65536 characters. The rest of the room holds the wrapper and the marker.
+const COMMENT_TEXT_LIMIT = 60000;
+
+// Cuts a long text to fit one issue comment, and says where the full text is.
+export function fitComment(text: string, fullAt: string): string {
+  return text.length > COMMENT_TEXT_LIMIT ? `${text.slice(0, COMMENT_TEXT_LIMIT)}\n\n(cut here, the full text is in ${fullAt})` : text;
 }
 
 // Asks the issue author. The card stays where it is until a member answers on the issue.

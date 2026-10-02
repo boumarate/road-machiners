@@ -14,9 +14,10 @@ Fix failures your change did not cause too.
 Put each such fix in its own commit.
 Name it in the task file under Conclusion.
 
-If `.factory/review-findings.md` exists, an adversarial review blocked the change.
-It lists each introduced finding with its file and line.
-A finding that cites an incident repeats a past bug.
+If `.factory/review-findings.md` exists, an adversarial review failed the change.
+It holds the whole review.
+A finding that names an incident id like R3 repeats a past bug.
+A finding that names a principle breaks a rule in `docs/architecture/principles.md`.
 Read that incident in `../docs/incident-log.md` and fix the cause, not only the line.
 Fix every finding.
 If you disagree with a finding, prove it with a probe and say so in the task file under Conclusion.

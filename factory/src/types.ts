@@ -150,8 +150,9 @@ export interface Telegram {
 // `mediaDir` is a host folder of reference images. The agent sees it read only at /work/.factory-media.
 // `readOnly` maps host folders to container paths, mounted read only.
 // `session` names the agent's Claude Code session. The container mounts `dir` as the agent's session store and starts the session with `id`, or continues it when `resume` is set.
+// `skill` is a slash command like `/code-review`. Claude runs it only from the first line of the input, so it goes first.
 export type AgentSession = { dir: string; id: string; resume: boolean };
-export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; session?: AgentSession };
+export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; session?: AgentSession; skill?: string };
 
 export interface Container {
   // Runs Claude Code headless in the clone. Throws on a nonzero exit.
