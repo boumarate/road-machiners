@@ -166,7 +166,7 @@ function pointsAway(from: Vec, to: Vec, threat: Vec): boolean {
 // ---- Goal builders.
 
 // Why an NPC needs service, whether low supplies are its only need, and whether it needs repairs.
-type ServiceNeed = { reason: string; suppliesOnly: boolean; damaged: boolean };
+type ServiceNeed = { reason: string; suppliesOnly: boolean };
 
 // A truck with no engine or a junk one stays stranded for good. No patch fixes it, only a refit. See serveStranded.
 function isStrandedForGood(vehicle: Vehicle): boolean {
@@ -193,7 +193,7 @@ function pumpsOf(vehicle: Vehicle, profile: NpcProfile): string[] {
   return [...profile.towns, ...SERVICE_STALLS];
 }
 
-const SERVICE_STALLS: readonly string[] = Object.values(SHOPS).filter((s) => s.kind === 'stall' && s.supplies.includes('fuel')).map((s) => s.id);
+const SERVICE_STALLS: readonly string[] = Object.values(SHOPS).filter((s) => s.kind === 'stall').map((s) => s.id);
 
 // The fuel a driver thinks the way to its nearest pump takes: the straight line at the heat where it stands.
 function fuelToPump(world: World, vehicle: Vehicle, profile: NpcProfile): number {
@@ -221,7 +221,7 @@ function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): Servi
   const lowSupplies = resources.supplies <= suppliesCap(vehicle) * NPC_UPKEEP.lowSupplies;
   const damaged = isDamaged(vehicle);
   if (!lowFuel && !lowSupplies && !damaged) return null;
-  return { reason: serviceReason(lowFuel, lowSupplies), suppliesOnly: lowSupplies && !lowFuel && !damaged, damaged };
+  return { reason: serviceReason(lowFuel, lowSupplies), suppliesOnly: lowSupplies && !lowFuel && !damaged };
 }
 
 function isBroke(world: World, vehicle: Vehicle): boolean {

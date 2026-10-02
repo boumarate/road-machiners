@@ -202,7 +202,7 @@ export type ShopDef = {
   pressurePerUnit: number; // fraction of base price a single unit traded moves the price
   driftPerTurn: number; // fraction of standing pressure removed each turn
   contractSlots: number; // contracts this shop can post at once; used from PH4
-  supplies: ('fuel' | 'supplies')[]; // which of fuel and food this shop sells
+  supplies: ('fuel' | 'supplies')[]; // which of fuel and food the player buys here; repairs and NPC service do not read it
 };
 
 // Fraction pressure is clamped to either side of base price. A good can never trade for more than
