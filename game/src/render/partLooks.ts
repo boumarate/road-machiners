@@ -2,8 +2,10 @@
 // Weapons are assembled from sub-part models. Each slot picks from its def's pool, seeded by the part id.
 
 import type { ModelName } from '../three/render/models';
-import { PARTS } from '../data/parts';
+import { PARTS, type PartDef } from '../data/parts';
 import { hashStr } from './noise';
+import type { PartInstance } from '../sim/types';
+import { maxHp } from '../sim/wear';
 
 // The base model each chassis is drawn from. Kit parts stand on its row surfaces.
 const BASE_MODELS: Record<string, ModelName> = {
@@ -228,4 +230,56 @@ export function weaponLook(partId: string, defId: string): WeaponLook {
     barrel: pick('barrel'),
     extra: pool.extra.length === 0 ? null : pick('extra'),
   };
+}
+
+// How worn a part looks, and what its break throws. A part's look moves in steps so a truck only rebuilds when a part
+// crosses one. These are render constants, not balance.
+
+export const WEAR_LOOK_STEPS = 4;
+// Share of the gray mix at the last step.
+export const GRAY_MAX = 0.7;
+// Meters a model-space vertex moves at the last step.
+export const JAG_MAX = 0.06;
+// Same weld as debris.ts: corners within a millimeter move together.
+const WELD = 1000;
+
+export type BreakSignature = 'ammo' | 'air' | 'fire';
+
+// 0 at full HP, WEAR_LOOK_STEPS only at 0 HP. Lower HP never gives a lower step.
+export function wearLookStep(part: PartInstance): number {
+  const max = maxHp(part);
+  if (max <= 0) throw new Error(`Part ${part.id} has max HP ${max}`);
+  if (part.hp <= 0) return WEAR_LOOK_STEPS;
+  const share = Math.min(1, Math.max(0, 1 - part.hp / max));
+  return Math.min(WEAR_LOOK_STEPS - 1, Math.ceil(share * (WEAR_LOOK_STEPS - 1)));
+}
+
+export function grayShare(step: number): number {
+  return (GRAY_MAX * step) / WEAR_LOOK_STEPS;
+}
+
+// The color mixed toward its own luminance gray.
+export function grayed(hex: number, share: number): number {
+  const r = (hex >> 16) & 255;
+  const g = (hex >> 8) & 255;
+  const b = hex & 255;
+  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  const mix = (c: number): number => Math.round(c + (lum - c) * share);
+  return (mix(r) << 16) | (mix(g) << 8) | mix(b);
+}
+
+export function jagOffset(partId: string, x: number, y: number, z: number, step: number): { x: number; y: number; z: number } {
+  if (step <= 0) return { x: 0, y: 0, z: 0 };
+  const key = `${partId}:${Math.round(x * WELD)},${Math.round(y * WELD)},${Math.round(z * WELD)}`;
+  const size = (JAG_MAX * step) / WEAR_LOOK_STEPS;
+  const axis = (n: number): number => (hashStr(`${key}:${n}`) * 2 - 1) * size;
+  return { x: axis(0), y: axis(1), z: axis(2) };
+}
+
+const CORE_BREAKS: Partial<Record<string, BreakSignature>> = { wheel: 'air', tank: 'fire' };
+
+export function breakSignature(def: PartDef): BreakSignature | null {
+  if (def.kind === 'weapon') return 'ammo';
+  if (def.kind === 'core') return CORE_BREAKS[def.role] ?? null;
+  return def.kind === 'store' && def.holds === 'fuel' ? 'fire' : null;
 }
