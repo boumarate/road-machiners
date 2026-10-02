@@ -1,10 +1,15 @@
 import { CONFIG } from "../config";
+import { PHYSICS } from "../data/physics";
+import { REGION } from "../data/region";
 import { PAL } from "../render/palette";
-import type { ShotRound, World } from "../sim/types";
+import { GROUND, type TurnResult } from "../phys/drive";
+import { mountedParts } from "../sim/grid";
+import type { GameEvent, ShotRound, World } from "../sim/types";
 import { roundLabel } from "../ui/format";
 import { groundPoint, toMap, type V3 } from "../phys/frames";
 import type { Fx3D } from "./render/fx";
-import { blastRadiusOf, planVolley, projectileOf, roundAims, type Muzzle } from "./render/projectiles";
+import { blastRadiusOf, planVolley, projectileOf, roundAims, towardFrom, type Muzzle } from "./render/projectiles";
+import { viewOf, type VehicleView } from "./render/vehicle";
 import type { SoundDirector } from "./sound";
 
 // What a volley draws on: the world it lands in, the effects and sounds it plays, and where an event's truck is seen.
@@ -50,4 +55,101 @@ function damageLabel(host: VolleyHost, vehicleId: string, label: string | null, 
   const row = rows.get(vehicleId) ?? 0;
   rows.set(vehicleId, row + 1);
   host.fx.label(p, label, PAL.damageText, row, atMs, CONFIG.combatReadMs);
+}
+
+// What combat effects draw on: a volley host plus the vehicle views the guns' muzzles come from.
+export type CombatHost = VolleyHost & { views: Map<string, VehicleView> };
+
+// Sparks and the crash sound for the collisions due by this physics step, or all that remain when null.
+export function playCrashes(host: CombatHost, cues: CollisionCues | null, step: number | null): void {
+  for (const e of cues?.due(step) ?? []) {
+    const p = host.eventPoint(e.a);
+    if (p) host.fx.crash(p);
+    if (p) host.sound.at("crash", p, 0);
+  }
+}
+
+// A seen gun that fired its last round clunks as the volley ends.
+export function playDryGuns(host: CombatHost): void {
+  for (const e of host.world.events) {
+    const p = e.t === "empty" ? host.eventPoint(e.vehicle) : null;
+    if (p) host.sound.at("gun-empty", p, CONFIG.combatShotMs);
+  }
+}
+
+// Plays every shown volley of the turn's shot and guardShot events. The score aims an accent at each volley's first landing.
+export function playShotFx(host: CombatHost): void {
+  const rows = new Map<string, number>();
+  for (const e of host.world.events) {
+    const landMs = e.t === "shot" ? playTruckShot(host, e, rows) : e.t === "guardShot" ? playGuardShot(host, e, rows) : null;
+    if (landMs !== null) host.sound.accents([e], host.world.player.vehicleId, () => landMs);
+  }
+}
+
+function playTruckShot(host: CombatHost, e: Extract<GameEvent, { t: "shot" }>, rows: Map<string, number>): number | null {
+  const a = host.eventPoint(e.shooter);
+  const b = host.eventPoint(e.target);
+  if (!a || !b) return null;
+  const w = host.world;
+  const shooter = w.vehicles.find((x) => x.id === e.shooter) ?? w.removed.find((x) => x.id === e.shooter);
+  const gun = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
+  if (!gun) throw new Error(`Shot from ${e.shooter} names no mounted weapon ${e.weapon}`);
+  const view = viewOf(host.views, e.shooter);
+  return playVolley(host, a, () => view.muzzle(e.weapon), b, e.rounds, gun.defId, e.target, rows);
+}
+
+function playGuardShot(host: CombatHost, e: Extract<GameEvent, { t: "guardShot" }>, rows: Map<string, number>): number | null {
+  const b = host.eventPoint(e.target);
+  if (!b) return null;
+  const g = groundPoint(host.world.terrain, e.from);
+  const a: V3 = { x: g.x, y: g.y + (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile, z: g.z };
+  return playVolley(host, a, () => towardFrom(a, b), b, e.rounds, "guard", e.target, rows);
+}
+
+export type CollisionEvent = Extract<GameEvent, { t: "collision" }>;
+export type TimedCollision = { event: CollisionEvent; step: number | null };
+
+type Steps = Pick<TurnResult, "crashes" | "breaks" | "landings">;
+
+// Matches each collision event to the physics step it happened at. Candidates are scanned in the order applyTurn()
+// writes the events (breaks, crashes, landings) and each is taken once. An event with no candidate, such as a far
+// truck breaking a fence, has no step.
+export function collisionSteps(events: GameEvent[], result: Steps): TimedCollision[] {
+  const used = new Set<object>();
+  const take = <T extends { step: number }>(list: T[], fits: (c: T) => boolean): number | null => {
+    const found = list.find((c) => !used.has(c) && fits(c));
+    if (!found) return null;
+    used.add(found);
+    return found.step;
+  };
+  const timed: TimedCollision[] = [];
+  for (const event of events) {
+    if (event.t !== "collision") continue;
+    const step =
+      take(result.breaks, (b) => b.vehicle === event.a && b.prop === event.b) ??
+      take(result.crashes, (c) => samePair(c, event)) ??
+      take(result.landings, (l) => l.vehicle === event.a && event.b === GROUND);
+    timed.push({ event, step });
+  }
+  return timed;
+}
+
+function samePair(c: { a: string; b: string }, e: CollisionEvent): boolean {
+  return (c.a === e.a && c.b === e.b) || (c.a === e.b && c.b === e.a);
+}
+
+// Hands out each collision once, when playback reaches its step.
+export class CollisionCues {
+  private pending: TimedCollision[];
+
+  constructor(timed: TimedCollision[]) {
+    this.pending = timed.slice();
+  }
+
+  // The events at or before this step. A null step means movement is over, so every remaining event is due.
+  due(step: number | null): CollisionEvent[] {
+    const out = this.pending.filter((t) => step === null || (t.step !== null && t.step <= step));
+    this.pending = this.pending.filter((t) => !out.includes(t));
+    return out.map((t) => t.event);
+  }
 }

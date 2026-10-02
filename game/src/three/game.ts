@@ -23,7 +23,6 @@ import {
 } from "../phys/frames";
 import { applyTurn, type PreparedTurn } from "../phys/turn";
 import { playerVehicle, vehicleById } from "../sim/damage";
-import { mountedParts } from "../sim/grid";
 
 import { isStranded, maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder, parkedVehicles, throttleFor } from "../sim/steering";
@@ -50,19 +49,17 @@ import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D, TruckFx } from "./render/fx";
-import { towardFrom } from "./render/projectiles";
-import { playVolley } from "./volley";
+import { CollisionCues, collisionSteps, playCrashes, playDryGuns, playShotFx, type CombatHost } from "./volley";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { PathView } from "./render/path";
 import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
 import { terrainMesh } from "./render/terrain";
-import { VehicleView, viewOf } from "./render/vehicle";
+import { VehicleView } from "./render/vehicle";
 import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
 import { WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
-import { REGION } from "../data/region";
 import { daylightAt, lampsOn, lightScene, NightLights, sunLight } from "./render/daylight";
 import { sunAt } from "../sim/sun";
 import { markError, markVehicle } from "../sim/detect";
@@ -92,6 +89,7 @@ const PICK_RING = { gap: 0.45, width: 0.06, alpha: 0.9, lift: 0.02 };
 type TurnPhase = ReturnType<UiHost["getTurnPhase"]>;
 
 const MOVE_MS = (TURN_STEPS / PHYSICS.stepsPerSecond) * 1000; // real time the movement plays over
+const stepMs = (step: number) => (step / PHYSICS.stepsPerSecond) * 1000; // real time into the movement of a physics step
 const MOVED_BY_RULES = 0.5; // tiles between a vehicle's drawn spot and its sim spot that mean the rules moved it
 
 const GUN_HEIGHT = 1.6; // meters above the body center where shots start and land
@@ -138,6 +136,7 @@ export class Game {
   private frames: Record<string, VehicleFrame> = {}; // last shown pose per vehicle
   // A played turn: physics movement, then shots in flight when there was combat, then time to read results.
   private anim: Playback | null = null;
+  private crashCues: CollisionCues | null = null; // collisions of the playing turn, due at their physics step
   private readonly travel = new Travel(CONFIG.travelHoldMs);
   private phase: TurnPhase = null;
   private readonly weaponRange = new WeaponRangeView(PAL.select, READY_ARC_BIT);
@@ -655,8 +654,13 @@ export class Game {
           this.eventPoint(e.target) !== null) ||
         (e.t === "guardShot" && this.eventPoint(e.target) !== null),
     );
-    // Crashes are known now, so the score can time its accent's peak onto the impact at the end of movement.
-    this.sound.accents(world.events, world.player.vehicleId, (e) => (e.t === "collision" ? Math.max(0, MOVE_MS - elapsed) : null));
+    // Crashes are known now, so the score can time its accent's peak onto the step the trucks touch.
+    const timed = collisionSteps(world.events, playback.result);
+    this.crashCues = new CollisionCues(timed);
+    this.sound.accents(world.events, world.player.vehicleId, (e) => {
+      const hit = timed.find((t) => t.event === e);
+      return hit ? Math.max(0, stepMs(hit.step ?? TURN_STEPS) - elapsed) : null;
+    });
     // A towed truck's engine is off.
     if (!towed) this.playDriveSound(playback.result);
     this.phase = "Moving";
@@ -675,8 +679,10 @@ export class Game {
     this.live = null;
     this.phase = a.combat ? "Firing" : "Results";
     timed("fog", () => this.fog.update(this.combatFogWorld()));
-    this.playShotFx();
-    this.playDryGuns();
+    const host = this.combatHost();
+    playCrashes(host, this.crashCues, null);
+    playShotFx(host);
+    playDryGuns(host);
     this.weapons.render();
   }
 
@@ -699,6 +705,7 @@ export class Game {
 
   private finishPlayback(): void {
     this.anim = null;
+    this.crashCues = null;
     this.phase = null;
     this.idleSince = performance.now();
     this.saves.finishTurn();
@@ -805,44 +812,8 @@ export class Game {
     return { x: f.pos.x, y: f.pos.y + GUN_HEIGHT, z: f.pos.z };
   }
 
-  // A seen gun that fired its last round clunks as the volley ends.
-  private playDryGuns(): void {
-    for (const e of this.world.events) {
-      const p = e.t === "empty" ? this.eventPoint(e.vehicle) : null;
-      if (p) this.sound.at("gun-empty", p, CONFIG.combatShotMs);
-    }
-  }
-
-  private playShotFx(): void {
-    const w = this.world;
-    const rows = new Map<string, number>();
-    const host = { world: w, fx: this.fx, sound: this.sound, eventPoint: (id: string) => this.eventPoint(id) };
-    for (const e of w.events) {
-      if (e.t === "shot") {
-        const a = this.eventPoint(e.shooter);
-        const b = this.eventPoint(e.target);
-        if (!a || !b) continue;
-        const shooter = w.vehicles.find((x) => x.id === e.shooter) ?? w.removed.find((x) => x.id === e.shooter);
-        const gun = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
-        if (!gun) throw new Error(`Shot from ${e.shooter} names no mounted weapon ${e.weapon}`);
-        const view = viewOf(this.views, e.shooter);
-        const landMs = playVolley(host, a, () => view.muzzle(e.weapon), b, e.rounds, gun.defId, e.target, rows);
-        this.sound.accents([e], w.player.vehicleId, () => landMs);
-      }
-      if (e.t === "guardShot") {
-        const b = this.eventPoint(e.target);
-        if (!b) continue;
-        const g = groundPoint(this.world.terrain, e.from);
-        const a = { x: g.x, y: g.y + (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile, z: g.z };
-        const landMs = playVolley(host, a, () => towardFrom(a, b), b, e.rounds, "guard", e.target, rows);
-        this.sound.accents([e], w.player.vehicleId, () => landMs);
-      }
-      if (e.t === "collision") {
-        const p = this.eventPoint(e.a);
-        if (p) this.fx.crash(p);
-        if (p) this.sound.at("crash", p, 0);
-      }
-    }
+  private combatHost(): CombatHost {
+    return { world: this.world, fx: this.fx, sound: this.sound, eventPoint: (id) => this.eventPoint(id), views: this.views };
   }
 
   // The path preview chains physics turns from the current state, so it shows what will happen.
@@ -943,6 +914,7 @@ export class Game {
     // The first frame's rAF time can come before the performance.now() the clock started from.
     this.syncVehicles(step, Math.max(0, dt) / 1000);
     this.obstacles.play(this.anim, step, this.world, this.frames, Math.max(0, dt) / 1000);
+    if (step !== null) playCrashes(this.combatHost(), this.crashCues, step);
     this.drawOverlays();
     // syncVehicles gives every vehicle a frame, the player's included.
     const truck = this.frames[playerVehicle(this.world).id].pos;
