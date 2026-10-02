@@ -112,6 +112,7 @@ describe('NPC restraint', () => {
 describe('NPC field repairs', () => {
   it('parks in nearby reachable shade and spends carried parts to patch damage', () => {
     const { world, npc } = createNpc();
+    world.vehicles[0].pos = { x: 60, y: 60 }; // inside the live range, so shade counts
     addGoods(world, npc, 'parts', 2);
     const cab = corePart(npc, 'cab');
     cab.hp = partDef(cab.defId).hp * 0.2;

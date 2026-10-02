@@ -1,7 +1,30 @@
 // A uniform grid over blockers by their circles, so a line check reads only the blockers near its segment.
 
 import { boxSegmentDistance, type PosedBox } from '../mapgen';
+import type { Obstacle } from '../types';
 import { segmentDist, type Vec } from '../vec';
+
+// What names an obstacle for a cache: world clones copy obstacles, so a cache keys on id and place, never identity.
+export type ObstacleMark = { id: string; x: number; y: number; r: number; shape: string };
+
+// The shape string names the model a prop is drawn with and its facing, which set its boxes.
+function shapeOf(o: Obstacle): string {
+  return o.kind === 'landmark' ? `${o.look}:${o.yaw}` : o.kind;
+}
+
+export function marksOf(obstacles: readonly Obstacle[]): ObstacleMark[] {
+  return obstacles.map((o) => ({ id: o.id, x: o.pos.x, y: o.pos.y, r: o.r, shape: shapeOf(o) }));
+}
+
+export function sameMarks(marks: readonly ObstacleMark[], obstacles: readonly Obstacle[]): boolean {
+  if (marks.length !== obstacles.length) return false;
+  for (let i = 0; i < marks.length; i++) if (!marksObstacle(marks[i], obstacles[i])) return false;
+  return true;
+}
+
+function marksObstacle(m: ObstacleMark, o: Obstacle): boolean {
+  return m.id === o.id && m.x === o.pos.x && m.y === o.pos.y && m.r === o.r && m.shape === shapeOf(o);
+}
 
 // What routes keep clear of. Site edges and parked vehicles are circles. A prop blocks by the ground outlines of
 // its boxes that reach below truck roofs. Its r is then its reach, so a circle test with r never misses the boxes,

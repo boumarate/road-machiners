@@ -5,7 +5,8 @@
 import { startKit } from '../../data/start';
 import { TIME } from '../../data/time';
 import { playerVehicle } from '../damage';
-import { advanceFar } from '../far';
+import { advanceFar, clearFarRoutes } from '../far';
+import { setHeadless } from '../fidelity';
 import { isTowed } from '../tow';
 import type { GameEvent, World, XpSource } from '../types';
 import { dist, type Vec } from '../vec';
@@ -46,6 +47,17 @@ export function recordTurns(seed: number, archetype: Archetype, turns: number): 
 // The player's death ends the run early, since no turn runs after it. A stall or any other error fails loud.
 function* stepsFrom(start: World, label: string, archetype: Archetype, turns: number): Generator<RecordStep> {
   if (!Number.isInteger(turns) || turns <= 0) throw new Error(`A recording needs a positive whole number of turns, got ${turns}`);
+  setHeadless(true);
+  clearFarRoutes();
+  try {
+    yield* playSteps(start, label, archetype, turns);
+  } finally {
+    setHeadless(false);
+    clearFarRoutes();
+  }
+}
+
+function* playSteps(start: World, label: string, archetype: Archetype, turns: number): Generator<RecordStep> {
   let world = start;
   const watch = new StallWatch(label, world.turn, playerVehicle(world).pos);
   for (let i = 0; i < turns; i++) {

@@ -1,10 +1,10 @@
 // Spatial indexes over world.obstacles for hot queries: sight lines, shade rays and breakable props on a walk. Each
 // query reads the buckets near its segment instead of filtering every obstacle.
-// update() clones the world every turn, so an index is keyed by the obstacle ids in order, never by array identity.
-// An obstacle never changes its position or radius, so a hit returns the current world's own objects by slot.
+// update() clones the world every turn, so an index is keyed by each obstacle's id and place in order, never by array
+// identity. A hit returns the current world's own objects by slot.
 
 import { TIME } from '../data/time';
-import { ObstacleBuckets, type Blocker } from './nav/buckets';
+import { marksOf, ObstacleBuckets, sameMarks, type Blocker, type ObstacleMark } from './nav/buckets';
 import { isBreakable, propReach } from './mapgen';
 import type { Obstacle, World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
@@ -23,17 +23,15 @@ const MEMBERS: Record<PropIndexKind, { has: (o: Obstacle) => boolean; radius: (o
 };
 
 class Entry {
-  readonly ids: string[];
+  private readonly marks: ObstacleMark[];
   private readonly built: Partial<Record<PropIndexKind, ObstacleBuckets<Slot>>> = {};
 
   constructor(obstacles: readonly Obstacle[], private readonly size: number) {
-    this.ids = obstacles.map((o) => o.id);
+    this.marks = marksOf(obstacles);
   }
 
   matches(obstacles: readonly Obstacle[], size: number): boolean {
-    if (this.size !== size || this.ids.length !== obstacles.length) return false;
-    for (let i = 0; i < obstacles.length; i++) if (this.ids[i] !== obstacles[i].id) return false;
-    return true;
+    return this.size === size && sameMarks(this.marks, obstacles);
   }
 
   buckets(kind: PropIndexKind, obstacles: readonly Obstacle[]): ObstacleBuckets<Slot> {

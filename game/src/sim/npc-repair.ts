@@ -11,7 +11,7 @@ import { straightClear } from './path';
 import { repairPlan } from './repair';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
-import { inShade, shadeCasters, sunAt } from './sun';
+import { inShade, shadeCasters, shadeMatters, sunAt } from './sun';
 import type { NpcActivity, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 
@@ -23,7 +23,7 @@ function chooseRepairPart(world: World, vehicle: Vehicle) {
 
 function canSearchForShade(world: World, vehicle: Vehicle): boolean {
   const sun = sunAt(world.turn);
-  if (!sun) return false;
+  if (!sun || !shadeMatters(world, vehicle.pos)) return false;
   if (getResources(world, vehicle).fuel === 0) return false;
   return !inShade(world, vehicle.pos, sun);
 }

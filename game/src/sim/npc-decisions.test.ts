@@ -308,7 +308,7 @@ describe('fight back', () => {
 
 describe('decision points', () => {
   it('the same hostile in sight fires one roll', () => {
-    const w = emptyWorld({ x: 80, y: 80 });
+    const w = emptyWorld({ x: 50, y: 50 }); // inside the live range, so the cover rock hides the raider
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
     const key = `hostileSeen:${raider.id}`;

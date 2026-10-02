@@ -1,6 +1,7 @@
 // Time of day and the sun. Pure functions of the turn number.
 
 import { TIME } from "../data/time";
+import { isCheapMeeting } from "./fidelity";
 import { shadeCastersAround } from "./prop-index";
 import { weatherAt } from "./weather";
 import type { Obstacle, World } from "./types";
@@ -61,10 +62,15 @@ export function heatAt(world: World, pos: Vec): number {
   return cappedHeatAt(world, pos, 1);
 }
 
+// Whether shade at pos is worth computing. Out of the player's live range, nobody sees it, so ground there is open sun.
+export function shadeMatters(world: World, pos: Vec): boolean {
+  return !isCheapMeeting(world, pos, pos);
+}
+
 // Heat at pos with the sun height share capped at `cap`, so a high sun heats like a lower one.
 export function cappedHeatAt(world: World, pos: Vec, cap: number): number {
   const sun = sunAt(world.turn);
-  if (!sun || inShade(world, pos, sun)) return 1;
+  if (!sun || (shadeMatters(world, pos) && inShade(world, pos, sun))) return 1;
   return heatOfShare(world, pos, Math.min(cap, sunShare(sun)));
 }
 

@@ -4,10 +4,8 @@
 // on the way breaks.
 
 import { chassisDef } from '../data/chassis';
-import { PERF } from '../data/perf';
 import { RULES } from '../data/rules';
-import { TERRAIN } from '../data/terrain';
-import { playerVehicle } from './damage';
+import { inLiveRange, isHeadless } from './fidelity';
 import { boxSegmentDistance, propBoxes, propReach } from './mapgen';
 import { route } from './path';
 import { propSlotsAlong } from './prop-index';
@@ -23,8 +21,7 @@ import { bearing, dist, segmentDist, type Vec } from './vec';
 // A towed truck has no body: it follows its tower through followTower instead.
 export function isNear(w: World, v: Vehicle): boolean {
   if (isOnRope(w, v.id)) return false;
-  if (v.id === w.player.vehicleId) return true;
-  return dist(v.pos, playerVehicle(w).pos) <= TERRAIN.vision.radius + PERF.liveMargin;
+  return inLiveRange(w, v.pos);
 }
 
 // Fuel limits the engine like the 2D rules: under the low-fuel share of the tank the top
@@ -60,8 +57,7 @@ export function advanceFar(w: World, v: Vehicle): void {
 
   const s = fuelLimited(w, v, full, v.speed, order);
   const next = order.kind === 'through' ? throughSpeed(s, v.speed, dist(v.pos, order.dest), order.pace) : Math.min(s.maxSpeed, v.speed + s.accel);
-  // Vehicles without a brain have nowhere to store the route, so they plan it every turn.
-  const stored = v.brain?.farRoute;
+  const stored = keptFarRoute(v);
   // A new route steers around parked vehicles, like the physics driver's.
   const points = stored && stored.dest.x === order.dest.x && stored.dest.y === order.dest.y ? stored.points : route(w, v.pos, order.dest, full.radius, parkedVehicles(w, v.id), v);
 
@@ -81,11 +77,34 @@ export function advanceFar(w: World, v: Vehicle): void {
   burnFuel(w, v, walk.moved);
   breakCrossed(w, v, walk.path, full.radius);
   // A blocked truck drops its route, so next turn it plans one around the vehicles now parked.
-  if (v.brain) v.brain.farRoute = done || block ? undefined : { dest: { ...order.dest }, points: walk.ahead };
+  keepFarRoute(v, done || block ? undefined : { dest: { ...order.dest }, points: walk.ahead });
   if (done) {
     w.events.push({ t: 'arrived', vehicle: v.id });
     v.order = null;
   }
+}
+
+// A truck without a brain has nowhere to store its route, so in a game it plans every turn. The recorder's player is
+// such a truck, and keeps its route here instead: the world is cloned each turn, so the route waits beside it, with
+// the spot it ended on. A truck moved from that spot by anything else plans anew.
+type FarRoute = { dest: Vec; points: Vec[] };
+const playerRoutes = new Map<string, { route: FarRoute; at: Vec }>();
+
+export function clearFarRoutes(): void {
+  playerRoutes.clear();
+}
+
+function keptFarRoute(v: Vehicle): FarRoute | undefined {
+  if (v.brain) return v.brain.farRoute;
+  const kept = isHeadless() ? playerRoutes.get(v.id) : undefined;
+  return kept && kept.at.x === v.pos.x && kept.at.y === v.pos.y ? kept.route : undefined;
+}
+
+function keepFarRoute(v: Vehicle, route: FarRoute | undefined): void {
+  if (v.brain) v.brain.farRoute = route;
+  else if (!isHeadless()) return;
+  else if (route) playerRoutes.set(v.id, { route, at: { x: v.pos.x, y: v.pos.y } });
+  else playerRoutes.delete(v.id);
 }
 
 const CONTACT_STEP = 0.25; // tiles between overlap checks along a far walk, below the smallest vehicle radius
