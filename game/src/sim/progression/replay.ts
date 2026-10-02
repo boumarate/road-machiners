@@ -6,7 +6,7 @@ import { MAIN_SKILL, MAX_SKILL_LEVEL, SKILL_IDS, TARGET_DAYS, TARGET_TOLERANCE, 
 import { accrueXp, levelOf, type SkillProgress } from '../progress';
 import type { SkillId, XpSource } from '../types';
 import { isArchetype, type Archetype } from './bot';
-import type { RunEnd, TraceLine } from './record';
+import type { DayRow, RunEnd, TraceLine } from './record';
 
 // levels[i] is the first turn the skill reaches level i + 1, or null if it never does.
 export type SkillCurve = { levels: (number | null)[]; total: number; perDay: number };
@@ -99,7 +99,7 @@ function missVerdict(target: number, reached: number | null, turns: number): 'to
 
 // A recorded run read back from a trace file's parsed lines: a header, the trace lines, and a death marker last if
 // the player died. `turns` is the death turn for a run the player did not survive.
-export type Run = { archetype: Archetype; seed: number; turns: number; death: number | null; trace: TraceLine[] };
+export type Run = { archetype: Archetype; seed: number; turns: number; death: number | null; trace: TraceLine[]; rows: DayRow[] };
 
 export function parseRun(values: readonly unknown[], label: string): Run {
   const [first, ...rest] = values;
@@ -107,11 +107,24 @@ export function parseRun(values: readonly unknown[], label: string): Run {
   const header = parseHeader(first, label);
   const end = rest.length > 0 ? parseRunEnd(rest[rest.length - 1]) : null;
   const body = end ? rest.slice(0, -1) : rest;
-  const trace = body.map((value) => {
-    if (parseRunEnd(value)) throw new Error(`${label} has lines after its death marker`);
-    return parseTraceLine(value);
-  });
-  return { ...header, turns: end ? end.turn : header.turns, death: end ? end.turn : null, trace };
+  if (body.some((value) => parseRunEnd(value))) throw new Error(`${label} has lines after its death marker`);
+  const trace = body.filter((value) => !isDayRow(value)).map(parseTraceLine);
+  const rows = body.filter(isDayRow).map(parseDayRow);
+  return { ...header, ...(end ? { turns: end.turn, death: end.turn } : { death: null }), trace, rows };
+}
+
+function isDayRow(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && 'day' in value;
+}
+
+const ROW_NUMBERS = ['day', 'turns', 'money', 'netWorth', 'tier', 'fightsWon', 'knockouts', 'gearLost', 'deaths'] as const;
+
+// An economy row read from a trace file. Throws on anything that is not a valid row.
+export function parseDayRow(value: unknown): DayRow {
+  const row = asRecord(value);
+  for (const key of ROW_NUMBERS) if (typeof row[key] !== 'number') throw new Error(`Bad economy row ${JSON.stringify(value)}: ${key} is not a number`);
+  if (typeof row.chassis !== 'string') throw new Error(`Bad economy row ${JSON.stringify(value)}: chassis is not a string`);
+  return row as unknown as DayRow;
 }
 
 function parseHeader(value: unknown, label: string): Pick<Run, 'archetype' | 'seed' | 'turns'> {

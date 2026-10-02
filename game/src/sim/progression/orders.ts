@@ -1,0 +1,139 @@
+// A bot's player commands: Orders runs them one after another and keeps their events, and upgradeGear is the town
+// upgrade routine every bot shares. In a garage it takes the part or chassis that adds the most within its money above
+// the upkeep reserve, and mounts it. The parts on offer are the shop's stock and the spares the bot holds, which cost
+// nothing. A part replaces the weakest mounted part of its kind when no mount is free. Gains are in money: a part's
+// value at its wear and health, a chassis's value, or its top speed for a bot that wants speed.
+
+import { chassisDef, PLAYER_CHASSIS } from '../../data/chassis';
+import { shopDef } from '../../data/market';
+import { startKit } from '../../data/start';
+import { partDef, type PartKind } from '../../data/parts';
+import { playerVehicle } from '../damage';
+import { buyChassis, buyStockPart, chassisTradeIn, partTradePrice, sellPart } from '../economy';
+import { goodsCount, mountedItems, type Spot } from '../grid';
+import { installSpot, moveItem, spareParts, storePart, takeFromStorage } from '../inventory';
+import { shopAt, shopState } from '../market';
+import { getUpkeepReserve } from '../npc-decisions';
+import type { GameEvent, GridItem, PartInstance, Vehicle, World } from '../types';
+import { isJunk, maxHp, partValue } from '../wear';
+
+// The world after the bot's commands, and every event those commands raised.
+export type BotTurn = { world: World; events: GameEvent[] };
+
+export class Orders {
+  readonly events: GameEvent[] = [];
+  constructor(public world: World) {}
+
+  run(command: (w: World) => World): void {
+    this.world = command(this.world);
+    this.events.push(...this.world.events);
+  }
+
+  get me(): Vehicle {
+    return playerVehicle(this.world);
+  }
+}
+
+// A bot keeps its starting money working as trade capital and buys gear from profit above it, since a bot spent down
+// to the upkeep reserve cannot buy a load and starves.
+const WORKING_CAPITAL = startKit('standard').money;
+
+// Kinds no bot uses: built-in parts cannot be traded, and no bot reads a scanner.
+const NEVER: readonly PartKind[] = ['core', 'scanner'];
+
+// skip names the part kinds a bot also leaves alone. chassis is what a better chassis means to the bot.
+export type UpgradeStyle = { skip: readonly PartKind[]; chassis: 'value' | 'speed' };
+
+type PartItem = Extract<GridItem, { kind: 'part' }>;
+type Option = { gain: number; cost: number; take: (o: Orders) => void };
+// A part the bot could mount, what it costs, and how it reaches the truck or garage storage.
+type Candidate = { part: PartInstance; price: number; acquire: (o: Orders) => void };
+
+export function upgradeGear(o: Orders, style: UpgradeStyle): void {
+  for (let option = bestOption(o, style); option; option = bestOption(o, style)) option.take(o);
+}
+
+function bestOption(o: Orders, style: UpgradeStyle): Option | null {
+  const shop = shopAt(o.world);
+  if (!shop || shopDef(shop).kind !== 'garage') return null;
+  const spend = o.world.player.money - getUpkeepReserve(o.me) - WORKING_CAPITAL;
+  const chassis = strongest(chassisOptions(o, style).filter((option) => option.cost <= spend));
+  if (style.chassis === 'speed' && chassis) return chassis;
+  const wanted = (c: Candidate) => !isJunk(c.part) && ![...NEVER, ...style.skip].includes(partDef(c.part.defId).kind);
+  const parts = candidates(o, shop).filter(wanted);
+  const options = parts.flatMap((c) => partOption(o, c)).filter((option) => option.cost <= spend);
+  return strongest(chassis ? [chassis, ...options] : options);
+}
+
+function strongest(options: Option[]): Option | null {
+  return options.reduce<Option | null>((best, option) => (!best || option.gain > best.gain ? option : best), null);
+}
+
+// What a part adds: its value at its wear, cut by its damage.
+function quality(part: PartInstance): number {
+  return partValue(part) * (part.hp / maxHp(part));
+}
+
+// ---- Chassis.
+
+// A chassis change moves the cargo through the new grid, and goods may not fit. So the bot changes chassis only empty.
+function chassisOptions(o: Orders, style: UpgradeStyle): Option[] {
+  if (Object.keys(goodsCount(o.me)).length > 0) return [];
+  const current = chassisDef(o.me.chassisId);
+  return PLAYER_CHASSIS.filter((id) => id !== current.id).flatMap((id) => {
+    const def = chassisDef(id);
+    const gain = style.chassis === 'speed' ? def.maxSpeed - current.maxSpeed : def.value - current.value;
+    return gain > 0 ? [{ gain, cost: def.value - chassisTradeIn(o.world), take: (orders: Orders) => orders.run((w) => buyChassis(w, id)) }] : [];
+  });
+}
+
+// ---- Parts.
+
+function candidates(o: Orders, shop: string): Candidate[] {
+  const stock = shopState(o.world, shop).stock.map((part) => ({ part, price: partTradePrice(o.world, o.me, part, 'buy'), acquire: (orders: Orders) => orders.run((w) => buyStockPart(w, part.id)) }));
+  const spares = [...spareParts(o.me), ...o.world.player.storage].map((part) => ({ part, price: 0, acquire: () => undefined }));
+  return [...stock, ...spares];
+}
+
+// Mounting the candidate, with the weakest mounted part of its kind sold first when no mount is free. Nothing when
+// the part would not mount or adds nothing.
+function partOption(o: Orders, c: Candidate): Option[] {
+  if (installSpot(o.me, probe(c.part))) return [{ gain: quality(c.part), cost: c.price, take: (orders) => mount(orders, c, null) }];
+  const weakest = weakestOfKind(o.me, partDef(c.part.defId).kind);
+  if (!weakest || quality(c.part) <= quality(weakest.part)) return [];
+  const without = { ...o.me, items: o.me.items.filter((it) => it.id !== weakest.id) };
+  if (!installSpot(without, probe(c.part))) return [];
+  const resale = partTradePrice(o.world, o.me, weakest.part, 'sell');
+  return [{ gain: quality(c.part) - quality(weakest.part), cost: c.price - resale, take: (orders) => mount(orders, c, weakest) }];
+}
+
+function weakestOfKind(v: Vehicle, kind: PartKind): PartItem | null {
+  return mountedItems(v, kind).reduce<PartItem | null>((weak, it) => (!weak || quality(it.part) < quality(weak.part) ? it : weak), null);
+}
+
+function probe(part: PartInstance): PartItem {
+  return { id: 'upgrade-probe', x: 0, y: 0, rot: 0, kind: 'part', part };
+}
+
+function mount(o: Orders, c: Candidate, replaced: PartItem | null): void {
+  if (replaced) {
+    o.run((w) => storePart(w, replaced.id));
+    o.run((w) => sellPart(w, replaced.part.id));
+  }
+  c.acquire(o);
+  const spot = installSpot(o.me, probe(c.part));
+  if (!spot) throw new Error(`No mount for the ${partDef(c.part.defId).name}`);
+  mountBought(o, c.part.id, spot);
+}
+
+// A bought part lands in garage storage or loose in the grid; either way it moves onto the spot.
+export function mountBought(o: Orders, partId: string, spot: Spot): void {
+  if (o.world.player.storage.some((p) => p.id === partId)) o.run((w) => takeFromStorage(w, partId, spot));
+  else o.run((w) => moveItem(w, itemOf(w, partId), spot));
+}
+
+function itemOf(world: World, partId: string): string {
+  const item = playerVehicle(world).items.find((it) => it.kind === 'part' && it.part.id === partId);
+  if (!item) throw new Error(`Part ${partId} is not on the truck`);
+  return item.id;
+}

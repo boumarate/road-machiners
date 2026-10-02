@@ -17,7 +17,7 @@ import { playerVehicle, vehicleById } from '../damage';
 import { chooseOption, currentOptions } from '../dialogue';
 import { affordableBuyCount, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
 import { findSpot, freeCells, goodsCount, gridOf, isMounted, MOUNT_CELLS, mountedParts, type Spot } from '../grid';
-import { moveItem, storePart, takeFromStorage } from '../inventory';
+import { storePart } from '../inventory';
 import { shopAt, shopState } from '../market';
 import { canLoot, salvageHere, takeAllLoot } from '../locations';
 import { getUpkeepReserve, raiderGrounds } from '../npc-decisions';
@@ -27,32 +27,18 @@ import { canUseSite, nearestPad, nearestTown, townAt, type Site } from '../sites
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from '../stats';
 import { clockOf } from '../sun';
 import { inTowReach, setBeacon } from '../tow';
-import type { GameEvent, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
+import type { GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
 import { dist, type Vec } from '../vec';
 import { playerExplored, playerSees } from '../vision';
+import { mountBought, Orders, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
+
+const GEAR_STYLE: UpgradeStyle = { skip: [], chassis: 'value' };
 
 export type Archetype = 'trader' | 'scavenger' | 'fighter' | 'mixed';
 export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'fighter', 'mixed'];
 type Goal = Exclude<Archetype, 'mixed'>;
 // The mixed bot plays one goal per in-game day, in this order.
 const MIXED_ROTATION: readonly Goal[] = ['trader', 'scavenger', 'fighter'];
-// The world after the bot's commands, and every event those commands raised.
-export type BotTurn = { world: World; events: GameEvent[] };
-
-// Applies commands one after another and keeps the events of each.
-class Orders {
-  readonly events: GameEvent[] = [];
-  constructor(public world: World) {}
-
-  run(command: (w: World) => World): void {
-    this.world = command(this.world);
-    this.events.push(...this.world.events);
-  }
-
-  get me(): Vehicle {
-    return playerVehicle(this.world);
-  }
-}
 
 export function isArchetype(value: string): value is Archetype {
   return (ARCHETYPES as readonly string[]).includes(value);
@@ -153,6 +139,7 @@ function serviceInTown(o: Orders): void {
   serviceHere(o);
   restoreEngine(o);
   if (paidFixNeeded(o.world)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money`);
+  upgradeGear(o, GEAR_STYLE);
 }
 
 function paidFixNeeded(world: World): boolean {
@@ -192,18 +179,6 @@ function restoreEngine(o: Orders): void {
   if (!spot) throw new Error('No free engine mount for a new engine');
   o.run((w) => buyStockPart(w, engine.id));
   mountBought(o, engine.id, spot);
-}
-
-// A bought part lands in garage storage or loose in the grid; either way it moves onto the spot.
-function mountBought(o: Orders, partId: string, spot: Spot): void {
-  if (o.world.player.storage.some((p) => p.id === partId)) o.run((w) => takeFromStorage(w, partId, spot));
-  else o.run((w) => moveItem(w, itemOf(w, partId), spot));
-}
-
-function itemOf(world: World, partId: string): string {
-  const item = playerVehicle(world).items.find((it) => it.kind === 'part' && it.part.id === partId);
-  if (!item) throw new Error(`Bought part ${partId} is not on the truck`);
-  return item.id;
 }
 
 function engineSpot(v: Vehicle, defId: string): Spot | null {

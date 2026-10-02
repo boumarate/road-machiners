@@ -1,6 +1,6 @@
 // Records progression traces: a bot plays each archetype on each seed, and every practice event goes to
-// tmp/progression/<archetype>-<seed>.jsonl. The first line holds the run, then one trace line per event. A run the
-// player did not survive ends early with a {"end":"death","turn":N} line.
+// tmp/progression/<archetype>-<seed>.jsonl. The first line holds the run, then one trace line per event and one
+// economy row per in-game day. A run the player did not survive ends early with a {"end":"death","turn":N} line.
 // Each run is a child process, and runs go in parallel up to the CPU count.
 // Usage: npm run progression:record -- --archetypes trader,fighter --seeds 1,2,3 --turns 2000
 import { spawn } from 'node:child_process';
@@ -94,8 +94,9 @@ function recordOne({ archetype, seed }, turns) {
   let count = 0;
   let death = null;
   for (const step of recordTurns(seed, archetype, turns)) {
-    const { world, lines } = step;
-    if (lines.length > 0) writeSync(fd, lines.map((line) => `${JSON.stringify(line)}\n`).join(''));
+    const { world, lines, rows } = step;
+    const written = [...lines, ...rows];
+    if (written.length > 0) writeSync(fd, written.map((line) => `${JSON.stringify(line)}\n`).join(''));
     count += lines.length;
     death = step.death;
     if ((world.turn - 1) % TIME.turnsPerDay === 0) console.log(`${name}: day ${(world.turn - 1) / TIME.turnsPerDay} done, ${count} events`);
