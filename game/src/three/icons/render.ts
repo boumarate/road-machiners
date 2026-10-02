@@ -24,8 +24,10 @@ export const ICON_VIEWS: { items: IconView; chassis: IconView } = { items: 'diag
 
 const CELL = PHYSICS.cell;
 const SUPERSAMPLE = 2; // drawn at this multiple of the cell, then scaled down
-const MARGIN = 0.1; // share of the cell left empty on each side, room for the outline and pips
-const OUTLINE_PX = 4; // silhouette outline width at cell size, about 1 px at 36 px
+// Share of the cell left empty on each side, room for the outline and pips. The manifest carries it and OUTLINE_PX,
+// so the shop can crop a portrait to the truck.
+export const MARGIN = 0.1;
+export const OUTLINE_PX = 4; // silhouette outline width at cell size, about 1 px at 36 px
 const RAMP = [0.45, 0.75, 1]; // toon light steps
 const CREASE_NORMAL = 0.35; // normal change, as color distance in the normal pass, that draws a crease
 const CREASE_DEPTH = 6; // depth step, in 8-bit depth levels, that draws a crease

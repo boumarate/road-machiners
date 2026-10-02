@@ -7,7 +7,7 @@ import { GOODS } from '../../data/goods';
 import { PARTS } from '../../data/parts';
 import { iconCatalog, ICON_SECTIONS, ICON_WEAPON_PICKS, type IconEntry, type IconSection } from '../../render/partLooks';
 import { loadModels, type ModelName } from '../render/models';
-import { barrelReads, context, hex, iconHash, ICON_VIEWS, renderIcon, type BarrelRead, type IconView } from './render';
+import { barrelReads, context, hex, iconHash, ICON_VIEWS, MARGIN, OUTLINE_PX, renderIcon, type BarrelRead, type IconView } from './render';
 
 const CELL = { items: 128, chassis: 192 };
 const COLS = { items: 16, chassis: 8 };
@@ -38,6 +38,8 @@ type Sheet = 'items' | 'chassis';
 type Rendered = { entry: IconEntry; sheet: Sheet; views: Record<IconView, HTMLCanvasElement> };
 type Manifest = {
   cell: Record<Sheet, number>;
+  margin: number;
+  outline: number;
   cols: Record<Sheet, number>;
   views: Record<Sheet, IconView>;
   items: Record<string, { index: number; hash: string }>;
@@ -100,7 +102,7 @@ function manifestOf(rendered: readonly Rendered[], bytes: Map<ModelName, Uint8Ar
   };
   const entries = (sheet: Sheet): Manifest['items'] =>
     Object.fromEntries(inSheet(rendered, sheet).map((r, index) => [r.entry.id, { index, hash: iconHash(r.entry, ICON_VIEWS[sheet], read) }]));
-  return { cell: CELL, cols: COLS, views: ICON_VIEWS, items: entries('items'), chassis: entries('chassis') };
+  return { cell: CELL, margin: MARGIN, outline: OUTLINE_PX, cols: COLS, views: ICON_VIEWS, items: entries('items'), chassis: entries('chassis') };
 }
 
 // Every weapon's barrel must read from lower left to upper right in the diagonal view, by its sockets and its pixels.

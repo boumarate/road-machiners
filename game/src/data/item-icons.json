@@ -3,6 +3,8 @@
     "items": 128,
     "chassis": 192
   },
+  "margin": 0.1,
+  "outline": 4,
   "cols": {
     "items": 16,
     "chassis": 8
