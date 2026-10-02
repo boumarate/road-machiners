@@ -86,7 +86,7 @@ try {
     await page.keyboard.press('i');
     await checkVisibleReadouts(page);
   }
-  for (const width of [1024, 700]) {
+  for (const width of [1024, 800, 700]) {
     await page.setViewportSize({ width, height: 800 });
     await checkVisibleReadouts(page);
     await checkInstruments(page);
