@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { pngBytes } from './photo-fixtures';
@@ -66,6 +66,28 @@ describe('botClient sendDocument', () => {
     expect(form.get('chat_id')).toBe('-100');
     expect(JSON.parse(form.get('reply_parameters') as string)).toEqual({ message_id: 4 });
     expect((form.get('document') as File).name).toBe('report.html');
+  });
+
+  it('refuses a missing file, a link, an empty file and a file over 50 MB before any request', async () => {
+    mkdirSync(join(process.cwd(), 'tmp'), { recursive: true });
+    const dir = mkdtempSync(join(process.cwd(), 'tmp', 'tg-'));
+    writeFileSync(join(dir, 'empty.csv'), '');
+    writeFileSync(join(dir, 'big.zip'), 'x');
+    truncateSync(join(dir, 'big.zip'), 50 * 1024 * 1024 + 1);
+    symlinkSync('/etc/passwd', join(dir, 'link.txt'));
+    const { fetchFn, calls } = fakeFetch([ok(9)]);
+    const client = botClient('T', fetchFn);
+    for (const name of ['missing.csv', 'link.txt']) await expect(client.sendDocument('-100', join(dir, name), 4)).rejects.toThrow('not a regular file');
+    for (const name of ['empty.csv', 'big.zip']) await expect(client.sendDocument('-100', join(dir, name), 4)).rejects.toThrow('the limit is');
+    expect(calls).toEqual([]);
+  });
+
+  it('throws the Telegram description when the upload is refused', async () => {
+    mkdirSync(join(process.cwd(), 'tmp'), { recursive: true });
+    const path = join(mkdtempSync(join(process.cwd(), 'tmp', 'tg-')), 'a.csv');
+    writeFileSync(path, 'a,b');
+    const { fetchFn } = fakeFetch([{ ok: false, description: 'Bad Request: chat not found' }]);
+    await expect(botClient('T', fetchFn).sendDocument('-100', path, 4)).rejects.toThrow('chat not found');
   });
 });
 
