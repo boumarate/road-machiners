@@ -1234,6 +1234,7 @@ body {
   flex: 1;
 }
 .inv-chip > .icon {
+  flex: none;
   width: 22px;
   height: 22px;
 }
@@ -1850,6 +1851,8 @@ canvas.view {
 .chassis-portrait {
   display: block;
   flex: none;
+  /* The grid's height: --rows cells of 10px with 1px gaps, inside 3px padding. Keep in step with .chassis-map. */
+  height: calc(var(--rows) * 11px + 5px);
 }
 .chassis-portrait svg {
   display: block;
@@ -1865,7 +1868,7 @@ canvas.view {
   background: #1a2125;
 }
 .chassis-map i {
-  width: 10px;
+  width: 10px; /* .chassis-portrait height follows this size */
   height: 10px;
 }
 .chassis-map .hole {
