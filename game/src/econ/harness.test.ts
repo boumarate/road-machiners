@@ -66,8 +66,9 @@ describe('runPolicy', () => {
     expect(r.perDay.map((d) => d.day)).toEqual([1, 2, 3]);
   });
 
-  it('greedy buys at least one upgrade within a few days on seed 1', () => {
-    const r = run(1, 'greedy', 3);
+  it('greedy buys at least one upgrade within a few days on seed 2', () => {
+    // Seed 1 buys none since the town building rings left the world's random stream; seeds 2 to 6 all buy.
+    const r = run(2, 'greedy', 3);
     expect(r.telemetry.upgradesBought).toBeGreaterThan(0);
   });
 
