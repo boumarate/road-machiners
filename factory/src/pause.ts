@@ -9,3 +9,13 @@ export function pausedReason(home: string): string | null {
   if (!existsSync(path)) return null;
   return readFileSync(path, 'utf8').trim() || 'no reason given';
 }
+
+// The update script writes this prefix into its own pause, and Hermes's pauses never start with it.
+const UPDATE_PAUSE_PREFIX = 'update to';
+export const updateFailedFile = (home: string): string => `${home}/update-failed`;
+
+// A pause owned by the update script that only waits for running jobs to end. It is not a pause while the update has failed.
+export function isDrainingUpdatePause(home: string): boolean {
+  const reason = pausedReason(home);
+  return reason !== null && reason.startsWith(UPDATE_PAUSE_PREFIX) && !existsSync(updateFailedFile(home));
+}

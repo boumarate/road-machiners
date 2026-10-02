@@ -156,12 +156,17 @@ function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): voi
   ctx.log('tick', pick.issue, `started ${pick.stage}, pid ${pid}, log ${log}`);
 }
 
+async function answeredWaiting(ctx: Ctx, card: Card): Promise<boolean> {
+  const waiting = card.column === 'Triage' && card.labels.includes(NEEDS_INFO_LABEL);
+  return waiting && isAnswered(await ctx.github.comments(card.issue));
+}
+
 // A Triage card that waits for answers gets its label back off once someone replies. Returns the cards as they stand after that.
-async function releaseAnswered(ctx: Ctx, cards: Card[]): Promise<Card[]> {
+// `mayRelease` runs before each label removal, so a caller can stop the pass when its permission lapses.
+export async function releaseAnswered(ctx: Ctx, cards: Card[], mayRelease: () => boolean = () => true): Promise<Card[]> {
   const released: Card[] = [];
   for (const card of cards) {
-    const waiting = card.column === 'Triage' && card.labels.includes(NEEDS_INFO_LABEL);
-    if (!waiting || !isAnswered(await ctx.github.comments(card.issue))) {
+    if (!(await answeredWaiting(ctx, card)) || !mayRelease()) {
       released.push(card);
       continue;
     }
