@@ -20,9 +20,10 @@ function contrast(a: string, b: string): number {
 }
 
 function colorOf(tier: string): string {
-  const m = css.match(new RegExp(`\\.cond-${tier}\\s*\\{[^}]*?\\bcolor:\\s*(#[0-9a-fA-F]{6})`));
+  const m = css.match(new RegExp(`\\.cond-${tier}\\s*\\{[^}]*?\\bcolor:\\s*(#[0-9a-fA-F]{6}|var\\(--[a-z-]+\\))`));
   if (!m) throw new Error(`no .cond-${tier} color in style.css`);
-  return m[1]!;
+  const v = m[1]!.match(/^var\((--[a-z-]+)\)$/);
+  return v ? css.match(new RegExp(`${v[1]}:\\s*(#[0-9a-fA-F]{6})`))![1]! : m[1]!;
 }
 
 const ink = css.match(/--ink:\s*(#[0-9a-fA-F]{6})/)![1]!;
@@ -51,5 +52,9 @@ describe("condition colors", () => {
 
   it("fills the pristine star", () => {
     expect(css).toMatch(/\.cond-pristine \.icon svg\s*\{[^}]*fill:/);
+  });
+
+  it("colors the grid star from the pristine color", () => {
+    expect(css).toMatch(/\.inv-item-star[^{]*\{[^}]*var\(--cond-pristine\)/);
   });
 });

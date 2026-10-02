@@ -8,7 +8,7 @@ import { itemCells, itemSize, type Cell, type Grid } from "../sim/grid";
 import type { GridItem, PartInstance, RefitJob, RefitMove, Vehicle, World } from "../sim/types";
 import { playerVehicle } from "../sim/damage";
 import { el } from "./dom";
-import { wearLabel } from "./format";
+import { conditionTier, wearLabel } from "./format";
 import { createIcon, goodIcon, partIcon, type IconName } from "./cards";
 import { hp, kg } from "./units";
 
@@ -63,7 +63,7 @@ export function cellEl(c: Cell, x: number, y: number, cell: number): HTMLElement
 
 // What a part's grid box adds to the icon and name: its condition bar and, when pristine, a corner star.
 function partBoxExtras(part: PartInstance): HTMLElement[] {
-  const star = part.wear === 0 ? [el("span", { class: "inv-item-star", "aria-hidden": "true" }, createIcon("star"))] : [];
+  const star = conditionTier(part) === "pristine" ? [el("span", { class: "inv-item-star", "aria-hidden": "true" }, createIcon("star"))] : [];
   return [conditionBar(part), ...star];
 }
 

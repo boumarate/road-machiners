@@ -18,6 +18,7 @@ body {
 }
 #ui {
   --ink: #e0d8ca;
+  --cond-pristine: #fff4d6;
   --muted: #aaa69e;
   --edge: #747777;
   --metal: #33383b;
@@ -1091,7 +1092,7 @@ body {
   top: 1px;
   right: 1px;
   display: inline-flex;
-  color: #fff4d6;
+  color: var(--cond-pristine);
   pointer-events: none;
 }
 .inv-item-star .icon,
@@ -1100,8 +1101,8 @@ body {
   height: 10px;
 }
 .inv-item-star .icon svg {
-  fill: #fff4d6;
-  stroke: #fff4d6;
+  fill: var(--cond-pristine);
+  stroke: var(--cond-pristine);
 }
 .inv-item {
   position: absolute;
@@ -1615,11 +1616,11 @@ canvas.view {
   height: 12px;
 }
 .cond-pristine {
-  color: #fff4d6;
+  color: var(--cond-pristine);
 }
 .cond-pristine .icon svg {
-  fill: #fff4d6;
-  stroke: #fff4d6;
+  fill: var(--cond-pristine);
+  stroke: var(--cond-pristine);
 }
 .cond-w1 {
   color: #e0d8ca;
