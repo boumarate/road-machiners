@@ -108,7 +108,7 @@ export function onOrchardRoad(s: number, c: number): Vec {
   return { x: s * cos + c * sin, y: s * sin - c * cos };
 }
 const ALONG = 0; // a turn that keeps a building's front along the road, toward its north end
-const ACROSS = Math.PI / 2; // a turn that sets a building's front across the road
+const ACROSS = Math.PI / 2; // a turn that sets a building's front across the road, toward map east: the road for a building on its west side
 const AT = onOrchardRoad; // short for the many authored points below
 const pose = (s: number, c: number, r: number, turn: number) => ({ at: onOrchardRoad(s, c), r, turn, shoulder: false });
 
@@ -178,10 +178,13 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
     farm: {
       road: { width: 3 },
       buildings: [
-        // The ruined two-storey farmhouse above the road at the middle, its long side to the road.
-        { look: 'farmhouse', table: 'landmark', poses: [pose(10, 11, 3, ALONG)] },
-        // The gabled barn far left above the road, and its shed just right of it.
-        { look: 'barn', table: 'farmStores', poses: [pose(-10, 25, 2.6, ALONG), pose(-4, 24, 1.8, ALONG)] },
+        // The ruined two-storey farmhouse above the road at the middle, its long side, broken roof and yard to the
+        // road. Turned from ALONG to ACROSS: the model's facade faces +X, so ALONG showed it up the road with its
+        // long side across it and hid the bare rafters from the camera.
+        { look: 'farmhouse', table: 'landmark', poses: [pose(10, 11, 3, ACROSS)] },
+        // The gabled barn far left above the road, and its shed just right of it, their open door gables to the
+        // road. Turned from ALONG to ACROSS, since the model's door gable faces +X.
+        { look: 'barn', table: 'farmStores', poses: [pose(-10, 25, 2.6, ACROSS), pose(-4, 24, 1.8, ACROSS)] },
         // Three Quonset huts side by side right of centre, below the road, their ends to the road. Moved to fit the
         // circle: the third hut at (28, -19) reached 36 tiles out. The row now steps across the road from (22, -9),
         // (25, -14), (28, -19) to (21.5, -8.5), (22, -13), (22.5, -17.5).
