@@ -17,7 +17,7 @@ import {
 } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { huntsForLoot, inCombatWithOther, isHostile } from './combat';
+import { fightsAgainst, huntsForLoot, inCombatWithOther, isHostile } from './combat';
 import { ramFactor, ramImpact } from './crash-contact';
 import { isKnockedOut } from './defeat';
 import { vehicleById } from './damage';
@@ -35,10 +35,10 @@ import { randRange } from './rng';
 import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable } from './salvage';
 import { canUseSite, isTerritory, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { territoryAt, territoryGrounds } from './territory';
-import { boundTo, givesWord, stateOf, statesHeld } from './states';
+import { addState, boundTo, endState, givesWord, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
-import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
+import type { Contact, NpcActivity, NpcState, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 
@@ -453,14 +453,24 @@ function canFight(world: World, vehicle: Vehicle, decision: DecisionId, subject:
   return firepower(world, vehicle) > 0 && canVehicleSee(world, vehicle, subjectOf(world, decision, subject).pos);
 }
 
+// A stranded driver holds off a robbery against a target that is not fighting it.
+function canFightSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  return canFight(world, vehicle, decision, subject) && !holdsOffRobbery(world, vehicle, subjectOf(world, decision, subject));
+}
+
+function canInvestigate(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  return canDrive(world, vehicle) && !holdsOffRobbery(world, vehicle, subjectOf(world, decision, subject));
+}
+
 // Driving off and closing in on a contact need fuel.
 function canDrive(world: World, vehicle: Vehicle): boolean {
   return getResources(world, vehicle).fuel > 0;
 }
 
 // A robbery is a fight, so it also needs a working gun. The driver's traits must allow it too.
+// A stranded truck can neither chase prey nor carry the loot off.
 function canRobSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
-  if (!traitsAllowRobbing(vehicle)) return false;
+  if (isStranded(world, vehicle) || !traitsAllowRobbing(vehicle)) return false;
   return firepower(world, vehicle) > 0 && canRob(world, vehicle, subjectOf(world, decision, subject));
 }
 
@@ -538,10 +548,10 @@ type OptionName = DecisionOptions[DecisionId];
 
 const AVAILABLE: Record<OptionName, Availability> = {
   keep: always,
-  fight: canFight,
+  fight: canFightSubject,
   fightBack: canFight,
   flee: canDrive,
-  investigate: canDrive,
+  investigate: canInvestigate,
   rob: canRobSubject,
   ram: canRamSubject,
   tow: canTow,
@@ -727,7 +737,17 @@ function robs(world: World, vehicle: Vehicle, subject: string | null): boolean {
 
 // Whether the driver may and does want the target's cargo. Only these drivers strip a stranded player.
 export function wantsLoot(world: World, vehicle: Vehicle, target: Vehicle): boolean {
-  return traitsAllowRobbing(vehicle) && robs(world, vehicle, target.id);
+  return !isStranded(world, vehicle) && traitsAllowRobbing(vehicle) && robs(world, vehicle, target.id);
+}
+
+// The driver's hostility toward the target is only for its cargo.
+export function robbedFor(world: World, vehicle: Vehicle, target: Vehicle): boolean {
+  return robbingFeud(world, vehicle, target) || huntsForLoot(world, vehicle, target);
+}
+
+// A stranded driver cannot carry out a robbery, unless the target is fighting it. The one stranded robbery rule.
+export function holdsOffRobbery(world: World, vehicle: Vehicle, target: Vehicle): boolean {
+  return isStranded(world, vehicle) && robbedFor(world, vehicle, target) && !fightsAgainst(world, target, vehicle);
 }
 
 function robbingFeud(world: World, vehicle: Vehicle, target: Vehicle): boolean {
@@ -947,4 +967,20 @@ function checkWeights(vehicle: Vehicle, decision: DecisionId, weights: Partial<R
   for (const [option, weight] of Object.entries(weights) as [OptionName, number][]) {
     if (!Number.isFinite(weight) || weight < 0) throw new Error(`${vehicle.id} has weight ${weight} for ${option} at ${decision}`);
   }
+}
+
+// A stranded driver ends each robbery feud whose target is not fighting it and backs off that target, as a robbery
+// that went quiet does.
+export function giveUpStrandedRobberies(world: World, vehicle: Vehicle): void {
+  if (!isStranded(world, vehicle)) return;
+  for (const s of statesHeld(world, vehicle.id).filter(isRobberyFeud)) {
+    const other = world.vehicles.find((v) => v.id === s.other);
+    if (!other || !holdsOffRobbery(world, vehicle, other)) continue;
+    endState(world, s, 'broken');
+    addState(world, 'backedOff', vehicle.id, s.other, { kind: 'none' });
+  }
+}
+
+function isRobberyFeud(s: NpcState): boolean {
+  return s.kind === 'feud' && s.data.kind === 'feud' && s.data.robbery;
 }

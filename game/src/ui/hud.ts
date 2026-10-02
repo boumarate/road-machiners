@@ -348,6 +348,7 @@ export class Hud {
     const douse = el(
       "button",
       {
+        class: "instrument-button",
         disabled: busy || !canDouse(w),
         onclick: () => this.actions.douseEngine(),
         title: `Pour ${ENGINE_HEAT.douseSupplies} supplies of water over the engine to cool it [G]`,
@@ -362,6 +363,7 @@ export class Hud {
     return el(
       "button",
       {
+        class: "instrument-button",
         disabled: busy,
         onclick: () => this.actions.openCharacter(),
         title: perkOpen ? "Driver and skills: a perk is ready to pick [C]" : "Driver and skills [C]",
@@ -373,6 +375,7 @@ export class Hud {
 
   renderTop(w: World): void {
     const readout = getHudReadout(w);
+    const timeStart = readout.clock.lastIndexOf(" ");
     const busy = this.actions.isBusy();
     this.condition.render(playerVehicle(w));
     this.renderContracts(w);
@@ -380,18 +383,33 @@ export class Hud {
     this.top.replaceChildren(
       this.condition.root,
       el(
-        "button",
+        "div",
         {
-          class: "truck-instrument",
-          title: "Truck inventory [I]",
-          "aria-label": "Open truck inventory",
-          disabled: busy,
-          onclick: () => this.actions.openInventory(),
+          class: "instrument-clock",
+          role: "timer",
+          title: "Day and time",
+          "aria-label": `Time: ${readout.clock}`,
         },
-        createSpeedDial(Number(readout.speed), Number(readout.maxSpeed)),
-        el("span", { class: "speed-value" }, readout.speed),
-        el("span", { class: "speed-unit" }, `km/h · max ${readout.maxSpeed}`),
-        createIcon("truck"),
+        el("span", { class: "clock-day" }, readout.clock.slice(0, timeStart)),
+        el("span", { class: "clock-time" }, readout.clock.slice(timeStart + 1)),
+      ),
+      el(
+        "div",
+        { class: "speedometer" },
+        el(
+          "button",
+          {
+            class: "truck-instrument",
+            title: "Truck inventory [I]",
+            "aria-label": "Open truck inventory",
+            disabled: busy,
+            onclick: () => this.actions.openInventory(),
+          },
+          createSpeedDial(Number(readout.speed), Number(readout.maxSpeed)),
+          el("span", { class: "speed-value" }, readout.speed),
+          createIcon("truck"),
+        ),
+        el("span", { class: "speed-max", title: "Max speed" }, `max ${readout.maxSpeed}`),
       ),
       el(
         "div",
@@ -456,15 +474,6 @@ export class Hud {
         }),
         ...this.engineButtons(w, busy),
         this.characterButton(w, busy),
-        ...(readout.broken
-          ? [
-              el(
-                "span",
-                { class: "bad", role: "status" },
-                `! ${readout.broken} broken`,
-              ),
-            ]
-          : []),
       ),
     );
   }
