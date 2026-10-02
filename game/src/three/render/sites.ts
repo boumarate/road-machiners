@@ -3,12 +3,11 @@
 
 import * as THREE from 'three';
 import { REGION, type SiteLocationDef, type SiteEdge, type TownDef } from '../../data/region';
-import { TERRAIN } from '../../data/terrain';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
 import { siteGates } from '../../sim/sites';
-import { BRIDGE_AXIS, BRIDGE_LENGTH } from '../../sim/bridge';
+import { deckById, type Deck } from '../../sim/bridge';
 import { deckEnds, heightAt, type Terrain } from '../../sim/terrain';
 import { angleDiff, segmentDist } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
@@ -22,6 +21,9 @@ const NOSE_SCALE = 4;
 // deck before this height scale.
 const BRIDGE_RISE = 1.5;
 const BRIDGE_DECK_TOP = 0.8; // meters from the model origin up to its deck top, before scaling
+// The Broken Wing deck model's size in meters, between its rail lines (tools/blender/wing_deck.py).
+const WING_DECK_LENGTH = 156;
+const WING_DECK_WIDTH = 24;
 
 // Site props stay within the site's collision footprint. Every prop is grounded independently.
 class SiteBuilder {
@@ -353,19 +355,42 @@ function buildLock(b: SiteBuilder): void {
   b.addRuin(3.7, 0, 1.7, 2);
 }
 
-// The deck top follows the sim deck line from sim/terrain.ts, which the physics deck also follows.
+// Poses a deck model on a sim deck: its middle on the deck's middle, pitched along the deck line from
+// sim/terrain.ts, which the physics deck also follows, and turned along the deck axis. `top` is meters from the model
+// origin up to its deck top, after scaling.
+function poseOnDeck(obj: THREE.Object3D, terrain: Terrain, deck: Deck, top: number): void {
+  const { from, axis, length } = deck;
+  const [h0, h1] = deckEnds(terrain, deck);
+  const pitch = Math.atan2((h1 - h0) * S, length * S);
+  obj.position.set((from.x + (axis.x * length) / 2) * S, ((h0 + h1) / 2) * S - top, (from.y + (axis.y * length) / 2) * S);
+  // YXZ applies the pitch about the model's own z first, then the yaw.
+  obj.rotation.set(0, -Math.atan2(axis.y, axis.x), pitch, 'YXZ');
+}
+
 function buildBridge(b: SiteBuilder, terrain: Terrain): void {
-  const { from, width } = TERRAIN.features.bridge;
-  const [h0, h1] = deckEnds(terrain);
-  const pitch = Math.atan2((h1 - h0) * S, BRIDGE_LENGTH * S);
-  const mid = { x: from.x + (BRIDGE_AXIS.x * BRIDGE_LENGTH) / 2, y: from.y + (BRIDGE_AXIS.y * BRIDGE_LENGTH) / 2 };
-  const bridge = b.addModel('bridge', mid.x - b.site.pos.x, mid.y - b.site.pos.y, 0, new THREE.Vector3((BRIDGE_LENGTH * S) / 32, BRIDGE_RISE, (width * S) / 7));
+  const deck = deckById('canyon-bridge');
+  const bridge = b.addModel('bridge', 0, 0, 0, new THREE.Vector3((deck.length * S) / 32, BRIDGE_RISE, (deck.width * S) / 7));
   // Trucks cross the bridge, which lies outside the site edge.
   bridge.userData.outsideEdge = true;
-  bridge.position.y = ((h0 + h1) / 2) * S - BRIDGE_DECK_TOP * BRIDGE_RISE;
-  // YXZ applies the pitch about the model's own z first, then the yaw.
-  bridge.rotation.set(0, -Math.atan2(BRIDGE_AXIS.y, BRIDGE_AXIS.x), pitch, 'YXZ');
+  poseOnDeck(bridge, terrain, deck, BRIDGE_DECK_TOP * BRIDGE_RISE);
   b.addRuin(0, 0, 3, 2);
+}
+
+// The Broken Wing deck model, 156 m by 24 m with its top at the origin, stretched to the sim deck. It stands on the
+// deck, not at the site, so addSites scopes it on its own.
+function buildWingDeck(t: Terrain): THREE.Group {
+  const deck = deckById('broken-wing');
+  const root = new THREE.Group();
+  root.name = 'landmark-wing-deck';
+  const obj = model('wing_deck');
+  obj.scale.set((deck.length * S) / WING_DECK_LENGTH, 1, (deck.width * S) / WING_DECK_WIDTH);
+  poseOnDeck(obj, t, deck, 0);
+  root.add(obj);
+  root.traverse((o) => {
+    o.updateMatrix();
+    o.matrixAutoUpdate = false;
+  });
+  return root;
 }
 
 function buildOasis(b: SiteBuilder, well: boolean): void {
@@ -414,6 +439,16 @@ function buildWrecks(b: SiteBuilder, id: string): void {
   }
 }
 
+// Torn plates and a crate beside the road past the wing's tip ramp. The deck and the hoop stand clear of the site.
+function buildWingSalvage(b: SiteBuilder): void {
+  b.addTank(2.5, 2.8, 0.6, 1.4, PAL.rust.top);
+  b.addTank(3.8, 2.2, 0.45, 1.1, PAL.rust.dark);
+  b.addBox(3, 1.2, 3, 0.15, 1.2, PAL.metalLight, 0.2, -0.3);
+  b.addBox(-3, 3, 2.2, 0.9, 1.3, PAL.rust.dark, 0, 0.2);
+  b.addBox(-1, 4, 1.8, 0.12, 0.9, PAL.rust.side, 0.1, 0.6);
+  b.addModel('crates', -3.8, 2.6, 0.5);
+}
+
 // Scrap shacks ring a fire pit. Fuel tanks and a stripped hull fill the gaps.
 function buildCamp(b: SiteBuilder, id: string): void {
   const turn = id === 'kiln' ? 1.3 : 0;
@@ -430,21 +465,37 @@ function buildCamp(b: SiteBuilder, id: string): void {
   b.addModel('crates', Math.cos(turn + 5.2) * 3.5, Math.sin(turn + 5.2) * 3.5, turn);
 }
 
+type SiteDecor = (b: SiteBuilder, site: Site, t: Terrain) => void;
+
+const wrecks: SiteDecor = (b, site) => buildWrecks(b, site.id);
+const camp: SiteDecor = (b, site) => buildCamp(b, site.id);
+const settlement: SiteDecor = (b, site) => buildSettlement(b, site);
+
+// How each site is dressed, by site id.
+const SITE_DECOR: Record<string, SiteDecor> = {
+  granary: (b) => buildGranary(b),
+  'pump-station': (b) => buildPump(b),
+  'south-lock': (b) => buildLock(b),
+  'canyon-bridge': (b, _site, t) => buildBridge(b, t),
+  dustwell: (b) => buildOasis(b, true),
+  'green-pit': (b) => buildOasis(b, false),
+  'broken-wing': (b) => buildWingSalvage(b),
+  'glass-flats': (b) => b.addModel('glass_flats', 0, 0),
+  nose: settlement,
+  bowl: settlement,
+  'burnt-convoy': wrecks,
+  podfield: wrecks,
+  'ridge-wrecks': wrecks,
+  'salvage-yard': wrecks,
+  scrapjaw: camp,
+  kiln: camp,
+};
+
 function buildSite(t: Terrain, site: Site): THREE.Group {
   const b = new SiteBuilder(t, site);
-  switch (site.id) {
-    case 'granary': buildGranary(b); break;
-    case 'pump-station': buildPump(b); break;
-    case 'south-lock': buildLock(b); break;
-    case 'canyon-bridge': buildBridge(b, t); break;
-    case 'dustwell': buildOasis(b, true); break;
-    case 'green-pit': buildOasis(b, false); break;
-    case 'glass-flats': b.addModel('glass_flats', 0, 0); break;
-    case 'nose': case 'bowl': buildSettlement(b, site); break;
-    case 'burnt-convoy': case 'podfield': case 'ridge-wrecks': case 'salvage-yard': buildWrecks(b, site.id); break;
-    case 'scrapjaw': case 'kiln': buildCamp(b, site.id); break;
-    default: throw new Error(`Missing landmark model for ${site.id}`);
-  }
+  const decor = SITE_DECOR[site.id];
+  if (decor === undefined) throw new Error(`Missing landmark model for ${site.id}`);
+  decor(b, site, t);
   addWall(b, site, edgeStyle(site));
   // Site models never move after they are built.
   b.root.traverse((o) => {
@@ -462,10 +513,13 @@ const SITES = [...REGION.towns, ...REGION.locations.filter((l): l is SiteLocatio
 export function buildSites(t: Terrain): THREE.Group {
   const group = new THREE.Group();
   for (const site of SITES) group.add(buildSite(t, site));
+  group.add(buildWingDeck(t));
   return group;
 }
 
 // Registers every site model with the scope at its site.
 export function addSites(t: Terrain, scope: RenderScope): void {
   for (const site of SITES) scope.add(buildSite(t, site), site.pos, site.radius);
+  const deck = deckById('broken-wing');
+  scope.add(buildWingDeck(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
 }
