@@ -681,8 +681,7 @@ export class Game {
     timed("fog", () => this.fog.update(this.combatFogWorld()));
     const host = this.combatHost();
     playCrashes(host, this.crashCues, null);
-    playShotFx(host);
-    playDryGuns(host);
+    playDryGuns(host, playShotFx(host));
     this.weapons.render();
   }
 

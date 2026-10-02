@@ -20,8 +20,10 @@ export type VolleyHost = {
   eventPoint: (vehicleId: string) => V3 | null;
 };
 
-// Plays one volley's bolts from the muzzle and sounds from a to b. Each round that damages parts shows its
-// damage over the target as it lands. Returns when the first round lands.
+// Plays one volley's bolts from the muzzle and sounds from a to b. The volley starts at its own moment in the
+// first CONFIG.combatFireSpreadMs of the band. Each round sounds as it leaves and as it lands, and each round that
+// damages parts shows its damage over the target as it lands. A dry volley clunks as its last round lands.
+// Returns when the first round lands.
 export function playVolley(
   host: VolleyHost,
   a: V3,
@@ -31,21 +33,31 @@ export function playVolley(
   weapon: string,
   targetId: string,
   rows: Map<string, number>,
+  dry: boolean,
 ): number {
-  // Every round lands within the shot time, before the results show.
   const spec = projectileOf(weapon);
   const ground = (p: V3) => groundPoint(host.world.terrain, toMap(p)).y;
-  const plans = planVolley(spec, a, roundAims(b, targetId, rounds, host.eventPoint), CONFIG.combatShotMs, ground);
+  const timing = { startMs: Math.random() * CONFIG.combatFireSpreadMs, windowMs: CONFIG.combatShotMs, burstMaxMs: CONFIG.combatBurstMaxMs };
+  const plans = planVolley(spec, a, roundAims(b, targetId, rounds, host.eventPoint), timing, ground);
+  const fireCue = spec.look === "tracer" ? "mg-fire" : "cannon-fire";
   plans.forEach((plan, k) => {
-    host.fx.shot(spec, muzzle, plan, blastRadiusOf(weapon));
-    host.sound.at(spec.look === "tracer" ? "mg-fire" : "cannon-fire", a, plan.delayMs);
-    host.sound.at(plan.struck ? "hit-metal" : "miss", plan.land, plan.delayMs + plan.flightMs);
-    const r = rounds[k];
-    const struck = r.struck === null ? [] : [{ vehicle: r.struck, hits: r.hits }];
-    const landMs = plan.delayMs + plan.flightMs;
-    for (const dealt of [...struck, ...r.blast]) damageLabel(host, dealt.vehicle, roundLabel(host.world, dealt.vehicle, dealt.hits, r.crit), rows, landMs);
+    const last = dry && k === plans.length - 1;
+    const cues = {
+      fired: (m: Muzzle) => host.sound.at(fireCue, m.pos, 0),
+      landed: () => {
+        host.sound.at(plan.struck ? "hit-metal" : "miss", plan.land, 0);
+        if (last) host.sound.at("gun-empty", a, 0);
+      },
+    };
+    host.fx.shot(spec, muzzle, plan, blastRadiusOf(weapon), cues);
+    showDamage(host, rounds[k], plan.delayMs + plan.flightMs, rows);
   });
   return Math.min(...plans.map((plan) => plan.delayMs + plan.flightMs));
+}
+
+function showDamage(host: VolleyHost, r: ShotRound, landMs: number, rows: Map<string, number>): void {
+  const struck = r.struck === null ? [] : [{ vehicle: r.struck, hits: r.hits }];
+  for (const dealt of [...struck, ...r.blast]) damageLabel(host, dealt.vehicle, roundLabel(host.world, dealt.vehicle, dealt.hits, r.crit), rows, landMs);
 }
 
 // Damage text over a truck that shows, stacked in rows per truck.
@@ -69,21 +81,28 @@ export function playCrashes(host: CombatHost, cues: CollisionCues | null, step: 
   }
 }
 
-// A seen gun that fired its last round clunks as the volley ends.
-export function playDryGuns(host: CombatHost): void {
+// A seen gun that fired its last round with no volley shown clunks as the band ends. Played guns clunk with their last round.
+export function playDryGuns(host: CombatHost, played: Set<string>): void {
   for (const e of host.world.events) {
-    const p = e.t === "empty" ? host.eventPoint(e.vehicle) : null;
+    const p = e.t === "empty" && !played.has(gunKey(e.vehicle, e.weapon)) ? host.eventPoint(e.vehicle) : null;
     if (p) host.sound.at("gun-empty", p, CONFIG.combatShotMs);
   }
 }
 
-// Plays every shown volley of the turn's shot and guardShot events. The score aims an accent at each volley's first landing.
-export function playShotFx(host: CombatHost): void {
+const gunKey = (vehicle: string, weapon: string) => `${vehicle}|${weapon}`;
+
+// Plays every shown volley of the turn's shot and guardShot events. The score aims an accent at each volley's first
+// landing. Returns the guns whose volley showed.
+export function playShotFx(host: CombatHost): Set<string> {
   const rows = new Map<string, number>();
+  const played = new Set<string>();
   for (const e of host.world.events) {
     const landMs = e.t === "shot" ? playTruckShot(host, e, rows) : e.t === "guardShot" ? playGuardShot(host, e, rows) : null;
-    if (landMs !== null) host.sound.accents([e], host.world.player.vehicleId, () => landMs);
+    if (landMs === null) continue;
+    host.sound.accents([e], host.world.player.vehicleId, () => landMs);
+    if (e.t === "shot") played.add(gunKey(e.shooter, e.weapon));
   }
+  return played;
 }
 
 function playTruckShot(host: CombatHost, e: Extract<GameEvent, { t: "shot" }>, rows: Map<string, number>): number | null {
@@ -95,7 +114,8 @@ function playTruckShot(host: CombatHost, e: Extract<GameEvent, { t: "shot" }>, r
   const gun = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
   if (!gun) throw new Error(`Shot from ${e.shooter} names no mounted weapon ${e.weapon}`);
   const view = viewOf(host.views, e.shooter);
-  return playVolley(host, a, () => view.muzzle(e.weapon), b, e.rounds, gun.defId, e.target, rows);
+  const dry = host.world.events.some((x) => x.t === "empty" && x.vehicle === e.shooter && x.weapon === e.weapon);
+  return playVolley(host, a, () => view.muzzle(e.weapon), b, e.rounds, gun.defId, e.target, rows, dry);
 }
 
 function playGuardShot(host: CombatHost, e: Extract<GameEvent, { t: "guardShot" }>, rows: Map<string, number>): number | null {
@@ -103,7 +123,7 @@ function playGuardShot(host: CombatHost, e: Extract<GameEvent, { t: "guardShot" 
   if (!b) return null;
   const g = groundPoint(host.world.terrain, e.from);
   const a: V3 = { x: g.x, y: g.y + (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile, z: g.z };
-  return playVolley(host, a, () => towardFrom(a, b), b, e.rounds, "guard", e.target, rows);
+  return playVolley(host, a, () => towardFrom(a, b), b, e.rounds, "guard", e.target, rows, false);
 }
 
 export type CollisionEvent = Extract<GameEvent, { t: "collision" }>;
