@@ -19,7 +19,7 @@ describe('site gates and pads', () => {
 
   it('gives towns and large locations a gate per road, and small locations one gate', () => {
     const large = SITES.filter((l) => 'kind' in l && l.radius >= REGION.sites.multiGateRadius);
-    expect(large.map((l) => l.id).sort()).toEqual(['orchard']);
+    expect(large).toEqual([]); // the large locations are territories, which have no gates
     for (const site of SITES) {
       const roads = REGION.roads.filter((road) => road.some((p) => dist(p, site.pos) <= site.radius)).length;
       if (large.includes(site as never) || REGION.towns.includes(site as never)) expect(siteGates(site).length, site.id).toBe(roads);
@@ -93,10 +93,10 @@ describe('clicks on a site', () => {
   });
 
   it('turns a click inside a site into a stop at its pad nearest the truck', () => {
-    const ship = REGION.locations.find((l) => l.id === 'orchard')!;
-    const pad = sitePads(ship)[1] ?? sitePads(ship)[0];
-    const from = { x: pad.x + 20 * (pad.x - ship.pos.x) / dist(pad, ship.pos), y: pad.y + 20 * (pad.y - ship.pos.y) / dist(pad, ship.pos) };
-    expect(clickOrder(ship.pos, false, { pos: from, order: null })).toEqual({ kind: 'stopAt', dest: pad });
+    const town = REGION.towns[0];
+    const pad = sitePads(town)[1] ?? sitePads(town)[0];
+    const from = { x: pad.x + 20 * (pad.x - town.pos.x) / dist(pad, town.pos), y: pad.y + 20 * (pad.y - town.pos.y) / dist(pad, town.pos) };
+    expect(clickOrder(town.pos, false, { pos: from, order: null })).toEqual({ kind: 'stopAt', dest: pad });
   });
 
   it('keeps a click on open ground as a drive-through order', () => {

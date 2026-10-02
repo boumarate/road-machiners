@@ -4,7 +4,7 @@ import { REGION } from '../data/region';
 import { SALVAGE, type LootTable } from '../data/salvage';
 import { TERRITORIES } from '../data/territory';
 import { hazardZones, isLootSpot, territoryAt, territoryEntries } from './territory';
-import { dist } from './vec';
+import { dist, segmentDist } from './vec';
 
 const mid = ([lo, hi]: [number, number]): number => (lo + hi) / 2;
 
@@ -18,6 +18,7 @@ function territoryValue(id: string): number {
   return TERRITORIES[id].spots.reduce((sum, s) => sum + s.count * tableValue(SALVAGE[s.table]), 0);
 }
 
+const orchard = REGION.locations.find((l) => l.id === 'orchard')!;
 const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
 
 describe('territory queries', () => {
@@ -45,5 +46,22 @@ describe('territory queries', () => {
 
   it('holds no more expected loot in the orchard than in the Fallen Sun', () => {
     expect(territoryValue('orchard')).toBeLessThanOrEqual(territoryValue('fallen-sun'));
+  });
+
+  it('knows each orchard spot look inside the orchard only', () => {
+    for (const rule of TERRITORIES.orchard.spots) {
+      const spot = { id: 'x', pos: orchard.pos, r: 1, kind: 'landmark', look: rule.look as never, yaw: 0 } as const;
+      expect(isLootSpot(spot), rule.look).toBe(true);
+      expect(isLootSpot({ ...spot, pos: { x: 1, y: 1 } }), rule.look).toBe(false);
+    }
+  });
+
+  it('makes Old Orchard a territory with a road entry on its edge and the trunk road outside it', () => {
+    expect(orchard.kind).toBe('territory');
+    const entries = territoryEntries(orchard as never);
+    expect(entries.length).toBeGreaterThan(0);
+    for (const e of entries) expect(dist(e, orchard.pos)).toBeCloseTo(orchard.radius, 6);
+    const trunk = REGION.roads.filter((road) => road.length > 2);
+    for (const road of trunk) for (let i = 1; i < road.length; i++) expect(segmentDist(orchard.pos, road[i - 1], road[i])).toBeGreaterThanOrEqual(orchard.radius);
   });
 });

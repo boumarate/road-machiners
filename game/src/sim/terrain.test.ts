@@ -98,7 +98,7 @@ describe("terrain grid", () => {
       expect(site.pos.y).toBeGreaterThan(site.radius);
       expect(site.pos.x).toBeLessThan(w.size - site.radius);
       expect(site.pos.y).toBeLessThan(w.size - site.radius);
-      expect(REGION.roads.some((road) => road.some((p) => dist(p, site.pos) <= (site.id === 'fallen-sun' ? site.radius : 0.01)))).toBe(true);
+      expect(REGION.roads.some((road) => road.some((p) => dist(p, site.pos) <= ('kind' in site && site.kind === 'territory' ? site.radius : 0.01)))).toBe(true);
     }
     for (let i = 0; i < sites.length; i++) for (let j = i + 1; j < sites.length; j++) expect(dist(sites[i].pos, sites[j].pos)).toBeGreaterThan(60);
   });
@@ -108,8 +108,10 @@ describe("terrain grid", () => {
       const sites = [...REGION.towns, ...REGION.locations];
       // A location beside a road joins it at the first point of its spur. A town lies on its roads.
       const access = (id: string) => {
-        const pos = sites.find((site) => site.id === id)!.pos;
-        return REGION.roads.find((road) => dist(road.at(-1)!, pos) < 0.01 && road.length === 2)?.[0] ?? pos;
+        const site = sites.find((s) => s.id === id)!;
+        // A territory's spur ends on its edge.
+        const reach = 'kind' in site && site.kind === 'territory' ? site.radius : 0.01;
+        return REGION.roads.find((road) => dist(road.at(-1)!, site.pos) <= reach && road.length === 2)?.[0] ?? site.pos;
       };
       const p = access(a);
       const q = access(b);

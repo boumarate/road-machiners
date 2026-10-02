@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
+import { TERRITORIES } from '../data/territory';
 import { GOODS } from '../data/goods';
 import { TIME } from '../data/time';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
@@ -21,7 +22,7 @@ import type { NpcActivity, Obstacle, RefitPickup, SalvageStock, Vehicle, World }
 import { propReach } from './mapgen';
 import { dist, type Vec } from './vec';
 import { maxHp } from './wear';
-import { grayRadius } from './vision';
+import { canVehicleSee, grayRadius } from './vision';
 import { sitePads } from './sites';
 import { isLootSpot, spotTable, territoryOfStock } from './territory';
 import { freeCells } from './grid';
@@ -249,7 +250,7 @@ const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
   });
 
   it('fills a landmark site with loot at world creation', () => {
-    const landmark = REGION.locations.find((site) => site.kind === 'landmark')!;
+    const landmark = REGION.locations.find((site) => site.kind === 'landmark' && !(site.id in SHOPS))!;
     const w = emptyWorld();
     const stock = w.salvage.find((s) => s.id === landmark.id)!;
     expect(hasSalvage(stock)).toBe(true);
@@ -532,6 +533,20 @@ describe('breakable props', () => {
     expect(hardest).toBeLessThanOrEqual(BREAKABLE.damage);
   });
 
+  it('lets a dead tree block sight until a truck breaks it', () => {
+    const w = emptyWorld(near);
+    const watcher = addVehicle(w, 'scavengers', 'scout', [], { x: 30, y: 60 });
+    const target = { x: 30, y: 75 };
+    w.obstacles = [{ id: 'deadTree-1', pos: { x: 30, y: 67 }, r: 0.35, kind: 'landmark', look: 'deadTree', yaw: 0 }];
+    expect(BREAKABLE.kinds).toContain('deadTree');
+    expect(canVehicleSee(w, watcher, target)).toBe(false);
+
+    breakProp(w, 'deadTree-1', w.vehicles[0].id);
+
+    expect(canVehicleSee(w, watcher, target)).toBe(true);
+    expect(w.broken.map((b) => b.obstacle.id)).toEqual(['deadTree-1']);
+  });
+
   it('refuses a prop that does not break, or one not standing', () => {
     const w = worldWithFence({ x: 30.6, y: 30 });
     w.obstacles.push({ id: 'rock3', pos: { x: 32, y: 30 }, r: 0.5, kind: 'rock' });
@@ -732,12 +747,23 @@ describe('territory loot spots', () => {
     expect(w.salvage.some((s) => s.id === 'fallen-sun')).toBe(false);
   }, 30_000);
 
-  it('rolls inner spots from the landmark table and outer spots from the hull scrap table', async () => {
+  it('gives Old Orchard no stock of its own and one stock to each of its spots', async () => {
+    const w = await realWorld();
+    const orchard = REGION.locations.find((l) => l.id === 'orchard')!;
+    const spots = spotsOf(w).filter((o) => dist(o.pos, orchard.pos) < orchard.radius);
+    expect(spots).toHaveLength(TERRITORIES.orchard.spots.reduce((n, s) => n + s.count, 0));
+    expect(w.salvage.some((s) => s.id === 'orchard')).toBe(false);
+    for (const o of spots) expect(w.salvage.filter((s) => s.id === o.id), o.id).toHaveLength(1);
+    expect(new Set(spots.map((o) => o.id)).size).toBe(spots.length);
+  }, 30_000);
+
+  it('rolls each spot from the table of its rule', async () => {
     const w = await realWorld();
     for (const o of spotsOf(w)) {
       const table = spotTable(o);
       const stock = stockOf(w, o.id);
-      expect(table).toBe(o.kind === 'landmark' && o.look === 'coreWreck' ? SALVAGE.landmark : SALVAGE.hullScrap);
+      const rule = Object.values(TERRITORIES).flatMap((t) => t.spots).find((s) => o.kind === 'landmark' && s.look === o.look)!;
+      expect(table).toBe(SALVAGE[rule.table]);
       expect(stock.goods.parts).toBeGreaterThanOrEqual(table.parts[0]);
       expect(stock.goods.parts).toBeLessThanOrEqual(table.parts[1]);
       expect(stock.fuel).toBeLessThanOrEqual(table.fuel[1]);

@@ -104,17 +104,6 @@ class SiteBuilder {
       throw new Error(`Site prop at ${x},${z} of ${this.site.id} stands on a road`);
     }
   }
-  // A dead orchard tree: bare trunk, two branches and a fallen limb.
-  addDeadTree(x: number, z: number, index: number): void {
-    const lean = (hash2(index, 19) - 0.5) * 0.35;
-    const trunk = this.addBox(x, z, 0.16, 1.5, 0.18, PAL.trunk);
-    trunk.rotation.z = lean;
-    for (const sign of [-1, 1]) {
-      const branch = this.addBox(x + sign * 0.24, z, 0.1, 0.95, 0.12, PAL.trunk, 0.85);
-      branch.rotation.z = sign * 0.75;
-    }
-    this.addBox(x + 0.35, z, 0.7, 0.13, 0.18, PAL.trunk, 0.03, lean);
-  }
   addRuin(x: number, z: number, width: number, depth: number): void {
     this.addBox(x, z, width, 0.12, depth, PAL.wall.dark);
     this.addBox(x - width / 2, z, 0.2, 1.2, depth, PAL.wall.side);
@@ -144,24 +133,6 @@ class SiteBuilder {
       this.addBox(x + i * length * 0.3, z - width * 0.6, length * 0.12, 0.12, width * 0.3, PAL.metalLight, 0.15, yaw + i * 0.4);
     }
   }
-}
-
-function buildOrchard(b: SiteBuilder): void {
-  const { orchardRows: rows, orchardSpacing: spacing } = REGION.settlement;
-  const half = (rows - 1) / 2;
-  const living: { x: number; z: number; yaw: number }[] = [];
-  for (let row = 0; row < rows; row++) {
-    const x = (row - half) * spacing;
-    b.addBox(x - 0.65, 0, 0.18, 0.06, rows * spacing, PAL.wall.dark);
-    for (let col = 0; col < rows; col++) {
-      const index = row * rows + col;
-      const z = (col - half) * spacing;
-      if (index % 4 === 0) b.addDeadTree(x, z, index);
-      else living.push({ x, z, yaw: hash2(index, 29) * Math.PI * 2 });
-    }
-  }
-  b.addInstances('orchard_tree', living);
-  b.addRuin(0, 12.5, 6, 4);
 }
 
 function buildSettlement(b: SiteBuilder, site: Site): void {
@@ -462,7 +433,6 @@ function buildCamp(b: SiteBuilder, id: string): void {
 function buildSite(t: Terrain, site: Site): THREE.Group {
   const b = new SiteBuilder(t, site);
   switch (site.id) {
-    case 'orchard': buildOrchard(b); break;
     case 'granary': buildGranary(b); break;
     case 'pump-station': buildPump(b); break;
     case 'south-lock': buildLock(b); break;

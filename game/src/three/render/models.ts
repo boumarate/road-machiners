@@ -32,7 +32,6 @@ const NAMES = [
   'crates',
   'water_tower',
   'palm',
-  'orchard_tree',
   'dead_tree',
   'bunker',
   'sandbags',

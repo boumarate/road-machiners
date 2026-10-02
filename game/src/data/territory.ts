@@ -86,28 +86,29 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         blocks: 6,
         ring: [0.2, 0.85],
         rows: [4, 5],
-        trees: [6, 9],
+        trees: [8, 11],
         rowGap: 4, // lanes 16 m wide, room for a truck to turn
-        treeGap: 2.5,
+        treeGap: 2, // 8 m between trunks, so a row reads as a row
         missing: 0.15, // dead rows thin out, and the gaps read as age
         radius: 0.35,
         maxTrees: 240, // keeps the props near the orchard inside the perf budget
       },
     },
+    // Debris stands outside debrisGap of its host spot, so each reach is an outer limit, wide enough to clear the gap.
     debris: [
       // Sandbags show the military takeover on every building and depot.
-      { look: 'sandbags', count: 4, radius: [0.8, 1.2], around: { look: 'farmhouse', reach: 8 } },
-      { look: 'sandbags', count: 5, radius: [0.8, 1.2], around: { look: 'armyCache', reach: 4 } },
-      { look: 'sandbags', count: 3, radius: [0.8, 1.2], around: { look: 'bunker', reach: 4 } },
-      { look: 'silo', count: 2, radius: [1.2, 1.6], around: { look: 'farmhouse', reach: 10 } },
-      { look: 'waterTower', count: 1, radius: [1.2, 1.6], around: { look: 'farmhouse', reach: 10 } },
-      { look: 'junk', count: 5, radius: [0.6, 1], around: { look: 'barn', reach: 4 } },
-      { look: 'tank', count: 3, radius: [1.4, 1.8], around: { look: 'armyCache', reach: 8 } },
+      { look: 'sandbags', count: 4, radius: [0.8, 1.2], around: { look: 'farmhouse', reach: 9 } },
+      { look: 'sandbags', count: 5, radius: [0.8, 1.2], around: { look: 'armyCache', reach: 7 } },
+      { look: 'sandbags', count: 3, radius: [0.8, 1.2], around: { look: 'bunker', reach: 9 } },
+      { look: 'silo', count: 2, radius: [1.2, 1.6], around: { look: 'farmhouse', reach: 12 } },
+      { look: 'waterTower', count: 1, radius: [1.2, 1.6], around: { look: 'farmhouse', reach: 12 } },
+      { look: 'junk', count: 5, radius: [0.6, 1], around: { look: 'barn', reach: 8 } },
+      { look: 'tank', count: 3, radius: [1.4, 1.8], around: { look: 'armyCache', reach: 10 } },
       { look: 'carWreck', count: 4, radius: [0.6, 0.8], around: null },
     ],
     spots: [
-      // The farmhouse in the middle rolls the old landmark table, the old orchard's whole stock.
-      { look: 'farmhouse', count: 1, ring: [0, 0.12], radius: [2, 2.4], table: 'landmark' },
+      // The farmhouse near the middle rolls the old landmark table, the old orchard's whole stock.
+      { look: 'farmhouse', count: 1, ring: [0, 0.2], radius: [1.6, 2], table: 'landmark' },
       { look: 'barn', count: 5, ring: [0.2, 0.7], radius: [1.4, 1.8], table: 'farmStores' },
       { look: 'armyCache', count: 5, ring: [0.45, 0.92], radius: [0.8, 1], table: 'armyStores' },
       { look: 'bunker', count: 3, ring: [0.6, 0.95], radius: [1.4, 1.8], table: 'armyStores' },

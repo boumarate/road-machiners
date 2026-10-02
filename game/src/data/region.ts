@@ -59,6 +59,16 @@ function bend(a: Vec, b: Vec): Vec[] {
 
 const FALLEN_SUN_POS = scalePoint({ x: 64, y: 54 });
 const FALLEN_SUN_RADIUS = 44;
+const ORCHARD_POS = { x: 114, y: 284 }; // region (22.8, 56.8), in the flat basin west of the north trunk road
+const ORCHARD_RADIUS = 32;
+
+// The point toward from that lies just inside the circle's edge, where a spur road ends. The road crosses the
+// edge a hair before its end, so floating-point error cannot leave it short of the edge.
+const RIM_REACH = 0.05;
+function rimPoint(from: Vec, centre: Vec, radius: number): Vec {
+  const d = Math.hypot(from.x - centre.x, from.y - centre.y);
+  return { x: centre.x + ((from.x - centre.x) / d) * (radius - RIM_REACH), y: centre.y + ((from.y - centre.y) / d) * (radius - RIM_REACH) };
+}
 
 export const REGION = {
   name: "Icarus",
@@ -97,14 +107,7 @@ export const REGION = {
     { id: "nose", name: "Nose", pos: scalePoint({ x: 102, y: 35 }), radius: 32 },
   ] as TownDef[],
   locations: [
-    {
-      id: "orchard",
-      edge: "fence",
-      name: "Old Orchard",
-      kind: "landmark",
-      pos: scalePoint({ x: 23.2, y: 62 }),
-      radius: 16, // the ruin on the far edge reaches 14.5 tiles; the trees stop at 10
-    },
+    { id: "orchard", name: "Old Orchard", kind: "territory", pos: ORCHARD_POS, radius: ORCHARD_RADIUS },
     {
       id: "dustwell",
       edge: "stone",
@@ -283,7 +286,7 @@ export const REGION = {
       { x: 88, y: 84 },
     ]),
     // Short straight spurs lead from a road point to each location beside it, so through traffic passes by.
-    scaleRoad([{ x: 28, y: 64 }, { x: 23.2, y: 62 }], [0]),
+    [scalePoint({ x: 28, y: 64 }), rimPoint(scalePoint({ x: 28, y: 64 }), ORCHARD_POS, ORCHARD_RADIUS)],
     scaleRoad([{ x: 37, y: 32 }, { x: 33.8, y: 32 }], [0]),
     scaleRoad([{ x: 50, y: 36 }, { x: 50, y: 32.8 }], [0]),
     scaleRoad([{ x: 63, y: 20 }, { x: 60, y: 18.8 }], [0]),
@@ -376,8 +379,6 @@ export const REGION = {
     guardTowerHeight: 2.6, // gate towers stand a full floor over the town wall
     gatePoleHeight: 5.5, // 22 m, so a gate shows from across the fog edge
     lampHeight: 1.6, // 6.4 m gate lamp posts, lower on the higher walls and towers
-    orchardRows: 11,
-    orchardSpacing: 2,
   },
   // The player starts off the north trunk road, which leaves Bowl toward Old Orchard, facing the road. The road
   // point lies 125 tiles along it from Bowl's center, about 90 tiles past its wall and halfway to Old Orchard, so

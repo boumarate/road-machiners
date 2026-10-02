@@ -37,7 +37,7 @@ export function paintGroundCanvas(
 ): void {
   paintGround(c, t, opts.hillshade);
   for (const l of REGION.locations) {
-    const farm = l.id === "orchard" || l.id === "granary";
+    const farm = l.id === "granary";
     if (farm) disc(c, l.pos, l.radius + 3, css(PAL.scrub[0], 0.2));
     disc(
       c,
