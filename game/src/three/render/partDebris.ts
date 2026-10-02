@@ -4,14 +4,18 @@
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
+import { partDef } from '../../data/parts';
 import { toMap, type V3 } from '../../phys/frames';
 import { hashStr } from '../../render/noise';
+import { breakSignature, type BreakSignature } from '../../render/partLooks';
 import type { Terrain } from '../../sim/terrain';
 import { dist } from '../../sim/vec';
-import type { Obstacle } from '../../sim/types';
+import type { Obstacle, PartInstance, World } from '../../sim/types';
 import { DebrisSim, FLY_REACH, piecesOf, type TruckBox } from './debris';
+import type { Fx3D } from './fx';
 import { disposeTree } from './obstacles';
 import type { RenderScope } from './scope';
+import type { VehicleView } from './vehicle';
 
 const S = PHYSICS.metersPerTile;
 const PART_DEBRIS_SCALE = 0.35; // share of the good_scrap model's size
@@ -88,4 +92,33 @@ function shrink(group: THREE.Group, share: number): void {
     piece.scale.setScalar(Math.max(0, share));
     piece.updateMatrix();
   }
+}
+
+const SIGNATURE_FX: Record<BreakSignature, (fx: Fx3D, at: V3) => void> = {
+  ammo: (fx, at) => fx.ammoBlast(at),
+  air: (fx, at) => fx.airBurst(at),
+  fire: (fx, at) => fx.fireBurst(at),
+};
+
+// A part a hit broke throws scrap where it is drawn, and a weapon, wheel or fuel part adds its own effect. Only trucks
+// the player may see (eventPoint is not null) play. Call it once, as the turn's hits land.
+export function playBreaks(world: World, debris: PartDebris, fx: Fx3D, views: ReadonlyMap<string, VehicleView>, eventPoint: (id: string) => V3 | null): void {
+  for (const e of world.events) {
+    if (e.t === 'partDisabled' && eventPoint(e.vehicle) !== null) breakAt(world, debris, fx, views.get(e.vehicle), e.vehicle, e.part);
+  }
+}
+
+function breakAt(world: World, debris: PartDebris, fx: Fx3D, view: VehicleView | undefined, vehicleId: string, partId: string): void {
+  if (!view) return;
+  const at = view.partPoint(partId);
+  debris.burst(`${vehicleId}:${partId}:${world.turn}`, at, view.center(), world.obstacles);
+  const sig = breakSignature(partDef(partOf(world, vehicleId, partId).defId));
+  if (sig) SIGNATURE_FX[sig](fx, at);
+}
+
+function partOf(world: World, vehicleId: string, partId: string): PartInstance {
+  const v = [...world.vehicles, ...world.removed].find((x) => x.id === vehicleId);
+  const item = v?.items.find((it) => it.kind === 'part' && it.part.id === partId);
+  if (!item || item.kind !== 'part') throw new Error(`Part ${partId} of ${vehicleId} was disabled but is not on the vehicle`);
+  return item.part;
 }

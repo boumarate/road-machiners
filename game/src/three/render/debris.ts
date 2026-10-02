@@ -6,12 +6,12 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
 import { obstacleColliders } from '../../phys/drive';
-import type { Quat, V3 } from '../../phys/frames';
+import type { Quat, V3, VehicleFrame } from '../../phys/frames';
 import { hashStr } from '../../render/noise';
 import { bodyOf } from '../../sim/body';
 import { propPose } from '../../sim/mapgen';
 import { heightAt, type Terrain } from '../../sim/terrain';
-import type { Obstacle } from '../../sim/types';
+import type { Obstacle, Vehicle } from '../../sim/types';
 import { dist } from '../../sim/vec';
 import { model, type ModelName } from './models';
 
@@ -39,6 +39,11 @@ export type PieceSource = { parts: { geometry: THREE.BufferGeometry; material: T
 type Flying = { body: RAPIER.RigidBody; mesh: THREE.Object3D; still: number; age: number }; // still and age in steps
 type Burst = { group: THREE.Group; pieces: Flying[]; fixed: RAPIER.Collider[] };
 export type TruckBox = { id: string; chassisId: string; pos: V3; rot: Quat };
+
+// The vehicles at their drawn poses, as the kinematic boxes pieces fly against.
+export function truckBoxes(vehicles: readonly Pick<Vehicle, 'id' | 'chassisId'>[], frames: Record<string, VehicleFrame>): TruckBox[] {
+  return vehicles.filter((v) => frames[v.id]).map((v) => ({ id: v.id, chassisId: v.chassisId, ...frames[v.id] }));
+}
 
 const sources = new Map<ModelName, PieceSource[]>();
 

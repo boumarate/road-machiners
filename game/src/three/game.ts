@@ -54,6 +54,7 @@ import { towardFrom } from "./render/projectiles";
 import { playVolley } from "./volley";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
+import { playBreaks } from "./render/partDebris";
 import { PathView } from "./render/path";
 import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
@@ -689,6 +690,7 @@ export class Game {
       const p = this.eventPoint(e.vehicle);
       if (p) this.fx.explode(p);
     }
+    playBreaks(this.world, this.obstacles.parts, this.fx, this.views, (id) => this.eventPoint(id));
     this.playImpactSounds();
     this.hud.pushEvents(this.world);
     // A finished search opens the loot beside the truck's grid.
