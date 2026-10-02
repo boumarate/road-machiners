@@ -260,7 +260,7 @@ function lightCore(reactor: THREE.Object3D, g: THREE.Group): void {
     m.emissiveIntensity = REACTOR_GLOW.emissive;
     materials.push(m);
   });
-  const light = new THREE.PointLight(PAL.reactorGlow, REACTOR_GLOW.intensity, REACTOR_GLOW.range, REACTOR_GLOW.decay);
+  const light = new THREE.PointLight(PAL.reactorLight, REACTOR_GLOW.intensity, REACTOR_GLOW.range, REACTOR_GLOW.decay);
   light.position.set(0, REACTOR_GLOW.height, 0);
   g.add(light);
   const glow: Glow = { materials, light };
@@ -317,7 +317,7 @@ function syncTrees(fixed: Fixed, obstacles: readonly Obstacle[]): void {
 // Glow strength, light strength, reach and fade in meters, and the light's height above the ground in model meters.
 // The core stands in the bow's breach with a rod about 9 m tall, so the light hangs at the breach and reaches the
 // ground in front of it to about the hazard's edge, not the whole crater.
-const REACTOR_GLOW = { emissive: 4, intensity: 260, range: 60, decay: 1.5, height: 8 };
+const REACTOR_GLOW = { emissive: 1.6, intensity: 200, range: 60, decay: 1.5, height: 8 };
 // The glow swells and fades by this share over one period in seconds, slow like a failing core breathing.
 const REACTOR_PULSE = { share: 0.2, period: 5 };
 type Glow = { materials: THREE.MeshLambertMaterial[]; light: THREE.PointLight };

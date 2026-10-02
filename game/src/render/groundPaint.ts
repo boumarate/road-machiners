@@ -87,8 +87,17 @@ function paintCraters(c: PaintCanvas): void {
 function paintScree(c: PaintCanvas): void {
   for (const t of REGION.locations.filter((l) => l.kind === "territory")) {
     const scree = TERRITORIES[t.id].wreck?.scree;
-    if (scree) disc(c, { x: t.pos.x + scree.at.x, y: t.pos.y + scree.at.y }, scree.radius, css(PAL.rust.side, 0.55));
+    if (scree) fadedDisc(c, { x: t.pos.x + scree.at.x, y: t.pos.y + scree.at.y }, scree.radius, PAL.scree, 0.65);
   }
+}
+
+// A disc that holds its color to half its radius and fades out to the edge, so it reads as a slope, not a stain.
+function fadedDisc(c: PaintCanvas, p: Vec, r: number, color: number, alpha: number): void {
+  const [x, y] = [c.toPx(p.x), c.toPx(p.y)];
+  const fill = c.ctx.createRadialGradient(x, y, 0, x, y, r * c.res);
+  fill.addColorStop(0.5, css(color, alpha));
+  fill.addColorStop(1, css(color, 0));
+  blob(c, p, r, fill);
 }
 
 function holdsTerritory(centre: Vec): boolean {
@@ -266,7 +275,7 @@ function disc(c: PaintCanvas, p: Vec, r: number, style: string): void {
   blob(c, p, r, style);
 }
 
-function blob(c: PaintCanvas, p: Vec, r: number, style: string): void {
+function blob(c: PaintCanvas, p: Vec, r: number, style: string | CanvasGradient): void {
   c.ctx.fillStyle = style;
   c.ctx.beginPath();
   c.ctx.arc(c.toPx(p.x), c.toPx(p.y), r * c.res, 0, Math.PI * 2);

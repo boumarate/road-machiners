@@ -18,9 +18,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit import Kit, Vec3, parse_args  # noqa: E402
 
 COLORS = {
-    "rock_top": 0x9A948A,  # PAL.rimRock.top
-    "rock_side": 0x6C675E,  # PAL.rimRock.side
-    "rock_dark": 0x4A4640,  # PAL.rimRock.dark
+    "rock_top": 0xBAB3A6,  # PAL.rimRock.top
+    "rock_side": 0x948E84,  # PAL.rimRock.side
+    "rock_dark": 0x6E6960,  # PAL.rimRock.dark
 }
 SEED = 53
 TOP_NZ = 0.55
