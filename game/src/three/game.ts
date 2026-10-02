@@ -690,13 +690,14 @@ export class Game {
       const p = this.eventPoint(e.vehicle);
       if (p) this.fx.explode(p);
     }
-    playBreaks(this.world, this.obstacles.parts, this.fx, this.views, (id) => this.eventPoint(id));
     this.playImpactSounds();
     this.hud.pushEvents(this.world);
     // A finished search opens the loot beside the truck's grid.
     const searched = this.world.events.find((e) => e.t === "searched");
     if (searched) this.inventory.openLoot(searched.stock);
     this.uiStale = true;
+    // Last, so a failed lookup in the cosmetic effects cannot skip the rest of the landing.
+    playBreaks(this.world, this.obstacles.parts, this.fx, this.views, (id) => this.eventPoint(id));
   }
 
   private finishPlayback(): void {
