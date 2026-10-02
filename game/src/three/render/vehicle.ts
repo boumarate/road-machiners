@@ -13,7 +13,7 @@ import { bodyOf, cellCenter, cellRect, engineAnchor, highestUnder, restOn, surfa
 import { headingOf, headingQuat, type V3, type VehicleFrame } from '../../phys/frames';
 import { FACTION_COLORS, PAL } from '../../render/palette';
 import { BODY_PARTS, baseModel, grayShare, grayed, jagOffset, partModel, weaponLook, wearLookStep } from '../../render/partLooks';
-import { baseGrid, isMounted, itemCells, itemSize, sideOf, type SideLetter } from '../../sim/grid';
+import { baseGrid, isMounted, itemCells, itemSize, plateSide, type SideLetter } from '../../sim/grid';
 import type { GridItem, Vehicle } from '../../sim/types';
 import { angleDiff, DEG } from '../../sim/vec';
 import { model, outlineOf, socket, TRUCK_BIT, type ModelName } from './models';
@@ -660,11 +660,10 @@ export function standingY(v: Pick<Vehicle, 'chassisId'>, item: GridItem): number
   return restOf(v, item).y;
 }
 
-// The side an armor part covers: its mount letter, or for a spare the front if it lies wide and the left if it lies tall.
+// The side an armor part covers, by plateSide(), checked to be one cell deep.
 function armorSide(v: Vehicle, item: PartItem): SideLetter {
   const size = itemSize(item);
-  const side = isMounted(v.chassisId, item) ? sideOf(v, item.part) : size.w >= size.h ? 'F' : 'L';
-  if (!side) throw new Error(`Armor ${item.part.id} is mounted off a side letter`);
+  const side = plateSide(v.chassisId, item);
   const depthCells = ['F', 'B'].includes(side) ? size.h : size.w;
   if (depthCells !== 1) throw new Error(`Armor ${item.part.id} is ${depthCells} cells deep on side ${side}, expected 1`);
   return side;

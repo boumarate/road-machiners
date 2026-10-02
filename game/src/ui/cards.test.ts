@@ -103,8 +103,8 @@ describe("item icons", () => {
 });
 
 describe("grid item icons", () => {
-  const straight = { rot: 0, plate: false, tall: true } as const;
-  const sideways = { rot: 1, plate: false, tall: false } as const;
+  const straight = { rot: 0, plate: false, alongSide: false } as const;
+  const sideways = { rot: 1, plate: false, alongSide: false } as const;
 
   it("crop a gun to its drawn extent, so it fills its footprint box", () => {
     const [x, y, w, h] = ICONS.items.longRifle.box;
@@ -117,11 +117,12 @@ describe("grid item icons", () => {
     expect(gridIconFrame(itemIconCell("longRifle"), straight).turn).toBe(0);
   });
 
-  it("turn armor, drawn as a front plate, when it lies tall along a side, whatever its rot", () => {
+  it("turn armor, drawn as a front plate, when it lies along the left or right side, whatever its rot", () => {
     const [, , w, h] = ICONS.items.cage.box;
     expect(w).toBeGreaterThan(h);
-    expect(gridIconFrame(itemIconCell("cage"), { rot: 0, plate: true, tall: true }).turn).toBe(1);
-    expect(gridIconFrame(itemIconCell("cage"), { rot: 1, plate: true, tall: false }).turn).toBe(0);
+    expect(gridIconFrame(itemIconCell("cage"), { rot: 0, plate: true, alongSide: true }).turn).toBe(1);
+    expect(gridIconFrame(itemIconCell("cage"), { rot: 1, plate: true, alongSide: false }).turn).toBe(0);
+    expect(gridIconFrame(itemIconCell("steelPlate"), { rot: 0, plate: true, alongSide: true }).turn).toBe(1);
   });
 
   it("never turn a good, which is drawn diagonal", () => {

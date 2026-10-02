@@ -235,7 +235,7 @@ export class InventoryView {
     const me = playerVehicle(w);
     const mounted = it.kind === "part" && isMounted(me.chassisId, it);
     const core = it.kind === "part" && partDef(it.part.defId).kind === "core";
-    const node = itemBox(it, mounted, this.cell);
+    const node = itemBox(it, me.chassisId, mounted, this.cell);
     node.setAttribute("aria-pressed", String(this.selectedItem === it.id));
     node.classList.toggle("selected", this.selectedItem === it.id);
     const inspect = () => this.showItem(w, it, mounted);
@@ -665,7 +665,7 @@ export class InventoryView {
 
   private truckItemEl(w: World, target: Vehicle, it: GridItem, grid: HTMLElement, removing: boolean): HTMLElement {
     const mounted = it.kind === "part" && isMounted(target.chassisId, it);
-    const node = itemBox(it, mounted, this.cell);
+    const node = itemBox(it, target.chassisId, mounted, this.cell);
     node.classList.toggle("refitting", removing);
     this.markSelected(node, it);
     node.addEventListener("focus", () => this.showTruckItem(w, it, mounted));
