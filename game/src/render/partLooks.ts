@@ -236,10 +236,14 @@ export function weaponLook(partId: string, defId: string): WeaponLook {
 // crosses one. These are render constants, not balance.
 
 export const WEAR_LOOK_STEPS = 4;
-// Share of the gray mix at the last step.
+// The dusty gray worn colors fade toward.
+export const WORN_GRAY = 0x8c8a84;
+// Share of the fade toward WORN_GRAY at the last step.
 export const GRAY_MAX = 0.7;
 // Meters a model-space vertex moves at the last step.
-export const JAG_MAX = 0.06;
+export const JAG_MAX = 0.14;
+// Share of a model's smallest extent its jag may reach, so thin parts bend but stay whole.
+export const JAG_THIN = 0.25;
 // Same weld as debris.ts: corners within a millimeter move together.
 const WELD = 1000;
 
@@ -258,20 +262,23 @@ export function grayShare(step: number): number {
   return (GRAY_MAX * step) / WEAR_LOOK_STEPS;
 }
 
-// The color mixed toward its own luminance gray.
+// The color faded toward WORN_GRAY by share.
 export function grayed(hex: number, share: number): number {
-  const r = (hex >> 16) & 255;
-  const g = (hex >> 8) & 255;
-  const b = hex & 255;
-  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-  const mix = (c: number): number => Math.round(c + (lum - c) * share);
-  return (mix(r) << 16) | (mix(g) << 8) | mix(b);
+  const mix = (shift: number): number => {
+    const c = (hex >> shift) & 255;
+    const w = (WORN_GRAY >> shift) & 255;
+    return Math.round(c + (w - c) * share);
+  };
+  return (mix(16) << 16) | (mix(8) << 8) | mix(0);
 }
 
-export function jagOffset(partId: string, x: number, y: number, z: number, step: number): { x: number; y: number; z: number } {
+// thinnest is the model's smallest model-space extent.
+export function jagOffset(
+  partId: string, x: number, y: number, z: number, step: number, thinnest: number,
+): { x: number; y: number; z: number } {
   if (step <= 0) return { x: 0, y: 0, z: 0 };
   const key = `${partId}:${Math.round(x * WELD)},${Math.round(y * WELD)},${Math.round(z * WELD)}`;
-  const size = (JAG_MAX * step) / WEAR_LOOK_STEPS;
+  const size = (Math.min(JAG_MAX, JAG_THIN * thinnest) * step) / WEAR_LOOK_STEPS;
   const axis = (n: number): number => (hashStr(`${key}:${n}`) * 2 - 1) * size;
   return { x: axis(0), y: axis(1), z: axis(2) };
 }

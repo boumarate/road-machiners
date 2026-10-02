@@ -5,7 +5,7 @@ import { PARTS } from '../data/parts';
 import type { PartInstance } from '../sim/types';
 import { maxHp } from '../sim/wear';
 import {
-  BODY_PARTS, JAG_MAX, PART_MODELS, WEAPON_POOLS, WEAR_LOOK_STEPS, baseModel, breakSignature, grayShare, grayed, jagOffset, partModel,
+  BODY_PARTS, JAG_MAX, JAG_THIN, PART_MODELS, WEAPON_POOLS, WEAR_LOOK_STEPS, WORN_GRAY, baseModel, breakSignature, grayShare, grayed, jagOffset, partModel,
   weaponLook, wearLookStep,
 } from './partLooks';
 
@@ -101,32 +101,57 @@ describe('wearLookStep', () => {
 });
 
 describe('grayed', () => {
-  it('keeps a gray color', () => {
-    expect(grayed(0x808080, 0.5)).toBe(0x808080);
+  const dist = (hex: number): number =>
+    [16, 8, 0].reduce((sum, sh) => sum + Math.abs(((hex >> sh) & 255) - ((WORN_GRAY >> sh) & 255)), 0);
+  it('returns the color at share 0 and WORN_GRAY at share 1', () => {
+    for (const hex of [0xff0000, 0x000000, 0xffffff]) {
+      expect(grayed(hex, 0)).toBe(hex);
+      expect(grayed(hex, 1)).toBe(WORN_GRAY);
+    }
   });
-  it('moves a saturated color toward its luminance', () => {
-    const out = grayed(0xff0000, 1);
-    expect(out >> 16).toBe(out & 255);
-    expect(grayed(0xff0000, 0)).toBe(0xff0000);
+  it('never moves away from WORN_GRAY as the share grows', () => {
+    for (const hex of [0xff0000, 0x000000, 0xffffff]) {
+      let last = Infinity;
+      for (const share of [0, 0.25, 0.5, 0.75, 1]) {
+        const d = dist(grayed(hex, share));
+        expect(d).toBeLessThanOrEqual(last);
+        last = d;
+      }
+    }
     expect(grayShare(0)).toBe(0);
     expect(grayShare(WEAR_LOOK_STEPS)).toBeGreaterThan(grayShare(1));
   });
 });
 
 describe('jagOffset', () => {
+  const thick = 1;
   it('is zero at step 0 and deterministic', () => {
-    expect(jagOffset('a', 1, 2, 3, 0)).toEqual({ x: 0, y: 0, z: 0 });
-    expect(jagOffset('a', 1, 2, 3, 2)).toEqual(jagOffset('a', 1, 2, 3, 2));
+    expect(jagOffset('a', 1, 2, 3, 0, thick)).toEqual({ x: 0, y: 0, z: 0 });
+    expect(jagOffset('a', 1, 2, 3, 2, thick)).toEqual(jagOffset('a', 1, 2, 3, 2, thick));
   });
   it('is equal for points within the weld distance', () => {
-    expect(jagOffset('a', 1, 2, 3, 2)).toEqual(jagOffset('a', 1.0001, 2.0001, 3.0001, 2));
+    expect(jagOffset('a', 1, 2, 3, 2, thick)).toEqual(jagOffset('a', 1.0001, 2.0001, 3.0001, 2, thick));
   });
   it('grows with the step and stays within the max', () => {
-    const lo = jagOffset('a', 1, 2, 3, 1);
-    const hi = jagOffset('a', 1, 2, 3, WEAR_LOOK_STEPS);
+    const lo = jagOffset('a', 1, 2, 3, 1, thick);
+    const hi = jagOffset('a', 1, 2, 3, WEAR_LOOK_STEPS, thick);
     expect(Math.abs(hi.x)).toBeCloseTo(Math.abs(lo.x) * WEAR_LOOK_STEPS, 6);
     expect(Math.abs(hi.x)).toBeLessThanOrEqual(JAG_MAX);
-    expect(jagOffset('b', 1, 2, 3, 2)).not.toEqual(jagOffset('a', 1, 2, 3, 2));
+    expect(jagOffset('b', 1, 2, 3, 2, thick)).not.toEqual(jagOffset('a', 1, 2, 3, 2, thick));
+  });
+  it('gives a thin model a smaller offset that still grows with the step', () => {
+    const thin = 0.02;
+    const bound = (step: number): number => (Math.min(JAG_MAX, JAG_THIN * thin) * step) / WEAR_LOOK_STEPS;
+    for (let step = 1; step <= WEAR_LOOK_STEPS; step++) {
+      const d = jagOffset('a', 1, 2, 3, step, thin);
+      for (const v of [d.x, d.y, d.z]) expect(Math.abs(v)).toBeLessThanOrEqual(bound(step) + 1e-12);
+    }
+    const thinHi = jagOffset('a', 1, 2, 3, WEAR_LOOK_STEPS, thin);
+    const thickHi = jagOffset('a', 1, 2, 3, WEAR_LOOK_STEPS, thick);
+    expect(Math.abs(thinHi.x)).toBeLessThan(Math.abs(thickHi.x));
+    expect(Math.abs(jagOffset('a', 1, 2, 3, WEAR_LOOK_STEPS, thin).x)).toBeGreaterThan(
+      Math.abs(jagOffset('a', 1, 2, 3, 1, thin).x),
+    );
   });
 });
 

@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { startKit } from '../../data/start';
 import { wheelMounts } from '../../phys/body';
-import { WEAR_LOOK_STEPS } from '../../render/partLooks';
+import { BODY_PARTS, WEAR_LOOK_STEPS } from '../../render/partLooks';
 import { bodyOf } from '../../sim/body';
 import { playerVehicle } from '../../sim/damage';
 import { mountedParts } from '../../sim/grid';
@@ -64,6 +64,23 @@ describe('part wear look', () => {
     expect(colors(view)).not.toBe(clean);
     part.hp = max;
     view.update(v, true);
+    expect(colors(view)).toBe(clean);
+  });
+
+  it('wears the body with the cab part and restores it on repair', () => {
+    const v = truck();
+    const view = new VehicleView(v, true);
+    const clean = colors(view);
+    const full = signatureOf(v);
+    const cab = mountedParts(v).find((p) => BODY_PARTS.has(p.defId))!;
+    const max = maxHp(cab);
+    cab.hp = max - 1;
+    expect(signatureOf(v)).not.toBe(full);
+    view.update(v, true);
+    expect(colors(view)).not.toBe(clean);
+    cab.hp = max;
+    view.update(v, true);
+    expect(signatureOf(v)).toBe(full);
     expect(colors(view)).toBe(clean);
   });
 

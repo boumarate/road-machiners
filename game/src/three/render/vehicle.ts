@@ -69,6 +69,8 @@ type Turret = { head: THREE.Group; tip: THREE.Vector3; spans: FireSpan[] };
 
 // How a part draws: the broken tone, its wear look step and the id that seeds its jag. A good has step 0 and no id.
 type Look = { tone: number; step: number; partId: string | null };
+// A flat model has no thickness, so its jag measures from this extent instead.
+const THINNEST_FLOOR = 0.01;
 const PRISTINE: Look = { tone: 1, step: 0, partId: null };
 
 // A point on a part, local to a parent that moves with the truck.
@@ -229,7 +231,7 @@ export class VehicleView {
 
     const still = new THREE.Group();
     const onBody = v.items.filter((item) => onChassis(v, item));
-    this.buildBase(v, body, baseModel(v.chassisId), still, paint, FACTION_COLORS[v.faction].cab, bumperlessCells(v, onBody));
+    this.buildBase(v, body, baseModel(v.chassisId), still, paint, FACTION_COLORS[v.faction].cab, bumperlessCells(v, onBody), cabLook(v));
     const wheelItems: PartItem[] = [];
     // The transmission and the tank of a truck that does not show its cores sit inside the body. A part with no surface
     // to rest on would float, so it is not drawn either.
@@ -340,12 +342,12 @@ export class VehicleView {
   }
 
   // The chassis base model at the collider center, and kit bumpers on its front and back row cells unless a ram or cage covers them.
-  private buildBase(v: Vehicle, body: Body, name: ModelName, into: THREE.Group, paint: number, trim: number, bumperless: Set<string>): void {
+  private buildBase(v: Vehicle, body: Body, name: ModelName, into: THREE.Group, paint: number, trim: number, bumperless: Set<string>, look: Look): void {
     const obj = model(name);
-    tint(obj, paint, PRISTINE);
     obj.traverse((o) => {
       if (o instanceof THREE.Mesh && o.material.name === TRIM) o.material.color.setHex(trim);
     });
+    tint(obj, paint, look);
     this.useLamp(obj);
     into.add(obj);
     const grid = baseGrid(v.chassisId);
@@ -356,7 +358,7 @@ export class VehicleView {
         if (grid.cells[y][x] === null || bumperless.has(`${x},${y}`)) continue;
         const bumper = model(bumperName);
         place(bumper, bumperPlacement(cellRect(v.chassisId, [{ x, y }]), y === 0, body.half.y, yaw, stretch));
-        tint(bumper, paint, PRISTINE);
+        tint(bumper, paint, look);
         into.add(bumper);
       }
     }
@@ -508,7 +510,7 @@ export class VehicleView {
   // A whip antenna at the back corner of the cab roof, and a tow chain under the rear bumper.
   // A truck with cargo rows past its grid has the cargo model at its rear, so it gets no chain.
   private buildLooseParts(v: Vehicle, body: Body, bareRear: boolean): void {
-    const cab = v.items.find((it) => it.kind === 'part' && BODY_PARTS.has(it.part.defId));
+    const cab = cabOf(v);
     if (!cab) throw new Error(`${v.id} has no cab`);
     const row = Math.max(...itemCells(cab).map((c) => c.y));
     const rear = cellRect(v.chassisId, itemCells(cab).filter((c) => c.y === row));
@@ -710,6 +712,16 @@ function itemModel(item: GridItem) {
   return partModel(item.kind === 'part' ? item.part.defId : item.good);
 }
 
+function cabOf(v: Vehicle): GridItem | undefined {
+  return v.items.find((it) => it.kind === 'part' && BODY_PARTS.has(it.part.defId));
+}
+
+// The base body and bumpers wear like the cab part. A truck with no cab part keeps the pristine base.
+function cabLook(v: Vehicle): Look {
+  const cab = cabOf(v);
+  return cab ? lookOf(cab) : PRISTINE;
+}
+
 function lookOf(item: GridItem): Look {
   if (item.kind === 'good') return PRISTINE;
   const step = wearLookStep(item.part);
@@ -766,6 +778,15 @@ function tint(obj: THREE.Object3D, paint: number, look: Look): void {
 function jag(obj: THREE.Object3D, partId: string, step: number): void {
   obj.updateMatrixWorld(true);
   const toModel = obj.matrixWorld.clone().invert();
+  const box = new THREE.Box3();
+  obj.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    const geo = o.geometry as THREE.BufferGeometry;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    box.union((geo.boundingBox as THREE.Box3).clone().applyMatrix4(o.matrixWorld).applyMatrix4(toModel));
+  });
+  const size = box.getSize(new THREE.Vector3());
+  const thinnest = Math.max(THINNEST_FLOOR, Math.min(size.x, size.y, size.z));
   obj.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     const geo = o.geometry as THREE.BufferGeometry;
@@ -774,7 +795,7 @@ function jag(obj: THREE.Object3D, partId: string, step: number): void {
     const p = new THREE.Vector3();
     for (let i = 0; i < pos.count; i++) {
       p.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld).applyMatrix4(toModel);
-      const d = jagOffset(partId, p.x, p.y, p.z, step);
+      const d = jagOffset(partId, p.x, p.y, p.z, step, thinnest);
       p.add(new THREE.Vector3(d.x, d.y, d.z)).applyMatrix4(toMesh);
       pos.setXYZ(i, p.x, p.y, p.z);
     }
