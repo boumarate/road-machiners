@@ -249,7 +249,9 @@ const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
   });
 
   it('fills a landmark site with loot at world creation', () => {
-    const landmark = REGION.locations.find((site) => site.kind === 'landmark')!;
+    // A landmark with a shop trades instead, so the site is the first that rolls from the landmark table.
+    const landmark = REGION.locations.find((site) => siteLootTable(site) === SALVAGE.landmark)!;
+    expect(landmark.kind).toBe('landmark');
     const w = emptyWorld();
     const stock = w.salvage.find((s) => s.id === landmark.id)!;
     expect(hasSalvage(stock)).toBe(true);
