@@ -17,9 +17,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit import Kit, Vec3, parse_args  # noqa: E402
 
 COLORS = {
-    "rock_top": 0x9A8A78,  # PAL.rock.top
-    "rock_side": 0x6E6254,  # PAL.rock.side
-    "rock_dark": 0x4E453C,  # PAL.rock.dark
+    "rock_top": 0xB08A68,  # PAL.stone.top
+    "rock_side": 0x84603F,  # PAL.stone.side
+    "rock_dark": 0x5A3F2C,  # PAL.stone.dark
 }
 SEED = 11
 # Faces whose normal points up steeper than this get rock_top. Faces pointing down get rock_dark.

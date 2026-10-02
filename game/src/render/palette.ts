@@ -17,6 +17,7 @@ export const PAL = {
   pebble: 0x9c7c54,
   scrub: [0x6f6a3a, 0x5d5a32, 0x7c7442],
   rock: { top: 0x9a8a78, side: 0x6e6254, dark: 0x4e453c },
+  stone: { top: 0xb08a68, side: 0x84603f, dark: 0x5a3f2c }, // warm sandstone of loose boulders, crags and pebbles
   rust: { top: 0x8a4a2a, side: 0x5e3420, dark: 0x3a2418 },
   wall: { top: 0xb89a74, side: 0x8e7454, dark: 0x6a5840 },
   roof: [0x7a5a3a, 0x5e6a5a, 0x8a3a2a],
