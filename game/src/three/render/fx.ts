@@ -17,7 +17,7 @@ import { tileAt } from '../../sim/terrain';
 import type { Vehicle, World } from '../../sim/types';
 import { maxHp } from '../../sim/wear';
 import type { CameraRig } from './camera';
-import { Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan } from './projectiles';
+import { Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan, type ShotCues } from './projectiles';
 
 // Pool sizes; effects beyond them are dropped rather than growing the pools. Wheel dust dominates: at the
 // top speed of 31 m/s on hardpan a truck throws 31 x DUST.perMeter x 3 wheel shares, about
@@ -297,12 +297,17 @@ export class Fx3D {
   // One round leaves the muzzle after its delay and flies to its landing point. muzzle is read when the round
   // fires, so it starts at the barrel tip as the turret points then. A round with a blast radius in meters explodes
   // where it lands. Any other lands with sparks when it struck something, else with dust.
-  shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan, blastRadius: number): void {
+  shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan, blastRadius: number, cues: ShotCues): void {
     const onFire = (m: Muzzle) => {
       this.flashes.show(m, spec.flash);
       this.puff(m.pos, PAL.flash, 1, { speed: 0, life: 0.12, scale: spec.flash * 0.6, grow: 1.6, additive: true });
+      cues.fired(m);
     };
-    const onLand = () => (blastRadius > 0 ? this.blast(plan.land, blastRadius) : this.impact(plan, spec.look === 'shell'));
+    const onLand = () => {
+      if (blastRadius > 0) this.blast(plan.land, blastRadius);
+      else this.impact(plan, spec.look === 'shell');
+      cues.landed();
+    };
     this.projectiles.launch({ spec, muzzle, plan, onFire, onLand });
   }
 
