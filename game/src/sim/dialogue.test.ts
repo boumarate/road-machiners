@@ -8,7 +8,7 @@ import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, honk, placeholders, raiseCalls } from './dialogue';
 import { fireBlock, isHostile } from './combat';
-import { NPC_UPKEEP, NPCS } from '../data/npcs';
+import { MEMORY, NPC_UPKEEP, NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { aidPrice, offerAid, playerAid, spareAid, wantedAid } from './aid';
 import { corePart, isMounted } from './grid';
@@ -25,6 +25,7 @@ import { refreshVision } from './vision';
 import { autoRuns, endTurn, setMoveOrder } from './world';
 import { beginSearch } from './search';
 import { knockOutNpc } from './defeat';
+import { forgetOld, remember } from './memory';
 import { chassisDef } from '../data/chassis';
 
 const TRAITS_OF: Record<string, TraitId[]> = { trader: ['trader'], scavenger: ['scavenger'], buggy: ['raider'] };
@@ -603,25 +604,51 @@ describe('call practice', () => {
 describe('market ears', () => {
   const askText = TOPICS.marketNews.ask!.text;
 
-  it('a trader back from a town tells its current buy and sell prices', () => {
+  // The trader did business at Nose this turn, at its standing prices.
+  function backFromNose(w: World, npc: Vehicle): void {
+    remember(w, npc, { kind: 'prices', shop: 'nose', pressure: { ...w.shops.nose.pressure } });
+  }
+
+  it('a trader back from a town tells its buy and sell prices', () => {
     const { w, npc } = withNpc('trader', 'traders');
     w.player.perks = ['marketEars'];
-    npc.brain!.lastTown = 'nose';
+    backFromNose(w, npc);
     const open = callVehicle(w, npc.id);
     const asked = chooseOption(open, optionIndex(open, askText));
     const goods = SHOPS.nose.goods.map((good) => ({ good, buy: buyPrice(w, 'nose', good), sell: sellPrice(w, 'nose', good) }));
     expect(asked.player.call?.vars).toEqual({ town: { kind: 'town', id: 'nose' }, prices: { kind: 'prices', town: 'nose', goods } });
   });
 
+  it('tells the prices as they were when the trader left, not as they are now', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    w.player.perks = ['marketEars'];
+    backFromNose(w, npc);
+    const goods = SHOPS.nose.goods.map((good) => ({ good, buy: buyPrice(w, 'nose', good), sell: sellPrice(w, 'nose', good) }));
+    for (const good of SHOPS.nose.goods) w.shops.nose.pressure[good] = 0.5;
+    const open = callVehicle(w, npc.id);
+    const asked = chooseOption(open, optionIndex(open, askText));
+    expect(asked.player.call?.vars.prices).toEqual({ kind: 'prices', town: 'nose', goods });
+  });
+
+  it('is not offered once the trader has forgotten the town', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    w.player.perks = ['marketEars'];
+    backFromNose(w, npc);
+    w.turn += MEMORY.turns.prices;
+    forgetOld(w);
+    expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).not.toContain(askText);
+  });
+
   it('is not offered without the perk', () => {
     const { w, npc } = withNpc('trader', 'traders');
-    npc.brain!.lastTown = 'nose';
+    backFromNose(w, npc);
     expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).not.toContain(askText);
   });
 
   it('is not offered by a driver that has not been to a town', () => {
     const { w, npc } = withNpc('trader', 'traders');
     w.player.perks = ['marketEars'];
+    remember(w, npc, { kind: 'prices', shop: 'granary', pressure: { ...w.shops.granary.pressure } });
     expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).not.toContain(askText);
   });
 });

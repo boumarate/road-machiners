@@ -201,6 +201,21 @@ function withoutRetiredStock_8_9(world: SavedJson): SavedJson {
   };
 }
 
+// A driver's last town became a memory of the prices it saw there, kept like any memory from now on. The saved
+// pressure stands in for what it saw, and the saved turn for when.
+function withMemories_9_10(world: SavedJson): SavedJson {
+  const shops = world.shops as Record<string, SavedJson>;
+  const turn = world.turn as number;
+  const remembering = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const { lastTown, ...brain } = v.brain as SavedJson;
+    const shop = typeof lastTown === 'string' ? shops[lastTown] : undefined;
+    const memories = shop ? [{ turn, fact: { kind: 'prices', shop: lastTown, pressure: { ...(shop.pressure as SavedJson) } } }] : [];
+    return { ...v, brain: { ...brain, memories } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(remembering), removed: (world.removed as SavedJson[]).map(remembering) };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -255,6 +270,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withoutRetiredStock_7_8,
   // 8 to 9: Old Orchard is a territory, so its site stock goes.
   withoutRetiredStock_8_9,
+  // 9 to 10: a driver's last town becomes a memory of its prices.
+  withMemories_9_10,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

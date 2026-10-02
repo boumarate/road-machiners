@@ -2,14 +2,14 @@
 // refers to. The records are typed complete, so a name in the data without a function fails typecheck.
 
 import type { ConditionId, EffectId, PrepareId } from '../data/dialogue';
-import { shopDef } from '../data/market';
 import { PERK_NUMBERS } from '../data/skills';
 import { REGION, type TownDef } from '../data/region';
 import { playerVehicle } from './damage';
 import { discoverSite } from './locations';
 import { inCombat, isHostile } from './combat';
 import { patchGoal, startTow, topGoal } from './npc-activities';
-import { vehicleValue } from './market';
+import { priceAtPressure, vehicleValue } from './market';
+import { recall } from './memory';
 import { hasPerk, practice } from './progress';
 import { answerPlea, standDownBeggar, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, answersWarning, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, lootsBesidePlayer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, settleWarning, standDownTo, surrenderTo, yieldTo, type ThreatAnswer, type WarnAnswer } from './parley';
 import { hasCargo, hasSalvage } from './salvage';
@@ -18,9 +18,9 @@ import { decide, isWeak, npcProfile, wantsLoot } from './npc-decisions';
 import { isStranded } from './stats';
 import { aidData, stateOf, towData } from './states';
 import { agreeAid, aidPrice, canSpareFor, hasAid, isLow, playerAid, refuseAid, spareAid, wantedAid, type AidAmounts } from './aid';
-import { buyPrice, sellPrice, startTrade, tradeWith, transfer } from './economy';
+import { spread, startTrade, tradeWith, transfer } from './economy';
 import { acceptOffer, canTowNpc, hitchNpc, isOnRope, npcTowTerms, playerTow, playerTowing, refuseOffer, releaseNpc, strandedPlayerAt } from './tow';
-import type { Call, CallVar, CallVars, NpcState, Plea, SalvageStock, TopicOutcome, Vehicle, World } from './types';
+import type { Call, CallVar, CallVars, MemoryFact, NpcState, Plea, SalvageStock, TopicOutcome, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
 
 // The top goal is a fight on the player that rolled a demand, and the player has cargo.
@@ -111,6 +111,26 @@ function heardRumor(world: World, npc: Vehicle): Rumor | null {
   return near[0] ?? null;
 }
 
+// What a driver tells about prices comes only from what it remembers of its last visits, never the live shop state,
+// so the prices are as they were when it left and fade with the memory.
+type PriceFact = Extract<MemoryFact, { kind: 'prices' }>;
+
+// The driver's newest price memory of a town, or null.
+function lastTownMemory(npc: Vehicle): PriceFact | null {
+  const memory = recall(npc, 'prices').find((m) => REGION.towns.some((t) => t.id === m.fact.shop));
+  return memory?.fact ?? null;
+}
+
+// The buy and sell prices the player would have met at the remembered pressure, at the player's spread now.
+function rememberedPrices(world: World, fact: PriceFact): { good: string; buy: number; sell: number }[] {
+  const margin = spread(world);
+  return Object.entries(fact.pressure).map(([good, pressure]) => ({
+    good,
+    buy: priceAtPressure(fact.shop, good, pressure, 'buy', margin),
+    sell: priceAtPressure(fact.shop, good, pressure, 'sell', margin),
+  }));
+}
+
 function trucePrice(npc: Vehicle): number {
   return Math.round(vehicleValue(npc) * PERK_NUMBERS.paidTruce.share);
 }
@@ -198,7 +218,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   holdsOn: (_world, _npc, vars) => answerOf(vars) === 'refuse',
   canTowNpc: (world, npc) => canTowNpc(world, npc),
   towedByPlayer: (world, npc) => playerTowing(world)?.other === npc.id,
-  knowsLastTown: (world, npc) => hasPerk(world, 'marketEars') && npc.brain?.lastTown !== undefined,
+  knowsLastTown: (world, npc) => hasPerk(world, 'marketEars') && lastTownMemory(npc) !== null,
   hearsRumor: (world, npc) => hasPerk(world, 'rumorMill') && heardRumor(world, npc) !== null,
   rumorOfSite: (_world, _npc, vars) => vars.site !== undefined,
   rumorOfWreck: (_world, _npc, vars) => vars.site === undefined,
@@ -329,10 +349,10 @@ export const PREPARES: Record<PrepareId, Prepare> = {
     return { town: { kind: 'town', id: site }, fee: { kind: 'money', amount: fee } };
   },
   lastTownPrices: (world, npc) => {
-    const town = npc.brain?.lastTown;
-    if (!town) throw new Error(`${npc.id} has been to no town`);
-    const goods = shopDef(town).goods.map((good) => ({ good, buy: buyPrice(world, town, good), sell: sellPrice(world, town, good) }));
-    return { town: { kind: 'town', id: town }, prices: { kind: 'prices', town, goods } };
+    const memory = lastTownMemory(npc);
+    if (!memory) throw new Error(`${npc.id} remembers no town`);
+    const town = memory.shop;
+    return { town: { kind: 'town', id: town }, prices: { kind: 'prices', town, goods: rememberedPrices(world, memory) } };
   },
   // Bearing and distance are from the player, like directions.
   nearestRumor: (world, npc): CallVars => {

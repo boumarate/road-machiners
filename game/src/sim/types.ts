@@ -203,7 +203,6 @@ export type NpcBrain = {
     // The fight whim rolled last, held until turn `until`. angle is where around the target a veer drives.
     whim?: { kind: 'keep' | 'rush' | 'halt' | 'veer'; until: number; angle: number };
     farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
-    lastTown?: string; // id of the last town where this driver finished a service or trade
     // Hidden facts the driver saw, oldest first, at most one per subject. Only src/sim/memory.ts writes them.
     memories: Memory[];
 };
