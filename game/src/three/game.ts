@@ -273,6 +273,7 @@ export class Game {
       toggleAutoRepair: () => this.runKey("KeyP"),
       toggleOverdrive: () => this.runKey("KeyO"),
       toggleHeadlights: () => this.runKey("KeyL"),
+      headlightsOn: () => this.world.player.headlights,
       douseEngine: () => this.runKey("KeyG"),
       unhitch: () =>
         this.rescueCommand((w) =>

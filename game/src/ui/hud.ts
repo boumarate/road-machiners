@@ -64,6 +64,7 @@ type HudActions = {
   toggleAutoRepair: () => void;
   toggleOverdrive: () => void;
   toggleHeadlights: () => void;
+  headlightsOn: () => boolean; // the live switch, since the HUD draws the world before the turn while it plays
   douseEngine: () => void;
   unhitch: () => void;
   setBeacon: (on: boolean) => void;
@@ -340,7 +341,7 @@ export class Hud {
     const headlights = createSwitch({
       on: "Lights on",
       off: "Lights off",
-      checked: w.player.headlights,
+      checked: this.actions.headlightsOn(),
       key: "L",
       title: "Headlights [L]",
       onclick: () => this.actions.toggleHeadlights(),
