@@ -1,7 +1,7 @@
 """Typed config for provisioning and deploy, loaded once from prod.env.
 
 pyinfra's inventory and deploy scripts import `settings` from here instead of reading os.environ.
-The factory's own config is a separate file (`factory_env_file`) that deploy pushes as it is.
+The factory's server-only env is a separate file (`factory_env_file`) that deploy pushes as it is. Its other settings are in the tracked factory/settings.env.
 """
 
 from pathlib import Path
@@ -21,6 +21,8 @@ CODE_DIR = f"{FACTORY_ROOT}/code"
 HOME_DIR = f"{FACTORY_ROOT}/home"
 WWW_DIR = f"{FACTORY_ROOT}/www"
 HERMES_DIR = f"{FACTORY_ROOT}/hermes"
+# Git tracks the factory settings. The server-only .env holds secrets, committee ids and host paths.
+SETTINGS_FILE = REPO_ROOT / "factory" / "settings.env"
 
 
 class Settings(BaseSettings):
@@ -38,11 +40,14 @@ class Settings(BaseSettings):
 settings = Settings()  # pyright: ignore[reportCallIssue] -- required values come from prod.env
 
 
-def read_factory_env(path: str | Path) -> dict[str, str]:
-    """Read the factory .env and check it matches the server layout. Raises on any mismatch."""
-    values = {key: value for key, value in dotenv_values(path).items() if value is not None}
+def read_factory_env(path: str | Path, settings_path: str | Path = SETTINGS_FILE) -> dict[str, str]:
+    """Read the server-only factory .env with the tracked settings.env and check them against the server layout. Raises on any mismatch."""
+    local = _values(path)
+    tracked = _values(settings_path)
+    values = {**tracked, **local}
     expected = {"FACTORY_HOME": HOME_DIR, "FACTORY_WEB_ROOT": WWW_DIR}
     wrong = [f"{key} must be {want}, got {values.get(key)!r}" for key, want in expected.items() if values.get(key) != want]
+    wrong += [f"{key} is in both {path} and {settings_path}" for key in sorted(local.keys() & tracked.keys())]
     for key in ("FACTORY_TICK_MINUTES", "FACTORY_COMMITTEE_BOOTSTRAP", "FACTORY_COMMITTEE_BOOTSTRAP_GITHUB", "FACTORY_COMMITTEE_CHAT", "TELEGRAM_BOT_TOKEN", "FACTORY_IMAGE"):
         if not values.get(key, "").strip():
             wrong.append(f"{key} is missing")
@@ -52,3 +57,7 @@ def read_factory_env(path: str | Path) -> dict[str, str]:
     if wrong:
         raise ValueError(f"{path}: " + "; ".join(wrong))
     return values
+
+
+def _values(path: str | Path) -> dict[str, str]:
+    return {key: value for key, value in dotenv_values(path).items() if value is not None}
