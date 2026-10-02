@@ -57,6 +57,7 @@ import { ObstacleViews } from "./render/obstacles";
 import { PathView } from "./render/path";
 import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
+import { addCraterTracks } from "./render/crater-tracks";
 import { terrainMesh } from "./render/terrain";
 import { VehicleView, viewOf } from "./render/vehicle";
 import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
@@ -210,7 +211,7 @@ export class Game {
     this.sightLimit = new SightLimit(this.world.size);
     const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit, false, false);
     const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true, true);
-    this.scopes = [groundScope, propScope];
+    this.scopes = [groundScope, propScope, addCraterTracks(this.world.terrain, this.props, this.sightLimit)];
     const groundChunks = terrainMesh(this.world, groundScope);
     addSites(this.world.terrain, propScope);
     this.obstacles = new ObstacleViews(propScope, this.world.terrain);

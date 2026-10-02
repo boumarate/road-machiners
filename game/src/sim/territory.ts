@@ -17,6 +17,7 @@ export type HazardZone = Hazard & { id: string; pos: Vec };
 export type BakedPiece = { look: LandmarkLook; pos: Vec; yaw: number; r: number };
 
 const TERRITORY_DEFS: readonly TerritoryDef[] = REGION.locations.filter(isTerritory);
+const TRACK_SMOOTHING = 3; // corner-cutting passes over each traced track
 
 export function territoryAt(pos: Vec): TerritoryDef | null {
   return TERRITORY_DEFS.find((t) => dist(pos, t.pos) < t.radius) ?? null;
@@ -88,8 +89,22 @@ export function territoryCaches(t: TerritoryDef): Vec[] {
   return TERRITORIES[t.id].caches.map((c) => onMap(t, c.at));
 }
 
+// Each traced track with its corners cut, so it curves like the concept's ruts. The ends stay, so tracks that meet
+// stay joined.
 export function territoryTracks(t: TerritoryDef): Vec[][] {
-  return TERRITORIES[t.id].tracks.map((track) => track.map((p) => onMap(t, p)));
+  return TERRITORIES[t.id].tracks.map((track) => cutCorners(track.map((p) => onMap(t, p)), TRACK_SMOOTHING));
+}
+
+// Chaikin corner cutting, passes times.
+function cutCorners(line: Vec[], passes: number): Vec[] {
+  if (passes === 0) return line;
+  const out: Vec[] = [line[0]];
+  for (let i = 0; i + 1 < line.length; i++) {
+    const [a, b] = [line[i], line[i + 1]];
+    out.push({ x: 0.75 * a.x + 0.25 * b.x, y: 0.75 * a.y + 0.25 * b.y }, { x: 0.25 * a.x + 0.75 * b.x, y: 0.25 * a.y + 0.75 * b.y });
+  }
+  out.push(line[line.length - 1]);
+  return cutCorners(out, passes - 1);
 }
 
 // Where the reactor stands, which is also the centre of its hazard.

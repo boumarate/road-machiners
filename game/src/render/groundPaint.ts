@@ -68,15 +68,20 @@ export function paintGroundCanvas(
     0,
   );
   stroke(c, dryRiver.path, dryRiver.width * 2, css(PAL.road, 0.65), 0);
+  paintCraters(c);
+}
+
+// Each crater's bank is rust-tinted. A territory's crater floor is warm open sand, as in the Fallen Sun's level
+// concept; other floors are scorched.
+function paintCraters(c: PaintCanvas): void {
   for (const crater of TERRAIN.features.craters) {
-    disc(
-      c,
-      crater.center,
-      crater.radius + crater.bank,
-      css(PAL.rust.side, 0.18),
-    );
-    disc(c, crater.center, crater.radius, css(PAL.rust.dark, 0.25));
+    disc(c, crater.center, crater.radius + crater.bank, css(PAL.rust.side, 0.18));
+    disc(c, crater.center, crater.radius, holdsTerritory(crater.center) ? css(PAL.craterSand, 0.6) : css(PAL.rust.dark, 0.25));
   }
+}
+
+function holdsTerritory(centre: Vec): boolean {
+  return REGION.locations.some((l) => l.kind === "territory" && Math.hypot(l.pos.x - centre.x, l.pos.y - centre.y) < 1);
 }
 
 // Per-tile inputs of the ground color, computed once per paint instead of once per pixel.

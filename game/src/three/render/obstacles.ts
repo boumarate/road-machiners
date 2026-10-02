@@ -253,8 +253,8 @@ function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   return g;
 }
 
-// The reactor's core glows by itself and lights the pit around it, so its danger is seen before it is felt. The group
-// keeps its glow, so the views can pulse it.
+// The reactor's core glows by itself and lights the breach and the ground before it, so its danger is seen before it
+// is felt. The group keeps its glow, so the views can pulse it.
 function lightCore(reactor: THREE.Object3D, g: THREE.Group): void {
   const materials: THREE.MeshLambertMaterial[] = [];
   eachMaterial(reactor, (m) => {
@@ -297,9 +297,10 @@ function buildWater(t: Terrain, o: Obstacle): THREE.Object3D {
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
-// Glow strength, light strength, reach and fade in meters, and the light's height above the ground. The core is 24 m
-// across with an 11 m rod, so the light hangs over the rod and reaches across the pit to the hazard's edge and past it.
-const REACTOR_GLOW = { emissive: 2.5, intensity: 160, range: 110, decay: 1.5, height: 10 };
+// Glow strength, light strength, reach and fade in meters, and the light's height above the ground in model meters.
+// The core stands in the bow's breach with a rod about 9 m tall, so the light hangs at the breach and reaches the
+// ground in front of it to about the hazard's edge, not the whole crater.
+const REACTOR_GLOW = { emissive: 4, intensity: 260, range: 60, decay: 1.5, height: 8 };
 // The glow swells and fades by this share over one period in seconds, slow like a failing core breathing.
 const REACTOR_PULSE = { share: 0.2, period: 5 };
 type Glow = { materials: THREE.MeshLambertMaterial[]; light: THREE.PointLight };
