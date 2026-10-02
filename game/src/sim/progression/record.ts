@@ -64,8 +64,9 @@ function* stepsFrom(start: World, label: string, archetype: Archetype, turns: nu
 function startWorld(seed: number): World {
   return update(newWorld(seed, startKit('standard'), TEST_MAP), (w) => {
     const p = w.player;
-    for (const skill of Object.keys(p.skills) as (keyof typeof p.skills)[]) {
-      p.skills[skill] = 0;
+    p.xp = 0;
+    for (const skill of Object.keys(p.ranks) as (keyof typeof p.ranks)[]) {
+      p.ranks[skill] = 0;
       p.xpToday[skill] = 0;
     }
     for (const source of Object.keys(p.xpBySource) as XpSource[]) p.xpBySource[source] = 0;

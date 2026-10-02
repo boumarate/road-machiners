@@ -30,7 +30,8 @@ type SavedWorld = { mapHash: string; player: { vehicleId: string; money: number 
 function currentSave(): { format: unknown; world: SavedWorld } {
   const world = newWorld(1337, KIT, TEST_MAP);
   world.player.money = 4321;
-  world.player.skills.driving = 800;
+  world.player.xp = 150;
+  world.player.ranks.driving = 2;
   return JSON.parse(JSON.stringify(saveOf(world)));
 }
 
@@ -40,7 +41,8 @@ describe('readCarried', () => {
     save.world.mapHash = 'other';
     const carried = readCarried(save);
     expect(carried.money).toBe(4321);
-    expect(carried.skills.driving).toBe(800);
+    expect(carried.xp).toBe(150);
+    expect(carried.ranks.driving).toBe(2);
     expect(carried.truck?.chassisId).toBe(KIT.chassis);
     expect(carried.truck?.items.some((it) => it.kind === 'part' && it.part.defId === 'mg')).toBe(true);
   });
@@ -83,7 +85,8 @@ describe('rescueSave', () => {
     expect(townAt(rescued.world)).not.toBeNull();
     expect(rescued.world.player.money).toBe(4321);
     const loaded = loadWorld(storage, 'auto', TEST_MAP)!;
-    expect(loaded.player.skills.driving).toBe(800);
+    expect(loaded.player.xp).toBe(150);
+    expect(loaded.player.ranks.driving).toBe(2);
     expect(playerVehicle(loaded).chassisId).toBe(KIT.chassis);
   });
 

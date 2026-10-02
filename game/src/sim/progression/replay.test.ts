@@ -1,6 +1,7 @@
 import { describe, expect, it, onTestFinished } from 'vitest';
-import { SKILL_IDS, TARGET_DAYS, TARGET_TOLERANCE, XP_RULES, XP_SOURCES, XP_TO_REACH } from '../../data/skills';
+import { SKILL_IDS, TARGET_DAYS, TARGET_TOLERANCE, XP_RULES, XP_SOURCES } from '../../data/skills';
 import { TIME } from '../../data/time';
+import { cumulativeCost } from '../progress';
 import { clockOf } from '../sun';
 import type { SkillId } from '../types';
 import type { TraceLine } from './record';
@@ -34,7 +35,7 @@ describe('replay', () => {
     ];
     const totals = [100, 300, 350, 450];
     const turns = [10, 40, dayTwo, dayTwo + 10];
-    const firstTurn = (level: number) => turns[totals.findIndex((xp) => xp >= XP_TO_REACH[level])] ?? null;
+    const firstTurn = (level: number) => turns[totals.findIndex((xp) => xp >= cumulativeCost(level))] ?? null;
 
     const curve = replay(trace, 2 * TIME.turnsPerDay);
 

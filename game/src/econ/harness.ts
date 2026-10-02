@@ -34,7 +34,7 @@ import { corePart, freeCells, goodsCount, mountedParts } from '../sim/grid';
 import { mountPart, spareParts } from '../sim/inventory';
 import { startStrip, stripYield } from '../sim/jobs';
 import { generateNpcLoadout } from '../sim/npc-loadout';
-import { skillLevel } from '../sim/progress';
+import { affordableRanks, buyRank, rankCost, skillLevel } from '../sim/progress';
 import { chance, randInt } from '../sim/rng';
 import {
   acceptContract,
@@ -688,8 +688,20 @@ const WISHLIST_ORDER: { item: string; kind: ItemKind; tier: Tier }[] = [
 function maybeMaintain(world: World, telemetry: Telemetry, wishlist: WishlistHit[], day: number): World {
   world = maybeRepairAndUpgrade(world, telemetry);
   world = maybeStripSpares(world, telemetry);
+  world = buyAffordableRanks(world);
   recordWishlist(world, wishlist, day);
   return world;
+}
+
+// Spends the XP pool on the cheapest next rank, ties in SKILL_IDS order, until no rank is affordable.
+function buyAffordableRanks(world: World): World {
+  for (;;) {
+    const affordable = affordableRanks(world);
+    if (affordable.length === 0) return world;
+    const cost = (skill: SkillId): number => rankCost(world.player.ranks[skill] + 1);
+    const cheapest = affordable.reduce((best, skill) => (cost(skill) < cost(best) ? skill : best));
+    world = buyRank(world, cheapest);
+  }
 }
 
 function maybeRepairAndUpgrade(world: World, telemetry: Telemetry): World {
@@ -699,9 +711,9 @@ function maybeRepairAndUpgrade(world: World, telemetry: Telemetry): World {
   return maybeUpgrade(world, shopId, telemetry);
 }
 
-// Skills grow by practice, so the report tracks the sum of skill levels as the player's level.
+// The harness player buys ranks from its XP, so the report tracks the sum of skill ranks as the player's level.
 function playerLevel(world: World): number {
-  return (Object.keys(world.player.skills) as SkillId[]).reduce((sum, skill) => sum + skillLevel(world, skill), 0);
+  return (Object.keys(world.player.ranks) as SkillId[]).reduce((sum, skill) => sum + skillLevel(world, skill), 0);
 }
 
 function haveTier(v: Vehicle, kind: ItemKind): Tier {

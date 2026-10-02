@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
 import { BEACON, TOW } from '../data/tow';
-import { SKILL_EFFECTS, XP_SOURCES, XP_TO_REACH } from '../data/skills';
+import { SKILL_EFFECTS, XP_SOURCES } from '../data/skills';
 import { partDef } from '../data/parts';
 import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
@@ -606,9 +606,9 @@ describe('emergency beacon', () => {
 });
 
 describe('social on tow fees', () => {
-  it('prices the tow lower for a player at level 5', () => {
+  it('prices the tow lower for a player at rank 5', () => {
     const s = stranded();
-    s.w.player.skills.social = XP_TO_REACH[5];
+    s.w.player.ranks.social = 5;
     const w = offered(s);
     const me = playerVehicle(w);
     const town = REGION.towns.find((t) => t.id === 'bowl')!;

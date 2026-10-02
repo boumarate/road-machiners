@@ -171,6 +171,23 @@ function withGaveUp_6_7(vehicle: SavedJson): SavedJson {
   return { ...vehicle, defeat: { ...defeat, gaveUp: defeat.phase === 'out' && ((cab?.part?.hp as number | undefined) ?? 0) > 0 } };
 }
 
+// Total XP a skill needed for each level at format 2.7; index is the level.
+const XP_TO_REACH_7_8 = [0, 200, 600, 1200, 2000, 3000];
+
+// Step 7 to 8: each skill's old level becomes the same rank, and the XP past it goes to the shared pool. A level cost
+// what its rank costs now, so no earned XP is lost. Also read by the rescue of saves from before format 2.8.
+export function pooledSkills_7_8(skills: Record<string, number>): { xp: number; ranks: Record<string, number> } {
+  let xp = 0;
+  const ranks: Record<string, number> = {};
+  for (const [skill, total] of Object.entries(skills)) {
+    let level = 0;
+    while (level < XP_TO_REACH_7_8.length - 1 && total >= XP_TO_REACH_7_8[level + 1]) level++;
+    ranks[skill] = level;
+    xp += total - XP_TO_REACH_7_8[level];
+  }
+  return { xp, ranks };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -221,6 +238,11 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     vehicles: (world.vehicles as SavedJson[]).map(withGaveUp_6_7),
     removed: (world.removed as SavedJson[]).map(withGaveUp_6_7),
   }),
+  // 7 to 8: XP goes to one pool and levels become bought ranks.
+  (world) => {
+    const { skills, ...player } = world.player as SavedJson;
+    return { ...world, player: { ...player, ...pooledSkills_7_8(skills as Record<string, number>) } };
+  },
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

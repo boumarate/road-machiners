@@ -1522,7 +1522,7 @@ canvas.view {
   padding: 3px 12px;
   font-size: 13px;
 }
-/* Character screen: one card per skill with its level pips, XP bars and perks. */
+/* Character screen: one card per skill with its rank pips, buy button, today's XP bar and perks. */
 .skill-level {
   display: flex;
   gap: 3px;
@@ -1566,6 +1566,18 @@ canvas.view {
 }
 #ui button.perk {
   padding: 5px 8px;
+}
+#ui button.buy-rank {
+  padding: 2px 8px;
+  font: 12px var(--font-mono);
+}
+.perk.locked {
+  margin-top: 4px;
+  padding: 5px 8px;
+  border-left: 2px solid #3a4246;
+}
+.chip.xp-pool {
+  color: #e0c070;
 }
 .footprint {
   display: grid;

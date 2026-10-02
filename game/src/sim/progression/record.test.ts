@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { SKILL_IDS } from '../../data/skills';
+import { SKILL_IDS, XP_SOURCES } from '../../data/skills';
 import { TIME } from '../../data/time';
-import type { World } from '../types';
+import type { World, XpSource } from '../types';
 import { emptyWorld } from '../testkit';
 import { record, recordFrom, recordTurns, StallWatch, type TraceLine } from './record';
 import { replay } from './replay';
@@ -37,7 +37,12 @@ describe('record', () => {
 
     const curve = replay(lines, SHORT_RUN);
 
-    for (const skill of SKILL_IDS) expect(curve[skill].total, skill).toBe(world.player.skills[skill]);
+    for (const skill of SKILL_IDS) {
+      const bySource = (Object.keys(XP_SOURCES) as XpSource[]).filter((s) => XP_SOURCES[s].skill === skill).reduce((sum, s) => sum + world.player.xpBySource[s], 0);
+      expect(curve[skill].total, skill).toBeCloseTo(bySource, 6);
+    }
+    const pool = SKILL_IDS.reduce((sum, skill) => sum + curve[skill].total, 0);
+    expect(pool).toBeCloseTo(world.player.xp, 6);
   }, RUN_TIMEOUT);
 });
 

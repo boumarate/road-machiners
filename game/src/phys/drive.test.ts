@@ -1,7 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
-import { XP_TO_REACH } from '../data/skills';
 import { makeVehicle } from '../sim/factory';
 import { addGoods, removeAllGoods } from '../sim/inventory';
 import { loadFactor, vehicleMass } from '../sim/mass';
@@ -183,7 +182,7 @@ describe('physics turns', () => {
       const road = play(ordered(order), 3);
       roadSkill0 = road.w;
       freeDrive(road.d);
-      w.player.skills.driving = XP_TO_REACH[5];
+      w.player.ranks.driving = 5;
       const skilled = play(setMoveOrder(w, order), 3);
       mudSkill5 = skilled.w;
       freeDrive(skilled.d);
@@ -193,7 +192,7 @@ describe('physics turns', () => {
       expect(me(mudSkill0).pos.x - 30).toBeLessThan(me(roadSkill0).pos.x - 30);
     });
 
-    it('a player at driving level 5 covers more mud than at level 0', () => {
+    it('a player at driving rank 5 covers more mud than at rank 0', () => {
       expect(me(mudSkill5).pos.x).toBeGreaterThan(me(mudSkill0).pos.x);
     });
   });
