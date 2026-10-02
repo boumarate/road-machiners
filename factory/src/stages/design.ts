@@ -1,4 +1,5 @@
 import { BRANCH, GAME_DIR, TASK_FILE, WONT_DO_LABEL, type Ctx } from '../types';
+import { releaseBundle } from './bundle';
 import { agentHome, askAuthor, baseBranchOf, fillPrompt, fitComment, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 import { existsSync, readFileSync } from 'node:fs';
 
@@ -35,6 +36,7 @@ async function refuse(ctx: Ctx, issue: number, reason: string): Promise<void> {
   await ctx.github.addLabel(issue, WONT_DO_LABEL);
   await ctx.github.close(issue, 'not planned');
   await ctx.github.move(issue, 'Done');
+  await releaseBundle(ctx, issue, 'will not be built');
 }
 
 function requirePlan(home: string, taskFile: string): void {

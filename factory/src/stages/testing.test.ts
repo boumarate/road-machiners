@@ -127,6 +127,13 @@ describe('testing stage', () => {
     expect(opened).toContain('The factory merges it when the committee approves.');
   });
 
+  it('closes every bundled issue from the pull request too', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), bundles: { '7': [9, 12] } });
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' })));
+    await runStage(ctx, 7);
+    expect(calls.find((call) => call.startsWith('openPullRequest'))).toContain('| Closes #7, #9, #12.');
+  });
+
   it('reuses the open pull request of the branch', async () => {
     openPr = 'https://github.com/o/r/pull/12';
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));

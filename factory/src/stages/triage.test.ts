@@ -1,18 +1,25 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { EMPTY_STATE, readState, writeState } from '../state';
 import { runStage } from './triage';
-import type { AgentRun, Ctx } from '../types';
+import type { AgentRun, Card, Ctx } from '../types';
 
 let home = '';
 let calls: string[] = [];
 let prompt = '';
 let effort: string | undefined;
+let related = '';
+// The board the stage sees. Issue 7 is the card under triage.
+let cards: Card[] = [];
 
 beforeEach(() => {
   mkdirSync('tmp', { recursive: true });
   home = mkdtempSync('tmp/factory-triage-');
   calls = [];
   prompt = '';
+  related = '';
+  cards = [card(7, 'Triage')];
+  writeState(`${home}/state.json`, structuredClone(EMPTY_STATE));
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
@@ -20,17 +27,20 @@ function fakeCtx(verdict: string | null, labels: string[] = [], earlier: string[
   const record = (name: string) => async (...args: unknown[]) => { calls.push(`${name} ${args.join(' ')}`); };
   const fake = {
     cfg: { home, designModel: 'opus', buildModel: 'sonnet', triageEffort: 'low', repo: 'o/r', committeeChat: 'chat' },
+    statePath: `${home}/state.json`,
     telegram: { sendMessage: record('message') },
     log: () => undefined,
     github: {
-      issue: async () => ({ number: 7, title: 'Big horn', body: 'Add a horn', labels, createdAt: '', state: 'OPEN', author: 'anna', thumbsUp: [] }),
+      issue: async (number: number) => ({ number, title: number === 7 ? 'Big horn' : `Horn idea ${number}`, body: number === 7 ? 'Add a horn' : `Body of ${number}`, labels: number === 7 ? labels : [], createdAt: '', state: 'OPEN', author: 'anna', thumbsUp: [] }),
       comments: async () => earlier.map((body) => ({ login: 'bot', body })),
+      cards: async () => cards,
       comment: record('comment'), addLabel: record('addLabel'), close: record('close'), move: record('move'),
     },
     container: {
       agent: async (run: AgentRun) => {
         calls.push(`agent ${run.model}`);
         effort = run.effort;
+        related = readFileSync(`${run.clone}/${run.dir}/.factory/related.md`, 'utf8');
         prompt = run.prompt;
         if (verdict !== null) writeFileSync(`${run.clone}/${run.dir}/.factory/triage.json`, verdict);
       },
@@ -43,7 +53,8 @@ function fakeCtx(verdict: string | null, labels: string[] = [], earlier: string[
   return fake as unknown as Ctx;
 }
 
-const verdict = (over: Record<string, unknown>): string => JSON.stringify({ verdict: 'ready', reason: 'Clear goal', questions: [], hotfix: false, complexity: 'intermediate', complexityReason: 'Touches the horn code and the audio module.', ...over });
+const verdict = (over: Record<string, unknown>): string => JSON.stringify({ verdict: 'ready', reason: 'Clear goal', questions: [], hotfix: false, complexity: 'intermediate', complexityReason: 'Touches the horn code and the audio module.', bundle: [], ...over });
+const card = (issue: number, column: Card['column'], labels: string[] = []): Card => ({ itemId: `i${issue}`, issue, column, labels });
 
 describe('triage stage', () => {
   it('comments and moves to Design when ready', async () => {
@@ -165,9 +176,48 @@ describe('triage stage', () => {
     [JSON.stringify({ verdict: 'unclear', reason: 'x' }), 'at least one'],
     [JSON.stringify({ verdict: 'ready', reason: 'x' }), 'hotfix as true or false'],
     [verdict({ hotfix: 'yes' }), 'hotfix as true or false'],
+    [JSON.stringify({ verdict: 'ready', reason: 'x', hotfix: false, complexity: 'intermediate', complexityReason: 'y' }), 'bundle as a list of issue numbers'],
+    [verdict({ bundle: ['9'] }), 'bundle as a list of issue numbers'],
+    [verdict({ bundle: [11] }), 'bundles #11, which is not an offered Triage card'],
+    [verdict({ bundle: [9, 9] }), 'bundles an issue twice'],
+    [verdict({ bundle: [9], hotfix: true }), 'bundles issues into a hotfix'],
   ])('throws on a bad triage.json %#', async (text, message) => {
+    cards = [card(7, 'Triage'), card(9, 'Triage')];
     await expect(runStage(fakeCtx(text), 7)).rejects.toThrow(message);
     expect(calls.filter((call) => /^(comment|move|close|addLabel)/.test(call))).toEqual([]);
+    expect(readState(`${home}/state.json`).bundles).toEqual({});
+  });
+});
+
+describe('triage bundles', () => {
+  it('offers only free Triage cards: not itself, not stuck, waiting, hotfix, bundled, a lead or busy', async () => {
+    cards = [
+      card(7, 'Triage'), card(9, 'Triage'), card(10, 'Triage', ['needs-info']), card(11, 'Design'), card(12, 'Triage', ['factory-stuck']),
+      card(13, 'Triage', ['hotfix']), card(14, 'Triage'), card(15, 'Triage'), card(16, 'Done', ['bundled']),
+    ];
+    writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), bundles: { '14': [16] }, jobs: [{ id: 'triage-15', stage: 'triage', issue: 15, pid: 1, startedAt: '', log: '' }] });
+    await runStage(fakeCtx(verdict({})), 7);
+    expect(related).toContain('# #9 Horn idea 9\n\nBody of 9');
+    expect(related.match(/^# #/gm)).toHaveLength(1);
+    expect(related).toContain('UNTRUSTED USER TEXT');
+  });
+
+  it('says so when no other request waits in Triage', async () => {
+    await runStage(fakeCtx(verdict({})), 7);
+    expect(related).toContain('No other request waits in Triage.');
+  });
+
+  it('folds the chosen cards into the lead, records the bundle and names it on the lead', async () => {
+    cards = [card(7, 'Triage'), card(9, 'Triage'), card(10, 'Triage')];
+    await runStage(fakeCtx(verdict({ bundle: [9, 10], reason: 'Both ask for a horn.' })), 7);
+    expect(calls).toContain('comment 9 Triage bundled this into #7, which carries it from here: Both ask for a horn.\n\nIt closes when #7 ships.');
+    expect(calls).toContain('addLabel 9 bundled');
+    expect(calls).toContain('move 9 Done');
+    expect(calls).toContain('move 10 Done');
+    // The routing note follows the reason and the bundle line.
+    expect(calls.find((call) => call.startsWith('comment 7 Triage passed:'))).toMatch(/^comment 7 Triage passed: Both ask for a horn\.\n\nThis card also carries #9, #10\.\n\n/);
+    expect(calls.at(-1)).toBe('move 7 Design');
+    expect(readState(`${home}/state.json`).bundles).toEqual({ '7': [9, 10] });
   });
 
   describe('visual-reference gate for a new location', () => {

@@ -4,6 +4,7 @@ import { deployDev } from '../deploy';
 import { must } from '../exec';
 import { updateState } from '../state';
 import { BUG_LABEL, GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type MergeStep, type ReleaseState } from '../types';
+import { closeBundle } from './bundle';
 import { agentLog } from './common';
 import { queueIncidents } from './incident';
 import { candidateDir, changeLines, openReleaseTasks, releaseFeatures, releaseLog, requireRelease } from './release-common';
@@ -77,13 +78,15 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   await ctx.github.createRelease(`release-${release.day}`, 'main', `ROAM release ${release.day}`, changelog);
   await deployDev(ctx, agentLog(ctx, issue, 'ship'));
   // Each shipped issue stayed open as a release candidate since its approval. It is on main and itch.io now, so it closes.
+  // A lead whose bundle holds a bug gets an incident job too, since the lead's merge carries the fix.
   const bugs: number[] = [];
   for (const feature of features) {
-    const { labels } = await ctx.github.issue(feature.issue);
-    if (labels.includes(BUG_LABEL)) bugs.push(feature.issue);
-    await ctx.github.comment(feature.issue, `Shipped in release ${release.day}. It is on main and itch.io.`);
+    const shipped = `Shipped in release ${release.day}. It is on main and itch.io.`;
+    await ctx.github.comment(feature.issue, shipped);
     await ctx.github.removeLabel(feature.issue, RELEASE_CANDIDATE_LABEL);
     await ctx.github.close(feature.issue, 'completed');
+    const bundled = await closeBundle(ctx, feature.issue, shipped);
+    if (await anyBug(ctx, [feature.issue, ...bundled])) bugs.push(feature.issue);
   }
   queueIncidents(ctx, bugs);
   await ctx.github.comment(issue, `Shipped by ${by} in the committee chat. Release ${release.day} is on main and itch.io.`);
@@ -96,4 +99,9 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   });
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Release ${release.day} shipped with ${features.length} changes.`);
   ctx.log('ship', issue, `shipped ${features.length} changes`);
+}
+
+async function anyBug(ctx: Ctx, issues: number[]): Promise<boolean> {
+  for (const issue of issues) if ((await ctx.github.issue(issue)).labels.includes(BUG_LABEL)) return true;
+  return false;
 }

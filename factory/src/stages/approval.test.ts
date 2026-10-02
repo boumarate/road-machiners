@@ -34,7 +34,7 @@ function fakeCtx(): Ctx {
     github: {
       cards: async () => [{ itemId: 'x', issue: 7, column, labels: [] }],
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels, createdAt: '', state: 'OPEN', thumbsUp: [] }),
-      comment: record('comment'), addLabel: record('addLabel'), pullRequestFor: async () => openPr, closePullRequest: record('closePullRequest'), close: record('close'), move: record('move'),
+      comment: record('comment'), addLabel: record('addLabel'), removeLabel: record('removeLabel'), pullRequestFor: async () => openPr, closePullRequest: record('closePullRequest'), close: record('close'), move: record('move'),
       createRelease: record('release'),
     },
     telegram: { sendMessage: record('message') },
@@ -186,6 +186,13 @@ describe('deny', () => {
     expect(state.approvalPosts).toEqual({ 200: 8 });
     expect(state.pendingApprovals).toEqual({});
     expect(state.builds).toEqual({ 8: 'bbb2222' });
+  });
+
+  it('sends each bundled issue back to Triage on its own and forgets the bundle', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), bundles: { '7': [9], '8': [10] } });
+    await deny(fakeCtx(), 7, 'bob');
+    expect(calls.slice(-3)).toEqual(['comment 9 #7 was denied, so this issue goes back to triage on its own.', 'removeLabel 9 bundled', 'move 9 Triage']);
+    expect(readState(`${home}/state.json`).bundles).toEqual({ '8': [10] });
   });
 
   it('closes the open pull request with the same comment', async () => {
