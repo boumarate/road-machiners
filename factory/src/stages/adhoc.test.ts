@@ -35,16 +35,17 @@ describe('adhoc', () => {
     expect(f.calls).toContain(`agent ro ${JSON.stringify(readOnly)}`);
   });
 
-  it('sends the HTML report as a file under the report message', async () => {
+  it('sends each file the agent made under the report message', async () => {
     const f = fake();
     queueReply(f.ctx.statePath);
-    f.agentWrites = { 'report.md': 'Tokens go to design.', 'report.html': '<html></html>' };
+    f.agentWrites = { 'report.md': 'Tokens go to design.', 'files/report.html': '<html></html>', 'files/chart.png': 'png' };
     await adhoc(f.ctx, 7);
+    const files = `${cfg.home}/work/adhoc-7/game/.factory/files`;
     const message = f.calls.indexOf('message -5 3 Tokens go to design.');
-    expect(f.calls[message + 1]).toBe(`document -5 1 ${cfg.home}/work/adhoc-7/game/.factory/report.html`);
+    expect(f.calls.slice(message + 1, message + 3)).toEqual([`document -5 1 ${files}/chart.png`, `document -5 1 ${files}/report.html`]);
   });
 
-  it('sends no file without an HTML report', async () => {
+  it('sends no file when the agent made none', async () => {
     const f = fake();
     queueReply(f.ctx.statePath);
     f.agentWrites = { 'report.md': 'x' };

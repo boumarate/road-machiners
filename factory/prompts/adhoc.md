@@ -26,6 +26,6 @@ When done, write the answer to `.factory/report.md`:
 - Use plain, short sentences.
 - Keep it under 3500 characters.
 
-When charts or long tables help, also write `.factory/report.html`. It must be one self-contained file that opens offline, with all scripts and data inline. The member gets it as a file under the report.
+Put any file the request asks for, or that helps the answer, in `{{files}}/`. The member gets each one as a file under the report. A file must open on its own, offline.
 
 This is ad hoc task {{issue}}.

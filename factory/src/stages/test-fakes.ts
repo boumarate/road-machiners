@@ -1,7 +1,7 @@
 import { EMPTY_STATE, writeState } from '../state';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { agentHome } from './common';
 import type { AgentRun, Card, Ctx, FactoryConfig, InlineButton, MergeStep } from '../types';
 
@@ -47,7 +47,10 @@ export function fake(): Fake {
         note(run.readOnly ? `agent ro ${JSON.stringify(run.readOnly)}` : 'agent');
         const home = agentHome(run.clone, run.dir);
         mkdirSync(join(home, '.factory'), { recursive: true });
-        for (const [name, text] of Object.entries(f.agentWrites)) writeFileSync(join(home, '.factory', name), text);
+        for (const [name, text] of Object.entries(f.agentWrites)) {
+          mkdirSync(dirname(join(home, '.factory', name)), { recursive: true });
+          writeFileSync(join(home, '.factory', name), text);
+        }
       },
     },
     repo: {
