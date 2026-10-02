@@ -52,9 +52,21 @@ Everything else waits for a release, also most bugs.
 A new feature is never a hotfix.
 When in doubt, it is not a hotfix.
 
+For `ready`, also rate the task complexity.
+It picks the models for the later stages.
+Judge by these checks, never by keywords in the text.
+Read the code the issue touches to answer them.
+
+- `trivial`: all of these hold. The change touches one file or one small, local piece of logic. It needs no new state, save data or cross-system rule. The result is a single visible behavior, such as a value, a text, a one-condition bug or a simple asset.
+- `hard`: any of these holds. The change spans three or more interacting systems, such as combat, pathing, saves, the world map and the UI. Or it changes shared state, a data format or a rule that other code depends on. Or the bug has no known cause and needs tracing across systems. Or the design has real tradeoffs between several workable approaches.
+- `intermediate`: everything else, and any case you cannot decide. When in doubt, pick `intermediate`.
+
+`complexityReason` is one short sentence that names the checks you applied, such as the files or systems you found.
+A committee member reads it to audit the choice.
+
 Write `.factory/triage.json` with this shape.
-`{"verdict": "ready" | "unclear" | "wont-do", "reason": "...", "questions": ["..."], "hotfix": true | false}`
+`{"verdict": "ready" | "unclear" | "wont-do", "reason": "...", "questions": ["..."], "hotfix": true | false, "complexity": "trivial" | "intermediate" | "hard", "complexityReason": "..."}`
 The reason is one or two plain sentences.
 For a hotfix, the reason says what breaks for players.
 The questions list is empty unless the verdict is `unclear`.
-The field `hotfix` is required for `ready`.
+The fields `hotfix`, `complexity` and `complexityReason` are required for `ready`.

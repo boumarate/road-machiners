@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { changesSaveMajor } from '../save-guard';
 import { readState } from '../state';
-import { BRANCH, GAME_DIR, HOTFIX_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type CardStage, type Ctx, type Stage } from '../types';
+import { BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type CardStage, type Ctx, type FactoryConfig, type Stage } from '../types';
 
 export const BASE_BRANCH = 'dev';
 export const HOTFIX_BASE = 'main';
@@ -70,7 +70,19 @@ export async function useOpenNetwork(ctx: Ctx, stage: Stage, issue: number | nul
   return open;
 }
 
-export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, model: string, prompt: string): Promise<void> {
+// The model of a stage comes from the issue's labels at the moment the agent starts, so a label changed by hand takes effect on the next agent run.
+// design-sonnet moves design to the build model. implementation-opus moves implementation and every testing pass (conflict merge, check fix, retry) to the design model.
+// Triage always runs on the build model. The model ids come from settings.env: FACTORY_DESIGN_MODEL is the Opus id, FACTORY_BUILD_MODEL the Sonnet id.
+export function modelFor(cfg: Pick<FactoryConfig, 'designModel' | 'buildModel'>, stage: CardStage, labels: string[]): string {
+  if (stage === 'design') return labels.includes(DESIGN_SONNET_LABEL) ? cfg.buildModel : cfg.designModel;
+  if (stage === 'implement' || stage === 'testing') return labels.includes(IMPLEMENTATION_OPUS_LABEL) ? cfg.designModel : cfg.buildModel;
+  return cfg.buildModel;
+}
+
+export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, prompt: string): Promise<void> {
+  const { labels } = await ctx.github.issue(issue);
+  const model = modelFor(ctx.cfg, stage, labels);
+  ctx.log(stage, issue, `agent model ${model}`);
   const openNetwork = await useOpenNetwork(ctx, stage, issue);
   await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt, log: agentLog(ctx, issue, stage), openNetwork });
 }

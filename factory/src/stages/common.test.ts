@@ -2,13 +2,13 @@ import { mkdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { AgentRun, Ctx } from '../types';
 import { EMPTY_STATE, writeState } from '../state';
-import { agentHome, baseBranchFor, baseBranchOf, factoryPaths, fillPrompt, runAgent } from './common';
+import { agentHome, baseBranchFor, baseBranchOf, factoryPaths, fillPrompt, modelFor, runAgent } from './common';
 
 function agentCtx(labels: string[]): { ctx: Ctx; runs: AgentRun[]; logs: string[] } {
   const runs: AgentRun[] = [];
   const logs: string[] = [];
   const ctx = {
-    cfg: { home: 'tmp/factory-common-test' },
+    cfg: { home: 'tmp/factory-common-test', designModel: 'opus-id', buildModel: 'sonnet-id' },
     github: { issue: async () => ({ labels }) },
     container: { agent: async (run: AgentRun) => { runs.push(run); } },
     log: (_stage: string, _issue: number | null, msg: string) => { logs.push(msg); },
@@ -19,16 +19,47 @@ function agentCtx(labels: string[]): { ctx: Ctx; runs: AgentRun[]; logs: string[
 describe('runAgent network', () => {
   it('uses the restricted network without the open-network label', async () => {
     const { ctx, runs, logs } = agentCtx(['bug']);
-    await runAgent(ctx, 7, 'design', 'opus', 'p');
+    await runAgent(ctx, 7, 'design', 'p');
     expect(runs[0].openNetwork).toBe(false);
-    expect(logs).toEqual(['agent runs on the restricted network']);
+    expect(logs).toEqual(['agent model opus-id', 'agent runs on the restricted network']);
   });
 
   it('uses the open network with the open-network label', async () => {
     const { ctx, runs, logs } = agentCtx(['bug', 'open-network']);
-    await runAgent(ctx, 7, 'design', 'opus', 'p');
+    await runAgent(ctx, 7, 'design', 'p');
     expect(runs[0].openNetwork).toBe(true);
-    expect(logs[0]).toContain('open network');
+    expect(logs[1]).toContain('open network');
+  });
+});
+
+describe('model routing', () => {
+  const cfg = { designModel: 'opus-id', buildModel: 'sonnet-id' };
+  const stages = ['triage', 'design', 'implement', 'testing'] as const;
+  const pick = (labels: string[]) => stages.map((stage) => modelFor(cfg, stage, labels));
+
+  it('keeps the baseline with no label: triage Sonnet, design Opus, implementation and testing Sonnet', () => {
+    expect(pick([])).toEqual(['sonnet-id', 'opus-id', 'sonnet-id', 'sonnet-id']);
+  });
+
+  it('design-sonnet forces Sonnet for design only', () => {
+    expect(pick(['design-sonnet'])).toEqual(['sonnet-id', 'sonnet-id', 'sonnet-id', 'sonnet-id']);
+  });
+
+  it('implementation-opus forces Opus for implementation and testing, never triage', () => {
+    expect(pick(['implementation-opus'])).toEqual(['sonnet-id', 'opus-id', 'opus-id', 'opus-id']);
+  });
+
+  it('both labels apply independently', () => {
+    expect(pick(['design-sonnet', 'implementation-opus'])).toEqual(['sonnet-id', 'sonnet-id', 'opus-id', 'opus-id']);
+  });
+
+  it('runAgent reads the labels at each run, so a manual change counts on the next one', async () => {
+    const labels: string[] = ['implementation-opus'];
+    const { ctx, runs } = agentCtx(labels);
+    await runAgent(ctx, 7, 'testing', 'p');
+    labels.length = 0;
+    await runAgent(ctx, 7, 'testing', 'p');
+    expect(runs.map((run) => run.model)).toEqual(['opus-id', 'sonnet-id']);
   });
 });
 

@@ -9,10 +9,10 @@ The design and its reasons are in [the factory task](docs/tasks/game-factory.md)
 ## Flow
 
 1. Intake marks an aged `feature-request` or `bug` issue with enough thumbs-up, or one from a committee member. It goes to the Triage column of the GitHub Project.
-2. Triage runs Sonnet in the agent container. It scores the issue on a clear goal, a checkable result, a scope of one task and a fit with DESIGN.md. It writes `.factory/triage.json`. `ready` moves the card to Design. `wont-do` comments the reason, labels the issue `wont-do`, closes it and moves the card to Done. `unclear` comments up to three questions for the author, labels the issue `needs-info` and leaves the card in Triage. The tick skips a `needs-info` issue until someone answers on GitHub. Then triage runs again with the answers.
-3. Design runs Opus with the up design and plan skills. It writes `docs/tasks/issue-N.md` on branch `factory/issue-N`, or refuses the issue as "won't do". For a real blocker it writes `.factory/questions.md` instead, and the card goes back to Triage with those questions.
-4. Implementation runs Sonnet with the up execute skill.
-5. Testing first merges the current `dev` into the issue branch, so the build matches what approve will merge. On a conflict the agent resolves it, and a merge left unfinished fails the stage. Then testing runs Sonnet with the up verify and review skills. Then the factory runs the tests and the CPU playtest itself, builds the branch and copies it to `/<hash>/`. The state file records the build of each issue.
+2. Triage runs Sonnet in the agent container. It stays on Sonnet whatever it rates. It scores the issue on a clear goal, a checkable result, a scope of one task and a fit with DESIGN.md. For a `ready` issue it also rates complexity by checkable criteria, as [Model routing](#model-routing) says. It writes `.factory/triage.json`. `ready` moves the card to Design. `wont-do` comments the reason, labels the issue `wont-do`, closes it and moves the card to Done. `unclear` comments up to three questions for the author, labels the issue `needs-info` and leaves the card in Triage. The tick skips a `needs-info` issue until someone answers on GitHub. Then triage runs again with the answers.
+3. Design runs Opus, unless the issue has `design-sonnet`, with the up design and plan skills. It writes `docs/tasks/issue-N.md` on branch `factory/issue-N`, or refuses the issue as "won't do". For a real blocker it writes `.factory/questions.md` instead, and the card goes back to Triage with those questions.
+4. Implementation runs Sonnet, unless the issue has `implementation-opus`, with the up execute skill.
+5. Testing first merges the current `dev` into the issue branch, so the build matches what approve will merge. On a conflict the agent resolves it, and a merge left unfinished fails the stage. Then testing runs Sonnet, or Opus with `implementation-opus`, with the up verify and review skills. Then the factory runs the tests and the CPU playtest itself, builds the branch and copies it to `/<hash>/`. The state file records the build of each issue.
 6. Testing opens a pull request against `dev`, or reuses the open one. The committee chat gets a screenshot, the play link, the pull request link and how to try it. The post has Approve and Deny buttons. Approve merges the branch into `dev`, which redeploys to `/dev/`. The issue stays open with the label `release-candidate` until its release ships. Deny labels the issue `wont-do` and closes it and the pull request as not planned. A reply to the post sends the task back to design with the reply as feedback. When the branch conflicts with `dev` at approval, since parallel work moved `dev` on, the card goes back to Testing with its approver kept. Testing merges `dev`, the agent resolves the conflict and the checks run again. Then the merge is queued with no new post, and the chat sees nothing of it.
 7. Every `FACTORY_RELEASE_DAYS`, the factory cuts branch `release/<day>` from `dev`. When `dev` lacks commits of `main`, like a merge made by hand, it merges `main` into `dev` first. So the release holds all of `main`, and its merge into `main` at Ship cannot conflict. It opens a tracking issue with the label `release` and two cleanup issues, one for optimization and one for code janitor work. They carry the labels `release-task` and `maintenance`. Release tasks run the normal stages against the release branch. Cleanup tasks merge into it without a committee post.
 8. When no release task is open, the factory builds the release candidate at `/rc/`. The release agent writes the changelog, one line `- [#N] what changed` per change, and the candidate fails when the lines do not name the release's changes exactly. The committee chat gets a screenshot, the play link, the pull request and the count of changes, with a Ship button. The whole changelog follows in a message under that post, since a caption holds only 1024 characters. Commands go to the post itself. A reply `remove #N` takes feature N out of the release and `dev`, and reopens its issue. Any other reply opens a new `release-task` issue with the reply as its body. Both make a new candidate later. Every merge into the release branch drops the current post's Ship, and a build that finds a release task opened while it ran is not posted.
@@ -44,6 +44,35 @@ Triage, design, implementation and testing each comment on their issue when they
 A failed or timed-out stage labels its issue `factory-stuck` and records the failure in `failures` in the state file for a day. The factory posts nothing about it, and neither about a tick crash. Hermes's incident watch sees both. Hermes fixes what it can and comments on the issue. It posts in the chat only when the committee must act or decide. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
 
 Hermes manages the factory. A watch job wakes it when an issue gets stuck or the tick crashes. It reads the logs, the state and the chat, then fixes the incident or asks the committee. It has a shell with `gh`, `git` and `jq` as the bot account, and it can edit the factory home. While it edits state, it pauses the factory with the file `$FACTORY_HOME/paused`, and every tick skips.
+
+## Model routing
+
+The baseline is triage Sonnet, design Opus, implementation Sonnet and testing Sonnet. `FACTORY_DESIGN_MODEL` in `settings.env` is the Opus id and `FACTORY_BUILD_MODEL` the Sonnet id. No stage hard-codes a model name.
+
+Two labels route an issue, and the issue's labels at the moment an agent starts decide the model:
+
+- `design-sonnet`: design, including a feedback revision, runs on Sonnet.
+- `implementation-opus`: implementation and every testing agent run run on Opus. That covers the conflict merge, the first test round and the check-fix round.
+
+Triage, ad hoc, `/change` and release candidate agents always run on Sonnet. Triage keeps its Sonnet model for classification too.
+
+Triage rates each `ready` issue and writes `complexity` and a one-sentence `complexityReason` to `triage.json`:
+
+- `trivial`: one file or one small local piece of logic, no new state, save data or cross-system rule, one visible behavior. Triage adds `design-sonnet`, so design, implementation and testing all run on Sonnet.
+- `hard`: three or more interacting systems, or a change to shared state or a data format, or a bug with no known cause across systems, or real tradeoffs between approaches. Triage adds `implementation-opus`, so design, implementation and testing all run on Opus.
+- `intermediate` or in doubt: no label, so Opus designs and Sonnet implements and tests.
+
+Triage posts the rating and reason in a comment that starts with `Model routing from triage:`. That comment is the audit trail.
+
+Precedence:
+
+1. A label on the issue wins. Triage never changes labels that are already there, and it only logs its rating.
+2. Triage decides once. When its routing comment exists, a later triage run, such as after a `needs-info` answer or a design question, adds nothing. A label a member removed stays removed.
+3. A member adds or removes a label on GitHub any time. The next agent run reads it, so nothing is cached and nothing overwrites it. A run already in progress keeps its model.
+
+The labels are the persisted decision, so a selection survives every job, retry and restart. Both labels together give Sonnet design and Opus implementation and testing.
+
+Cost: Opus costs several times Sonnet per token. A `hard` issue runs three stages on Opus instead of one, and a testing run holds up to two agent rounds plus the conflict merge. A `trivial` issue saves the design stage's Opus run. Limits: the rating is one Sonnet judgment from the issue text and the code it reads, so it can misjudge. A member fixes that with the labels. There is no label for Opus testing alone, nor for Sonnet implementation with Opus testing.
 
 ## Parts
 

@@ -7,7 +7,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, clone);
   const home = agentHome(clone, GAME_DIR);
   resetOutputs(home);
-  await runAgent(ctx, issue, 'implement', ctx.cfg.buildModel, fillPrompt('implement', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
+  await runAgent(ctx, issue, 'implement', fillPrompt('implement', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
   throwIfNeedsCommittee(home);
   const head = await ctx.repo.fetchFromWork(clone, BRANCH(issue));
   if (await ctx.repo.isMerged(head, BRANCH(issue))) throw new Error('The implementation stage made no new commits');
