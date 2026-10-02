@@ -375,6 +375,7 @@ export class Hud {
 
   renderTop(w: World): void {
     const readout = getHudReadout(w);
+    const timeStart = readout.clock.lastIndexOf(" ");
     const busy = this.actions.isBusy();
     this.condition.render(playerVehicle(w));
     this.renderContracts(w);
@@ -389,8 +390,8 @@ export class Hud {
           title: "Day and time",
           "aria-label": `Time: ${readout.clock}`,
         },
-        el("small", {}, "TIME"),
-        el("span", { class: "clock-digits" }, readout.clock),
+        el("span", { class: "clock-day" }, readout.clock.slice(0, timeStart)),
+        el("span", { class: "clock-time" }, readout.clock.slice(timeStart + 1)),
       ),
       el(
         "div",

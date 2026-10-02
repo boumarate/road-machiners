@@ -130,10 +130,11 @@ body {
 }
 .instrument-clock {
   grid-column: 1 / -1;
-  justify-self: start;
+  justify-self: stretch;
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 18px;
   padding: 1px 6px;
   background: #9fa58a;
   color: #1f2418;
@@ -145,10 +146,7 @@ body {
   letter-spacing: 0.08em;
   white-space: nowrap;
 }
-.instrument-clock small {
-  font: 8px var(--font-mono);
-  color: #596048;
-}
+
 .speedometer {
   display: flex;
   flex-direction: column;
