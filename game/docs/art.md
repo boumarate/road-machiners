@@ -1,6 +1,6 @@
 # Art pipeline
 
-Static props, obstacles, landmarks and truck parts are low-poly Blender models. Settlement houses, ruins, water and some hull sections are built from Three.js shapes in code. Models placed many times, like rocks, are drawn as instanced meshes. The ground is one painted canvas texture over the whole map, and a shader draws roads and pads on it. Pebbles and scrub are instanced 3D models from `src/three/render/scatter.ts`.
+Static props, obstacles, landmarks and truck parts are low-poly Blender models. Settlement houses, ruins, water and some hull sections are built from Three.js shapes in code. Models placed many times are drawn as instanced meshes, one per terrain chunk: rocks in `src/three/render/obstacles.ts`, and dead trees in `TreeInstances` in `src/three/render/trees.ts`, since a grove holds hundreds of trees. The ground is one painted canvas texture over the whole map, and a shader draws roads and pads on it. Pebbles and scrub are instanced 3D models from `src/three/render/scatter.ts`.
 
 Some models come from Blender scripts in `tools/blender/`. Blender is installed with `brew install --cask blender`. Each script writes a `.glb` into `public/models/`, and both are committed. Rebuild one with `blender --background --python tools/blender/<name>.py -- public/models/<name>.glb tmp/<name>.png`. The second path is an optional preview render from the game camera angle.
 
@@ -18,6 +18,12 @@ Some models come from Blender scripts in `tools/blender/`. Blender is installed 
 10. Take an in-game screenshot with a Playwright script in `tmp/`, and run `npm run playtest`. The user confirms small visual details.
 
 `models.ts` loads every model at boot. It swaps the glTF materials for flat Lambert, so models match the procedural meshes.
+
+## Models from a concept image
+
+When a place has a concept image, like Old Orchard's `docs/concepts/old-orchard-issue-111.jpg`, model each building it shows from a crop of the image with the `blender-image-to-3d` skill, then write the result as a Kit script by the steps above. Keep the briefs and review sheets in `tmp/models/<name>/`. The concept is a perspective painting, so take sizes from scale cues (a road about 10 m wide, a truck about 8 m long, a storey about 3.2 m) and judge the review sheets by eye.
+
+Old Orchard's models were built this way: `farmhouse`, `barn`, `quonset`, `guard_post`, `army_truck` and `barrier`, the reworked `bunker` blockhouse with its sandbag ring, and a shorter, wider `dead_tree`. `LANDMARK_MODELS` in `src/sim/mapgen.ts` maps each prop look to its model, and `MODEL_RADIUS` holds the footprint radius from each script's docstring.
 
 ## Trucks
 
