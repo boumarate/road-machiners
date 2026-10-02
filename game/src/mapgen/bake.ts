@@ -148,11 +148,11 @@ function pickType(g: GroundInput, x: number, y: number): TerrainTypeId {
   return 'hardpan';
 }
 
-// The canyon and the dry river are water courses: their floors and lower banks are wash beds, never lakes,
+// The canyon, the dry river and Broken Wing's trench are water courses: their floors and lower banks are wash beds, never lakes,
 // even where the carved floor holds a closed hollow. Half the bank reaches the foot of the slope.
 function drainChannels(pond: Float32Array, size: number): Float32Array {
   const n = size + 1;
-  const channels = [TERRAIN.features.canyon, TERRAIN.features.dryRiver];
+  const channels = [TERRAIN.features.canyon, TERRAIN.features.dryRiver, TERRAIN.features.trench];
   for (let k = 0; k < pond.length; k++) {
     if (pond[k] === 0) continue;
     const p = { x: k % n, y: Math.floor(k / n) };
@@ -199,7 +199,17 @@ function sandType(g: GroundInput, _tile: number, k: number): TerrainTypeId | nul
   return cornerMean(g.d.sand, g.d.size, k) >= G.looseSand ? 'sand' : null;
 }
 
-const GEOLOGY_RULES: GroundRule[] = [screeType, pondType, washType, sandType];
+// Drift sand lies over Broken Wing's ramps, round the hoop's feet and on the trench floor, where the wing came down.
+function wingSandType(g: GroundInput, _tile: number, k: number): TerrainTypeId | null {
+  const n = g.d.size + 1;
+  const p = { x: (k % n) + 0.5, y: Math.floor(k / n) + 0.5 };
+  const F = TERRAIN.features;
+  if (F.mounds.some((m) => dist(p, m.center) <= m.radius + m.bank * 0.7)) return 'sand';
+  if (dist(p, F.wing.pos) <= F.wing.r) return 'sand';
+  return polylineDist(p, F.trench.path) <= F.trench.width ? 'sand' : null;
+}
+
+const GEOLOGY_RULES: GroundRule[] = [screeType, wingSandType, pondType, washType, sandType];
 
 // Largest and mean value over the four corners of the tile whose top-left corner is k.
 function cornerMax(a: ArrayLike<number>, size: number, k: number): number {
