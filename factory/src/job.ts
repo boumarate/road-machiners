@@ -7,19 +7,20 @@ import { runStage as design } from './stages/design';
 import { runStage as implement } from './stages/implement';
 import { candidate } from './stages/candidate';
 import { release } from './stages/release';
+import { runStage as incident } from './stages/incident';
 import { remove } from './stages/remove';
 import { ship } from './stages/ship';
 import { runStage as testing } from './stages/testing';
 import { runStage as triage } from './stages/triage';
 import { clearSessions, resumedStage } from './sessions';
 import { readState, updateState } from './state';
-import { QUEUE_OF, type Ctx, type Job, type JobStage } from './types';
+import { QUEUE_OF, type Ctx, type FactoryState, type Job, type JobStage } from './types';
 
 type Handler = (ctx: Ctx, issue: number) => Promise<void>;
 
 // Ship reads who pressed it from the state, so the job cannot run without a queued Ship.
 const HANDLERS: Record<Exclude<JobStage, 'release' | 'dev'>, Handler> = {
-  triage, design, implement, testing, change, adhoc, candidate, remove,
+  triage, design, implement, testing, change, adhoc, candidate, remove, incident,
   ship: (ctx, issue) => ship(ctx, issue, readState(ctx.statePath).pendingShip),
   approve: (ctx, issue) => approve(ctx, issue, readState(ctx.statePath).pendingApprovals[String(issue)] ?? 'the committee'),
 };
@@ -81,15 +82,21 @@ async function dispatch(ctx: Ctx, stage: JobStage, issue: number | null, job: Jo
 
 function clearJob(ctx: Ctx, stage: JobStage, issue: number | null): void {
   updateState(ctx.statePath, (state) => {
-    const pendingApprovals = { ...state.pendingApprovals };
-    if (stage === 'approve') delete pendingApprovals[String(issue)];
-    const pendingChanges = stage === 'change' ? state.pendingChanges.filter((item) => item.id !== issue) : state.pendingChanges;
-    const pendingShip = stage === 'ship' ? null : state.pendingShip;
-    const first = stage === 'remove' ? state.pendingRemovals.findIndex((item) => item.issue === issue) : -1;
-    const pendingRemovals = state.pendingRemovals.filter((_, index) => index !== first);
     const jobs = state.jobs.filter((job) => job.stage !== stage || job.issue !== issue);
     // Only agent and test jobs resume. A change job's id is no issue number, so it never clears a mark.
     const interrupted = QUEUE_OF[stage] === 'branch' ? state.interrupted : state.interrupted.filter((item) => item !== issue);
-    return { ...state, jobs, pendingApprovals, pendingChanges, pendingShip, pendingRemovals, interrupted };
+    return { ...clearQueued(state, stage, issue), jobs, interrupted };
   });
+}
+
+// The queued command the job ran, so nothing runs it again.
+function clearQueued(state: FactoryState, stage: JobStage, issue: number | null): FactoryState {
+  const pendingApprovals = { ...state.pendingApprovals };
+  if (stage === 'approve') delete pendingApprovals[String(issue)];
+  const pendingChanges = stage === 'change' ? state.pendingChanges.filter((item) => item.id !== issue) : state.pendingChanges;
+  const pendingIncidents = stage === 'incident' ? state.pendingIncidents.filter((n) => n !== issue) : state.pendingIncidents;
+  const pendingShip = stage === 'ship' ? null : state.pendingShip;
+  const first = stage === 'remove' ? state.pendingRemovals.findIndex((item) => item.issue === issue) : -1;
+  const pendingRemovals = state.pendingRemovals.filter((_, index) => index !== first);
+  return { ...state, pendingApprovals, pendingChanges, pendingIncidents, pendingShip, pendingRemovals };
 }

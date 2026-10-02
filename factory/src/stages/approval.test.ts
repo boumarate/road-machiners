@@ -108,6 +108,7 @@ describe('approve', () => {
     expect(state.release?.postId).toBeNull();
     expect(state.pendingShip).toBeNull();
     expect(state.pendingApprovals).toEqual({});
+    expect(state.pendingIncidents).toEqual([7]);
   });
 
   it('sends the card back to Testing on a conflict with dev, keeping the approver, with no chat post', async () => {

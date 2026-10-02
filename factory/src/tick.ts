@@ -18,7 +18,7 @@ type Due = Pick<FactoryConfig, 'releaseDays' | 'maxJobsPerDay' | 'agentWorkers' 
 const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
 // Committee-driven jobs never count against the daily cap.
-const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'dev'];
+const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev'];
 const CARD_ORDER: [Card['column'], JobStage][] = [['Testing', 'testing'], ['Implementation', 'implement'], ['Design', 'design'], ['Triage', 'triage']];
 
 function isDue(last: string | null, now: Date, everyMs: number): boolean {
@@ -32,8 +32,15 @@ function queued(state: FactoryState): JobPick | null {
   const removal = state.pendingRemovals[0];
   if (removal) return { stage: 'remove', issue: removal.issue };
   if (state.pendingShip !== null && state.release) return { stage: 'ship', issue: state.release.issue };
+  return queuedLast(state);
+}
+
+// Factory changes, then incident entries. Neither waits on a release step.
+function queuedLast(state: FactoryState): JobPick | null {
   const change = state.pendingChanges[0];
-  return change ? { stage: 'change', issue: change.id } : null;
+  if (change) return { stage: 'change', issue: change.id };
+  const incident = state.pendingIncidents[0];
+  return incident === undefined ? null : { stage: 'incident', issue: incident };
 }
 
 function openCards(cards: Card[]): Card[] {

@@ -80,6 +80,15 @@ describe('ship', () => {
     expect(f.calls.filter((call) => call === 'close completed')).toHaveLength(2);
   });
 
+  it('queues an incident job for each shipped issue labeled bug, and for no other', async () => {
+    const f = shippable();
+    f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #4: new horn'];
+    writeFileSync(join(ROOT, 'work', 'release-candidate', 'game', '.factory', 'release.md'), '- [#3] Trucks are faster.\n- [#4] A horn.\n');
+    f.ctx.github.issue = async (n: number) => ({ number: n, title: 'T', body: '', labels: n === 3 ? ['bug'] : ['feature-request'], createdAt: '', state: 'OPEN', author: 'a', thumbsUp: [] });
+    await ship(f.ctx, 11, 'Ann');
+    expect(readState(f.ctx.statePath).pendingIncidents).toEqual([3]);
+  });
+
   it('publishes a GitHub release of main with the changelog, after the itch push', async () => {
     const f = shippable();
     await ship(f.ctx, 11, 'Ann');

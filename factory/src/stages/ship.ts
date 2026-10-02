@@ -3,8 +3,9 @@ import { join } from 'node:path';
 import { deployDev } from '../deploy';
 import { must } from '../exec';
 import { updateState } from '../state';
-import { GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type MergeStep, type ReleaseState } from '../types';
+import { BUG_LABEL, GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type MergeStep, type ReleaseState } from '../types';
 import { agentLog } from './common';
+import { queueIncidents } from './incident';
 import { candidateDir, changeLines, openReleaseTasks, releaseFeatures, releaseLog, requireRelease } from './release-common';
 
 export type ItchKeys = { itchTarget: string; butlerKey: string };
@@ -76,11 +77,15 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   await ctx.github.createRelease(`release-${release.day}`, 'main', `ROAM release ${release.day}`, changelog);
   await deployDev(ctx, agentLog(ctx, issue, 'ship'));
   // Each shipped issue stayed open as a release candidate since its approval. It is on main and itch.io now, so it closes.
+  const bugs: number[] = [];
   for (const feature of features) {
+    const { labels } = await ctx.github.issue(feature.issue);
+    if (labels.includes(BUG_LABEL)) bugs.push(feature.issue);
     await ctx.github.comment(feature.issue, `Shipped in release ${release.day}. It is on main and itch.io.`);
     await ctx.github.removeLabel(feature.issue, RELEASE_CANDIDATE_LABEL);
     await ctx.github.close(feature.issue, 'completed');
   }
+  queueIncidents(ctx, bugs);
   await ctx.github.comment(issue, `Shipped by ${by} in the committee chat. Release ${release.day} is on main and itch.io.`);
   await ctx.github.close(issue, 'completed');
   await ctx.github.move(issue, 'Done');

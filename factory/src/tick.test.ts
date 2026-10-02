@@ -34,6 +34,12 @@ describe('chooseJobs daily cap', () => {
     expect(chooseJobs(capped, [card(6, 'Implementation', ['adhoc'])], NOW, CFG)).toEqual([{ stage: 'adhoc', issue: 6 }]);
   });
 
+  it('runs a queued incident job at the cap, after the other branch jobs', () => {
+    const queuedIncident = { ...capped, pendingIncidents: [7, 8] };
+    expect(chooseJobs(queuedIncident, [], NOW, CFG)).toEqual([{ stage: 'incident', issue: 7 }]);
+    expect(chooseJobs({ ...queuedIncident, pendingChanges: [{ id: 2, text: 't', by: 'u' }] }, [], NOW, CFG)).toEqual([{ stage: 'change', issue: 2 }]);
+  });
+
   it('ignores starts older than 24 hours', () => {
     expect(chooseJobs({ ...capped, jobStarts: starts(25, 5, 1) }, [], NOW, CFG)).toEqual([{ stage: 'release', issue: null }]);
   });

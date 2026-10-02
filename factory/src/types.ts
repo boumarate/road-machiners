@@ -4,7 +4,7 @@ export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Appro
 
 export type CardStage = 'triage' | 'design' | 'implement' | 'testing';
 export type ReleaseStage = 'release' | 'candidate' | 'ship' | 'remove';
-export type Stage = CardStage | ReleaseStage | 'approve' | 'feedback' | 'change' | 'adhoc' | 'dev' | 'intake' | 'tick';
+export type Stage = CardStage | ReleaseStage | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'intake' | 'tick';
 
 export type FactoryConfig = {
   repo: string; // "owner/name" on GitHub
@@ -58,7 +58,8 @@ export type Card = { itemId: string; issue: number; column: Column; labels: stri
 
 // A job is one detached `factory run` process. `issue` is null for the release cut and a change id for change.
 // Candidate and ship carry the tracking issue, remove the issue of the feature to take out. Dev rebuilds /dev/ and has no issue.
-export type JobStage = CardStage | ReleaseStage | 'approve' | 'change' | 'adhoc' | 'dev';
+// An incident job carries the issue of a shipped bug fix.
+export type JobStage = CardStage | ReleaseStage | 'approve' | 'change' | 'adhoc' | 'incident' | 'dev';
 // `id` names the job's containers, so a kill stops only its own.
 export type Job = { id: string; stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
 
@@ -69,7 +70,8 @@ export type Queue = 'branch' | 'agent' | 'test';
 export const QUEUE_OF: Record<JobStage, Queue> = {
   triage: 'agent', design: 'agent', implement: 'agent', adhoc: 'agent',
   testing: 'test',
-  approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', change: 'branch',
+  // An incident job pushes dev, and two of them at once would pick the same log id.
+  approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', change: 'branch', incident: 'branch',
 };
 // `error` is the short summary. The full text is in `log`.
 export type Failure = { stage: Stage; issue: number | null; error: string; log: string | null; at: string };
@@ -95,6 +97,7 @@ export type FactoryState = {
   pendingApprovals: Record<string, string>; // issue number -> approving Telegram user, run by the next tick
   approvedResolving: Record<string, string>; // issue number -> approver, for an approved card back in Testing to resolve a conflict with its base. Testing then queues its merge with no new post.
   pendingChanges: ChangeRequest[]; // factory change requests, run by the next ticks in order
+  pendingIncidents: number[]; // shipped bug issues whose incident job has not run yet, run by the next ticks in order
   lastTickError: string | null; // the last tick crash. Hermes's incident watch reports it.
   failures: Failure[]; // failed jobs of the last day. Hermes's incident watch reports each one, and the chat hears of it only from Hermes.
   adhocReplies: Record<string, { chat: string; messageId: number }>; // ad hoc issue number -> the chat message its report answers
@@ -229,7 +232,11 @@ export const RELEASE_CANDIDATE_LABEL = 'release-candidate'; // approved and merg
 // A fix for a shipped bug. It branches from main, and its approval ships it to main and itch.io at once. Only collaborators set labels, so it needs no votes.
 export const HOTFIX_LABEL = 'hotfix';
 export const ADHOC_LABEL = 'adhoc';
-export const CANDIDATE_LABELS = ['feature-request', 'bug'];
+export const BUG_LABEL = 'bug';
+export const CANDIDATE_LABELS = ['feature-request', BUG_LABEL];
+// The incident log lives at the repo root, outside the game folder the agent starts in.
+export const INCIDENT_LOG = 'docs/incident-log.md';
+export const INCIDENT_BRANCH = (issue: number): string => `factory/incident-${issue}`;
 export const NEEDS_INFO_LABEL = 'needs-info';
 export const FACTORY_MARK = '<!-- roam-factory -->'; // last line of every factory comment, so a factory comment differs from a member's
 export const QUESTIONS_HEADING = '## Questions from the factory';
