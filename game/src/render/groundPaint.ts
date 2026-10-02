@@ -12,7 +12,7 @@ export const TERRAIN_MARGIN = 10; // tiles of dim ground drawn past the map edge
 const TYPE_JITTER = 0.6; // tiles; jittered sampling frays the blend between tile types
 const JITTER_GRID = 6; // samples per tile for the type-jitter hash, independent of paint resolution
 const PATCH_TILES = 24; // tiles per cell of the slow noise that lays ochre and rust patches over open desert
-const PATCH_MIX = 0.3; // strongest mix toward a patch color, at full desert weight
+const PATCH_MIX = 0.5; // strongest mix toward a patch color, at full desert weight
 const PATCH_OFFSET = 41.5; // lattice cells; keeps the patch noise from sharing corners with the other ground noise
 
 // How much each ground type takes the ochre and rust patches. Farmland, old highways and pools keep their color.

@@ -11,7 +11,7 @@ Recognizable destinations interrupt long stretches of damaged farmland and rough
 
 ## Materials and shapes
 
-- Warm sand and stone form the background. Winding roads retain broad rises and falls instead of flattening the whole basin.
+- Warm sand and stone form the background. Open desert shifts between ochre and rust in slow, low-contrast patches, and slopes read as low-poly facets under a strong sun. Rust-brown roads fray into gravel shoulders with stones along them. Winding roads retain broad rises and falls instead of flattening the whole basin.
 - Cold metal identifies ship debris and machinery. Fallen Sun has an open, faceted hull, exposed ribs, detached plates, and engine remains. Nose combines hull shelter with buildings.
 - Muted green identifies surviving vegetation. Old Orchard has planted rows, dead branching trunks, irrigation lines, fencing, and a ruined building.
 - Blue-green marks water at Bowl, Dustwell, Green Pit, and South Lock. Glass Flats uses shallow angular fragments rather than a building.
