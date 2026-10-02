@@ -1,0 +1,77 @@
+import { describe, expect, it } from 'vitest';
+import { REGION } from '../data/region';
+import { TERRITORIES } from '../data/territory';
+import { applyHazards } from './hazard';
+import { route } from './path';
+import { addVehicle, emptyWorld } from './testkit';
+import { getResources } from './resources';
+import type { World } from './types';
+import { dist } from './vec';
+
+const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
+const hazard = TERRITORIES['fallen-sun'].hazard!;
+const outsidePos = { x: sun.pos.x + hazard.radius + 3, y: sun.pos.y };
+
+function worldAt(pos: { x: number; y: number }): World {
+  const w = emptyWorld(pos);
+  w.player.health = 100;
+  return w;
+}
+
+describe('the reactor hazard', () => {
+  it('costs driver health inside the zone, stops at the floor and spares trucks outside', () => {
+    const w = worldAt(sun.pos);
+    applyHazards(w);
+    expect(w.player.health).toBe(100 - hazard.healthPerTurn);
+    for (let i = 0; i < 30; i++) applyHazards(w);
+    expect(w.player.health).toBe(hazard.floor);
+    const out = worldAt(outsidePos);
+    applyHazards(out);
+    expect(out.player.health).toBe(100);
+  });
+
+  it('leaves health already below the floor alone', () => {
+    const w = worldAt(sun.pos);
+    w.player.health = hazard.floor - 10;
+    applyHazards(w);
+    expect(w.player.health).toBe(hazard.floor - 10);
+  });
+
+  it('hurts an NPC truck by the same rule, and spares its parts', () => {
+    const w = worldAt(outsidePos);
+    const npc = addVehicle(w, 'scavengers', 'scout', [], sun.pos);
+    npc.resources = { money: 0, fuel: 10, supplies: 10, health: 100 };
+    const hp = npc.items.map((i) => (i.kind === 'part' ? i.part.hp : 0));
+    applyHazards(w);
+    expect(getResources(w, npc).health).toBe(100 - hazard.healthPerTurn);
+    expect(npc.items.map((i) => (i.kind === 'part' ? i.part.hp : 0))).toEqual(hp);
+    expect(w.player.health).toBe(100);
+  });
+
+  it('tells the player once for each entry, and uses no numbers', () => {
+    const w = worldAt(sun.pos);
+    const me = w.vehicles[0];
+    me.trail = [{ ...outsidePos, heading: 0 }];
+    applyHazards(w);
+    const lines = w.events.filter((e) => e.t === 'info');
+    expect(lines).toHaveLength(1);
+    expect(lines[0].t === 'info' && /\d/.test(lines[0].text)).toBe(false);
+    me.trail = [{ ...sun.pos, heading: 0 }];
+    applyHazards(w);
+    expect(w.events.filter((e) => e.t === 'info')).toHaveLength(1);
+  });
+
+  it('keeps routes out of the zone', () => {
+    const w = worldAt(outsidePos);
+    const far = { x: sun.pos.x - hazard.radius - 3, y: sun.pos.y };
+    const path = route(w, outsidePos, far, 0.6, []);
+    let at = outsidePos;
+    for (const p of path) {
+      for (let k = 0; k <= 20; k++) {
+        const s = { x: at.x + ((p.x - at.x) * k) / 20, y: at.y + ((p.y - at.y) * k) / 20 };
+        expect(dist(s, sun.pos)).toBeGreaterThanOrEqual(hazard.radius - 0.01);
+      }
+      at = p;
+    }
+  });
+});

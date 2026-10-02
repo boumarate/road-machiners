@@ -2,7 +2,7 @@
 // so nothing here blocks. Blender models come from tools/blender/; each script's docstring gives its size.
 
 import * as THREE from 'three';
-import { REGION, type LocationDef, type SiteEdge, type TownDef } from '../../data/region';
+import { REGION, type SiteLocationDef, type SiteEdge, type TownDef } from '../../data/region';
 import { TERRAIN } from '../../data/terrain';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
@@ -15,9 +15,7 @@ import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
 
 const S = PHYSICS.metersPerTile;
-type Site = TownDef | LocationDef;
-// The Fallen Sun hull model fits a 20 m radius around its origin, so it scales to fill the site edge.
-const HULL_RADIUS = 20;
+type Site = TownDef | SiteLocationDef;
 // Nose's 48 m bow from the 12 m cone.
 const NOSE_SCALE = 4;
 // The bridge model's 32 m by 7 m deck is stretched to the sim deck. Its trusses stand 2.4 m over the
@@ -471,11 +469,6 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
     case 'canyon-bridge': buildBridge(b, t); break;
     case 'dustwell': buildOasis(b, true); break;
     case 'green-pit': buildOasis(b, false); break;
-    case 'fallen-sun':
-      b.addModel('ship_hull', 0, 0, -0.2, (site.radius * S) / HULL_RADIUS);
-      b.addBox(-10, 16, 25, 0.3, 15, PAL.metalLight, 0.6, 0.3);
-      for (const z of [-8, 8]) b.addTank(-33, z, 3, 5, PAL.rust.dark);
-      break;
     case 'glass-flats': b.addModel('glass_flats', 0, 0); break;
     case 'nose': case 'bowl': buildSettlement(b, site); break;
     case 'burnt-convoy': case 'podfield': case 'ridge-wrecks': case 'salvage-yard': buildWrecks(b, site.id); break;
@@ -492,15 +485,17 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
+// A territory has no edge, gates or models of its own: its props are baked.
+const SITES = [...REGION.towns, ...REGION.locations.filter((l): l is SiteLocationDef => l.kind !== 'territory')];
 
 // Every site model under one group, for inspection.
 export function buildSites(t: Terrain): THREE.Group {
   const group = new THREE.Group();
-  for (const site of [...REGION.towns, ...REGION.locations]) group.add(buildSite(t, site));
+  for (const site of SITES) group.add(buildSite(t, site));
   return group;
 }
 
 // Registers every site model with the scope at its site.
 export function addSites(t: Terrain, scope: RenderScope): void {
-  for (const site of [...REGION.towns, ...REGION.locations]) scope.add(buildSite(t, site), site.pos, site.radius);
+  for (const site of SITES) scope.add(buildSite(t, site), site.pos, site.radius);
 }

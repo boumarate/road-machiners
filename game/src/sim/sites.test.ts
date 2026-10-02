@@ -4,7 +4,8 @@ import { clickOrder } from './steering';
 import { canUseSite, nearestPad, siteGates, sitePads, siteUnder } from './sites';
 import { dist } from './vec';
 
-const SITES = [...REGION.towns, ...REGION.locations];
+// A territory is open ground: it has no gates or pads.
+const SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 const PAD = REGION.sites.pad;
 
 describe('site gates and pads', () => {
@@ -17,8 +18,8 @@ describe('site gates and pads', () => {
   });
 
   it('gives towns and large locations a gate per road, and small locations one gate', () => {
-    const large = REGION.locations.filter((l) => l.radius >= REGION.sites.multiGateRadius);
-    expect(large.map((l) => l.id).sort()).toEqual(['fallen-sun', 'orchard']);
+    const large = SITES.filter((l) => 'kind' in l && l.radius >= REGION.sites.multiGateRadius);
+    expect(large.map((l) => l.id).sort()).toEqual(['orchard']);
     for (const site of SITES) {
       const roads = REGION.roads.filter((road) => road.some((p) => dist(p, site.pos) <= site.radius)).length;
       if (large.includes(site as never) || REGION.towns.includes(site as never)) expect(siteGates(site).length, site.id).toBe(roads);
@@ -27,7 +28,7 @@ describe('site gates and pads', () => {
   });
 
   it('lets no road pass through a location', () => {
-    for (const site of REGION.locations) {
+    for (const site of SITES) {
       for (const road of REGION.roads) {
         const inside = road.map((p) => dist(p, site.pos) <= site.radius);
         if (!inside.some(Boolean)) continue;
@@ -92,8 +93,8 @@ describe('clicks on a site', () => {
   });
 
   it('turns a click inside a site into a stop at its pad nearest the truck', () => {
-    const ship = REGION.locations.find((l) => l.id === 'fallen-sun')!;
-    const pad = sitePads(ship)[1];
+    const ship = REGION.locations.find((l) => l.id === 'orchard')!;
+    const pad = sitePads(ship)[1] ?? sitePads(ship)[0];
     const from = { x: pad.x + 20 * (pad.x - ship.pos.x) / dist(pad, ship.pos), y: pad.y + 20 * (pad.y - ship.pos.y) / dist(pad, ship.pos) };
     expect(clickOrder(ship.pos, false, { pos: from, order: null })).toEqual({ kind: 'stopAt', dest: pad });
   });
@@ -102,5 +103,18 @@ describe('clicks on a site', () => {
     const dest = { x: 5, y: 5 };
     expect(siteUnder(dest)).toBeNull();
     expect(clickOrder(dest, false, { pos: { x: 1, y: 1 }, order: null })).toEqual({ kind: 'through', dest });
+  });
+});
+
+describe('territories', () => {
+  const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
+  const rim = { x: fallenSun.pos.x + fallenSun.radius, y: fallenSun.pos.y };
+
+  it('have no gates, pads or edge, and no truck can use one', () => {
+    expect(fallenSun.kind).toBe('territory');
+    expect(siteGates(fallenSun)).toEqual([]);
+    expect(sitePads(fallenSun)).toEqual([]);
+    expect(canUseSite(rim, fallenSun)).toBe(false);
+    expect(canUseSite(fallenSun.pos, fallenSun)).toBe(false);
   });
 });

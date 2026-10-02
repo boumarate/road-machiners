@@ -1,6 +1,6 @@
 // Which town or location the player is at. Trucks never enter a site: each is used from a pad outside one of its gates.
 
-import { REGION, type LocationDef, type TownDef } from '../data/region';
+import { REGION, type LocationDef, type TerritoryDef, type TownDef } from '../data/region';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
 import type { World } from './types';
@@ -8,12 +8,14 @@ import { dist, type Vec } from './vec';
 
 export type Site = TownDef | LocationDef;
 
-const SITES: readonly Site[] = [...REGION.towns, ...REGION.locations];
+// Sites a truck is stopped at. A territory is open ground, so a click in it is an ordinary drive.
+const SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 const GATES = new Map<string, Vec[]>();
 const PADS = new Map<string, Vec[]>();
 
 // Gates lie on the site edge where roads cross it, in road order.
 export function siteGates(site: Site): Vec[] {
+  if (isTerritory(site)) return [];
   let gates = GATES.get(site.id);
   if (!gates) {
     const crossings = REGION.roads.flatMap((road) => road.slice(1).flatMap((b, i) => edgeCrossings(road[i], b, site.pos, site.radius)));
@@ -27,12 +29,18 @@ export function siteGates(site: Site): Vec[] {
   return gates;
 }
 
+// A territory is open ground: no edge, gates or pads. src/sim/territory.ts owns its rules.
+export function isTerritory(site: Site): site is TerritoryDef {
+  return 'kind' in site && site.kind === 'territory';
+}
+
 function hasGatePerRoad(site: Site): boolean {
   return !('kind' in site) || site.radius >= REGION.sites.multiGateRadius;
 }
 
 // One pad center per gate, in gate order. Each pad lies outside the site with its inner edge on the gate.
 export function sitePads(site: Site): Vec[] {
+  if (isTerritory(site)) return [];
   let pads = PADS.get(site.id);
   if (!pads) {
     const out = site.radius + REGION.sites.pad.length / 2;
@@ -46,6 +54,7 @@ export function sitePads(site: Site): Vec[] {
 }
 
 export function nearestPad(site: Site, from: Vec): Vec {
+  if (isTerritory(site)) throw new Error(`Territory ${site.id} has no pads; use territoryEntries`);
   return sitePads(site).reduce((a, b) => (dist(from, a) <= dist(from, b) ? a : b));
 }
 
@@ -96,7 +105,7 @@ export function nearestTown(world: World): TownDef {
 }
 
 // Points where segment a-b crosses the circle, ordered from a to b.
-function edgeCrossings(a: Vec, b: Vec, c: Vec, r: number): Vec[] {
+export function edgeCrossings(a: Vec, b: Vec, c: Vec, r: number): Vec[] {
   const d = { x: b.x - a.x, y: b.y - a.y };
   const f = { x: a.x - c.x, y: a.y - c.y };
   const A = d.x * d.x + d.y * d.y;

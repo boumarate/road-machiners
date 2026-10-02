@@ -50,7 +50,7 @@ export function isBakedObstacle(o: Obstacle): boolean {
 // Buildings ring each town with gaps where roads leave. Wrecks sit at the convoy, a pond at the oasis.
 function placeSites(world: World): Obstacle[] {
   const S = REGION.sites;
-  const out: Obstacle[] = [...REGION.towns, ...REGION.locations].map((s) => ({ id: `site-${s.id}`, pos: { ...s.pos }, r: s.radius, kind: 'site' }));
+  const out: Obstacle[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')].map((s) => ({ id: `site-${s.id}`, pos: { ...s.pos }, r: s.radius, kind: 'site' }));
   for (const town of REGION.towns) {
     const exits = roadExits(town.pos);
     for (let i = 0; i < S.buildingsPerTown; i++) {
@@ -145,7 +145,7 @@ export type PropPose = { model: PropModel; pos: Vec; yaw: number; scale: PropSca
 export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
-type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk';
+type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'hull_rib' | 'crates' | 'reactor';
 
 const M = PHYSICS.metersPerTile;
 const TURN = Math.PI * 2;
@@ -164,11 +164,16 @@ const LANDMARK_MODELS: Record<LandmarkLook, PropModel> = {
   fence: 'fence',
   junk: 'junk',
   carWreck: 'wreck',
+  hullChunk: 'hull_chunk',
+  hullRib: 'hull_rib',
+  shipCache: 'crates',
+  coreWreck: 'tank_hulk',
+  reactor: 'reactor',
 };
 // Footprint radius in meters each model is built at, for models that scale evenly to their obstacle radius. A
 // fence segment is 4 m long, so its radius is half that. The building model stretches to its footprint instead.
 // The pole, billboard and tank stand at their real size.
-const MODEL_RADIUS: Partial<Record<PropModel, number>> = { crag: 1, silo: 2.5, water_tower: 2, ruin_house: 4.8, gas_station: 7.2, bridge_broken: 6, wreck: 0.7 * M, shack: 3.6, junk: 2.4, fence: 2 };
+const MODEL_RADIUS: Partial<Record<PropModel, number>> = { crag: 1, silo: 2.5, water_tower: 2, ruin_house: 4.8, gas_station: 7.2, bridge_broken: 6, wreck: 0.7 * M, shack: 3.6, junk: 2.4, fence: 2, hull_chunk: 6, hull_rib: 3, crates: 1.5, reactor: 3 };
 const WRECK_RADIUS = 0.7; // tiles, the reference size of the wreck model
 const BUILDING_FILL = 0.78; // share of the obstacle radius a building's footprint fills
 const SHAPE_BOXES = new Map<string, readonly ShapeBox[]>(Object.entries(SHAPES).map(([name, shape]) => [name, shape.boxes]));

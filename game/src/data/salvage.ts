@@ -56,6 +56,15 @@ export const SALVAGE = {
     fuel: [0, 4],
     supplies: [0, 1],
   } as LootTable,
+  // Outer loot spots of a territory: a road wreck's size, with a little more to find.
+  hullScrap: {
+    goods: { scrap: [1, 2] },
+    parts: [0, 1],
+    sparePartChance: 0.1,
+    spareParts: ['mg', 'cage', 'plates', 'flatFour'],
+    fuel: [0, 4],
+    supplies: [0, 1],
+  } as LootTable,
   convoy: {
     goods: { scrap: [1, 3], meds: [0, 1] },
     parts: [1, 2],

@@ -1,5 +1,5 @@
 {
- "format": "2.7",
+ "format": "2.8",
  "shape": {
   "broken": [],
   "dustClouds": [],
@@ -222,6 +222,33 @@
     },
     "id": "string",
     "parts": [],
+    "pos": {
+     "x": "number",
+     "y": "number"
+    },
+    "radius": "number",
+    "supplies": "number"
+   },
+   {
+    "fuel": "number",
+    "goods": {
+     "parts": "number",
+     "scrap": "number"
+    },
+    "id": "string",
+    "parts": [
+     {
+      "defId": "string",
+      "gun": {
+       "ammo": "number",
+       "cooldown": "number",
+       "reloadWork": "number"
+      },
+      "hp": "number",
+      "id": "string",
+      "wear": "number"
+     }
+    ],
     "pos": {
      "x": "number",
      "y": "number"

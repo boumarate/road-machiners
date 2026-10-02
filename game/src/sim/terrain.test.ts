@@ -60,7 +60,7 @@ describe('terrain variety', () => {
       const point = { x: x + 0.5, y: y + 0.5 };
       const kind = t.types[y * t.size + x];
       if (ROAD_INDEX.nearestWithin(point.x, point.y, REGION.roadWidth / 2) < REGION.roadWidth / 2) expect(kind).toBe('road');
-      else if ([...REGION.towns, ...REGION.locations].some((s) => dist(point, s.pos) < s.radius + TERRAIN.types.siteMargin)) expect(kind).toBe('hardpan');
+      else if ([...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')].some((s) => dist(point, s.pos) < s.radius + TERRAIN.types.siteMargin)) expect(kind).toBe('hardpan');
     }
   });
 

@@ -19,6 +19,7 @@ import { knockOutNpc } from './defeat';
 import { chassisDef } from '../data/chassis';
 import { cloneWorld } from './world';
 import { canUseSite, siteGates, sitePads } from './sites';
+import { territoryEntries, territoryOfStock, territorySpots } from './territory';
 import { fuelCap, vehicleStats } from './stats';
 import { heatAt } from './sun';
 import { dist } from './vec';
@@ -291,7 +292,66 @@ describe('NPC activities', () => {
     const { w, npc } = createScavenger();
     planNpcOrders(w);
     expect(topGoal(npc)?.kind).toBe('scavenge');
-    expect(TRAITS.scavenger.salvageSites).toContain(topGoal(npc)?.targetId);
+    const target = topGoal(npc)?.targetId;
+    // A territory is searched at one of its loot spots.
+    const spotOf = w.salvage.find((stock) => stock.id === target && territoryOfStock(stock));
+    expect(spotOf ? 'fallen-sun' : target).toSatisfy((id: string) => TRAITS.scavenger.salvageSites.includes(id));
+  });
+
+  describe('in a territory', () => {
+    // A scavenger that knows only the Fallen Sun, with the player far away.
+    function fallenSunScavenger(at: { x: number; y: number }) {
+      const { w, npc } = createScavenger();
+      npc.pos = { ...at };
+      npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+      const traits = TRAITS.scavenger as { salvageSites: string[] };
+      const saved = traits.salvageSites;
+      traits.salvageSites = ['fallen-sun'];
+      return { w, npc, restore: () => void (traits.salvageSites = saved) };
+    }
+    const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
+    const entry = () => territoryEntries(sun as never)[0];
+
+    it('targets one of its loot spots, and keeps the goal while the spot is out of sight', () => {
+      const { w, npc, restore } = fallenSunScavenger({ x: 10, y: 10 });
+      try {
+        planNpcOrders(w);
+        const goal = topGoal(npc)!;
+        expect(goal.kind).toBe('scavenge');
+        const spot = territorySpots(w, 'fallen-sun').find((s) => s.id === goal.targetId)!;
+        expect(spot).toBeDefined();
+        expect(goal.destination).toEqual(spot.pos);
+        planNpcOrders(w);
+        expect(topGoal(npc)).toBe(goal);
+      } finally {
+        restore();
+      }
+    });
+
+    it('parks beside the spot, searches it and takes its loot', () => {
+      const { w, npc, restore } = fallenSunScavenger({ x: 10, y: 10 });
+      try {
+        planNpcOrders(w);
+        const spot = territorySpots(w, 'fallen-sun').find((s) => s.id === topGoal(npc)!.targetId)!;
+        npc.pos = { x: spot.pos.x + spot.radius + 4, y: spot.pos.y };
+        let next = w;
+        let took = false;
+        for (let turn = 0; turn < 80 && !took; turn++) {
+          next = endTurn(next, testDrive);
+          const me = next.vehicles.find((v) => v.id === npc.id)!;
+          took = (goodsCount(me).scrap ?? 0) > 0;
+        }
+        expect(took).toBe(true);
+      } finally {
+        restore();
+      }
+    });
+
+    it('ends a trip to a territory at its road end, not at its centre', () => {
+      const { w, npc } = createScavenger();
+      const goal: NpcActivity = { kind: 'travel', targetId: sun.id, destination: { ...entry() }, phase: 'travel', reason: 'make a trip to another site' };
+      expect(getActivityDestination(w, npc, goal)).toEqual(entry());
+    });
   });
 
   it('interrupts work for low fuel', () => {
