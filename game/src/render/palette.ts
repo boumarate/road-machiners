@@ -16,6 +16,8 @@ export const PAL = {
   padMark: 0xd86a2a, // worn orange paint around site pads, where trucks stop to use a site
   pebble: 0x9c7c54,
   scrub: [0x6f6a3a, 0x5d5a32, 0x7c7442],
+  brush: [0x4d512b, 0x5f6634, 0x8a8a4a], // desert scrub stems: dark core, olive body, dry lit tips
+  cactus: { body: 0x6b7a3a, shade: 0x4e5a2c }, // short columnar cacti: lit column, shaded column
   rock: { top: 0x9a8a78, side: 0x6e6254, dark: 0x4e453c },
   stone: { top: 0xb08a68, side: 0x84603f, dark: 0x5a3f2c }, // warm sandstone of loose boulders, crags and pebbles
   rust: { top: 0x8a4a2a, side: 0x5e3420, dark: 0x3a2418 },
