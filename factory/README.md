@@ -45,7 +45,7 @@ Triage, design, implementation and testing each comment on their issue when they
 
 A failed or timed-out stage labels its issue `factory-stuck` and records the failure in `failures` in the state file for a day. The factory posts nothing about it, and neither about a tick crash. Hermes's incident watch sees both. Hermes fixes what it can and comments on the issue. It posts in the chat only when the committee must act or decide. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
 
-Hermes manages the factory. A watch job wakes it when an issue gets stuck or the tick crashes. It reads the logs, the state and the chat, then fixes the incident or asks the committee. It has a shell with `gh`, `git` and `jq` as the bot account, and it can edit the factory home. While it edits state, it pauses the factory with the file `$FACTORY_HOME/paused`, and every tick skips.
+Hermes manages the factory. A watch job wakes it when an issue gets stuck or the tick crashes. It reads the logs, the state and the chat, then fixes the incident or asks the committee. It has a shell with `gh`, `git` and `jq` as the bot account, and it can edit the factory home. While it edits state, it pauses the factory with the file `$FACTORY_HOME/paused`, and every tick skips. The one exception is the pause of the update script, whose reason starts with `update to`. While jobs still run and the update has not failed, the tick still removes `needs-info` from a Triage issue that someone answered on GitHub, and does nothing else: no state write, no job, no other label.
 
 ## Visual evidence
 
