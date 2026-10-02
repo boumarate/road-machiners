@@ -1,11 +1,10 @@
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { rmSync, writeFileSync } from 'node:fs';
 import { BRANCH, GAME_DIR, INCIDENT_LOG, OUT_DIR, REVIEW_HEADING, TASK_FILE, type Ctx } from '../types';
-import { agentHome, fillPrompt, fitComment, readOutput, runAgent, workDir } from './common';
+import { BASE_BRANCH, agentHome, fillPrompt, fitComment, readOutput, runAgent, workDir } from './common';
 
 export const PASS_LINE = 'REVIEW_VERDICT: PASS';
 export const FAIL_LINE = 'REVIEW_VERDICT: FAIL';
-const PRINCIPLES = 'docs/architecture/principles.md';
+const PRINCIPLES = `${GAME_DIR}/docs/architecture/principles.md`;
 
 export type Review = { passed: boolean; text: string };
 
@@ -20,16 +19,16 @@ export function parseReview(text: string | null): Review {
 }
 
 // Runs Claude Code's /code-review once over the whole branch, with the incident log and the principles pasted in, so
-// the review cannot skip them.
+// the review cannot skip them. Both come from dev, where incidents land, so a hotfix branch from main gets them too.
 async function reviewRound(ctx: Ctx, issue: number, base: string): Promise<Review> {
-  const clone = workDir(ctx, issue);
-  const home = agentHome(clone, GAME_DIR);
+  const home = agentHome(workDir(ctx, issue), GAME_DIR);
   rmSync(`${home}/${OUT_DIR}/review.md`, { force: true });
   const prompt = fillPrompt('review', {
     issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), base,
-    incidentLog: readFileSync(join(clone, INCIDENT_LOG), 'utf8'), principles: readFileSync(join(home, PRINCIPLES), 'utf8'),
+    incidentLog: await ctx.repo.readFile(BASE_BRANCH, INCIDENT_LOG), principles: await ctx.repo.readFile(BASE_BRANCH, PRINCIPLES),
   });
-  await runAgent(ctx, issue, 'testing', 'review', prompt, { model: ctx.cfg.designModel, skill: '/code-review' });
+  // A review only reads and its file is cleared above, so a resumed job reviews again from the start.
+  await runAgent(ctx, issue, 'testing', 'review', prompt, { model: ctx.cfg.designModel, skill: '/code-review', fresh: true });
   return parseReview(readOutput(home, 'review.md'));
 }
 

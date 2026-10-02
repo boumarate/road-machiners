@@ -91,12 +91,13 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
       },
     },
     repo: {
-      prepareWorkClone: async (_b: string, base: string, dir: string) => {
-        bases.push(`prepare ${base}`);
-        mkdirSync(`${dir}/docs`, { recursive: true });
-        mkdirSync(`${dir}/game/docs/architecture`, { recursive: true });
-        writeFileSync(`${dir}/docs/incident-log.md`, 'ID: R3\nwhat: propsNear scans every prop.\n');
-        writeFileSync(`${dir}/game/docs/architecture/principles.md`, '## 3. Hot code uses an index\n');
+      prepareWorkClone: async (_b: string, base: string, dir: string) => { bases.push(`prepare ${base}`); mkdirSync(dir, { recursive: true }); },
+      // The review reads the incident log and the principles from dev, whatever the card's base.
+      readFile: async (branch: string, path: string) => {
+        if (branch !== 'dev') throw new Error(`readFile from ${branch}`);
+        if (path === 'docs/incident-log.md') return 'ID: R3\nwhat: propsNear scans every prop.\n';
+        if (path === 'game/docs/architecture/principles.md') return '## 3. Hot code uses an index\n';
+        throw new Error(`no file ${path}`);
       },
       fetchFromWork: async () => 'w1',
       untrackFactoryFiles: async () => [],

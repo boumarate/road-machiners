@@ -194,6 +194,7 @@ export interface HostRepo {
   headHash(branch: string): Promise<string>; // short hash
   diff(base: string, branch: string): Promise<string>;
   changedFiles(base: string, branch: string): Promise<string[]>; // files `branch` changed since it split from `base`
+  readFile(branch: string, path: string): Promise<string>; // a file as `branch` holds it. Throws when it is missing.
   hasNewCommits(base: string, branch: string): Promise<boolean>;
   // Runs the steps in order and pushes every changed branch in one atomic push. A conflict throws MergeConflictError before the push.
   merge(steps: MergeStep[]): Promise<void>;

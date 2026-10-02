@@ -7,7 +7,7 @@ import { isAnswered } from '../questions';
 import { resumedStage, roundSession } from '../sessions';
 import { readState } from '../state';
 import { bundleOf } from './bundle';
-import { FACTORY_MARK, BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type CardStage, type Ctx, type FactoryConfig, type Stage } from '../types';
+import { FACTORY_MARK, BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type AgentSession, type CardStage, type Ctx, type FactoryConfig, type Stage } from '../types';
 
 export const BASE_BRANCH = 'dev';
 export const HOTFIX_BASE = 'main';
@@ -126,7 +126,14 @@ export function prepareOutputs(ctx: Ctx, issue: number, home: string): void {
 
 // What a stage may set beyond its stage's defaults. `model` replaces the model the labels pick, like the review's design model.
 // `skill` is a slash command to run first, and `effort` a reasoning effort for claude --effort.
-export type AgentExtras = { model?: string; skill?: string; effort?: string };
+// `fresh` starts a new session even in a resumed job, for a read-only round that is safe to run again and that clears its own output first.
+export type AgentExtras = { model?: string; skill?: string; effort?: string; fresh?: boolean };
+
+function agentSession(ctx: Ctx, issue: number, stage: CardStage, round: string, extras: AgentExtras): AgentSession {
+  const session = roundSession(ctx.cfg.home, issue, round, extras.fresh !== true && isResuming(ctx, issue));
+  if (session.resume) ctx.log(stage, issue, `resuming round ${round}, session ${session.id}`);
+  return session;
+}
 
 // `round` names the agent run inside the job. A stage with two runs gives each its own, so a resume finds the right session.
 export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round: string, prompt: string, extras: AgentExtras = {}): Promise<void> {
@@ -134,8 +141,7 @@ export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round:
   const model = extras.model ?? modelFor(ctx.cfg, stage, labels);
   ctx.log(stage, issue, `agent model ${model}`);
   const openNetwork = await useOpenNetwork(ctx, stage, issue);
-  const session = roundSession(ctx.cfg.home, issue, round, isResuming(ctx, issue));
-  if (session.resume) ctx.log(stage, issue, `resuming round ${round}, session ${session.id}`);
+  const session = agentSession(ctx, issue, stage, round, extras);
   const full = session.resume ? RESUME_NOTE : `${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`;
   // A resumed round already ran its skill, so only the note goes in.
   const skill = session.resume ? undefined : extras.skill;

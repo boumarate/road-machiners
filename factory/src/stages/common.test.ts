@@ -82,6 +82,18 @@ describe('runAgent sessions', () => {
     expect(marked.runs[1].prompt).toMatch(/^fix\n\n/);
   });
 
+  it('starts a fresh round with the full prompt and its skill when the round asks for it, even in a resumed job', async () => {
+    const first = markedCtx([]);
+    await runAgent(first.ctx, 7, 'testing', 'review', 'review it', { skill: '/code-review' });
+    saved(first.runs[0]);
+    const marked = markedCtx([7]);
+    await runAgent(marked.ctx, 7, 'testing', 'review', 'review it', { skill: '/code-review', fresh: true });
+    expect(marked.runs[0].session?.resume).toBe(false);
+    expect(marked.runs[0].session?.id).not.toBe(first.runs[0].session?.id);
+    expect(marked.runs[0].skill).toBe('/code-review');
+    expect(marked.runs[0].prompt).toMatch(/^review it\n\n/);
+  });
+
   it('never resumes the session of an unmarked issue', async () => {
     const first = markedCtx([]);
     await runAgent(first.ctx, 8, 'design', 'design', 'p');

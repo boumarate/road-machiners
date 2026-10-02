@@ -53,16 +53,16 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, workDir(ctx, issue));
   prepareOutputs(ctx, issue, home);
   const merged = await mergeBase(ctx, issue, base, home);
-  let evidence = await agentRound(ctx, issue, 'test', base);
+  let evidence = await agentRound(ctx, issue, 'test', 'test', base);
   await requireBaseMerged(ctx, issue, base, merged);
   // A fix round changes the code, so its evidence replaces the first round's.
-  if (!(await reviewGate(ctx, issue, base, async () => { evidence = await agentRound(ctx, issue, 'test-fix', base); }))) return;
+  if (!(await reviewGate(ctx, issue, base, async () => { evidence = await agentRound(ctx, issue, 'test-fix', 'review-fix', base); }))) return;
   let build = await ctx.repo.headHash(BRANCH(issue));
   const failure = await runChecks(ctx, issue, base, build);
   // The agent gets one round to fix what the factory's own checks found. A second failure stops the card.
   if (failure !== null) {
     writeFileSync(`${home}/${OUT_DIR}/check-failure.md`, failure);
-    evidence = await agentRound(ctx, issue, 'test-fix', base);
+    evidence = await agentRound(ctx, issue, 'test-fix', 'checks-fix', base);
     build = await ctx.repo.headHash(BRANCH(issue));
     const again = await runChecks(ctx, issue, base, build);
     if (again !== null) throw new Error(`The factory checks failed twice.\n${again}`);
@@ -106,8 +106,9 @@ async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: 
 }
 
 // Returns the evidence of the round, checked against the branch head the round left. A round that changed code must capture again.
-async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'test-fix', base: string): Promise<Evidence> {
-  await runAgent(ctx, issue, 'testing', prompt, fillPrompt(prompt, { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
+// `round` names the session, so the review's fix and the checks' fix each resume their own conversation.
+async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'test-fix', round: 'test' | 'review-fix' | 'checks-fix', base: string): Promise<Evidence> {
+  await runAgent(ctx, issue, 'testing', round, fillPrompt(prompt, { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   throwIfNeedsCommittee(home);
   readApproval(home);
