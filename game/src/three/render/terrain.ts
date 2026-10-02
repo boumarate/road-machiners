@@ -72,7 +72,8 @@ export type TerrainChunk = {
 // which greys out the ground per corner. Roads are part of the ground material.
 export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
   const chunks: TerrainChunk[] = [];
-  const material = new THREE.MeshLambertMaterial({ map: groundTexture(w) });
+  // Flat shading lights each ground triangle by its own face, so slopes read as low-poly facets.
+  const material = new THREE.MeshLambertMaterial({ map: groundTexture(w), flatShading: true });
   drawRoads(material, mapCanvas(w));
   for (let y = 0; y < w.size; y += TERRAIN_CHUNK)
     for (let x = 0; x < w.size; x += TERRAIN_CHUNK) {
