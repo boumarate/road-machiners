@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { START_KITS } from '../data/start';
 import { PHYSICS } from '../data/physics';
-import { boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propPose, propReach, propShape, segmentCrossesBox } from './mapgen';
+import { boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propPose, propReach, propShape, segmentCrossesBox, touchesObstacle } from './mapgen';
 import { ROAD_INDEX } from './road-index';
 import type { Obstacle } from './types';
 import { dist } from './vec';
@@ -18,6 +18,8 @@ const prop = (kind: BakedProp['kind'], x: number, extra: Partial<BakedProp> = {}
 function mapWith(props: BakedProp[]): BakedMap {
   return { ...TEST_MAP, props };
 }
+
+const isFortPiece = (o: Obstacle) => o.kind === 'landmark' && o.look.startsWith('fort');
 
 describe('baked map obstacles', () => {
   it('turns rocks into rock obstacles and other props into landmarks, with ids by prop order', () => {
@@ -100,7 +102,8 @@ describe('world from the baked map', () => {
 
   it('keeps every baked landmark off every road surface and out of every site', () => {
     const sites = [...REGION.towns, ...REGION.locations];
-    const landmarks = baked.filter((o): o is Landmark => o.kind === 'landmark');
+    // Fortress pieces make up the site edge and its gates, which cross roads. src/sim/fortress.test.ts holds them to their circle.
+    const landmarks = baked.filter((o): o is Landmark => o.kind === 'landmark' && !isFortPiece(o));
     expect(landmarks.length).toBeGreaterThan(0);
     for (const o of landmarks) {
       const reach = REGION.roadWidth / 2 + o.r;
@@ -115,7 +118,9 @@ describe('world from the baked map', () => {
     // little, but the segments only touch. The map stores positions as float32, off by up to 6e-5 tiles at x = 600.
     const ends = (o: Obstacle) => (o.kind === 'landmark' && o.look === 'fence' ? [1, -1].map((k) => ({ x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) })) : []);
     const touching = (a: Obstacle, b: Obstacle) => ends(a).some((p) => ends(b).some((q) => dist(p, q) < 1e-4));
-    const overlaps = baked.flatMap((o) => all.filter((other) => other.id !== o.id && dist(o.pos, other.pos) < o.r + other.r - 1e-6 && !touching(o, other)).map((other) => `${o.id} ${other.id}`));
+    // Fortress pieces meet end to end and share their joints, so only the ones of another kind count. A long wall
+    // leaves its circle mostly empty, so its boxes decide.
+    const overlaps = baked.flatMap((o) => all.filter((other) => other.id !== o.id && !(isFortPiece(o) && isFortPiece(other)) && (isFortPiece(o) ? touchesObstacle(o, other.pos, other.r) : isFortPiece(other) ? touchesObstacle(other, o.pos, o.r) : dist(o.pos, other.pos) < o.r + other.r - 1e-6) && !touching(o, other)).map((other) => `${o.id} ${other.id}`));
     expect(overlaps).toEqual([]);
   });
 

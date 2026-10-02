@@ -27,6 +27,11 @@ const PROP_LOOKS = {
   fence: { color: 0xf4ecd0, shape: 'rail' },
   junk: { color: 0xc03890, shape: 'disc' },
   carWreck: { color: 0x2a2a70, shape: 'long' },
+  fortWall: { color: 0xd8d0b8, shape: 'rail' },
+  fortTower: { color: 0xb8a888, shape: 'disc' },
+  fortGate: { color: 0xe05030, shape: 'long' },
+  fortBastion: { color: 0xb8a888, shape: 'box' },
+  fortInner: { color: 0xe05030, shape: 'long' },
 };
 const DRAW_ORDER = Object.keys(PROP_LOOKS);
 const COLORS = TYPE_IDS.map((id) => TERRAIN_TYPES[id].color);

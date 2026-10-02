@@ -171,6 +171,17 @@ function withGaveUp_6_7(vehicle: SavedJson): SavedJson {
   return { ...vehicle, defeat: { ...defeat, gaveUp: defeat.phase === 'out' && ((cab?.part?.hp as number | undefined) ?? 0) > 0 } };
 }
 
+// Old saves hold a circle for each of these sites and a ring of buildings for Bowl and Nose. The sites are fortresses now:
+// their walls come from the map file, and the town houses from the render.
+const FORTRESS_OBSTACLES_7_8 = new Set(
+  ['bowl', 'nose', 'dustwell', 'green-pit', 'pump-station', 'granary', 'salvage-yard', 'south-lock', 'scrapjaw', 'kiln'].map((id) => `site-${id}`),
+);
+
+function isGoneObstacle_7_8(o: SavedJson): boolean {
+  const id = o.id as string;
+  return FORTRESS_OBSTACLES_7_8.has(id) || id.startsWith('bld-bowl-') || id.startsWith('bld-nose-');
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -221,6 +232,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     vehicles: (world.vehicles as SavedJson[]).map(withGaveUp_6_7),
     removed: (world.removed as SavedJson[]).map(withGaveUp_6_7),
   }),
+  // 7 to 8: the fortress sites lose their circle obstacle, and Bowl and Nose their building rings.
+  (world) => ({ ...world, obstacles: (world.obstacles as SavedJson[]).filter((o) => !isGoneObstacle_7_8(o)) }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

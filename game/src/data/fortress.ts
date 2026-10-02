@@ -28,8 +28,10 @@ export const FORTRESS = {
   wallDepth: 0.75, // wall thickness, 3 m. Each wall reaches half of it past both ends, so joints close.
   stretch: [0.6, 1.6] as [number, number], // allowed wall length as a share of wallLength
   towerSize: 1.5, // square tower footprint, 6 m
+  bastionBack: 0.4, // a bastion model's tip reaches 6.4 m past its origin. It stands this far back from the corner, so the tip stays in the circle.
   bastionSize: 1.5, // square footprint of a star point bastion, 6 m
   gate: { width: 5, depth: 2.5 }, // gatehouse footprint, width along the wall and depth out of the site
+  gateFlare: 0.08, // how far a gatehouse model's plinth and door detail reach past its outer face, 0.32 m. Its face stands this far inside the circle.
   innerWidth: 3, // inner gate in the curtain behind a barbican, along the wall. Its depth is wallDepth.
   circleTowerEvery: 5, // circle wall sections between towers
   starPoints: 5,

@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { REGION, type LocationDef, type SiteEdge, type TownDef } from '../../data/region';
 import { FORTRESS_SITES } from '../../data/fortress';
+import { insideCurtain } from '../../mapgen/fortress';
 import { TERRAIN } from '../../data/terrain';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
@@ -167,16 +168,28 @@ function buildOrchard(b: SiteBuilder): void {
   b.addRuin(0, 12.5, 6, 4);
 }
 
+// Whether a box of width w and depth d centered at (x, z) from the site lies inside the curtain, off its walls.
+function fitsCurtain(site: Site, x: number, z: number, w: number, d: number): boolean {
+  return [-1, 1].every((i) => [-1, 1].every((j) => insideCurtain(site, { x: site.pos.x + x + (i * w) / 2, y: site.pos.y + z + (j * d) / 2 })));
+}
+
+// Whether a house may stand at (x, z): inside the curtain, off the open center and off the roads.
+function isHomeSpot(site: Site, x: number, z: number, limit: number): boolean {
+  const layout = REGION.settlement;
+  if (Math.hypot(x, z) > limit) return false;
+  if (site.id === 'bowl' ? Math.hypot(x, z) < 9 : Math.abs(x) < 21 && Math.abs(z) < 9) return false;
+  if (!fitsCurtain(site, x, z, layout.houseWidth + 0.3, layout.houseDepth + 0.3)) return false;
+  const pos = { x: site.pos.x + x, y: site.pos.y + z };
+  return !REGION.roads.some((road) => road.some((point, i) => i > 0 && segmentDist(pos, road[i - 1], point) < REGION.roadWidth / 2 + layout.houseWidth));
+}
+
 function buildSettlement(b: SiteBuilder, site: Site): void {
   const layout = REGION.settlement;
   const limit = site.radius - layout.houseWidth - 0.3;
   let homes = 0;
   for (let x = -limit; x <= limit; x += layout.streetSpacing) {
     for (let z = -limit; z <= limit; z += layout.streetSpacing) {
-      if (Math.hypot(x, z) > limit) continue;
-      if (site.id === 'bowl' ? Math.hypot(x, z) < 9 : Math.abs(x) < 21 && Math.abs(z) < 9) continue;
-      const pos = { x: site.pos.x + x, y: site.pos.y + z };
-      if (REGION.roads.some((road) => road.some((point, i) => i > 0 && segmentDist(pos, road[i - 1], point) < REGION.roadWidth / 2 + layout.houseWidth))) continue;
+      if (!isHomeSpot(site, x, z, limit)) continue;
       const h = layout.houseHeights[homes % layout.houseHeights.length];
       const w = layout.houseWidth;
       const d = layout.houseDepth;
@@ -380,8 +393,8 @@ function buildPump(b: SiteBuilder): void {
 }
 
 function buildLock(b: SiteBuilder): void {
-  for (const x of [-2, 2]) b.addBox(x, 0, 0.6, 1.1, 8, PAL.wall.side);
-  b.addBox(0, 0, 3.6, 0.05, 8, PAL.water);
+  for (const x of [-1.6, 1.6]) b.addBox(x, 0, 0.6, 1.1, 3.8, PAL.wall.side);
+  b.addBox(0, 0, 2.6, 0.05, 3.8, PAL.water);
   // The gate wall runs along the model's Y, so a quarter turn sets it across the channel.
   b.addModel('lock_gate', 0, 0, Math.PI / 2);
   b.addRuin(3.7, 0, 1.7, 2);
@@ -464,10 +477,39 @@ function buildCamp(b: SiteBuilder, id: string): void {
   b.addModel('crates', Math.cos(turn + 5.2) * 3.5, Math.sin(turn + 5.2) * 3.5, turn);
 }
 
-// Fortress sites stand behind baked curtain pieces and need no edge of their own.
-function closeEdge(b: SiteBuilder, site: Site): void {
-  if (site.id in FORTRESS_SITES) return;
-  addWall(b, site, edgeStyle(site));
+// Fortress sites stand behind baked curtain pieces and need no edge of their own, only an interior inside them.
+function closeSite(b: SiteBuilder, site: Site): void {
+  if (site.id in FORTRESS_SITES) pullInside(site, b.root);
+  else addWall(b, site, edgeStyle(site));
+}
+
+// Whether every vertex of the object lies inside the site's curtain.
+function insideSiteCurtain(site: Site, obj: THREE.Object3D): boolean {
+  const v = new THREE.Vector3();
+  let inside = true;
+  obj.updateMatrixWorld(true);
+  obj.traverse((o) => {
+    if (!(o instanceof THREE.Mesh) || !inside) return;
+    const pos = o.geometry.getAttribute('position');
+    for (let i = 0; i < pos.count && inside; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      inside = insideCurtain(site, { x: v.x / S, y: v.z / S });
+    }
+  });
+  return inside;
+}
+
+// A fortress interior was laid out for the whole circle. Each piece moves toward the center, by the least step that
+// puts it inside the curtain, so the arrangement stays and no piece touches a wall.
+function pullInside(site: Site, root: THREE.Group): void {
+  for (const child of root.children) {
+    const home = child.position.clone();
+    const cx = site.pos.x * S;
+    const cz = site.pos.y * S;
+    for (let k = 1; k >= 0 && !insideSiteCurtain(site, child); k -= 0.05) {
+      child.position.set(cx + (home.x - cx) * k, home.y, cz + (home.z - cz) * k);
+    }
+  }
 }
 
 function buildSite(t: Terrain, site: Site): THREE.Group {
@@ -491,7 +533,7 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
     case 'scrapjaw': case 'kiln': buildCamp(b, site.id); break;
     default: throw new Error(`Missing landmark model for ${site.id}`);
   }
-  closeEdge(b, site);
+  closeSite(b, site);
   // Site models never move after they are built.
   b.root.traverse((o) => {
     o.updateMatrix();

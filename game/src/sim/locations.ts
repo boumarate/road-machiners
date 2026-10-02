@@ -15,19 +15,20 @@ import { inCombat } from './combat';
 import { startJob } from './jobs';
 import { beginSearch } from './search';
 import { practice } from './progress';
-import { locationAt, townAt } from './sites';
+import { isFortress, locationAt, townAt } from './sites';
 import type { GridItem, PartInstance, SalvageStock, Vehicle, World } from './types';
 import { tileCenter } from './vision';
 import { dist, type Vec } from './vec';
 import { playerCommand } from './world';
 import { suppliesCap } from './stats';
 
-// A site is discovered once the player sees any tile inside it. Buildings and wrecks can hide the center.
+// A site is discovered once the player sees any tile inside it. Buildings and wrecks can hide the center, and a
+// fortress curtain hides all of it, so a fortress is found from any tile as far out as its pads reach.
 export function discoverSites(world: World): void {
   for (const s of [...REGION.towns, ...REGION.locations]) {
     if (
       world.player.discovered.includes(s.id) ||
-      !seesArea(world, s.pos, s.radius)
+      !seesArea(world, s.pos, s.radius + (isFortress(s) ? REGION.sites.pad.length : 0))
     )
       continue;
     discoverSite(world, s);

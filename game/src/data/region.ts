@@ -333,10 +333,6 @@ export const REGION = {
     maxTries: 20000,
   },
   sites: {
-    buildingsPerTown: 10,
-    buildingRing: [0.62, 0.82] as [number, number], // buildings fit inside the non-drivable town radius
-    buildingRadius: [0.75, 1.2] as [number, number],
-    roadGapAngle: 0.38, // radians kept clear on each side of a road leaving a town
     convoyWrecks: [
       { x: -2.6, y: 0.6 },
       { x: 0.8, y: -2.6 },

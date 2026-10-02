@@ -12,7 +12,10 @@
 
 import { FORTRESS, FORTRESS_SITES, type FortressSite } from '../data/fortress';
 import { siteGates, type Site } from '../sim/sites';
-import { bearing, DEG, dist, type Vec } from '../sim/vec';
+import { bearing, DEG, dist, segmentDist, type Vec } from '../sim/vec';
+import { REGION } from '../data/region';
+import type { BakedProp, PropKind } from '../sim/terrain';
+import type { MapDraft } from './bake';
 
 export type FortressKind = 'wall' | 'tower' | 'gate' | 'bastion' | 'inner';
 // r is half the piece's length along its model +x. For a wall that is half its stretched length.
@@ -28,6 +31,20 @@ type Run = { points: Vec[]; corners: (number | null)[] };
 
 export function fortressOutline(site: Site): Vec[] {
   return outlineCorners(site).map((c) => c.pos);
+}
+
+// Whether a point lies inside the site's curtain, at least inset tiles from every wall line. Interiors keep half a
+// wall depth clear, so a model never pokes into the wall.
+export function insideCurtain(site: Site, p: Vec, inset: number = FORTRESS.wallDepth / 2): boolean {
+  const outline = fortressOutline(site);
+  let inside = false;
+  for (let i = 0, j = outline.length - 1; i < outline.length; j = i++) {
+    const a = outline[i];
+    const b = outline[j];
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+    if (segmentDist(p, a, b) < inset) return false;
+  }
+  return inside;
 }
 
 export function fortressPieces(site: Site): FortressPiece[] {
@@ -50,6 +67,32 @@ function cornerPieces(site: Site, corners: Corner[], houses: Rect[]): FortressPi
     const size = c.piece === 'tower' ? FORTRESS.towerSize : FORTRESS.bastionSize;
     return [{ kind: c.piece, pos: c.pos, yaw: bearing(site.pos, c.pos) + Math.PI / 2, r: size / 2 }];
   });
+}
+
+const PROP_KIND: Record<FortressKind, PropKind> = { wall: 'fortWall', tower: 'fortTower', gate: 'fortGate', bastion: 'fortBastion', inner: 'fortInner' };
+
+// The last layer: each fortress site's pieces as baked props. group is the site's place in the towns and
+// locations and step the piece's place in fortressPieces(), so every prop id is unique and stable.
+export function fortressLayer(_seed: number, d: MapDraft): MapDraft {
+  const sites = [...REGION.towns, ...REGION.locations];
+  const props = sites.flatMap((site, group) => (site.id in FORTRESS_SITES ? fortressPieces(site).map((piece, step) => bakedPiece(site, piece, group, step)) : []));
+  return { ...d, props: [...d.props, ...props] };
+}
+
+// A piece's prop. The gate model faces +x with its origin on the outer face, the inner gate and the bastion also
+// run along +x across the curtain, and the layout's yaw runs along the wall.
+function bakedPiece(site: Site, piece: FortressPiece, group: number, step: number): BakedProp {
+  const base = { kind: PROP_KIND[piece.kind], r: piece.r, group, step };
+  if (piece.kind === 'gate') {
+    const yaw = piece.yaw - Math.PI / 2;
+    return { ...base, pos: along(piece.pos, { x: Math.cos(yaw), y: Math.sin(yaw) }, FORTRESS.gate.depth / 2 - FORTRESS.gateFlare), yaw };
+  }
+  if (piece.kind === 'bastion') {
+    const yaw = piece.yaw - Math.PI / 2;
+    return { ...base, pos: along(piece.pos, { x: Math.cos(yaw), y: Math.sin(yaw) }, -FORTRESS.bastionBack), yaw };
+  }
+  if (piece.kind === 'inner') return { ...base, pos: piece.pos, yaw: piece.yaw - Math.PI / 2 };
+  return { ...base, pos: piece.pos, yaw: piece.yaw };
 }
 
 // The four footprint corners of a piece, counterclockwise.
