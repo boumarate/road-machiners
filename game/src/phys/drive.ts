@@ -77,9 +77,10 @@ export function captureDrive(drive: Drive): DriveSnapshot {
   return { ...structuredClone(handles), snapshot: world.takeSnapshot() };
 }
 
+// Each Drive and DriveSnapshot owns its handle records, so a sync of a restored drive never reaches the snapshot it came from.
 export function restoreDrive(saved: DriveSnapshot): Drive {
   const { snapshot, ...handles } = saved;
-  return { ...handles, world: RAPIER.World.restoreSnapshot(snapshot) };
+  return { ...structuredClone(handles), world: RAPIER.World.restoreSnapshot(snapshot) };
 }
 
 export async function initPhysics(): Promise<void> {
@@ -102,6 +103,7 @@ export function freeDrive(d: Drive): void {
 // Only near vehicles keep a body. A far vehicle loses its body and driver memory, and gets a new body
 // at its sim pose once it comes near again.
 export function syncDrive(d: Drive, w: World): void {
+  checkHandles(d);
   const near = w.vehicles.filter((v) => isNear(w, v));
   const ids = new Set(near.map((v) => v.id));
   for (const [id, handle] of Object.entries(d.bodies)) {
@@ -114,6 +116,20 @@ export function syncDrive(d: Drive, w: World): void {
   syncObstacles(d, w);
   for (const v of w.vehicles) {
     if (isNear(w, v) !== (d.bodies[v.id] !== undefined)) throw new Error(`Vehicle ${v.id} is ${isNear(w, v) ? 'near without' : 'far with'} a physics body`);
+  }
+}
+
+// Rapier looks up by index only, so a stale handle reads as null or as another object.
+function checkHandles(d: Drive): void {
+  for (const [id, handle] of Object.entries(d.bodies)) {
+    if (d.world.getRigidBody(handle)?.handle !== handle) throw new Error(`Vehicle ${id} has no body ${handle}`);
+  }
+  for (const [id, handles] of Object.entries(d.obstacles)) checkColliders(d, id, handles);
+}
+
+function checkColliders(d: Drive, id: string, handles: number[]): void {
+  for (const handle of handles) {
+    if (d.world.getCollider(handle)?.handle !== handle) throw new Error(`Obstacle ${id} has no collider ${handle}`);
   }
 }
 
