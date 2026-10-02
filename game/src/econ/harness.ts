@@ -647,7 +647,7 @@ function runDeliver(world: World, telemetry: Telemetry, mem: Memory, contractId:
   return world;
 }
 
-// ---- Greedy: repairs and spends skill points when parked, tracks the upgrade wishlist, and each
+// ---- Greedy: repairs and upgrades when parked, tracks the upgrade wishlist, and each
 // trip follows a fixed priority: finish a haul or a contract in progress, else take a fresh
 // contract if the shops it knows post one, else haul, else fall back to salvage. This is a simple
 // stand-in for a computed money-per-turn score, not the full mix the design calls for (see report).
@@ -688,12 +688,12 @@ const WISHLIST_ORDER: { item: string; kind: ItemKind; tier: Tier }[] = [
 function maybeMaintain(world: World, telemetry: Telemetry, wishlist: WishlistHit[], day: number): World {
   world = maybeRepairAndUpgrade(world, telemetry);
   world = maybeStripSpares(world, telemetry);
-  world = buyAffordableRanks(world);
   recordWishlist(world, wishlist, day);
   return world;
 }
 
-// Spends the XP pool on the cheapest next rank, ties in SKILL_IDS order, until no rank is affordable.
+// Spends the XP pool on the cheapest next rank, ties in SKILL_IDS order, until no rank is affordable. Every policy
+// does this after each trip, so its runs keep the skill effects it earns.
 function buyAffordableRanks(world: World): World {
   for (;;) {
     const affordable = affordableRanks(world);
@@ -860,7 +860,7 @@ export function runPolicy(seed: number, policy: PolicyName, days: number): RunRe
 
   while (world.turn < endTurn) {
     const before = world.turn;
-    world = takeOneTrip(world, policy, telemetry, mem, wishlist, day);
+    world = buyAffordableRanks(takeOneTrip(world, policy, telemetry, mem, wishlist, day));
     if (world.turn === before) passTurns(world, telemetry, 1, 0);
     while (world.turn >= nextDayAt && day < days) {
       day++;
