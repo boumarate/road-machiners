@@ -2,7 +2,82 @@
 // changed after the last npm run models:shapes.
 
 import { describe, expect, it } from 'vitest';
+import { PHYSICS } from './physics';
 import SHAPES from './prop-shapes.json';
+
+type Box = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
+
+// Which boxes of a model its length measures.
+const WHOLE = (): boolean => true;
+// The dead tree's crown: boxes at or above truck clearance, which block neither driving nor nav.
+const CROWN = (b: Box) => b.z0 >= PHYSICS.truckClearance;
+// The bunker's blockhouse, without the lower sandbag ring around it: boxes that rise above 3 m.
+const BLOCKHOUSE = (b: Box) => b.z1 > 3;
+const ARMY_TRUCK_M = 8.1;
+// The guard post is built at a 3.2 m radius, and the orchard poses it at r 1.1 tiles. Every other model in the
+// table is built at its in-game size and drawn at scale 1.
+const GUARD_POST_SCALE = (1.1 * PHYSICS.metersPerTile) / 3.2;
+
+// IV11: the length of each orchard model in game, in meters, from Old Orchard's concept. Length is the extent of the
+// measured boxes along the model's longer horizontal axis (x or y), times the model's pose scale.
+const ORCHARD_SIZES = [
+  { model: 'quonset', meters: 22, boxes: WHOLE, scale: 1 },
+  { model: 'barn', meters: 24, boxes: WHOLE, scale: 1 },
+  { model: 'farmhouse', meters: 26, boxes: WHOLE, scale: 1 },
+  { model: 'bunker', meters: 14, boxes: BLOCKHOUSE, scale: 1 },
+  { model: 'guard_post', meters: 4.5, boxes: WHOLE, scale: GUARD_POST_SCALE },
+  { model: 'army_truck', meters: ARMY_TRUCK_M, boxes: WHOLE, scale: 1 },
+  { model: 'dead_tree', meters: 6.5, boxes: CROWN, scale: 1 },
+  { model: 'drums', meters: 2.5, boxes: WHOLE, scale: 1 },
+  { model: 'woodpile', meters: 4, boxes: WHOLE, scale: 1 },
+] as const;
+
+function shapeBoxes(model: string): readonly Box[] {
+  const shape = (SHAPES as Record<string, { boxes: Box[] } | undefined>)[model];
+  if (shape === undefined) throw new Error(`Model ${model} has no shape in prop-shapes.json. Run npm run models:shapes.`);
+  return shape.boxes;
+}
+
+// Extent along the longer horizontal axis of the boxes, in model meters.
+function lengthOf(boxes: readonly Box[]): number {
+  if (boxes.length === 0) throw new Error('No boxes to measure');
+  const along = Math.max(...boxes.map((b) => b.x1)) - Math.min(...boxes.map((b) => b.x0));
+  const across = Math.max(...boxes.map((b) => b.y1)) - Math.min(...boxes.map((b) => b.y0));
+  return Math.max(along, across);
+}
+
+function orchardLength(model: string): number {
+  const size = ORCHARD_SIZES.find((s) => s.model === model);
+  if (size === undefined) throw new Error(`Model ${model} is not in the orchard size table`);
+  return lengthOf(shapeBoxes(model).filter(size.boxes)) * size.scale;
+}
+
+describe('orchard model sizes (IV11)', () => {
+  it.each(ORCHARD_SIZES)('$model is $meters m long, within 15%', ({ model, meters }) => {
+    expect(Math.abs(orchardLength(model) - meters)).toBeLessThanOrEqual(meters * 0.15);
+  });
+
+  it('makes the Quonset hut at least 2.5 army trucks long', () => {
+    expect(orchardLength('quonset')).toBeGreaterThanOrEqual(2.5 * orchardLength('army_truck'));
+  });
+
+  it('makes the barn at least 2.8 army trucks long', () => {
+    expect(orchardLength('barn')).toBeGreaterThanOrEqual(2.8 * orchardLength('army_truck'));
+  });
+
+  it('keeps every dead tree box below truck clearance inside the 2.4 m trunk footprint', () => {
+    const low = shapeBoxes('dead_tree').filter((b) => b.z0 < PHYSICS.truckClearance);
+    expect(low.length).toBeGreaterThan(0);
+    for (const b of low) {
+      expect(Math.min(b.x0, b.y0)).toBeGreaterThanOrEqual(-1.2);
+      expect(Math.max(b.x1, b.y1)).toBeLessThanOrEqual(1.2);
+    }
+  });
+
+  it('fails loudly on a model missing from prop-shapes.json', () => {
+    expect(() => shapeBoxes('no_such_model')).toThrow('no shape');
+  });
+});
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?url&inline', import: 'default' });
 const DATA_URL = 'data:model/gltf-binary;base64,';

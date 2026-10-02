@@ -1,9 +1,9 @@
 """Old timber barn of the orchard farm: a gable with a big open door, holes in its sheet roof and a lean-to.
 
-Built to a 2.6-tile reference radius, 10.4 m: the barn is 12 m along X and 9 m across, 4.2 m to the eaves and
-6.6 m to the ridge, and the lean-to on its +Y side reaches 7.5 m out. With the open door leaf and the crates by
-the door, no point lies more than 8.8 m from the origin. The orchard's shed (1.8 tiles) is this model scaled
-down. The door gable faces +X.
+Built at its in-game size: the barn is 24 m along X and 12 m across, 6.4 m to the eaves and 10 m to the ridge, and
+the lean-to on its +Y side reaches 4 m further out, so the whole barn is 24 x 16 m, about 3 army trucks long. Its
+footprint radius is 14.7 m, the reach of the open door leaf; the corners reach 14.4 m. The orchard's shed is this
+model at a smaller pose scale. The door gable faces +X.
 Run: blender --background --python tools/blender/barn.py -- public/models/barn.glb [tmp/barn.png]
 """
 
@@ -28,14 +28,15 @@ COLORS = {
     "crate": 0x9A7A4A,  # PAL.crate
 }
 SEED = 79
-HALF_L = 6.0  # m, half the barn's length along X
-HALF_W = 4.5  # m, half its width along Y
-EAVE = 4.2  # m
-RIDGE = 6.6  # m
-DOOR_HALF = 2.5  # m, half the door's width
-DOOR_H = 3.6  # m
-WALL = 0.15  # m
-PANELS = 4  # roof panels per slope along X
+HALF_L = 12.0  # m, half the barn's length along X
+HALF_W = 6.0  # m, half its width along Y
+EAVE = 6.4  # m
+RIDGE = 10.0  # m
+DOOR_HALF = 3.3  # m, half the door's width
+DOOR_H = 5.2  # m
+WALL = 0.2  # m
+PANELS = 6  # roof panels per slope along X
+LEAN = 4.0  # m, how far the lean-to reaches out from the +Y wall
 HOLES = (0, 1)  # panels missing from the -Y slope, toward the back
 
 
@@ -62,16 +63,19 @@ def build(kit: Kit) -> None:
         y0, y1 = sorted((s * DOOR_HALF, s * HALF_W))
         kit.box(f"gable_front_side{s:+d}", (WALL, y1 - y0, DOOR_H), (HALF_L - WALL / 2, (y0 + y1) / 2, DOOR_H / 2), "plank", dent_by=0.02)
     # Vertical battens on the front gable and a door frame, so the boards read.
-    for i, y in enumerate((-3.9, -3.2, 3.2, 3.9, -1.2, 0.0, 1.2)):
+    for i, y in enumerate((-5.2, -4.3, 4.3, 5.2, -1.6, 0.0, 1.6)):
         top = EAVE + (RIDGE - EAVE) * (1 - abs(y) / HALF_W) - 0.2
         bottom = 0.0 if abs(y) > DOOR_HALF else DOOR_H
-        kit.box(f"batten{i}", (0.06, 0.12, top - bottom), (HALF_L + 0.02, y, (top + bottom) / 2), "plank_dark")
-    kit.box("door_beam", (0.2, 2 * DOOR_HALF + 0.4, 0.25), (HALF_L + 0.05, 0, DOOR_H + 0.1), "rafter")
-    # The open door leaf, swung out against the front wall.
-    kit.box("door_leaf", (1.9, 0.1, DOOR_H - 0.2), (HALF_L + 0.95, -DOOR_HALF - 0.1, (DOOR_H - 0.2) / 2), "plank_dark", rot=(0, 0, math.radians(-70)), dent_by=0.03)
+        kit.box(f"batten{i}", (0.08, 0.16, top - bottom), (HALF_L + 0.03, y, (top + bottom) / 2), "plank_dark")
+    kit.box("door_beam", (0.3, 2 * DOOR_HALF + 0.6, 0.35), (HALF_L + 0.08, 0, DOOR_H + 0.15), "rafter")
+    # The open door leaf, hinged at the door's -Y edge and swung out 70 degrees.
+    leaf, swing = DOOR_HALF - 0.1, math.radians(-70)
+    hinge = (HALF_L + 0.05, -DOOR_HALF)
+    leaf_at = (hinge[0] + math.cos(swing) * leaf / 2, hinge[1] + math.sin(swing) * leaf / 2, (DOOR_H - 0.3) / 2)
+    kit.box("door_leaf", (leaf, 0.12, DOOR_H - 0.3), leaf_at, "plank_dark", rot=(0, 0, swing), dent_by=0.04)
     # Two roof slopes in panels, with holes in the -Y slope over bare rafters.
     pitch = math.atan2(RIDGE - EAVE, HALF_W)
-    slope = math.hypot(HALF_W, RIDGE - EAVE) + 0.4
+    slope = math.hypot(HALF_W, RIDGE - EAVE) + 0.5
     panel = (2 * HALF_L + 0.6) / PANELS
     for s in (-1, 1):
         cy = s * (HALF_W / 2 + 0.15 * math.sin(pitch))
@@ -81,20 +85,21 @@ def build(kit: Kit) -> None:
             if s == -1 and i in HOLES:
                 continue
             mat = "roof_rust" if (i + (s > 0)) % 3 == 0 else "roof"
-            kit.box(f"roof{s:+d}_{i}", (panel - 0.05, slope, 0.12), (x, cy, cz), mat, rot=(-s * pitch, 0, 0), dent_by=0.04)
+            kit.box(f"roof{s:+d}_{i}", (panel - 0.08, slope, 0.15), (x, cy, cz), mat, rot=(-s * pitch, 0, 0), dent_by=0.06)
     for i in range(HOLES[0] * 3, (HOLES[-1] + 1) * 3 + 1):
         x = -HALF_L - 0.3 + panel * i / 3
-        strut(kit, f"rafter{i}", (x, -HALF_W - 0.2, EAVE - 0.1), (x, 0.0, RIDGE + 0.05), 0.14, "rafter")
-    kit.box("ridge_beam", (2 * HALF_L + 0.4, 0.2, 0.2), (0, 0, RIDGE), "rafter")
+        strut(kit, f"rafter{i}", (x, -HALF_W - 0.2, EAVE - 0.1), (x, 0.0, RIDGE + 0.05), 0.2, "rafter")
+    kit.box("ridge_beam", (2 * HALF_L + 0.4, 0.3, 0.3), (0, 0, RIDGE), "rafter")
     # Lean-to on the +Y side: board walls under a shallow roof, open toward +X.
-    lean = (HALF_W, HALF_W + 3.0)
-    lean_x = (-4.0, 3.0)
-    lean_hi, lean_lo = 3.8, 2.4
+    lean = (HALF_W, HALF_W + LEAN)
+    lean_x = (-8.0, 6.0)
+    lean_hi, lean_lo = 5.6, 3.6
     mid_y = sum(lean) / 2
     kit.box("lean_back", (WALL, lean[1] - lean[0], lean_lo), (lean_x[0], mid_y, lean_lo / 2), "plank_dark", dent_by=0.03)
     kit.box("lean_side", (lean_x[1] - lean_x[0], WALL, lean_lo), ((lean_x[0] + lean_x[1]) / 2, lean[1], lean_lo / 2), "plank_dark", dent_by=0.03)
     kit.box("lean_floor", (lean_x[1] - lean_x[0], lean[1] - lean[0], 0.1), ((lean_x[0] + lean_x[1]) / 2, mid_y, 0.05), "dark")
-    kit.box("lean_post", (0.2, 0.2, lean_lo), (lean_x[1], lean[1] - 0.1, lean_lo / 2), "rafter")
+    for i, x in enumerate((lean_x[1], lean_x[1] - 4.5)):
+        kit.box(f"lean_post{i}", (0.3, 0.3, lean_lo), (x, lean[1] - 0.15, lean_lo / 2), "rafter")
     lean_pitch = math.atan2(lean_hi - lean_lo, lean[1] - lean[0])
     kit.box(
         "lean_roof",
@@ -105,7 +110,7 @@ def build(kit: Kit) -> None:
         dent_by=0.04,
     )
     # A stack of crates by the door.
-    for i, (x, y, z) in enumerate(((HALF_L + 1.0, -HALF_W + 0.3, 0.4), (HALF_L + 1.0, -HALF_W + 1.2, 0.4), (HALF_L + 1.0, -HALF_W + 0.75, 1.2))):
+    for i, (x, y, z) in enumerate(((HALF_L + 1.0, HALF_W - 0.5, 0.4), (HALF_L + 1.0, HALF_W - 1.4, 0.4), (HALF_L + 1.0, HALF_W - 0.95, 1.2))):
         kit.box(f"crate{i}", (0.8, 0.8, 0.8), (x, y, z), "crate", rot=(0, 0, kit.rng.uniform(-0.2, 0.2)), dent_by=0.03)
 
 
@@ -113,7 +118,7 @@ def main() -> None:
     args = parse_args()
     kit = Kit(COLORS, SEED)
     build(kit)
-    kit.export("barn", args, view_size=22)
+    kit.export("barn", args, view_size=36)
 
 
 if __name__ == "__main__":
