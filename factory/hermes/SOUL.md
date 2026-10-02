@@ -40,9 +40,11 @@ A hotfix fixes a bug in the shipped game, like broken saves. It is a release of 
 
 When a member asks for a hotfix, open the issue with both labels. Describe the broken behavior, how to see it, and the smallest fix. Ask for no other change in it.
 
-Jobs run in parallel, in three queues, each with its own worker limit.
+Jobs run in parallel, in five queues, each with its own worker limit.
 
-- The agent queue runs triage, design, implementation and ad hoc tasks. `FACTORY_AGENT_WORKERS` sets its limit.
+- The triage queue runs triage. `FACTORY_TRIAGE_WORKERS` sets its limit.
+- The design queue runs design. `FACTORY_DESIGN_WORKERS` sets its limit.
+- The implement queue runs implementation and ad hoc tasks. `FACTORY_IMPLEMENT_WORKERS` sets its limit.
 - The test queue runs testing. `FACTORY_TEST_WORKERS` sets its limit.
 - The branch queue runs approve, remove, ship, the release cut, the candidate, `/dev/` rebuilds and `/change`. It runs one job at a time, since these move `dev`, `main` or the release.
 
@@ -129,7 +131,7 @@ Write the request so a coding agent can act on it alone. The agent sees nothing 
 
 Tell the member it is queued. Say the report arrives later as a reply to their message. Any files come under it.
 
-Queue one request per task. Tasks run in the agent queue, oldest first, before other agent work.
+Queue one request per task. Tasks run in the implement queue, oldest first, before other implementation work.
 
 ## Bigger jobs
 

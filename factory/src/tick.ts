@@ -7,13 +7,13 @@ import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
 import { readState, updateState } from './state';
 import { isAnswered } from './questions';
-import { ADHOC_LABEL, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
+import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
 import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Queue, Run } from './types';
 
 export type JobPick = { stage: JobStage; issue: number | null };
 // A candidate job and whether it may start at the daily cap.
 type Candidate = JobPick & { uncapped: boolean };
-type Due = Pick<FactoryConfig, 'releaseDays' | 'maxJobsPerDay' | 'agentWorkers' | 'testWorkers'>;
+type Due = Pick<FactoryConfig, 'releaseDays' | 'maxJobsPerDay' | 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'testWorkers'>;
 
 const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
@@ -106,7 +106,7 @@ export function atCap(state: FactoryState, now: Date, cfg: Pick<FactoryConfig, '
 }
 
 function limits(cfg: Due): Record<Queue, number> {
-  return { branch: 1, agent: cfg.agentWorkers, test: cfg.testWorkers };
+  return { branch: 1, triage: cfg.triageWorkers, design: cfg.designWorkers, implement: cfg.implementWorkers, test: cfg.testWorkers };
 }
 
 // A job fits when its queue has a free worker and no other job works on its issue.
@@ -232,7 +232,7 @@ export async function releaseAnswered(ctx: Ctx, cards: Card[]): Promise<Card[]> 
 // Testing and branch jobs deploy builds before they record them, so cleanup waits while one of them runs.
 function cleanBuilds(ctx: Ctx, cards: Card[]): void {
   const state = readState(ctx.statePath);
-  if (state.jobs.some((job) => QUEUE_OF[job.stage] !== 'agent')) return;
+  if (state.jobs.some((job) => !AGENT_QUEUES.includes(QUEUE_OF[job.stage]))) return;
   // The candidate's card is the tracking issue, so its 'rc' build stays while the card waits in Approval.
   const keep = cards.filter((card) => card.column === 'Approval').map((card) => state.builds[String(card.issue)]).filter((name) => name !== undefined);
   removeStaleBuilds(ctx.cfg.webRoot, new Set(keep), (msg) => ctx.log('tick', null, msg));

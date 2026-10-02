@@ -6,6 +6,7 @@ import type { AgentRun, Ctx } from '../types';
 let home = '';
 let calls: string[] = [];
 let prompt = '';
+let effort: string | undefined;
 
 beforeEach(() => {
   mkdirSync('tmp', { recursive: true });
@@ -18,7 +19,7 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 function fakeCtx(verdict: string | null, labels: string[] = [], earlier: string[] = []): Ctx {
   const record = (name: string) => async (...args: unknown[]) => { calls.push(`${name} ${args.join(' ')}`); };
   const fake = {
-    cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat' },
+    cfg: { home, designModel: 'opus', buildModel: 'sonnet', triageEffort: 'low', repo: 'o/r', committeeChat: 'chat' },
     telegram: { sendMessage: record('message') },
     log: () => undefined,
     github: {
@@ -29,6 +30,7 @@ function fakeCtx(verdict: string | null, labels: string[] = [], earlier: string[
     container: {
       agent: async (run: AgentRun) => {
         calls.push(`agent ${run.model}`);
+        effort = run.effort;
         prompt = run.prompt;
         if (verdict !== null) writeFileSync(`${run.clone}/${run.dir}/.factory/triage.json`, verdict);
       },
@@ -47,6 +49,7 @@ describe('triage stage', () => {
   it('comments and moves to Design when ready', async () => {
     await runStage(fakeCtx(verdict({})), 7);
     expect(calls).toContain('agent sonnet');
+    expect(effort).toBe('low');
     expect(calls.find((call) => call.startsWith('comment 7 Triage passed: Clear goal'))).toContain('Model routing from triage: intermediate, default models');
     expect(calls.at(-1)).toBe('move 7 Design');
     expect(prompt).not.toContain('{{');

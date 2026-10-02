@@ -4,7 +4,7 @@ import { must } from './exec';
 import { MEDIA_MOUNT } from './media';
 import { jobLabel } from './jobs';
 import { withLock } from './lock';
-import { AGENT_NETWORK, GAME_DIR, PROXY_NAME, PROXY_PORT, type Container, type FactoryConfig, type Run } from './types';
+import { AGENT_NETWORK, GAME_DIR, PROXY_NAME, PROXY_PORT, type AgentSession, type Container, type FactoryConfig, type Run } from './types';
 
 const FACTORY_LABEL = 'factory=1';
 
@@ -73,11 +73,24 @@ export function outputsNote(dir: string): string {
   return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory.`;
 }
 
+// Only the projects folder is mounted, since the image keeps its skills in the rest of ~/.claude.
+function sessionMount(session: AgentSession | undefined): string[] {
+  return session === undefined ? [] : ['-v', `${session.dir}:${SESSIONS_MOUNT}`];
+}
+
+function sessionArgs(session: AgentSession | undefined): string[] {
+  return session === undefined ? [] : [session.resume ? '--resume' : '--session-id', session.id];
+}
+
+function effortArgs(effort: string | undefined): string[] {
+  return effort === undefined ? [] : ['--effort', effort];
+}
+
 // Agents get the work clone, the npm cache, the read-only folders their stage names, the OAuth token and the ElevenLabs key with its cap, nothing else. Secrets travel in the docker process env, never in argv.
 // Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
 export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null): Container {
   return {
-    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, session, skill }) {
+    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, session, skill, effort }) {
       if (!openNetwork) await ensureProxy(run, cfg);
       // A headless run ends when the agent ends its turn, and that kills anything it left in the background.
       // Agents ended turns to wait for background subagents, and the run died with their work, so background tasks are off.
@@ -86,12 +99,9 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
         CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1',
       };
       const readOnlyArgs = Object.entries(readOnly).flatMap(([host, path]) => ['-v', `${host}:${path}:ro`]);
-      // Only the projects folder is mounted, since the image keeps its skills in the rest of ~/.claude.
-      const sessionMount = session === undefined ? [] : ['-v', `${session.dir}:${SESSIONS_MOUNT}`];
-      const sessionArgs = session === undefined ? [] : [session.resume ? '--resume' : '--session-id', session.id];
       const args = [
-        ...baseArgs(jobId), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount, ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
-        'factory-agent', '-p', '--model', model, '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs,
+        ...baseArgs(jobId), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount(session), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
+        'factory-agent', '-p', '--model', model, ...effortArgs(effort), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs(session),
       ];
       const input = [skill, outputsNote(dir), prompt].filter((part) => part !== undefined).join('\n\n');
       const result = await run('docker', args, { env, input, logPath: log });

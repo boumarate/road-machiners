@@ -24,9 +24,11 @@ The design and its reasons are in [the factory task](docs/tasks/game-factory.md)
 
 Before every agent stage, the host fetches the reference images of the issue body and every comment, feedback included. It takes only PNG, JPEG, GIF and WebP from GitHub's attachment hosts, follows redirects only to GitHub's own storage hosts, and caps each file at 10 MB and the count at 12. Files land in `$FACTORY_HOME/media/issue-N/`, which the agent sees read only at `/work/.factory-media`, and never in a commit. Each stage prompt ends with the absolute paths and the list of images, and tells the agent to open each with the Read tool. An image that fails to fetch or decode fails the stage before any agent runs, so no agent goes on as if it had seen it. An image on another host, or a file that is not an image, is listed as not seen. Testing compares a screenshot of the game with the reference when the issue wants a look, and corrects and compares again for up to three rounds.
 
-Each stage runs as its own job process, and jobs run in parallel in three queues.
+Each stage runs as its own job process, and jobs run in parallel in five queues.
 
-- The agent queue runs triage, design, implementation and ad hoc jobs, up to `FACTORY_AGENT_WORKERS` at once.
+- The triage queue runs triage, up to `FACTORY_TRIAGE_WORKERS` at once. Triage runs at the reasoning effort `FACTORY_TRIAGE_EFFORT`, so a new issue never waits behind a long build.
+- The design queue runs design, up to `FACTORY_DESIGN_WORKERS` at once.
+- The implement queue runs implementation and ad hoc jobs, up to `FACTORY_IMPLEMENT_WORKERS` at once.
 - The test queue runs testing, up to `FACTORY_TEST_WORKERS` at once. Testing builds the game and plays it in a browser, so it needs the most memory.
 - The branch queue runs approve, remove, ship, incident, the release cut, the candidate, `/dev/` rebuilds and `/change`, one at a time. These move `dev`, `main` or the release.
 

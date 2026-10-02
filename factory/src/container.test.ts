@@ -75,6 +75,13 @@ describe('dockerContainer', () => {
     expect(args).not.toContain('--session-id');
   });
 
+  it('passes a reasoning effort right after the model', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'sonnet', prompt: 'p', log: '/l.log', effort: 'low' });
+    const args = runCall(calls).args;
+    expect(args.slice(args.indexOf('--model'), args.indexOf('--model') + 4)).toEqual(['--model', 'sonnet', '--effort', 'low']);
+  });
+
   it('puts a skill command on the first line, before the outputs note', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'do it', log: '/l.log', skill: '/code-review' });

@@ -19,6 +19,7 @@ export type FactoryConfig = {
   sfxMaxGenerations: number; // most ElevenLabs generations one sfx:gen run may make
   designModel: string;
   buildModel: string;
+  triageEffort: string; // reasoning effort of the triage agent, passed to claude --effort
   minVotes: number;
   minAgeHours: number;
   committeeBootstrapTelegram: string; // sole member while committee.json is missing
@@ -31,7 +32,9 @@ export type FactoryConfig = {
   itchTarget: string | null; // itch.io page as "user/game". Null until set, and then a release fails loud.
   butlerKey: string | null; // BUTLER_API_KEY, only ever in the env of the butler call
   maxJobsPerDay: number; // public-driven agent jobs allowed in any 24 hours
-  agentWorkers: number; // jobs of the agent queue that run at once
+  triageWorkers: number; // jobs of the triage queue that run at once
+  designWorkers: number; // jobs of the design queue that run at once
+  implementWorkers: number; // jobs of the implement queue that run at once
   testWorkers: number; // jobs of the test queue that run at once
 };
 
@@ -65,10 +68,13 @@ export type Job = { id: string; stage: JobStage; issue: number | null; pid: numb
 
 // Jobs run in parallel up to a limit per queue.
 // The branch queue moves dev, main and the release, or rebuilds a shared build, so it runs one job at a time.
-// The agent queue runs light agent jobs. The test queue builds the game and plays it in a browser, which is heavy.
-export type Queue = 'branch' | 'agent' | 'test';
+// Triage, design and implement each get their own queue, so a short triage never waits behind a long build.
+// The test queue builds the game and plays it in a browser, which is heavy.
+export type Queue = 'branch' | 'triage' | 'design' | 'implement' | 'test';
+// Queues whose jobs only run agents in work clones, with no deploy or branch move.
+export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement'];
 export const QUEUE_OF: Record<JobStage, Queue> = {
-  triage: 'agent', design: 'agent', implement: 'agent', adhoc: 'agent',
+  triage: 'triage', design: 'design', implement: 'implement', adhoc: 'implement',
   testing: 'test',
   // An incident job pushes dev, and two of them at once would pick the same log id.
   approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', change: 'branch', incident: 'branch',
@@ -98,6 +104,7 @@ export type FactoryState = {
   approvedResolving: Record<string, string>; // issue number -> approver, for an approved card back in Testing to resolve a conflict with its base. Testing then queues its merge with no new post.
   pendingChanges: ChangeRequest[]; // factory change requests, run by the next ticks in order
   pendingIncidents: number[]; // shipped bug issues whose incident job has not run yet, run by the next ticks in order
+  bundles: Record<string, number[]>; // lead issue number -> the issues triage bundled into its card, which close when the lead ships
   lastTickError: string | null; // the last tick crash. Hermes's incident watch reports it.
   failures: Failure[]; // failed jobs of the last day. Hermes's incident watch reports each one, and the chat hears of it only from Hermes.
   adhocReplies: Record<string, { chat: string; messageId: number }>; // ad hoc issue number -> the chat message its report answers
@@ -151,8 +158,9 @@ export interface Telegram {
 // `readOnly` maps host folders to container paths, mounted read only.
 // `session` names the agent's Claude Code session. The container mounts `dir` as the agent's session store and starts the session with `id`, or continues it when `resume` is set.
 // `skill` is a slash command like `/code-review`. Claude runs it only from the first line of the input, so it goes first.
+// `effort` is the reasoning effort passed to claude --effort. Absent means the model's default.
 export type AgentSession = { dir: string; id: string; resume: boolean };
-export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; session?: AgentSession; skill?: string };
+export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; session?: AgentSession; skill?: string; effort?: string };
 
 export interface Container {
   // Runs Claude Code headless in the clone. Throws on a nonzero exit.
@@ -234,6 +242,8 @@ export const RELEASE_CANDIDATE_LABEL = 'release-candidate'; // approved and merg
 export const HOTFIX_LABEL = 'hotfix';
 export const ADHOC_LABEL = 'adhoc';
 export const BUG_LABEL = 'bug';
+// An issue triage folded into another issue's card. Its card waits in Done, and the issue closes when the lead ships.
+export const BUNDLED_LABEL = 'bundled';
 export const CANDIDATE_LABELS = ['feature-request', BUG_LABEL];
 // The incident log lives at the repo root, outside the game folder the agent starts in.
 export const INCIDENT_LOG = 'docs/incident-log.md';

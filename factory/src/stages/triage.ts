@@ -13,7 +13,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const home = agentHome(clone, GAME_DIR);
   prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
-  await runAgent(ctx, issue, 'triage', 'triage', fillPrompt('triage', { issue: String(issue) }));
+  await runAgent(ctx, issue, 'triage', 'triage', fillPrompt('triage', { issue: String(issue) }), { effort: ctx.cfg.triageEffort });
   const result = parseVerdict(readOutput(home, 'triage.json'));
   if (result.verdict === 'unclear') return askAuthor(ctx, issue, result.questions, 'triage');
   if (result.verdict === 'ready') return pass(ctx, issue, result.reason, result.hotfix, result.routing);

@@ -8,9 +8,9 @@ import { EMPTY_STATE, readState, writeState } from './state';
 import { FACTORY_MARK, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type ReleaseState, type Ctx, type IssueComment, type FactoryState, type Job } from './types';
 
 const NOW = new Date('2026-01-10T12:00:00Z');
-const CFG = { releaseDays: 7, maxJobsPerDay: 3, agentWorkers: 3, testWorkers: 1 };
-// One agent worker, so a test sees which card the agent queue prefers.
-const ONE = { ...CFG, agentWorkers: 1 };
+const CFG = { releaseDays: 7, maxJobsPerDay: 3, triageWorkers: 3, designWorkers: 3, implementWorkers: 3, testWorkers: 1 };
+// One worker per agent queue, so a test sees which card each queue prefers.
+const ONE = { ...CFG, triageWorkers: 1, designWorkers: 1, implementWorkers: 1 };
 const DEV = 'dev0001';
 const FRESH = { lastRelease: '2026-01-09T12:00:00Z', devBuild: DEV };
 
@@ -78,7 +78,7 @@ describe('chooseJobs during a release', () => {
 
   it('runs release tasks before other cards, furthest along first', () => {
     const cards = [tracking(), card(30, 'Implementation'), card(21, 'Design', ['release-task']), card(22, 'Implementation', ['release-task'])];
-    expect(chooseJobs(open, cards, NOW, ONE)).toEqual([{ stage: 'implement', issue: 22 }]);
+    expect(chooseJobs(open, cards, NOW, ONE)).toEqual([{ stage: 'implement', issue: 22 }, { stage: 'design', issue: 21 }]);
     expect(chooseJobs(open, cards, NOW, CFG)).toEqual([{ stage: 'implement', issue: 22 }, { stage: 'design', issue: 21 }, { stage: 'implement', issue: 30 }]);
   });
 
@@ -112,7 +112,7 @@ describe('chooseJobs', () => {
 
   it('runs a hotfix card before ad hoc work and other cards, at the cap too', () => {
     const cards = [card(2, 'Implementation', ['adhoc']), card(3, 'Testing'), card(9, 'Design', ['bug', 'hotfix']), card(8, 'Design', ['hotfix', 'factory-stuck'])];
-    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'design', issue: 9 }, { stage: 'testing', issue: 3 }]);
+    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'design', issue: 9 }, { stage: 'adhoc', issue: 2 }, { stage: 'testing', issue: 3 }]);
     expect(chooseJobs(state({ jobStarts: starts(23, 5, 1) }), cards, NOW, CFG)).toEqual([{ stage: 'design', issue: 9 }, { stage: 'adhoc', issue: 2 }]);
   });
 
@@ -123,9 +123,9 @@ describe('chooseJobs', () => {
   it('fills each queue up to its limit beside running jobs, never twice on one issue', () => {
     const s = state({ jobs: [running('design', 1), running('testing', 7), running('approve', 9)], pendingChanges: [{ id: 3, text: 't', by: 'u' }] });
     const cards = [card(1, 'Design'), card(2, 'Design'), card(8, 'Testing'), card(4, 'Triage'), card(5, 'Triage')];
-    expect(chooseJobs(s, cards, NOW, { ...CFG, maxJobsPerDay: 10 })).toEqual([{ stage: 'design', issue: 2 }, { stage: 'triage', issue: 4 }]);
+    expect(chooseJobs(s, cards, NOW, { ...CFG, maxJobsPerDay: 10 })).toEqual([{ stage: 'design', issue: 2 }, { stage: 'triage', issue: 4 }, { stage: 'triage', issue: 5 }]);
     const idle = state({ jobs: [running('design', 1)] });
-    expect(chooseJobs(idle, cards, NOW, { ...CFG, maxJobsPerDay: 10, testWorkers: 2 })).toEqual([{ stage: 'testing', issue: 8 }, { stage: 'design', issue: 2 }, { stage: 'triage', issue: 4 }]);
+    expect(chooseJobs(idle, cards, NOW, { ...CFG, maxJobsPerDay: 10, testWorkers: 2, designWorkers: 1 })).toEqual([{ stage: 'testing', issue: 8 }, { stage: 'triage', issue: 4 }, { stage: 'triage', issue: 5 }]);
   });
 
   it('counts each counted pick against the cap slots left', () => {
@@ -154,13 +154,14 @@ describe('chooseJobs', () => {
 
   it('picks the card furthest along, lowest issue first, per queue', () => {
     const cards = [card(1, 'Design'), card(5, 'Implementation'), card(7, 'Testing'), card(6, 'Testing')];
-    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'testing', issue: 6 }, { stage: 'implement', issue: 5 }]);
+    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'testing', issue: 6 }, { stage: 'implement', issue: 5 }, { stage: 'design', issue: 1 }]);
     expect(chooseJobs(state(), cards.slice(0, 1), NOW, ONE)).toEqual([{ stage: 'design', issue: 1 }]);
   });
 
-  it('runs Triage cards last and skips needs-info and stuck ones', () => {
+  it('runs Triage cards in their own queue beside a long design, and skips needs-info and stuck ones', () => {
     const cards = [card(1, 'Triage'), card(2, 'Triage', [NEEDS_INFO_LABEL]), card(3, 'Design')];
-    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'design', issue: 3 }]);
+    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'design', issue: 3 }, { stage: 'triage', issue: 1 }]);
+    expect(chooseJobs(state({ jobs: [running('design', 5)] }), cards, NOW, ONE)).toEqual([{ stage: 'triage', issue: 1 }]);
     expect(chooseJobs(state(), cards.slice(0, 2), NOW, ONE)).toEqual([{ stage: 'triage', issue: 1 }]);
     expect(chooseJobs(state(), [card(2, 'Triage', [NEEDS_INFO_LABEL]), card(4, 'Triage', [STUCK_LABEL])], NOW, CFG)).toEqual([]);
   });

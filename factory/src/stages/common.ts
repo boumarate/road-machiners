@@ -118,8 +118,9 @@ export function prepareOutputs(ctx: Ctx, issue: number, home: string): void {
   mkdirSync(`${home}/${OUT_DIR}`, { recursive: true });
 }
 
-// What a stage may set beyond its stage's defaults. `model` replaces the model the labels pick, like the review's design model. `skill` is a slash command to run first.
-export type AgentExtras = { model?: string; skill?: string };
+// What a stage may set beyond its stage's defaults. `model` replaces the model the labels pick, like the review's design model.
+// `skill` is a slash command to run first, and `effort` a reasoning effort for claude --effort.
+export type AgentExtras = { model?: string; skill?: string; effort?: string };
 
 // `round` names the agent run inside the job. A stage with two runs gives each its own, so a resume finds the right session.
 export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round: string, prompt: string, extras: AgentExtras = {}): Promise<void> {
@@ -132,7 +133,7 @@ export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round:
   const full = session.resume ? RESUME_NOTE : `${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`;
   // A resumed round already ran its skill, so only the note goes in.
   const skill = session.resume ? undefined : extras.skill;
-  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), session, skill });
+  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), session, skill, effort: extras.effort });
 }
 
 // GitHub caps a comment at 65536 characters. The rest of the room holds the wrapper and the marker.

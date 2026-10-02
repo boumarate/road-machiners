@@ -27,6 +27,7 @@ const KEYS = {
   sfxMaxGenerations: 'SFX_MAX_GENERATIONS',
   designModel: 'FACTORY_DESIGN_MODEL',
   buildModel: 'FACTORY_BUILD_MODEL',
+  triageEffort: 'FACTORY_TRIAGE_EFFORT',
   minVotes: 'FACTORY_MIN_VOTES',
   minAgeHours: 'FACTORY_MIN_AGE_HOURS',
   committeeBootstrapTelegram: 'FACTORY_COMMITTEE_BOOTSTRAP',
@@ -39,13 +40,15 @@ const KEYS = {
   itchTarget: 'ITCH_TARGET',
   butlerKey: 'BUTLER_API_KEY',
   maxJobsPerDay: 'FACTORY_MAX_JOBS_PER_DAY',
-  agentWorkers: 'FACTORY_AGENT_WORKERS',
+  triageWorkers: 'FACTORY_TRIAGE_WORKERS',
+  designWorkers: 'FACTORY_DESIGN_WORKERS',
+  implementWorkers: 'FACTORY_IMPLEMENT_WORKERS',
   testWorkers: 'FACTORY_TEST_WORKERS',
 } as const satisfies Record<keyof FactoryConfig, string>;
 
 const RELEASE_ONLY = new Set<keyof FactoryConfig>(['itchTarget', 'butlerKey']);
 
-const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes','releaseDays', 'maxJobsPerDay', 'agentWorkers', 'testWorkers']);
+const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes', 'releaseDays', 'maxJobsPerDay', 'triageWorkers', 'designWorkers', 'implementWorkers', 'testWorkers']);
 
 export function loadConfig(env: Record<string, string | undefined>): FactoryConfig {
   const missing = Object.entries(KEYS).filter(([field, key]) => !RELEASE_ONLY.has(field as keyof FactoryConfig) && !env[key]?.trim()).map(([, key]) => key);
