@@ -23,7 +23,7 @@ import { dist, type Vec } from '../vec';
 import { canVehicleSee } from '../vision';
 import { partValue } from '../wear';
 import { endTurn, newWorld, update } from '../world';
-import { botOrders, parkedOnPurpose, type Archetype } from './bot';
+import { botOrders, parkedOnPurpose, type Archetype, type BotOptions } from './bot';
 import { TEST_MAP } from '../../test/map';
 
 // One practice event. turn is the world turn it happened on; a run of N turns ends on world turn N + 1.
@@ -38,14 +38,14 @@ export type Recording = { lines: TraceLine[]; rows: DayRow[]; death: RunEnd | nu
 // A truck that moves less than this many tiles in a whole in-game day, while not parked on purpose, has stalled.
 const STALL_TILES = 1;
 
-export function record(seed: number, archetype: Archetype, turns: number): Recording {
-  return recordFrom(startWorld(seed), `seed ${seed} ${archetype}`, archetype, turns);
+export function record(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Recording {
+  return recordFrom(startWorld(seed), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
 // Records from a given world. label names the run in errors.
-export function recordFrom(start: World, label: string, archetype: Archetype, turns: number): Recording {
+export function recordFrom(start: World, label: string, archetype: Archetype, turns: number, options: BotOptions = {}): Recording {
   const recording: Recording = { lines: [], rows: [], death: null };
-  for (const step of stepsFrom(start, label, archetype, turns)) {
+  for (const step of stepsFrom(start, label, archetype, turns, options)) {
     recording.lines.push(...step.lines);
     recording.rows.push(...step.rows);
     recording.death = step.death;
@@ -54,31 +54,31 @@ export function recordFrom(start: World, label: string, archetype: Archetype, tu
 }
 
 // Plays the turns one at a time and yields each turn's world and trace lines, so a caller can write as it goes.
-export function recordTurns(seed: number, archetype: Archetype, turns: number): Generator<RecordStep> {
-  return stepsFrom(startWorld(seed), `seed ${seed} ${archetype}`, archetype, turns);
+export function recordTurns(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Generator<RecordStep> {
+  return stepsFrom(startWorld(seed), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
 // The player's death ends the run early, since no turn runs after it. A stall or any other error fails loud.
-function* stepsFrom(start: World, label: string, archetype: Archetype, turns: number): Generator<RecordStep> {
+function* stepsFrom(start: World, label: string, archetype: Archetype, turns: number, options: BotOptions): Generator<RecordStep> {
   if (!Number.isInteger(turns) || turns <= 0) throw new Error(`A recording needs a positive whole number of turns, got ${turns}`);
   setHeadless(true);
   clearFarRoutes();
   try {
-    yield* playSteps(start, label, archetype, turns);
+    yield* playSteps(start, label, archetype, turns, options);
   } finally {
     setHeadless(false);
     clearFarRoutes();
   }
 }
 
-function* playSteps(start: World, label: string, archetype: Archetype, turns: number): Generator<RecordStep> {
+function* playSteps(start: World, label: string, archetype: Archetype, turns: number, options: BotOptions): Generator<RecordStep> {
   let world = start;
   const watch = new StallWatch(label, world.turn, playerVehicle(world).pos);
   const tally = new DayTally();
   let carried: DayRow[] = [tally.close(0, world)]; // the starting state rides on the first step
   for (let i = 0; i < turns; i++) {
     const before = world;
-    const played = inContext(label, before, () => playTurn(before, archetype));
+    const played = inContext(label, before, () => playTurn(before, archetype, options));
     world = played.next;
     tally.note(played.after, world, played.events);
     const dead = world.player.state === 'dead';
@@ -114,8 +114,8 @@ function startWorld(seed: number): World {
 // after is the world the bot's commands left, and events everything raised on the way to next.
 type PlayedTurn = { after: World; next: World; lines: TraceLine[]; events: GameEvent[] };
 
-function playTurn(world: World, archetype: Archetype): PlayedTurn {
-  const orders = botOrders(world, archetype);
+function playTurn(world: World, archetype: Archetype, options: BotOptions): PlayedTurn {
+  const orders = botOrders(world, archetype, options);
   const goals = topGoals(orders.world);
   const next = endTurn(orders.world, moveAllFar);
   failOnStall(next, goals);

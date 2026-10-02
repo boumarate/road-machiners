@@ -1,6 +1,7 @@
 import { PRESSURE_MAX } from '../../data/market';
 import type { World } from '../types';
 import { describe, expect, it } from 'vitest';
+import { chassisDef } from '../../data/chassis';
 import { REGION } from '../../data/region';
 import { playerVehicle } from '../damage';
 import { makePart } from '../factory';
@@ -8,7 +9,7 @@ import { goodsCount, mountedParts } from '../grid';
 import { addGoods, removeAllGoods } from '../inventory';
 import { nearestPad, nearestTown } from '../sites';
 import { isStranded } from '../stats';
-import { addVehicle, emptyWorld , startCombat } from '../testkit';
+import { addVehicle, emptyWorld, npcBrain, startCombat } from '../testkit';
 import { botOrders, raiderHuntGrounds } from './bot';
 
 function town(id: string) {
@@ -128,7 +129,7 @@ describe('botOrders', () => {
     w.shops.bowl.stock.push(makePart(w, 'stockEngine', 0));
     expect(isStranded(w, playerVehicle(w))).toBe(true);
 
-    const turn = botOrders(w, 'fighter');
+    const turn = botOrders(w, 'hunter');
 
     expect(mountedParts(playerVehicle(turn.world), 'engine')).toHaveLength(1);
     expect(isStranded(turn.world, playerVehicle(turn.world))).toBe(false);
@@ -138,7 +139,7 @@ describe('botOrders', () => {
     const w = withoutEngine(parkedAt('bowl'));
     w.player.money = 0;
 
-    const turn = botOrders(w, 'fighter');
+    const turn = botOrders(w, 'hunter');
 
     expect(mountedParts(playerVehicle(turn.world), 'engine')).toHaveLength(0);
     expect(playerVehicle(turn.world).order?.kind).toBe('stopAt');
@@ -152,8 +153,97 @@ describe('botOrders', () => {
     me.pos = { x: ground.x + 1.5, y: ground.y };
     me.order = null;
 
-    const turn = botOrders(w, 'fighter');
+    const turn = botOrders(w, 'hunter');
 
     expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: raiderHuntGrounds()[2] });
+  });
+});
+
+describe('the hunter', () => {
+  it('strips a knocked-out truck it is parked beside', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    playerVehicle(w).speed = 0;
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 });
+    raider.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: false };
+
+    const turn = botOrders(w, 'hunter');
+
+    const job = playerVehicle(turn.world).job;
+    expect(job?.kind).toBe('refit');
+  });
+
+  it('drives beside a knocked-out truck it sees that still has loot', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    playerVehicle(w).speed = 0;
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    raider.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: false };
+
+    const turn = botOrders(w, 'hunter');
+
+    const order = playerVehicle(turn.world).order;
+    if (order?.kind !== 'stopAt') throw new Error('Expected a stop order');
+    expect(Math.hypot(order.dest.x - raider.pos.x, order.dest.y - raider.pos.y)).toBeLessThan(6);
+  });
+
+  it('drives at the weaker of two raiders in sight', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    playerVehicle(w).speed = 0;
+    const strong = addVehicle(w, 'raiders', 'buggy', ['mg', 'mg', 'stockEngine'], { x: 30, y: 42 });
+    const weak = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 42, y: 30 });
+    for (const raider of [strong, weak]) raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+
+    const turn = botOrders(w, 'hunter');
+
+    expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: weak.pos });
+  });
+
+  it('leaves the world random stream where it was', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    playerVehicle(w).speed = 0;
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    const state = w.rngState;
+
+    const turn = botOrders(w, 'hunter');
+
+    expect(turn.world.rngState).toBe(state);
+  });
+});
+
+describe('the markov bot', () => {
+  it('needs a stretch length', () => {
+    expect(() => botOrders(parkedAt('bowl'), 'markov')).toThrow(/markovTurns/);
+  });
+
+  it('plays a goal without shifting the world random stream', () => {
+    const w = saltGlut(parkedAt('nose'));
+    const state = w.rngState;
+
+    const turn = botOrders(w, 'markov', { markovTurns: 10 });
+
+    expect(turn.world.rngState).toBe(state);
+  });
+
+  it('draws the same goal for the same seed and stretch', () => {
+    const a = botOrders(saltGlut(parkedAt('nose')), 'markov', { markovTurns: 10 });
+    const b = botOrders(saltGlut(parkedAt('nose')), 'markov', { markovTurns: 10 });
+
+    expect(b.world.player.money).toBe(a.world.player.money);
+    expect(playerVehicle(b.world).order).toEqual(playerVehicle(a.world).order);
+  });
+});
+
+describe('the fast trader', () => {
+  it('buys a faster chassis and no armor with money to spare', () => {
+    const w = parkedAt('bowl');
+    w.player.money = 200_000;
+    const before = playerVehicle(w);
+    const armor = mountedParts(before, 'armor').length;
+
+    const turn = botOrders(w, 'fastTrader');
+
+    const after = playerVehicle(turn.world);
+    expect(chassisDef(after.chassisId).maxSpeed).toBeGreaterThan(chassisDef(before.chassisId).maxSpeed);
+    expect(mountedParts(after, 'armor').length).toBeLessThanOrEqual(armor);
   });
 });

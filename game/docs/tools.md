@@ -17,7 +17,7 @@ Details of the `npm run` commands and debug tools. Run them from `game/`.
 - `npm run sfx:import -- <cue> <file...>` imports files as variants of a cue in `src/data/sounds.ts`.
 - `npm run sfx:gen -- <cue> <count>` generates variants with ElevenLabs. It costs credits.
 - `npm run sfx:reimport` rebuilds every sound file from the raw source path stored in its tags, after an import change.
-- `npm run progression:record -- --archetypes trader,scavenger,fighter,mixed --seeds 1,2,3 --turns 2000` plays a bot per archetype and seed and writes each trace to `tmp/progression/`. Runs go in parallel. It is slow: about 75 seconds per 2000 turns per run.
+- `npm run progression:record -- --archetypes trader,scavenger,hunter,fastTrader --seeds 1,2,3 --turns 2000` plays a bot per archetype and seed and writes each trace to `tmp/progression/`: the XP events and one economy row per in-game day. Every bot earns, pays upkeep, buys gear and shoots back. Only the hunter seeks fights. The `markov` archetype plays a random one of the others and needs `--markov-turns <k>`, the turns it keeps one goal. The recorder runs headless, so every truck uses the cheap far rules. Runs go in parallel. A 30-day run takes about 15 minutes, so run it in the background with a log.
 - `npm run progression:report` replays every trace in `tmp/progression/` with the current XP rules. It prints the days to each skill level, the XP per day per archetype and misses against the targets in `src/data/skills.ts`.
 - `npm run itch` builds the game and uploads it to itch.io with butler. It builds the last commit in a clean worktree and names the upload after it. [Publishing](publishing.md) has the one-time setup.
 

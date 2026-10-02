@@ -2,7 +2,8 @@
 // tmp/progression/<archetype>-<seed>.jsonl. The first line holds the run, then one trace line per event and one
 // economy row per in-game day. A run the player did not survive ends early with a {"end":"death","turn":N} line.
 // Each run is a child process, and runs go in parallel up to the CPU count.
-// Usage: npm run progression:record -- --archetypes trader,fighter --seeds 1,2,3 --turns 2000
+// Usage: npm run progression:record -- --archetypes trader,hunter --seeds 1,2,3 --turns 2000
+// The markov archetype also needs --markov-turns <k>, the turns it keeps one goal.
 import { spawn } from 'node:child_process';
 import { closeSync, mkdirSync, openSync, renameSync, writeSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
@@ -12,18 +13,33 @@ import { isArchetype } from '../src/sim/progression/bot.ts';
 import { recordTurns } from '../src/sim/progression/record.ts';
 
 const OUT_DIR = 'tmp/progression';
-const USAGE = 'Usage: npm run progression:record -- --archetypes <a,b> --seeds <1,2> --turns <n>';
+const USAGE = 'Usage: npm run progression:record -- --archetypes <a,b> --seeds <1,2> --turns <n> [--markov-turns <k>]';
 
 const args = parseArgs(process.argv.slice(2).filter((a) => a !== '--'));
-if (args.job) recordOne(args.job, args.turns);
+if (args.job) recordOne(args.job, args.turns, args.options);
 else await recordAll(args);
 
 function parseArgs(argv) {
   const flags = readFlags(argv);
   const turns = Number(flags.turns);
   if (!Number.isInteger(turns) || turns <= 0) throw new Error(`--turns must be a positive whole number. ${USAGE}`);
-  if (flags.job) return { job: parseJob(flags.job), turns };
-  return { ...parseRuns(flags), turns };
+  const options = parseOptions(flags);
+  if (flags.job) return { job: parseJob(flags.job), turns, options: requireMarkov([parseJob(flags.job).archetype], options) };
+  const runs = parseRuns(flags);
+  return { ...runs, turns, options: requireMarkov(runs.archetypes, options) };
+}
+
+// The markov bot keeps a goal for --markov-turns turns. Every other bot ignores it.
+function parseOptions(flags) {
+  if (flags['markov-turns'] === undefined) return {};
+  const markovTurns = Number(flags['markov-turns']);
+  if (!Number.isInteger(markovTurns) || markovTurns <= 0) throw new Error(`--markov-turns must be a positive whole number. ${USAGE}`);
+  return { markovTurns };
+}
+
+function requireMarkov(archetypes, options) {
+  if (archetypes.includes('markov') && options.markovTurns === undefined) throw new Error(`The markov archetype needs --markov-turns <k>. ${USAGE}`);
+  return options;
 }
 
 function readFlags(argv) {
@@ -57,7 +73,7 @@ function parseJob(text) {
   return { archetype, seed: parseSeed(seedText) };
 }
 
-async function recordAll({ archetypes, seeds, turns }) {
+async function recordAll({ archetypes, seeds, turns, options }) {
   const jobs = archetypes.flatMap((archetype) => seeds.map((seed) => ({ archetype, seed })));
   const width = Math.min(jobs.length, availableParallelism());
   console.log(`Recording ${jobs.length} runs of ${turns} turns, ${width} at a time`);
@@ -65,7 +81,7 @@ async function recordAll({ archetypes, seeds, turns }) {
   const queue = [...jobs];
   await Promise.all(Array.from({ length: width }, async () => {
     for (let job = queue.shift(); job; job = queue.shift()) {
-      const code = await runChild(job, turns);
+      const code = await runChild(job, turns, options);
       if (code !== 0) failed.push(`${job.archetype}-${job.seed}`);
     }
   }));
@@ -73,10 +89,11 @@ async function recordAll({ archetypes, seeds, turns }) {
   console.log(`Wrote ${jobs.length} traces to ${OUT_DIR}/`);
 }
 
-function runChild({ archetype, seed }, turns) {
+function runChild({ archetype, seed }, turns, options) {
   const viteNode = fileURLToPath(new URL('../node_modules/.bin/vite-node', import.meta.url));
   const script = fileURLToPath(import.meta.url);
-  const child = spawn(viteNode, [script, '--', '--job', `${archetype}:${seed}`, '--turns', String(turns)], { stdio: 'inherit' });
+  const markov = options.markovTurns === undefined ? [] : ['--markov-turns', String(options.markovTurns)];
+  const child = spawn(viteNode, [script, '--', '--job', `${archetype}:${seed}`, '--turns', String(turns), ...markov], { stdio: 'inherit' });
   return new Promise((resolve, reject) => {
     child.on('error', reject);
     child.on('exit', (code) => resolve(code));
@@ -84,16 +101,16 @@ function runChild({ archetype, seed }, turns) {
 }
 
 // Writes one trace, turn by turn, into a part file that becomes the trace only when the run finishes.
-function recordOne({ archetype, seed }, turns) {
+function recordOne({ archetype, seed }, turns, options) {
   const name = `${archetype}-${seed}`;
   const path = `${OUT_DIR}/${name}.jsonl`;
   mkdirSync(OUT_DIR, { recursive: true });
   const fd = openSync(`${path}.part`, 'w');
   const started = Date.now();
-  writeSync(fd, `${JSON.stringify({ archetype, seed, turns })}\n`);
+  writeSync(fd, `${JSON.stringify({ archetype, seed, turns, ...options })}\n`);
   let count = 0;
   let death = null;
-  for (const step of recordTurns(seed, archetype, turns)) {
+  for (const step of recordTurns(seed, archetype, turns, options)) {
     const { world, lines, rows } = step;
     const written = [...lines, ...rows];
     if (written.length > 0) writeSync(fd, written.map((line) => `${JSON.stringify(line)}\n`).join(''));

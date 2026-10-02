@@ -121,7 +121,9 @@ function mount(o: Orders, c: Candidate, replaced: PartItem | null): void {
     o.run((w) => sellPart(w, replaced.part.id));
   }
   c.acquire(o);
-  const spot = installSpot(o.me, probe(c.part));
+  // A part the truck now holds may stand on the mount it is going to, so its own cells count as free.
+  const held = o.me.items.find((it): it is PartItem => it.kind === 'part' && it.part.id === c.part.id);
+  const spot = installSpot(o.me, held ?? probe(c.part));
   if (!spot) throw new Error(`No mount for the ${partDef(c.part.defId).name}`);
   mountBought(o, c.part.id, spot);
 }

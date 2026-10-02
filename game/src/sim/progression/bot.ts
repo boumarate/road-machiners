@@ -10,48 +10,65 @@ import { PARTS, partDef } from '../../data/parts';
 import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
 import { CONDITION, ENGINE_HEAT } from '../../data/wear';
-import { maxHp } from '../wear';
-import { inCombat } from '../combat';
+import { TOPICS } from '../../data/dialogue';
+import { maxHp, partValue } from '../wear';
+import { inCombat, isHostile } from '../combat';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
-import { chooseOption, currentOptions } from '../dialogue';
+import { isKnockedOut } from '../defeat';
+import { callVehicle, chooseOption, currentOptions } from '../dialogue';
+import { offeredSurrenderBy } from '../parley';
+import { hashRandom } from '../rng';
 import { affordableBuyCount, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
 import { findSpot, freeCells, goodsCount, gridOf, isMounted, MOUNT_CELLS, mountedParts, type Spot } from '../grid';
-import { storePart } from '../inventory';
+import { stowSpot, storePart } from '../inventory';
 import { shopAt, shopState } from '../market';
-import { canLoot, salvageHere, takeAllLoot } from '../locations';
-import { getUpkeepReserve, raiderGrounds } from '../npc-decisions';
-import { canReachSalvage, hasSalvage, lootBlocker } from '../salvage';
+import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
+import { getUpkeepReserve, isWeak, perceiveDanger, raiderGrounds } from '../npc-decisions';
+import { canReachSalvage, hasSalvage, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, townAt, type Site } from '../sites';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from '../stats';
-import { clockOf } from '../sun';
 import { inTowReach, setBeacon } from '../tow';
 import type { GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
 import { dist, type Vec } from '../vec';
 import { playerExplored, playerSees } from '../vision';
 import { mountBought, Orders, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
 
-const GEAR_STYLE: UpgradeStyle = { skip: [], chassis: 'value' };
+// Every bot plays the base loop: earn money, pay upkeep, buy upgrades, and shoot back when attacked. Only the hunter
+// goes looking for fights. The fast trader wants speed and mounts no armor. The markov bot plays a random one of the
+// others for a stretch of turns, then draws again.
+export type Archetype = 'trader' | 'scavenger' | 'hunter' | 'fastTrader' | 'markov';
+export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'hunter', 'fastTrader', 'markov'];
+type Goal = Exclude<Archetype, 'markov'>;
+const GOALS_PLAYED: readonly Goal[] = ['trader', 'scavenger', 'hunter', 'fastTrader'];
 
-export type Archetype = 'trader' | 'scavenger' | 'fighter' | 'mixed';
-export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'fighter', 'mixed'];
-type Goal = Exclude<Archetype, 'mixed'>;
-// The mixed bot plays one goal per in-game day, in this order.
-const MIXED_ROTATION: readonly Goal[] = ['trader', 'scavenger', 'fighter'];
+const VALUE_GEAR: UpgradeStyle = { skip: [], chassis: 'value' };
+const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
+  trader: VALUE_GEAR,
+  scavenger: VALUE_GEAR,
+  hunter: VALUE_GEAR,
+  fastTrader: { skip: ['armor'], chassis: 'speed' },
+};
+
+// markovTurns is how many turns the markov bot keeps one goal. It is required for that bot and ignored by the others.
+export type BotOptions = { markovTurns?: number };
+
+// The markov draws come from their own hash of the run seed, so they never shift the world's randomness.
+const MARKOV_SALT = 0x6d61726b;
 
 export function isArchetype(value: string): value is Archetype {
   return (ARCHETYPES as readonly string[]).includes(value);
 }
 
 // The player's commands for this turn. A knocked-out or towed player gets none, and turns still run.
-export function botOrders(world: World, archetype: Archetype): BotTurn {
+export function botOrders(world: World, archetype: Archetype, options: BotOptions = {}): BotTurn {
   const o = new Orders(world);
   answerCall(o);
   if (playerCanAct(o.world)) {
-    const goal = goalOf(o.world, archetype);
+    const goal = goalOf(o.world, archetype, options);
     keepSwitches(o);
-    if (!holds(o) && !serviceTrip(o)) GOALS[goal](o);
+    if (!holds(o) && !serviceTrip(o, GEAR_STYLES[goal])) GOALS[goal](o);
   }
   return { world: o.world, events: o.events };
 }
@@ -63,9 +80,12 @@ export function parkedOnPurpose(world: World): boolean {
   return playerVehicle(world).job !== null || patchDeal(world) !== null || townAt(world) !== null;
 }
 
-function goalOf(world: World, archetype: Archetype): Goal {
-  if (archetype !== 'mixed') return archetype;
-  return MIXED_ROTATION[(clockOf(world.turn).day - 1) % MIXED_ROTATION.length];
+function goalOf(world: World, archetype: Archetype, options: BotOptions): Goal {
+  if (archetype !== 'markov') return archetype;
+  const { markovTurns } = options;
+  if (markovTurns === undefined || !Number.isInteger(markovTurns) || markovTurns <= 0) throw new Error(`The markov bot needs markovTurns as a positive whole number, got ${markovTurns}`);
+  const stretch = Math.floor((world.turn - 1) / markovTurns);
+  return GOALS_PLAYED[Math.floor(hashRandom(world.seed ^ MARKOV_SALT, stretch) * GOALS_PLAYED.length)];
 }
 
 // ---- Calls and switches.
@@ -124,10 +144,10 @@ function workPatch(o: Orders, deal: NpcState): void {
 // cannot pay for does not send it to town, so a poor bot drives on to earn, crawling if it must. A stranded truck
 // also turns its beacon on and takes the first tow offered on the radio. Returns true when the trip to town is this
 // turn's order.
-function serviceTrip(o: Orders): boolean {
+function serviceTrip(o: Orders, style: UpgradeStyle): boolean {
   if (isStranded(o.world, o.me) && !o.world.player.beacon) o.run((w) => setBeacon(w, true));
   if (townAt(o.world)) {
-    serviceInTown(o);
+    serviceInTown(o, style);
     return false;
   }
   if (!paidFixNeeded(o.world)) return false;
@@ -135,11 +155,11 @@ function serviceTrip(o: Orders): boolean {
   return true;
 }
 
-function serviceInTown(o: Orders): void {
+function serviceInTown(o: Orders, style: UpgradeStyle): void {
   serviceHere(o);
   restoreEngine(o);
   if (paidFixNeeded(o.world)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money`);
-  upgradeGear(o, GEAR_STYLE);
+  upgradeGear(o, style);
 }
 
 function paidFixNeeded(world: World): boolean {
@@ -211,7 +231,7 @@ function serviceHere(o: Orders): void {
 
 // ---- Goals.
 
-const GOALS: Record<Goal, (o: Orders) => void> = { trader: traderGoal, scavenger: scavengerGoal, fighter: fight };
+const GOALS: Record<Goal, (o: Orders) => void> = { trader: traderGoal, scavenger: scavengerGoal, hunter: hunterGoal, fastTrader: traderGoal };
 
 // A trader with too little money for a load, and every town known, scavenges until it can buy one. Salvage never
 // grows back, so a bot with neither left waits in the nearest town.
@@ -303,14 +323,87 @@ function findSalvageSite(o: Orders): boolean {
   return true;
 }
 
-// The fighter drives at the nearest hostile it sees or hears, loots the wrecks it sees, sells in town when full and
-// otherwise drives to the nearest raider hunting ground.
-function fight(o: Orders): void {
+// The hunter strips a knocked-out truck it sees of its parts and goods. It drives at the weakest hostile it sees and
+// demands it stand down once it is badly broken. With no foe in sight it follows the nearest it hears, loots the wrecks
+// it sees, sells in town when full and otherwise drives to the nearest raider hunting ground.
+function hunterGoal(o: Orders): void {
   if (townAt(o.world) && hasCargo(o.me)) sellCargo(o);
-  const foe = nearestFoe(o.world);
-  if (foe) return driveTo(o, foe);
+  if (stripDowned(o) || engageFoe(o)) return;
   lootHere(o);
   collectOrHunt(o);
+}
+
+// Demands the weakest foe in sight stand down when it is broken, or else drives at it, or at the nearest one heard.
+// True when this turn's command went to a foe.
+function engageFoe(o: Orders): boolean {
+  const foe = weakestFoe(o.world);
+  if (foe && demandYield(o, foe)) return true;
+  const spot = foe?.pos ?? heardFoe(o.world);
+  if (spot) driveTo(o, spot);
+  return spot !== null;
+}
+
+// ---- Stripping knocked-out trucks.
+
+// The best thing on a knocked-out truck that the bot can take and has room for: parts first by value, then goods.
+function nextLoot(me: Vehicle, target: Vehicle): { item: GridItem; spot: Spot } | null {
+  const worth = (it: GridItem) => (it.kind === 'part' ? partValue(it.part) : 0);
+  for (const item of [...target.items].sort((a, b) => worth(b) - worth(a))) {
+    const spot = takeError(target, item) === null ? stowSpot(me, item) : null;
+    if (spot) return { item, spot };
+  }
+  return null;
+}
+
+// Takes one item from the knocked-out truck beside it, or drives beside the nearest one in sight that has loot to take.
+// True when this turn's command went to the strip.
+function stripDowned(o: Orders): boolean {
+  const here = downedHere(o.world);
+  const pick = here && !lootBlocker(o.world, o.me, here.id) ? nextLoot(o.me, here) : null;
+  if (here && pick) {
+    o.run((w) => takeFromTruck(w, here.id, pick.item.id, pick.spot));
+    return true;
+  }
+  const seen = o.world.vehicles.filter((v) => v.id !== o.me.id && isKnockedOut(v) && playerSees(o.world, v.pos) && nextLoot(o.me, v) !== null);
+  const target = nearestVehicle(o.me.pos, seen);
+  if (target) driveTo(o, besideStop(o.world, target.pos, chassisDef(target.chassisId).radius));
+  return target !== null;
+}
+
+// ---- Foes.
+
+// The hostile truck it sees with the least danger, as the bot reads it. Reading danger rolls world randomness, so the
+// roll is put back and the bot never shifts the NPCs' draws.
+function weakestFoe(world: World): Vehicle | null {
+  const me = playerVehicle(world);
+  const seen = world.vehicles.filter((v) => v.id !== me.id && hostileToPlayer(world, v) && !isKnockedOut(v) && playerSees(world, v.pos));
+  const rng = world.rngState;
+  const danger = new Map(seen.map((v) => [v.id, perceiveDanger(world, me, v)]));
+  world.rngState = rng;
+  return seen.reduce<Vehicle | null>((best, v) => (!best || (danger.get(v.id) ?? 0) < (danger.get(best.id) ?? 0) ? v : best), null);
+}
+
+// Calls a badly broken foe in sight and demands it stand down, once. A foe that agrees is knocked out where it stands
+// and stripped like any knocked-out truck. True when the call was made.
+function demandYield(o: Orders, foe: Vehicle): boolean {
+  const asks = foe.brain !== undefined && isHostile(o.world, foe, o.me) && isWeak(o.world, foe) && !offeredSurrenderBy(o.world, foe, o.me);
+  if (!asks) return false;
+  o.run((w) => callVehicle(w, foe.id));
+  const ask = currentOptions(o.world).findIndex((option) => option.text === TOPICS.yieldDemand.ask?.text);
+  if (ask >= 0) o.run((w) => chooseOption(w, ask));
+  answerCall(o);
+  return true;
+}
+
+// Where an unseen hostile is: the center of its contact circle. Nearest first.
+function heardFoe(world: World): Vec | null {
+  const me = playerVehicle(world);
+  const hostile = world.vehicles.filter((v) => v.id !== me.id && hostileToPlayer(world, v));
+  return nearest(me.pos, world.player.contacts.filter((c) => hostile.some((v) => v.id === c.vehicleId)).map((c) => c.center));
+}
+
+function nearestVehicle(from: Vec, vehicles: readonly Vehicle[]): Vehicle | null {
+  return vehicles.reduce<Vehicle | null>((best, v) => (!best || dist(from, v.pos) < dist(from, best.pos) ? v : best), null);
 }
 
 function collectOrHunt(o: Orders): void {
@@ -335,15 +428,6 @@ function hunt(o: Orders): void {
   if (order?.kind === 'stopAt' && grounds.some((g) => g.x === order.dest.x && g.y === order.dest.y)) return;
   const here = grounds.indexOf(nearest(o.me.pos, grounds) ?? grounds[0]);
   driveTo(o, grounds[(here + 1) % grounds.length]);
-}
-
-// Where a hostile truck is: in sight, or at the center of its contact circle. Nearest first.
-function nearestFoe(world: World): Vec | null {
-  const me = playerVehicle(world);
-  const hostile = world.vehicles.filter((v) => v.id !== me.id && hostileToPlayer(world, v));
-  const seen = hostile.filter((v) => playerSees(world, v.pos)).map((v) => v.pos);
-  const heard = world.player.contacts.filter((c) => hostile.some((v) => v.id === c.vehicleId)).map((c) => c.center);
-  return nearest(me.pos, seen) ?? nearest(me.pos, heard);
 }
 
 // ---- Salvage.
