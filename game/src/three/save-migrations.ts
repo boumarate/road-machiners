@@ -255,6 +255,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withoutRetiredStock_7_8,
   // 8 to 9: Old Orchard is a territory, so its site stock goes.
   withoutRetiredStock_8_9,
+  // 9 to 10: the player gets the headlight switch, off as in a new game.
+  (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
