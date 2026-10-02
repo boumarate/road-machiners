@@ -87,7 +87,7 @@ function paintCraters(c: PaintCanvas): void {
 function paintScree(c: PaintCanvas): void {
   for (const t of REGION.locations.filter((l) => l.kind === "territory")) {
     const scree = TERRITORIES[t.id].wreck?.scree;
-    if (scree) fadedDisc(c, { x: t.pos.x + scree.at.x, y: t.pos.y + scree.at.y }, scree.radius, PAL.scree, 0.65);
+    if (scree) fadedDisc(c, { x: t.pos.x + scree.at.x, y: t.pos.y + scree.at.y }, scree.radius, PAL.scree, 0.95);
   }
 }
 
