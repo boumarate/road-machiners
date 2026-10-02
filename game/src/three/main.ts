@@ -96,6 +96,8 @@ async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<Booted> {
 
 // Asks the browser to keep saves under disk pressure. A refusal leaves them best-effort storage, as before.
 async function persistSaves(): Promise<void> {
+  // The storage manager exists only on https pages.
+  if (!navigator.storage) return console.warn('The page is not secure, so it cannot ask the browser to keep saves under disk pressure');
   if (!(await navigator.storage.persist())) console.warn('The browser did not grant persistent storage, so it may evict saves under disk pressure');
 }
 
@@ -143,8 +145,10 @@ function freshSeed(): number {
   return Math.floor(Math.random() * 2 ** 32) | 0;
 }
 
+// 16 random bytes in hex. crypto.randomUUID() exists only on https pages, and the game also runs over plain http on a
+// local network.
 function freshRunId(): string {
-  return crypto.randomUUID();
+  return [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function routeRadii(world: World): number[] {
