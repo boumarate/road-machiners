@@ -1,18 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { ECONOMY } from '../data/goods';
-import { REGION } from '../data/region';
+import { ORCHARD_HEADING, REGION, type TerritoryDef } from '../data/region';
 import { START_KITS } from '../data/start';
 import { TERRAIN } from '../data/terrain';
-import { TERRITORIES } from '../data/territory';
+import { onOrchardRoad, TERRITORIES } from '../data/territory';
 import { bayPoints, deckAlongAt, deckPlane, hullDecks, isLootSpot, ribPoses, territoryEntries, type HullDeck } from '../sim/territory';
 import { propReach } from '../sim/mapgen';
 import { route } from '../sim/path';
 import { ROAD_INDEX } from '../sim/road-index';
 import { groundAt, heightAt, isCliff, tileAt, type BakedProp, type Terrain } from '../sim/terrain';
 import { newWorld } from '../sim/world';
-import { dist, lerp, type Vec } from '../sim/vec';
+import { dist, lerp, segmentDist, type Vec } from '../sim/vec';
 import { TEST_MAP } from '../test/map';
-import { newDraft, type MapDraft } from './bake';
+import { newDraft, tileSteepness, type MapDraft } from './bake';
+import { fillFarm } from './farm';
+import { BUILT_DIRTY_WATER, BUILT_TRACK } from './newworld';
+import { BUILT_FIELD, BUILT_OLD_ROAD, ruleRng, tileOf, tilesWithin } from './oldworld';
 import { territoryLayer } from './territory';
 
 const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
@@ -187,5 +190,119 @@ describe('the territory layer', () => {
         expect(dist(end, spot.pos), spot.id).toBeLessThanOrEqual(reach(spot));
       }
     }
+  });
+});
+
+describe('the orchard farm', () => {
+  const orchard = REGION.locations.find((l) => l.id === 'orchard') as TerritoryDef;
+  const rules = TERRITORIES.orchard;
+  const farm = rules.farm!;
+  const groves = farm.groves;
+  const abs = (at: Vec): Vec => ({ x: orchard.pos.x + at.x, y: orchard.pos.y + at.y });
+  const [roadFrom, roadTo] = [abs(rules.spine.from), abs(rules.spine.to)];
+
+  // A draft over the region with the committed map's heights, so the farm bakes on the orchard's real basin and
+  // ridges. Marks and props start empty, as no earlier layer marks or builds inside a territory.
+  function groundDraft(): MapDraft {
+    const d = newDraft(REGION.size);
+    d.heights.set(TEST_MAP.terrain.heights);
+    return d;
+  }
+
+  // Tiles along the road toward its north end, and tiles across it toward the map's west, from the centre.
+  function frameOf(pos: Vec): { s: number; c: number } {
+    const [x, y] = [pos.x - orchard.pos.x, pos.y - orchard.pos.y];
+    return { s: x * Math.cos(ORCHARD_HEADING) + y * Math.sin(ORCHARD_HEADING), c: x * Math.sin(ORCHARD_HEADING) - y * Math.cos(ORCHARD_HEADING) };
+  }
+
+  // The tile under the prop's centre and every tile whose centre its footprint covers.
+  function footprint(d: MapDraft, p: BakedProp): number[] {
+    return [tileOf(d.size, p.pos), ...tilesWithin(d.size, p.pos, p.r)];
+  }
+
+  const baked = territoryLayer(7, groundDraft());
+  const props = baked.props.filter((p) => dist(p.pos, orchard.pos) < orchard.radius);
+  const trees = props.filter((p) => p.kind === groves.look);
+  const drawn = props.filter((p) => [...rules.spots, ...rules.debris].some((rule) => rule.look === p.kind));
+  const spots = props.filter((p) => [...farm.buildings, ...rules.spots].some((rule) => rule.look === p.kind));
+
+  it('bakes the same farm for the same seed', () => {
+    const again = territoryLayer(7, groundDraft());
+    expect(again.props).toEqual(baked.props);
+    expect(again.built).toEqual(baked.built);
+  });
+
+  it('stands one building at each authored pose, turned with the road', () => {
+    for (const group of farm.buildings) {
+      expect(props.filter((p) => p.kind === group.look), group.look).toHaveLength(group.poses.length);
+      for (const pose of group.poses) {
+        const found = props.filter((p) => p.kind === group.look && dist(p.pos, abs(pose.at)) < 1e-6);
+        expect(found, `${group.look} at ${pose.at.x},${pose.at.y}`).toHaveLength(1);
+        expect(found[0].r).toBe(pose.r);
+        expect(found[0].yaw).toBeCloseTo(ORCHARD_HEADING + pose.turn, 6);
+      }
+    }
+  });
+
+  it('marks the old road from the south rim to the north rim', () => {
+    for (let s = -orchard.radius + 0.5; s <= orchard.radius - 0.5; s += 0.5) {
+      const p = abs(onOrchardRoad(s, 0));
+      const onNewRoad = ROAD_INDEX.nearestWithin(p.x, p.y, REGION.roadWidth / 2) < REGION.roadWidth / 2;
+      expect(onNewRoad || baked.built[tileOf(baked.size, p)] === BUILT_OLD_ROAD, `road at ${s}`).toBe(true);
+    }
+  });
+
+  it('marks the motor pool as concrete, tracks as dirt, ditches as dirty water and blocks as field', () => {
+    const at = (p: Vec) => baked.built[tileOf(baked.size, abs(p))];
+    for (const pad of farm.pads) expect(at(pad.at)).toBe(BUILT_OLD_ROAD);
+    const middle = (a: Vec, b: Vec): Vec => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    for (const track of farm.tracks) for (let k = 1; k < track.points.length; k++) expect(at(middle(track.points[k - 1], track.points[k]))).toBe(BUILT_TRACK);
+    for (const ditch of farm.ditches) for (let k = 1; k < ditch.points.length; k++) expect(at(middle(ditch.points[k - 1], ditch.points[k]))).toBe(BUILT_DIRTY_WATER);
+    for (const block of farm.blocks) {
+      const centre = frameOf(abs(block.at));
+      const inside = tilesWithin(baked.size, abs(block.at), Math.hypot(block.size.x, block.size.y) / 2).filter((tile) => {
+        const f = frameOf({ x: (tile % baked.size) + 0.5, y: Math.floor(tile / baked.size) + 0.5 });
+        return Math.abs(f.s - centre.s) <= block.size.x / 2 && Math.abs(f.c - centre.c) <= block.size.y / 2;
+      });
+      const field = inside.filter((tile) => baked.built[tile] === BUILT_FIELD);
+      expect(field.length, `block at ${centre.s},${centre.c}`).toBeGreaterThanOrEqual(inside.length * 0.8);
+    }
+  });
+
+  it('keeps every drawn prop and tree off the roads, tracks and cliffs and clear of every spot', () => {
+    // Two spots keep the spot gap between centres; debris and trees keep the debris gap from a spot's edge.
+    const gapOk = (p: BakedProp, spot: BakedProp) =>
+      spots.includes(p) ? dist(p.pos, spot.pos) >= rules.spotGap : dist(p.pos, spot.pos) >= spot.r + p.r + rules.debrisGap;
+    expect(drawn.length).toBe([...rules.spots, ...rules.debris].reduce((n, rule) => n + rule.count, 0));
+    for (const p of [...drawn, ...trees]) {
+      const where = `${p.kind} at ${p.pos.x},${p.pos.y}`;
+      for (const tile of footprint(baked, p)) expect([BUILT_OLD_ROAD, BUILT_TRACK], where).not.toContain(baked.built[tile]);
+      expect(segmentDist(p.pos, roadFrom, roadTo), where).toBeGreaterThanOrEqual(farm.road.width / 2 + p.r);
+      expect(ROAD_INDEX.nearestWithin(p.pos.x, p.pos.y, REGION.roadWidth / 2 + p.r), where).toBe(Infinity);
+      expect(tileSteepness(baked.heights, baked.size, tileOf(baked.size, p.pos)), where).toBeLessThanOrEqual(TERRAIN.drive.maxSlope);
+      for (const spot of spots.filter((o) => o !== p)) expect(gapOk(p, spot), `${where} by ${spot.kind} at ${spot.pos.x},${spot.pos.y}`).toBe(true);
+    }
+  });
+
+  it('plants every block in rows, keeping most of its trees and a truck lane between rows, within the cap', () => {
+    expect(trees.length).toBeLessThanOrEqual(groves.maxTrees);
+    for (const block of farm.blocks) {
+      const centre = frameOf(abs(block.at));
+      // Offsets along a row and across rows, from the block's middle.
+      const [rowAxis, laneAxis] = block.rows === 'along' ? (['s', 'c'] as const) : (['c', 's'] as const);
+      const [rowLength, rowSpan] = block.rows === 'along' ? [block.size.x, block.size.y] : [block.size.y, block.size.x];
+      const planned = (Math.floor(rowLength / groves.treeGap) + 1) * (Math.floor(rowSpan / groves.rowGap) + 1);
+      const inBlock = (f: { s: number; c: number }) => Math.abs(f[rowAxis] - centre[rowAxis]) <= rowLength / 2 + groves.jitter && Math.abs(f[laneAxis] - centre[laneAxis]) <= rowSpan / 2 + 1e-6;
+      const mine = trees.map((t) => frameOf(t.pos)).filter(inBlock);
+      expect(mine.length, `block at ${centre.s},${centre.c}`).toBeGreaterThanOrEqual(groves.keep * planned);
+      const rows = [...new Set(mine.map((f) => Math.round((f[laneAxis] - centre[laneAxis]) * 1e4) / 1e4))].sort((a, b) => a - b);
+      for (let k = 1; k < rows.length; k++) expect(rows[k] - rows[k - 1] - 2 * groves.radius).toBeGreaterThanOrEqual(groves.rowGap - 2 * groves.radius - 1e-6);
+    }
+  });
+
+  it('throws on a building outside the circle', () => {
+    const moved = structuredClone(rules);
+    moved.farm!.buildings[0].poses[0].at = onOrchardRoad(0, orchard.radius + 4);
+    expect(() => fillFarm(groundDraft(), orchard, moved, moved.farm!, ruleRng(7, 1))).toThrow(/outside/);
   });
 });

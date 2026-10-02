@@ -182,8 +182,10 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { look: 'farmhouse', table: 'landmark', poses: [pose(10, 11, 3, ALONG)] },
         // The gabled barn far left above the road, and its shed just right of it.
         { look: 'barn', table: 'farmStores', poses: [pose(-10, 25, 2.6, ALONG), pose(-4, 24, 1.8, ALONG)] },
-        // Three Quonset huts side by side right of centre, below the road, their ends to the road.
-        { look: 'quonset', table: 'armyStores', poses: [pose(22, -9, 2.2, ACROSS), pose(25, -14, 2.2, ACROSS), pose(28, -19, 2.2, ACROSS)] },
+        // Three Quonset huts side by side right of centre, below the road, their ends to the road. Moved to fit the
+        // circle: the third hut at (28, -19) reached 36 tiles out. The row now steps across the road from (22, -9),
+        // (25, -14), (28, -19) to (21.5, -8.5), (22, -13), (22.5, -17.5).
+        { look: 'quonset', table: 'armyStores', poses: [pose(21.5, -8.5, 2.2, ACROSS), pose(22, -13, 2.2, ACROSS), pose(22.5, -17.5, 2.2, ACROSS)] },
         // The sandbagged blockhouse just below the road at the middle.
         { look: 'bunker', table: 'armyStores', poses: [pose(2, -8, 2.6, ALONG)] },
         // Guard huts: at the motor pool, at the checkpoint by the road on the upper right, and the concrete hut by the
@@ -195,8 +197,9 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
           poses: [
             // The motor pool: two rows of three army trucks, 3 tiles apart along the road and 4 across.
             ...[-22, -19, -16].flatMap((s) => [11, 15].map((c) => pose(s, c, 1.1, ALONG))),
-            // The derelict jeep on the lower-left shoulder, and the army truck on the upper-right shoulder.
-            { at: onOrchardRoad(-28, -1), r: 1.1, turn: ALONG, shoulder: true },
+            // The derelict jeep on the lower-left shoulder, and the army truck on the upper-right shoulder. The jeep
+            // moved from (-28, -1) to (-27, -1), off the end of the spur road.
+            { at: onOrchardRoad(-27, -1), r: 1.1, turn: ALONG, shoulder: true },
             { at: onOrchardRoad(17, 1), r: 1.1, turn: Math.PI, shoulder: true },
           ],
         },
@@ -222,31 +225,36 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { points: [AT(7, -3.5), AT(17, -3.5)], width: 1 },
         // Along the top of the east block.
         { points: [AT(-7, -15.5), AT(7, -15.5)], width: 1 },
-        // Along the north end of the south-east block.
-        { points: [AT(-13.5, -5), AT(-13.5, -19)], width: 1 },
+        // Along the north end of the south-east block, shortened from c -19 to -16 with the block.
+        { points: [AT(-13.5, -5), AT(-13.5, -16)], width: 1 },
       ],
       groves: { look: 'deadTree', rowGap: 2.5, treeGap: 1.5, jitter: 0.2, missing: 0.1, radius: 0.35, maxTrees: 320, keep: 0.7 },
       // Six blocks of dead orchard trees on both sides of the road.
       blocks: [
         // The big block upper left, above the farmhouse.
         { at: AT(8, 21), size: { x: 16, y: 12 }, rows: 'along' },
-        // The block upper right, above the road past the farmhouse.
-        { at: AT(25, 10), size: { x: 10, y: 10 }, rows: 'across' },
+        // The block upper right, above the road past the farmhouse. Moved from (25, 10) 10 x 10 to (21, 10) 8 x 10:
+        // its far corner at (30, 15) lay outside the circle and on the north ridge, which rises from s 26, and its
+        // near rows must clear the farmhouse's parking gap.
+        { at: AT(21, 10), size: { x: 8, y: 10 }, rows: 'across' },
         // The small block left of the farmhouse, between the road and the barn track.
         { at: AT(0, 8), size: { x: 8, y: 6 }, rows: 'along' },
-        // The block just below the road right of the blockhouse.
-        { at: AT(12, -7), size: { x: 10, y: 6 }, rows: 'across' },
+        // The block just below the road right of the blockhouse. Shrunk from 10 x 6 to 7 x 6 along the road: its end
+        // rows stood in the parking gaps of the blockhouse, the first Quonset hut and the checkpoint.
+        { at: AT(12, -7), size: { x: 7, y: 6 }, rows: 'across' },
         // The block below the blockhouse.
         { at: AT(0, -22), size: { x: 14, y: 12 }, rows: 'along' },
-        // The big block lower left, below the road.
-        { at: AT(-22, -12), size: { x: 16, y: 14 }, rows: 'across' },
+        // The big block lower left, below the road. Shrunk from (-22, -12) 16 x 14 to (-20.5, -10.75) 13 x 10.5,
+        // between the ditch and a tile off the road's fence: its far corner at (-30, -19) lay outside the circle.
+        { at: AT(-20.5, -10.75), size: { x: 13, y: 10.5 }, rows: 'across' },
       ],
       runs: [
-        // Wooden fences along the outer edges of four blocks, open where the track enters.
+        // Wooden fences along the outer edges of four blocks, open where the track enters. The upper-right block's
+        // fence moved with it from s 20..30 to 17..25, and the lower-left block's ends at s -27, not -30.
         { look: 'fence', points: [AT(-0.5, 15), AT(-0.5, 27)], segment: 2, gaps: [] },
-        { look: 'fence', points: [AT(20, 4.5), AT(30, 4.5)], segment: 2, gaps: [] },
+        { look: 'fence', points: [AT(17, 4.5), AT(25, 4.5)], segment: 2, gaps: [] },
         { look: 'fence', points: [AT(-7, -28.5), AT(7, -28.5)], segment: 2, gaps: [] },
-        { look: 'fence', points: [AT(-14, -4.5), AT(-30, -4.5)], segment: 2, gaps: [1, 2] },
+        { look: 'fence', points: [AT(-14, -4.5), AT(-27, -4.5)], segment: 2, gaps: [1, 2] },
         // Concrete barriers along both road edges near the middle, open where the tracks cross.
         { look: 'barrier', points: [AT(-6, 2), AT(6, 2)], segment: 1, gaps: [9, 10, 11] },
         { look: 'barrier', points: [AT(-6, -2), AT(6, -2)], segment: 1, gaps: [2, 3, 4] },

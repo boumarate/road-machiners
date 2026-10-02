@@ -1,7 +1,8 @@
-// Territory layer: hull decks, ribs, deck bays, walls, the reactor, field spots and debris inside each territory,
-// placed by the rules in TERRITORIES. It runs after the new-world layer, so ground rules read these props and the
-// stamped deck heights. Decks, ribs, bays and walls are authored; field spots and debris are drawn along the spine
-// from the map seed and the territory's own seed offset, on open ground off the decks and roads.
+// Territory layer: hull decks, ribs, deck bays, walls, the reactor, a farm's layout (./farm), field spots and debris
+// inside each territory, placed by the rules in TERRITORIES. It runs after the new-world layer, so ground rules read
+// these props, the stamped deck heights and the farm's marks. Decks, ribs, bays, walls and farms are authored; field
+// spots and debris are drawn along the spine from the map seed and the territory's own seed offset, on open ground
+// off the decks, roads, pads and tracks.
 
 import { REGION, type TerritoryDef } from '../data/region';
 import { TERRITORIES, type HullRules, type TerritoryRules } from '../data/territory';
@@ -12,6 +13,7 @@ import { bayPoints, DECK_BAY, deckAlongAt, deckGap, deckPlane, hullDecks, isTerr
 import { groundAt, type BakedProp } from '../sim/terrain';
 import { dist, type Vec } from '../sim/vec';
 import { tileSteepness, type MapDraft } from './bake';
+import { fillFarm, touchesMarks } from './farm';
 import { BUILT_HULL } from './newworld';
 import { prop, ruleRng, tileOf } from './oldworld';
 
@@ -43,7 +45,12 @@ function fill(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, rng: Rng): vo
     return from + r < t.radius && from > hazard + r && decks.every((deck) => deckGap(deck, pos) > r + DECK_EDGE);
   };
   const g: Ground = { d, t, rules, rng, free };
-  placeDebris(g, placeSpots(g, bays));
+  // A farm's buildings are spots, so drawn spots keep the spot gap from them, and they keep the debris gap from its
+  // trees and runs, so a truck can still park beside one.
+  const before = d.props.length;
+  const buildings = rules.farm ? fillFarm(d, t, rules, rules.farm, rng) : [];
+  const dressing = d.props.slice(before).filter((p) => !buildings.includes(p));
+  placeDebris(g, placeSpots(g, [...bays, ...buildings], dressing));
 }
 
 // Ribs over the decks, a loot spot in each bay and the walls. Returns the bays.
@@ -86,11 +93,13 @@ function markHullTile(d: MapDraft, deck: HullDeck, x: number, y: number): void {
   if (x < d.size && y < d.size && deckAlongAt(deck, { x: x + 0.5, y: y + 0.5 }) !== null) d.built[y * d.size + x] = BUILT_HULL;
 }
 
-// Spots go first, so debris never boxes one in. Field spots keep the spot gap from the deck bays too.
-function placeSpots(g: Ground, bays: readonly BakedProp[]): BakedProp[] {
-  const spots: BakedProp[] = [...bays];
+// Spots go first, so debris never boxes one in. Field spots keep the spot gap from the authored spots too: deck bays
+// and farm buildings. They keep the debris gap from the authored dressing around them.
+function placeSpots(g: Ground, authored: readonly BakedProp[], dressing: readonly BakedProp[]): BakedProp[] {
+  const spots: BakedProp[] = [...authored];
   for (const rule of g.rules.spots) {
-    const apart = (pos: Vec, r: number): boolean => g.free(pos, r) && spots.every((o) => dist(o.pos, pos) >= g.rules.spotGap) && clearOf(g.d.props, pos, r, 0);
+    const apart = (pos: Vec, r: number): boolean =>
+      g.free(pos, r) && spots.every((o) => dist(o.pos, pos) >= g.rules.spotGap) && clearOf(g.d.props, pos, r, 0) && clearOf(dressing, pos, r, g.rules.debrisGap);
     for (let i = 0; i < rule.count; i++) {
       const p = draw(g, rule.look, () => bandPoint(g, rule.band), rule.radius, apart);
       spots.push(p);
@@ -132,11 +141,12 @@ function bandPoint({ t, rules, rng }: Ground, band: [number, number]): Vec {
   };
 }
 
-// Inside the map margin, off every road and off cliffs.
+// Inside the map margin, off every road, off a farm's old road, pads and tracks, and off cliffs.
 function standable(d: MapDraft, pos: Vec, r: number): boolean {
   if (Math.min(pos.x, pos.y, d.size - pos.x, d.size - pos.y) < REGION.obstacles.edgeMargin + r) return false;
   const reach = REGION.roadWidth / 2 + r;
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, reach) < reach) return false;
+  if (touchesMarks(d, pos, r)) return false;
   return tileSteepness(d.heights, d.size, tileOf(d.size, pos)) <= TERRAIN.drive.maxSlope;
 }
 
