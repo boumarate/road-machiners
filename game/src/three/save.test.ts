@@ -197,6 +197,28 @@ describe('local game save', () => {
     expect(loaded.broken).toEqual(world.broken);
   });
 
+  it('stores no trails, visible tiles, last turn events, removed vehicles or broken prop copies, and rebuilds them on load', () => {
+    const storage = makeStorage();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const fence = world.obstacles.find(isBreakable)!;
+    breakProp(world, fence.id, world.player.vehicleId);
+    world.vehicles[0].trail = [{ x: 1, y: 2, heading: 0 }];
+    world.events = [{ t: 'wake' }];
+    world.removed = [world.vehicles[1]];
+    writeSave(storage, 'auto', world, 1000);
+    const saved = JSON.parse(storage.getItem('roam.save')!).world;
+
+    expect(saved).not.toHaveProperty('events');
+    expect(saved).not.toHaveProperty('removed');
+    expect(saved.player).not.toHaveProperty('visible');
+    expect(saved.vehicles.filter((v: object) => 'trail' in v)).toEqual([]);
+    expect(saved.broken).toEqual([{ id: fence.id, turn: world.broken[0].turn }]);
+    const loaded = loadWorld(storage, 'auto', TEST_MAP)!;
+    expect(loaded.player.visible).toEqual(world.player.visible);
+    expect(loaded.broken).toEqual(world.broken);
+    expect([loaded.events, loaded.removed, loaded.vehicles[0].trail]).toEqual([[], [], []]);
+  });
+
   it('rejects a save whose broken props do not match the map', () => {
     const storage = makeStorage();
     const world = newWorld(1337, startKit('standard'), TEST_MAP);

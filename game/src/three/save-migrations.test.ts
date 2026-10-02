@@ -9,6 +9,7 @@ import FORMAT_2_3 from './save-fixtures/format-2-3.json';
 import FORMAT_2_4 from './save-fixtures/format-2-4.json';
 import FORMAT_2_5 from './save-fixtures/format-2-5.json';
 import FORMAT_2_6 from './save-fixtures/format-2-6.json';
+import FORMAT_2_7 from './save-fixtures/format-2-7.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS } from './save-migrations';
@@ -168,5 +169,26 @@ describe('save migration 6 to 7', () => {
     expect(knocked.defeat?.gaveUp).toBe(false);
     expect(retreating.defeat?.gaveUp).toBe(false);
     expect(free).toEqual(FORMAT_2_6.vehicles[3]);
+  });
+});
+
+describe('save migration 7 to 8', () => {
+  const next = MIGRATIONS[7](FORMAT_2_7) as Record<string, unknown> & { vehicles: object[]; player: object; broken: object[] };
+
+  it('drops trails, the visible tiles, the last turn events and removed vehicles', () => {
+    expect(next.vehicles).toEqual(FORMAT_2_7.vehicles.map(({ trail: _t, ...rest }) => rest));
+    expect('events' in next).toBe(false);
+    expect('removed' in next).toBe(false);
+    const { visible: _v, ...player } = FORMAT_2_7.player;
+    expect(next.player).toEqual(player);
+  });
+
+  it('keeps only the id and turn of a broken prop', () => {
+    expect(next.broken).toEqual([{ id: 'deadTree-1354', turn: 2559 }]);
+  });
+
+  it('keeps dust clouds, contacts and clouds', () => {
+    expect(next.dustClouds).toEqual(FORMAT_2_7.dustClouds);
+    expect(next.turn).toBe(FORMAT_2_7.turn);
   });
 });

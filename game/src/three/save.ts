@@ -1,7 +1,8 @@
 import type { BakedMap } from '../sim/terrain';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
-import type { BrokenProp, Obstacle, World } from '../sim/types';
+import type { BrokenProp, Obstacle, Player, Vehicle, World } from '../sim/types';
+import { playerVisible } from '../sim/vision';
 import { clearTips } from '../ui/tips';
 import { settleAims } from '../sim/combat';
 import { clockOf } from '../sim/sun';
@@ -62,6 +63,17 @@ function parsedOrUndefined(raw: string): unknown {
 // Saves leave out the terrain and the baked props, which come from the map file the save names by hash. Broken props are saved whole. The 600-tile terrain alone is
 // about 10 MB of JSON, past the browser's local storage quota. Old saves migrate to the current format on load.
 
+// A broken prop as a save holds it. The map file holds the prop itself.
+type SavedBroken = { id: string; turn: number };
+
+// A world as a save holds it. Load rebuilds the rest: the terrain and baked props from the map, the visible tiles
+// from the player's position, and empty trails, events and removed vehicles, which only animate the last turn.
+type SavedWorld = Omit<World, 'terrain' | 'events' | 'removed' | 'broken' | 'vehicles' | 'player'> & {
+  broken: SavedBroken[];
+  vehicles: Omit<Vehicle, 'trail'>[];
+  player: Omit<Player, 'visible'>;
+};
+
 // The saved world on the given map. A save made on another map fails, since its terrain is gone.
 export function loadWorld(storage: Storage, slot: SlotId, map: BakedMap): World | null {
   const raw = storage.getItem(slotKey(SAVE_KEY, slot));
@@ -70,23 +82,35 @@ export function loadWorld(storage: Storage, slot: SlotId, map: BakedMap): World 
   if (world.mapHash !== map.hash) throw new SaveError(`Game save was made on map ${world.mapHash}, not on the current map ${map.hash}`);
   const explored = unpackExplored(world.player.explored, world.size * world.size);
   if (world.obstacles.some(isBakedObstacle)) throw new SaveError('Game save holds baked map props, which come from the map file');
-  const player = { ...world.player, explored };
-  const loaded = { ...world, player, obstacles: [...standingBaked(map, world.broken), ...world.obstacles], terrain: map.terrain };
+  const baked = mapObstacles(map);
+  const broken = brokenProps(baked, world.broken);
+  const gone = new Set(world.broken.map((b) => b.id));
+  const loaded: World = {
+    ...world,
+    player: { ...world.player, explored, visible: [] },
+    vehicles: world.vehicles.map((v) => ({ ...v, trail: [] })),
+    obstacles: [...baked.filter((o) => !gone.has(o.id)), ...world.obstacles],
+    broken,
+    events: [],
+    removed: [],
+    terrain: map.terrain,
+  };
+  loaded.player.visible = [...playerVisible(loaded)].sort((a, b) => a - b);
   settleAims(loaded);
   return loaded;
 }
 
-// The map's baked props but the broken ones. Every broken prop must be a breakable prop of this map.
-function standingBaked(map: BakedMap, broken: readonly BrokenProp[]): Obstacle[] {
-  const baked = mapObstacles(map);
-  const ids = new Set(baked.map((o) => o.id));
-  const bad = broken.find(({ obstacle }) => !isBreakable(obstacle) || !ids.has(obstacle.id));
-  if (bad) throw new SaveError(`Game save holds broken prop ${bad.obstacle.id}, which is no breakable prop of the map`);
-  const gone = new Set(broken.map(({ obstacle }) => obstacle.id));
-  return baked.filter((o) => !gone.has(o.id));
+// The broken props of a save, taken from the map by id. Every one must be a breakable prop of this map.
+function brokenProps(baked: readonly Obstacle[], broken: readonly SavedBroken[]): BrokenProp[] {
+  const byId = new Map(baked.map((o) => [o.id, o]));
+  return broken.map(({ id, turn }) => {
+    const obstacle = byId.get(id);
+    if (!obstacle || !isBreakable(obstacle)) throw new SaveError(`Game save holds broken prop ${id}, which is no breakable prop of the map`);
+    return { obstacle, turn };
+  });
 }
 
-function savedWorld(save: unknown): Omit<World, 'terrain'> {
+function savedWorld(save: unknown): SavedWorld {
   const world = migratedWorld(save);
   if (!isWorld(world)) throw new SaveError('Invalid saved world');
   return world;
@@ -123,11 +147,11 @@ function isCount(value: unknown): value is number {
 }
 
 // World fields a save must hold as arrays.
-const WORLD_LISTS = ['vehicles', 'obstacles', 'broken', 'salvage', 'events', 'removed', 'weather', 'dustClouds', 'states'] as const;
+const WORLD_LISTS = ['vehicles', 'obstacles', 'broken', 'salvage', 'weather', 'dustClouds', 'states'] as const;
 
-function isWorld(value: unknown): value is Omit<World, 'terrain'> {
+function isWorld(value: unknown): value is SavedWorld {
   if (!value || typeof value !== 'object') return false;
-  const world = value as Partial<World>;
+  const world = value as Partial<SavedWorld>;
   if ('terrain' in world) return false;
   return Number.isInteger(world.turn) && world.turn! > 0 && Number.isInteger(world.seed)
     && Number.isInteger(world.rngState) && Number.isInteger(world.nextId) && world.nextId! >= 0
@@ -161,13 +185,15 @@ export function writeSave(storage: Storage, slot: SlotId, world: World, savedAt:
   storage.setItem(slotKey(SAVE_KEY, slot), JSON.stringify({ ...saveOf(world), savedAt }));
 }
 
-// The save of a world as it goes into JSON.
+// The save of a world, holding only what load cannot rebuild.
 export function saveOf(world: World): { format: typeof SAVE_FORMAT; world: object } {
-  const { terrain: _terrain, ...saved } = world;
-  // JSON writes a typed array as an object keyed by index, so explored goes out as a base64 bitset.
-  const player = { ...saved.player, explored: packExplored(saved.player.explored) };
+  const { terrain: _terrain, events: _events, removed: _removed, ...saved } = world;
+  const { visible: _visible, ...player } = saved.player;
+  const vehicles = saved.vehicles.map(({ trail: _trail, ...vehicle }) => vehicle);
   const obstacles = saved.obstacles.filter((o) => !isBakedObstacle(o));
-  return { format: SAVE_FORMAT, world: { ...saved, player, obstacles } };
+  const broken = saved.broken.map(({ obstacle, turn }) => ({ id: obstacle.id, turn }));
+  // explored goes out as a base64 bitset, a fraction of a list of zeros and ones.
+  return { format: SAVE_FORMAT, world: { ...saved, player: { ...player, explored: packExplored(player.explored) }, vehicles, obstacles, broken } };
 }
 
 // Explored tiles go into a save as a base64 bitset, one bit per tile and the least significant bit first. A list of zeros

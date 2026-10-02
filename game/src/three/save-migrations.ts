@@ -221,6 +221,15 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     vehicles: (world.vehicles as SavedJson[]).map(withGaveUp_6_7),
     removed: (world.removed as SavedJson[]).map(withGaveUp_6_7),
   }),
+  // 7 to 8: a save keeps only what load cannot rebuild. Trails, visible tiles, the last turn's events and removed
+  // vehicles go, and a broken prop keeps its id and turn, since the map file holds the prop.
+  (world) => {
+    const { events: _events, removed: _removed, ...rest } = world;
+    const { visible: _visible, ...player } = world.player as SavedJson;
+    const vehicles = (world.vehicles as SavedJson[]).map(({ trail: _trail, ...vehicle }) => vehicle);
+    const broken = (world.broken as SavedJson[]).map((b) => ({ id: (b.obstacle as SavedJson).id, turn: b.turn }));
+    return { ...rest, player, vehicles, broken };
+  },
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
