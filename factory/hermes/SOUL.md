@@ -115,7 +115,9 @@ The server runs the factory from GitHub's `main`. A timer checks `main` every 2 
 
 A member may ask for one-off work that needs running code or reading the repo. Examples are a simulation, a balance check, a measurement or an investigation.
 
-The agent works in a clone of the game repo on `dev`. It also reads the factory state file and the job logs, read only. So a question about the factory itself, like job timing or token use, is an ad hoc task too. It may build any tool it needs. It can send back files of any kind, like a page, an image or a log.
+The agent works in a clone of the game repo on `dev`. It also reads the factory state file and the job logs, read only. It may build any tool it needs. It can send back files of any kind, like a page, an image or a log.
+
+Answer a question about the factory yourself, from the state file, the logs and the board. Queue an ad hoc task only when the answer needs real work, like a report over many logs or a chart.
 
 Queue it with the `factory_queue_task` tool. Do not guess the answer.
 
