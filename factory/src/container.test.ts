@@ -42,6 +42,14 @@ describe('dockerContainer', () => {
     expect(call.args.slice(call.args.indexOf('img:1'))).toEqual(['img:1', 'factory-agent', '-p', '--model', 'opus', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose']);
   });
 
+  it('mounts the folders the stage names read only', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', readOnly: { '/h/state': '/factory/state' } });
+    const args = runCall(calls).args;
+    expect(args.filter((a) => a === '-v')).toHaveLength(3);
+    expect(args).toContain('/h/state:/factory/state:ro');
+  });
+
   it('mounts the reference images read only inside the clone, and only when the run has them', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', mediaDir: '/h/media/issue-7' });

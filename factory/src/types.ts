@@ -137,13 +137,15 @@ export interface Telegram {
   sendPhoto(chat: string, pngPath: string, caption: string, buttons?: InlineButton[][]): Promise<number>;
   // Sends 1 to 10 photos as one photo or one album, with no buttons, optionally as a reply. Returns the message ids in order.
   sendPhotos(chat: string, photos: AlbumPhoto[], replyTo?: number): Promise<number[]>;
+  sendDocument(chat: string, path: string, replyTo?: number): Promise<number>;
   editCaption(chat: string, messageId: number, caption: string): Promise<void>; // replaces a photo's caption and drops its buttons
 }
 
 // `dir` is the repo folder the agent works in, `game` or `factory`. The container starts it there.
 // `openNetwork` runs the container on the normal network with no proxy. Absent means the restricted network.
 // `mediaDir` is a host folder of reference images. The agent sees it read only at /work/.factory-media.
-export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string };
+// `readOnly` maps host folders to container paths, mounted read only.
+export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string> };
 
 export interface Container {
   // Runs Claude Code headless in the clone. Throws on a nonzero exit.

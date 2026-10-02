@@ -72,11 +72,11 @@ export function outputsNote(dir: string): string {
   return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory.`;
 }
 
-// Agents get the work clone, the npm cache, the OAuth token and the ElevenLabs key with its cap, nothing else. Secrets travel in the docker process env, never in argv.
+// Agents get the work clone, the npm cache, the read-only folders their stage names, the OAuth token and the ElevenLabs key with its cap, nothing else. Secrets travel in the docker process env, never in argv.
 // Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
 export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null): Container {
   return {
-    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir }) {
+    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {} }) {
       if (!openNetwork) await ensureProxy(run, cfg);
       // A headless run ends when the agent ends its turn, and that kills anything it left in the background.
       // Agents ended turns to wait for background subagents, and the run died with their work, so background tasks are off.
@@ -84,8 +84,9 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
         CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken, ELEVENLABS_API_KEY: cfg.elevenlabsKey, SFX_MAX_GENERATIONS: String(cfg.sfxMaxGenerations),
         CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1',
       };
+      const readOnlyArgs = Object.entries(readOnly).flatMap(([host, path]) => ['-v', `${host}:${path}:ro`]);
       const args = [
-        ...baseArgs(jobId), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
+        ...baseArgs(jobId), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
         'factory-agent', '-p', '--model', model, '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose',
       ];
       const result = await run('docker', args, { env, input: `${outputsNote(dir)}\n\n${prompt}`, logPath: log });

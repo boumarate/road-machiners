@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { readState, updateState } from '../state';
 import { adhoc } from './adhoc';
 import { cfg, fake, reset } from './test-fakes';
@@ -23,6 +24,33 @@ describe('adhoc', () => {
     expect(f.calls.some((call) => call.startsWith('push'))).toBe(false);
     expect(readState(f.ctx.statePath).adhocReplies).toEqual({});
     expect(existsSync(`${cfg.home}/work/adhoc-7`)).toBe(false);
+  });
+
+  it('gives the agent the state and logs read only', async () => {
+    const f = fake();
+    queueReply(f.ctx.statePath);
+    f.agentWrites = { 'report.md': 'x' };
+    await adhoc(f.ctx, 7);
+    const readOnly = { [dirname(f.ctx.statePath)]: '/factory/state', [`${cfg.home}/logs`]: '/factory/logs' };
+    expect(f.calls).toContain(`agent ro ${JSON.stringify(readOnly)}`);
+  });
+
+  it('sends each file the agent made under the report message', async () => {
+    const f = fake();
+    queueReply(f.ctx.statePath);
+    f.agentWrites = { 'report.md': 'Tokens go to design.', 'files/report.html': '<html></html>', 'files/chart.png': 'png' };
+    await adhoc(f.ctx, 7);
+    const files = `${cfg.home}/work/adhoc-7/game/.factory/files`;
+    const message = f.calls.indexOf('message -5 3 Tokens go to design.');
+    expect(f.calls.slice(message + 1, message + 3)).toEqual([`document -5 1 ${files}/chart.png`, `document -5 1 ${files}/report.html`]);
+  });
+
+  it('sends no file when the agent made none', async () => {
+    const f = fake();
+    queueReply(f.ctx.statePath);
+    f.agentWrites = { 'report.md': 'x' };
+    await adhoc(f.ctx, 7);
+    expect(f.calls.some((call) => call.startsWith('document'))).toBe(false);
   });
 
   it('throws when the agent wrote no report', async () => {

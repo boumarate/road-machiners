@@ -54,6 +54,21 @@ describe('botClient sendMessage', () => {
   });
 });
 
+describe('botClient sendDocument', () => {
+  it('posts the file as a reply to the given message', async () => {
+    mkdirSync(join(process.cwd(), 'tmp'), { recursive: true });
+    const path = join(mkdtempSync(join(process.cwd(), 'tmp', 'tg-')), 'report.html');
+    writeFileSync(path, '<html></html>');
+    const { fetchFn, calls } = fakeFetch([ok(9)]);
+    expect(await botClient('T', fetchFn).sendDocument('-100', path, 4)).toBe(9);
+    expect(calls[0]!.url).toBe('https://api.telegram.org/botT/sendDocument');
+    const form = calls[0]!.init.body as FormData;
+    expect(form.get('chat_id')).toBe('-100');
+    expect(JSON.parse(form.get('reply_parameters') as string)).toEqual({ message_id: 4 });
+    expect((form.get('document') as File).name).toBe('report.html');
+  });
+});
+
 describe('botClient sendPhoto', () => {
   const png = (): string => {
     const dir = mkdtempSync(join(process.cwd(), 'tmp', 'tg-'));

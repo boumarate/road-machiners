@@ -239,7 +239,7 @@ QUEUE_SCHEMA = {
     "description": (
         "Queue one-off work for the factory when a committee member asks for something that needs running code "
         "or reading the repo, like a simulation, a balance check, a measurement or an investigation. "
-        "A coding agent runs it in a clone of the game repo. The result comes back later as a reply to the member's message. "
+        "A coding agent runs it in a clone of the game repo, with the factory state file and job logs read only. The result comes back later as a reply to the member's message. "
         "Call it once per task."
     ),
     "parameters": {
