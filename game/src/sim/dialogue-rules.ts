@@ -23,13 +23,13 @@ import { acceptOffer, canTowNpc, hitchNpc, isOnRope, npcTowTerms, playerTow, pla
 import type { Call, CallVar, CallVars, NpcState, Plea, SalvageStock, TopicOutcome, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
 
-// `vars` are the call values, empty on the hub and before a topic's prepare step.
 // The top goal is a fight on the player that rolled a demand, and the player has cargo.
 function demandsOnTop(world: World, npc: Vehicle): boolean {
   const top = topGoal(npc);
   return top?.kind === 'fight' && top.targetId === world.player.vehicleId && top.demands === true && hasCargo(playerVehicle(world));
 }
 
+// `vars` are the call values, empty on the hub and before a topic's prepare step.
 export type Condition = (world: World, npc: Vehicle, vars: CallVars) => boolean;
 export type Effect = (world: World, npc: Vehicle, call: Call) => void;
 export type Prepare = (world: World, npc: Vehicle) => CallVars;
