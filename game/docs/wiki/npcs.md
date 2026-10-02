@@ -129,7 +129,7 @@ A timed state between two vehicles, like a feud or a tow, is owned by `src/sim/s
 | tow |  | true |
 | turnedDown |  | false |
 | towPromise |  | false |
-| answering |  | true |
+| answering | 20 | true |
 | truce | 60 | false |
 | grievance | 5 | false |
 | plea | 20 | false |

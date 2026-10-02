@@ -209,6 +209,20 @@ describe("NPC names in the log", () => {
   });
 });
 
+describe("tow text", () => {
+  it("says free for a fee of 0 and keeps the price otherwise", () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = addVehicle(w, "traders", "scout", ["stockEngine"], { x: 34, y: 30 });
+    const town = REGION.towns[0].id;
+    expect(eventText(w, { t: "towOffer", by: npc.id, town, fee: 0 })?.text).toMatch(/ for free\.$/);
+    expect(eventText(w, { t: "towOffer", by: npc.id, town, fee: 40 })?.text).toMatch(/ for 40\.$/);
+    expect(eventText(w, { t: "towDone", by: npc.id, client: w.player.vehicleId, fee: 0 })).toMatchObject({ text: expect.stringMatching(/tows you into town for free\.$/), cls: "" });
+    expect(eventText(w, { t: "towDone", by: npc.id, client: w.player.vehicleId, fee: 40 })).toMatchObject({ text: expect.stringMatching(/takes 40\.$/), cls: "bad" });
+    const other = addVehicle(w, "roamers", "buggy", ["stockEngine"], { x: 50, y: 30 });
+    expect(eventText(w, { t: "towDone", by: npc.id, client: other.id, fee: 0 })?.text).toMatch(/ in for free\.$/);
+  });
+});
+
 describe("aid handover text", () => {
   it("labels the work for both trucks and logs its start", () => {
     const w = emptyWorld({ x: 30, y: 30 });

@@ -1,7 +1,6 @@
 // NPC goals: the goal stack, the fixed survival rule, the decision points that push and pop goals, and each goal's
 // work. See src/sim/npc-decisions.ts for the weighted rolls.
 
-import { chassisDef } from '../data/chassis';
 import { ECONOMY } from '../data/goods';
 import { NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, type DecisionOptions } from '../data/npcs';
 import { SHOPS, shopDef } from '../data/market';
@@ -15,6 +14,7 @@ import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods, cargoRoom } from './inventory';
 import { cancelJob } from './jobs';
 import { isFree } from './spawn';
+import { bodyStop } from './meeting-stop';
 import { route } from './path';
 import {
   tradeOffers, canRob, decide, bodyCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolSite, travelSitesAway,
@@ -435,6 +435,7 @@ function towInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string |
   if (heldTow(world, vehicle)) return null;
   const client = world.vehicles.find((v) => v.id === goal.targetId);
   if (!client || stateOf(world, 'turnedDown', vehicle.id, client.id)) return 'the tow is off';
+  if (!stateOf(world, 'answering', vehicle.id, client.id)) return 'could not get through to the truck';
   return strandedAt(world, vehicle, client) ? null : 'the tow is off';
 }
 
@@ -1086,11 +1087,7 @@ function siteStop(world: World, vehicle: Vehicle, activity: NpcActivity, destina
   const out = vehicleStats(world, vehicle).radius + RULES.arriveRadius;
   const site = [...REGION.towns, ...REGION.locations].find((entry) => entry.id === activity.targetId);
   if (site) return parkedOn(vehicle, site) ? { ...vehicle.pos } : siteSpot(world, vehicle, site, out, activity.kind === 'tow' ? TOW.gap / 2 : 0);
-  const radius = stockRadius(world, activity) ?? towedRadius(world, activity);
-  if (radius === undefined) throw new Error(`Missing activity destination ${activity.targetId}`);
-  // A stock or a towed truck is met on the side the vehicle comes from.
-  const angle = Math.atan2(vehicle.pos.y - destination.y, vehicle.pos.x - destination.x);
-  return { x: destination.x + Math.cos(angle) * (radius + out), y: destination.y + Math.sin(angle) * (radius + out) };
+  return bodyStop(world, vehicle, activity, destination, out);
 }
 
 // A driver parked on a pad of the site already uses it. Its own spot may lie under a truck parked there since,
@@ -1112,18 +1109,6 @@ function siteSpot(world: World, vehicle: Vehicle, site: ReturnType<typeof getKno
 
 function charCodes(text: string): number[] {
   return Array.from(text, (ch) => ch.charCodeAt(0));
-}
-
-function stockRadius(world: World, activity: NpcActivity): number | undefined {
-  if (activity.kind !== 'scavenge' && activity.kind !== 'loot') return undefined;
-  return world.salvage.find((entry) => entry.id === activity.targetId)?.radius;
-}
-
-// A tower, a patcher, a trader or a looter drives up to the other truck, and parks beside it like beside a stock.
-function towedRadius(world: World, activity: NpcActivity): number | undefined {
-  if (!['tow', 'patch', 'meet', 'loot'].includes(activity.kind)) return undefined;
-  const towed = world.vehicles.find((entry) => entry.id === activity.targetId);
-  return towed && chassisDef(towed.chassisId).radius;
 }
 
 // Each goal kind's work once the NPC is parked. Kinds without work only drive.

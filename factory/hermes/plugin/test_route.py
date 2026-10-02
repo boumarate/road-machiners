@@ -326,6 +326,26 @@ def test_queue_tool_writes_adhoc_command(tmp_path):
     }
 
 
+def test_change_tool_writes_change_command(tmp_path):
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    cfg = plugin.Config(str(inbox), "/st", "-100", committee)
+    handle = plugin.make_queue_handler(cfg, session_env=lambda key: SESSION.get(key, ""), kind="change", done=plugin.CHANGE_DONE)
+    assert json.loads(handle({"request": "Set FACTORY_TEST_WORKERS to 2."}))["message"] == plugin.CHANGE_DONE
+    [path] = list(inbox.iterdir())
+    assert json.loads(path.read_text())["kind"] == "change"
+    assert json.loads(path.read_text())["text"] == "Set FACTORY_TEST_WORKERS to 2."
+
+
+def test_change_guidance_asks_for_an_acknowledgment_not_silence():
+    assert "[SILENT]" in plugin.CHANGE_DONE
+    assert "Never reply with [SILENT]" in plugin.CHANGE_DONE
+    assert "Queued for a PR." in plugin.CHANGE_DONE
+    assert "Add nothing about it" not in plugin.CHANGE_DONE
+
+
 def test_queue_tool_refuses_non_member(tmp_path):
     inbox, handle = queue_setup(tmp_path, {**SESSION, "HERMES_SESSION_USER_ID": "2"})
     assert "error" in json.loads(handle({"request": "x"}))
@@ -364,3 +384,4 @@ def test_register_adds_queue_tool(tmp_path, monkeypatch):
     plugin.register(ctx)
     assert calls[0]["name"] == "factory_queue_task" and calls[0]["toolset"] == "factory"
     assert calls[0]["schema"]["parameters"]["required"] == ["request"]
+    assert calls[1]["name"] == "factory_queue_change" and calls[1]["toolset"] == "factory"

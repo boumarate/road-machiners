@@ -37,11 +37,8 @@ describe('ship', () => {
     f.ctx.container.shell = async (clone, script, _log, env) => { shells.push({ script, env }); f.calls.push(`shell ${clone}`); };
     await ship(f.ctx, 11, 'Ann');
     const at = (name: string) => f.calls.findIndex((call) => call.startsWith(name));
-    expect(at('sync release/2026-09-29')).toBeLessThan(at('merge release/2026-09-29 main'));
-    expect(at('merge release/2026-09-29 main')).toBeLessThan(at('push main'));
-    expect(at('push main')).toBeLessThan(at('merge main dev'));
-    expect(at('merge main dev')).toBeLessThan(at('push dev'));
-    expect(at('push dev')).toBeLessThan(at('prepare main'));
+    expect(f.calls.slice(at('fetch'), at('fetch') + 4)).toEqual(['fetch', 'merge release/2026-09-29 main', 'merge main dev', 'push main dev']);
+    expect(at('push main dev')).toBeLessThan(at('prepare main'));
     expect(at('prepare main')).toBeLessThan(at('run butler'));
     expect(at('run butler')).toBeLessThan(at('photo public'));
     expect(at('photo public')).toBeLessThan(at('message public'));
@@ -55,7 +52,7 @@ describe('ship', () => {
   it('fails on a dev merge conflict before the build, the butler push and any public post', async () => {
     const f = shippable();
     const merge = f.ctx.repo.merge;
-    f.ctx.repo.merge = async (branch, into, message) => { if (into === 'dev') throw new Error('merge conflict in dev'); return merge(branch, into, message); };
+    f.ctx.repo.merge = async (steps) => { if (steps.some((step) => step.into === 'dev')) throw new Error('merge conflict in dev'); return merge(steps); };
     await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('merge conflict in dev');
     expect(f.calls.some((call) => call.startsWith('prepare') || call.startsWith('run butler') || call.includes('public'))).toBe(false);
     expect(readState(f.ctx.statePath).release).not.toBeNull();
@@ -105,7 +102,7 @@ describe('ship', () => {
     f.ctx.repo.changedFiles = async () => ['factory/src/tick.ts'];
     await ship(f.ctx, 11, 'Ann');
     const merges = f.calls.filter((call) => call.startsWith('merge') || call.startsWith('push'));
-    expect(merges.slice(0, 4)).toEqual(['merge main release/2026-09-29', 'push release/2026-09-29', 'merge release/2026-09-29 main', 'push main']);
+    expect(merges).toEqual(['merge main release/2026-09-29', 'merge release/2026-09-29 main', 'merge main dev', 'push release/2026-09-29 main dev']);
   });
 
   it('stops before it merges anything when the changelog does not match the release', async () => {
@@ -118,7 +115,7 @@ describe('ship', () => {
   it('stops before it merges anything when the itch keys are missing', async () => {
     const f = shippable();
     Object.assign(f.ctx.cfg, { itchTarget: null, butlerKey: null });
-    await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('ITCH_TARGET and BUTLER_API_KEY');
+    await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('ITCH_TARGET in factory/settings.env and BUTLER_API_KEY');
     expect(f.calls).toEqual([]);
   });
 

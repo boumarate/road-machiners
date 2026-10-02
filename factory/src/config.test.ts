@@ -1,5 +1,7 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from './config';
+import { loadConfig, readEnvFiles } from './config';
 
 const FULL = {
   FACTORY_REPO: 'o/r', FACTORY_PROJECT_OWNER: 'o', FACTORY_PROJECT_NUMBER: '3', FACTORY_HOME: '/h', FACTORY_WEB_ROOT: '/w',
@@ -42,5 +44,30 @@ describe('loadConfig', () => {
 
   it('rejects a bad number', () => {
     expect(() => loadConfig({ ...FULL, FACTORY_MIN_VOTES: 'many' })).toThrow('FACTORY_MIN_VOTES');
+  });
+});
+
+describe('readEnvFiles', () => {
+  const SECRET = /TOKEN|KEY|SECRET|PASSWORD/;
+
+  function files(settings: string, local: string): [string, string] {
+    mkdirSync('tmp', { recursive: true });
+    const dir = mkdtempSync(join('tmp', 'factory-config-'));
+    writeFileSync(join(dir, 'settings.env'), settings);
+    writeFileSync(join(dir, '.env'), local);
+    return [join(dir, 'settings.env'), join(dir, '.env')];
+  }
+
+  it('joins the two files and stops on a key in both', () => {
+    expect(readEnvFiles(...files('A=1\n', 'B=2\n'))).toEqual({ A: '1', B: '2' });
+    expect(() => readEnvFiles(...files('A=1\nB=1\n', 'B=2\n'))).toThrow('B set in both');
+  });
+
+  it('keeps every secret out of the tracked settings, and with .env.example covers the whole config', () => {
+    const settings = readEnvFiles('settings.env', '.env.example');
+    const tracked = Object.keys(readEnvFiles('settings.env', files('', '')[1]));
+    expect(tracked.filter((key) => SECRET.test(key))).toEqual([]);
+    const filled = Object.fromEntries(Object.keys(settings).map((key) => [key, settings[key] || '1']));
+    expect(() => loadConfig(filled)).not.toThrow();
   });
 });
