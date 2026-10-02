@@ -1,6 +1,7 @@
 // Renders every item and chassis icon from the game's models in headless Chromium, through icons.html.
 // Writes the sprite sheets public/icons/items.png and public/icons/chassis.png, the manifest src/data/item-icons.json,
-// the labeled comparison atlases docs/icons/atlas-top.png and docs/icons/atlas-diagonal.png, and docs/icons/report.txt.
+// and under public/icons/atlas/ the labeled atlases atlas-top.png, atlas-diagonal.png and atlas-game.png (each entry in
+// the view the game shows) and report.txt. The build serves the atlases for review, and the game never loads them.
 // Fails when a weapon's barrel does not read from lower left to upper right in the diagonal view.
 // Rerun after a model, a weapon pick or the icon style changes. src/data/item-icons.test.ts fails while the manifest is stale.
 // Usage: npm run icons -- [--cpu]. With --cpu, Chromium draws in software, as on a machine without a GPU.
@@ -41,7 +42,7 @@ try {
     writeAtomic(path, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'));
     console.log(`${path}: ${(statSync(path).size / 1024).toFixed(0)} KB`);
   }
-  writeAtomic('docs/icons/report.txt', result.report);
+  writeAtomic('public/icons/atlas/report.txt', result.report);
   writeAtomic('src/data/item-icons.json', `${JSON.stringify(result.manifest, null, 2)}\n`);
   const counts = `${Object.keys(result.manifest.items).length} items, ${Object.keys(result.manifest.chassis).length} chassis`;
   console.log(`src/data/item-icons.json: ${counts}, views ${JSON.stringify(result.manifest.views)}`);

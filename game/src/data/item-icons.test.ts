@@ -7,7 +7,7 @@ import { GOODS } from './goods';
 import { PARTS } from './parts';
 import { iconCatalog, ICON_WEAPON_PICKS } from '../render/partLooks';
 import type { ModelName } from '../three/render/models';
-import { iconHash, ICON_VIEWS } from '../three/icons/render';
+import { iconHash, iconView, ICON_VIEWS } from '../three/icons/render';
 import ICONS from './item-icons.json';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?url&inline', import: 'default' });
@@ -45,6 +45,25 @@ describe('item icons', () => {
     expect(ICONS.views, STALE).toEqual(ICON_VIEWS);
   });
 
+  it('shows parts and chassis top-down and goods diagonal', () => {
+    const view = (id: string): string => {
+      const entry = catalog.find((e) => e.id === id);
+      if (!entry) throw new Error(`No catalog entry ${id}`);
+      return iconView(entry);
+    };
+    expect(['mg', 'steelPlate', 'stockEngine', 'scrap', 'scout'].map(view)).toEqual(['top', 'top', 'top', 'diagonal', 'top']);
+  });
+
+  it.each(Object.entries(ICONS.items))('item %s has a drawn extent inside its cell', (_id, icon) => {
+    const [x, y, w, h] = icon.box;
+    expect(w).toBeGreaterThan(0);
+    expect(h).toBeGreaterThan(0);
+    expect(x).toBeGreaterThanOrEqual(0);
+    expect(y).toBeGreaterThanOrEqual(0);
+    expect(x + w).toBeLessThanOrEqual(1);
+    expect(y + h).toBeLessThanOrEqual(1);
+  });
+
   it('gives every icon its own cell', () => {
     for (const sheet of [ICONS.items, ICONS.chassis]) {
       const cells = Object.values(sheet).map((e) => e.index);
@@ -54,11 +73,11 @@ describe('item icons', () => {
 
   it.each(items.map((e) => [e.id, e] as const))('item %s matches its models and pick', (id, entry) => {
     const stored: Record<string, { hash: string }> = ICONS.items;
-    expect(stored[id]?.hash, STALE).toBe(iconHash(entry, ICON_VIEWS.items, read));
+    expect(stored[id]?.hash, STALE).toBe(iconHash(entry, iconView(entry), read));
   });
 
   it.each(chassis.map((e) => [e.id, e] as const))('chassis %s matches its model', (id, entry) => {
     const stored: Record<string, { hash: string }> = ICONS.chassis;
-    expect(stored[id]?.hash, STALE).toBe(iconHash(entry, ICON_VIEWS.chassis, read));
+    expect(stored[id]?.hash, STALE).toBe(iconHash(entry, iconView(entry), read));
   });
 });

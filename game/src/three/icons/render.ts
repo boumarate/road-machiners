@@ -11,7 +11,7 @@ import { model, socket, type ModelName } from '../render/models';
 import { weaponHead } from '../render/weaponHead';
 
 // Bump when a change here alters how icons look, so the manifest test asks for npm run icons.
-export const ICON_STYLE_VERSION = 1;
+export const ICON_STYLE_VERSION = 2;
 
 // top: straight down, nose up, like the inventory grid. diagonal: from the right side with the nose to the image's
 // right, turned DIAGONAL_YAW_DEG toward the rear and raised DIAGONAL_PITCH_DEG, so a barrel reads lower left to upper right.
@@ -19,8 +19,21 @@ export type IconView = 'top' | 'diagonal';
 export const DIAGONAL_YAW_DEG = 20;
 export const DIAGONAL_PITCH_DEG = 20;
 
-// The view the game shows per sheet. Flip one and rerun npm run icons.
-export const ICON_VIEWS: { items: IconView; chassis: IconView } = { items: 'diagonal', chassis: 'top' };
+// The view the game shows per category: equipment top-down like the truck grid, cargo goods diagonal, trucks
+// top-down beside their grid. Flip one and rerun npm run icons.
+export type IconCategory = 'part' | 'good' | 'chassis';
+export const ICON_VIEWS: Record<IconCategory, IconView> = { part: 'top', good: 'diagonal', chassis: 'top' };
+
+// The one owner of which view the game shows for an entry.
+export function iconView(entry: IconEntry): IconView {
+  return ICON_VIEWS[iconCategory(entry)];
+}
+
+function iconCategory(entry: IconEntry): IconCategory {
+  if (entry.section === 'good') return 'good';
+  if (entry.section === 'chassis') return 'chassis';
+  return 'part';
+}
 
 const CELL = PHYSICS.cell;
 const SUPERSAMPLE = 2; // drawn at this multiple of the cell, then scaled down
