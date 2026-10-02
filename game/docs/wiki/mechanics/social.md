@@ -1,6 +1,6 @@
 # Social
 
-Radio calls, topics and the horn. The principles behind them are in [DESIGN.md](../../DESIGN.md).
+Radio calls, topics, the horn and Waste Of Time Radio. The principles behind them are in [DESIGN.md](../../DESIGN.md).
 
 Every truck has a radio, as in Space Rangers 2. A call reaches only a truck in sight. The player calls the truck under the cursor with T. An NPC calls the player when it has something to say. Turns wait while a call is open, and neither truck on the line shoots the other. A driver in combat with another truck answers a call with a short refusal in the call panel, and the player can only hang up. It does not honk back. Other drivers do not rob it, tow it or hire it until that combat ends. A driver that only flees, with nobody attacking or hunting it, takes calls. A hostile driver is part of the player's fight, so it takes calls even while it fights another truck. While the player is in combat, only the foe calls, with a cargo demand, a truce or a plea for mercy. Tow offers and patch requests wait until the fight ends.
 
@@ -20,3 +20,5 @@ Talk is built from topics. A topic is lines and replies in data, and its logic i
 - Robbery: the player can demand the cargo of a truck at peace, once per driver. The driver gives it up, fights or runs. Traders and cowards give up more, raiders fight more, and every driver gives up to a much stronger player. Giving up drops the cargo beside the truck and holds a truce with the player. Fighting or running starts a feud.
 
 H honks, also while a turn plays. Traders and scavengers in earshot that are not hostile honk back. During a turn they answer once it ends.
+
+Waste Of Time Radio plays on the radio panel above the log. J.J. reports weather as it starts and ends, new contracts on boards of found places, raider robberies and knockouts of other drivers, dawn, noon, dusk and midnight, and road wisdom after a quiet stretch. She names a place only when the player has found it and it lies near the news. Anywhere else she gives a basin direction. She never reports the player's own fights and never quotes prices. News comes before clock calls, and clock calls before road wisdom. Broadcasts keep a gap of several turns between them, old news is dropped unsent, one place gets one raid report in a long while, and one restock gives at most one contract report, the best paid. A load or a new game starts the station over without announcing what is already on the boards. NPCs do not listen, since the radio changes no rule or decision.
