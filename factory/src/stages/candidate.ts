@@ -1,6 +1,8 @@
 import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildAndDeploy, recordBuild } from '../deploy';
+import { readEvidence, type Evidence } from '../evidence';
+import { postWithEvidence } from '../evidence-post';
 import { updateState } from '../state';
 import { GAME_DIR, OUT_DIR, type Ctx } from '../types';
 import { agentHome, fillPrompt, readOutput, resetOutputs } from './common';
@@ -62,10 +64,23 @@ export async function candidate(ctx: Ctx, issue: number): Promise<void> {
   await ctx.github.comment(issue, `Release candidate: ${url}\n\n${changes}`);
   const caption = candidateCaption(release.day, url, trackingLink(ctx, issue), pr, features.length);
   const buttons = [[{ text: 'Ship', data: `factory:ship:${issue}` }]];
-  const photoId = await ctx.telegram.sendPhoto(ctx.cfg.committeeChat, join(home, OUT_DIR, 'screenshot.png'), caption, buttons);
-  updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: photoId }, postCaptions: { ...state.postCaptions, [photoId]: caption } }));
+  const evidence = await candidateEvidence(ctx, issue, home, release.branch);
+  const photoId = await postWithEvidence(ctx, evidence, caption, buttons, {
+    add: (id) => updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: id }, postCaptions: { ...state.postCaptions, [id]: caption } })),
+    drop: (id) => updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: null }, postCaptions: Object.fromEntries(Object.entries(state.postCaptions).filter(([name]) => name !== String(id))) })),
+  });
   // A caption holds 1024 characters, so the whole changelog goes in a message under the post. It splits only past Telegram's message limit.
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, changes, photoId);
+}
+
+// The release agent may add views of the changes in `.factory/evidence.json`. Those are optional, so a manifest that fails a rule is logged and the one screenshot stands.
+async function candidateEvidence(ctx: Ctx, issue: number, home: string, branch: string): Promise<Evidence> {
+  try {
+    return readEvidence(home, await ctx.repo.headHash(branch));
+  } catch (error) {
+    ctx.log('candidate', issue, `evidence manifest ignored: ${error instanceof Error ? error.message : String(error)}`);
+    return { images: [{ path: join(home, OUT_DIR, 'screenshot.png'), description: '', covers: [], sheet: false }] };
+  }
 }
 
 // The candidate post. Commands act on it alone, so it says to reply to it, not to the changelog under it.

@@ -26,7 +26,11 @@ Reference images from the issue are listed at the end of this prompt.
 If your fixes change what a player sees and the issue wants the result to look like an image, redo the visual comparison.
 Read the image, take a screenshot, compare, and update "Visual comparison" in the Conclusion of {{taskFile}}.
 
-Update `.factory/approval.json` and `.factory/screenshot.png` if your fixes change what a player sees.
+Update `.factory/approval.json` if your fixes change what a player sees.
+The evidence in `.factory/evidence.json` must come from the final commit of this round.
+If you changed any code, capture every view again and rewrite the manifest after your last commit, with `commit` set to `git rev-parse HEAD`.
+The factory rejects a manifest from an older commit, and this is the last round.
+Keep the rules of the first round: every visible change shown, three views for a location, a labeled real-screenshot sheet for a system-wide change, at most 10 images with `.factory/screenshot.png` first, no invented art, no duplicates.
 Commit on the current branch.
 Never push.
 

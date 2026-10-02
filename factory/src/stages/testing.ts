@@ -1,4 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readEvidence, type Evidence } from '../evidence';
+import { postWithEvidence } from '../evidence-post';
 import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
 import { readState, updateState } from '../state';
@@ -49,14 +51,14 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, workDir(ctx, issue));
   resetOutputs(home);
   const merged = await mergeBase(ctx, issue, base, home);
-  await agentRound(ctx, issue, 'test', base);
+  let evidence = await agentRound(ctx, issue, 'test', base);
   await requireBaseMerged(ctx, issue, base, merged);
   let build = await ctx.repo.headHash(BRANCH(issue));
   const failure = await runChecks(ctx, issue, base, build);
   // The agent gets one round to fix what the factory's own checks found. A second failure stops the card.
   if (failure !== null) {
     writeFileSync(`${home}/${OUT_DIR}/check-failure.md`, failure);
-    await agentRound(ctx, issue, 'test-fix', base);
+    evidence = await agentRound(ctx, issue, 'test-fix', base);
     build = await ctx.repo.headHash(BRANCH(issue));
     const again = await runChecks(ctx, issue, base, build);
     if (again !== null) throw new Error(`The factory checks failed twice.\n${again}`);
@@ -65,7 +67,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
   const approver = approvedAlready(ctx, issue, item.labels);
-  if (approver === null) await post(ctx, issue, approval, `${home}/${OUT_DIR}/screenshot.png`, url, base);
+  if (approver === null) await post(ctx, issue, approval, evidence, url, base);
   await ctx.github.move(issue, 'Approval');
   if (approver !== null) queueMerge(ctx, issue, approver);
 }
@@ -99,12 +101,14 @@ async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: 
   if (!(await ctx.repo.isMerged(commit, BRANCH(issue)))) throw new Error(`The testing agent left the merge of ${base} at ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
 }
 
-async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'test-fix', base: string): Promise<void> {
+// Returns the evidence of the round, checked against the branch head the round left. A round that changed code must capture again.
+async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'test-fix', base: string): Promise<Evidence> {
   await runAgent(ctx, issue, 'testing', fillPrompt(prompt, { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   throwIfNeedsCommittee(home);
   readApproval(home);
   await guardAndPush(ctx, issue, base, 'testing');
+  return readEvidence(home, await ctx.repo.headHash(BRANCH(issue)));
 }
 
 function readApproval(home: string): Approval {
@@ -153,15 +157,22 @@ function checkFailure(log: string, error: unknown): string {
 export const CAPTION_LIMIT = 1024;
 const TRIM_MARK = '…';
 
-// The approval post is one photo with everything in its caption. The full notes also go on the issue.
-export async function post(ctx: Ctx, issue: number, approval: Approval, screenshot: string, url: string, base: string): Promise<void> {
+// The approval post is the primary photo with everything in its caption, and the only post with buttons. The full notes also go on the issue.
+// Further evidence images follow as a reply photo or album, which no command acts on.
+export async function post(ctx: Ctx, issue: number, approval: Approval, evidence: Evidence, url: string, base: string): Promise<void> {
   const item = await ctx.github.issue(issue);
   const link = `https://github.com/${ctx.cfg.repo}/issues/${issue}`;
   const pr = await pullRequestUrl(ctx, issue, item.title, approval, base);
   await ctx.github.comment(issue, `Ready for approval: ${url}\n\n${approval.description}\n\nHow to try: ${approval.howToTry}`);
   const caption = approvalCaption(`#${issue} ${item.title}`, url, link, pr, approval, base);
-  const photoId = await ctx.telegram.sendPhoto(ctx.cfg.committeeChat, screenshot, caption, approvalButtons(issue, base));
-  updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [photoId]: issue }, postCaptions: { ...state.postCaptions, [photoId]: caption } }));
+  await postWithEvidence(ctx, evidence, caption, approvalButtons(issue, base), {
+    add: (id) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [id]: issue }, postCaptions: { ...state.postCaptions, [id]: caption } })),
+    drop: (id) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: omit(state.approvalPosts, id), postCaptions: omit(state.postCaptions, id) })),
+  });
+}
+
+function omit<T>(record: Record<string, T>, key: number): Record<string, T> {
+  return Object.fromEntries(Object.entries(record).filter(([name]) => name !== String(key)));
 }
 
 // A feedback round reuses the pull request of the first round.

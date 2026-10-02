@@ -1,5 +1,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { pngBytes } from '../photo-fixtures';
 import { EMPTY_STATE, readState, writeState } from '../state';
 import type { AgentRun, Ctx } from '../types';
 
@@ -11,6 +12,8 @@ let calls: string[] = [];
 let shellScript = '';
 let shellEnv: Record<string, string> | undefined;
 let photoButtons: unknown;
+let albums: { path: string; caption: string }[][] = [];
+let albumFails = false;
 let openPr: string | null = null;
 let labels: string[] = [];
 let bases: string[] = [];
@@ -20,6 +23,8 @@ let conflicts: string[] = [];
 let merged = true;
 
 beforeEach(() => {
+  albums = [];
+  albumFails = false;
   conflicts = [];
   merged = true;
   mkdirSync('tmp', { recursive: true });
@@ -49,6 +54,13 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
     telegram: {
       sendPhoto: async (chat: string, path: string, caption: string, buttons?: unknown) => { calls.push(`photo ${chat} ${path} ${caption}`); photoButtons = buttons; return 100; },
       sendMessage: async (chat: string, text: string, replyTo?: number) => { calls.push(`message ${replyTo} ${text}`); return 101; },
+      sendPhotos: async (_chat: string, photos: { path: string; caption: string }[], replyTo?: number) => {
+        calls.push(`album ${photos.length} ${replyTo}`);
+        albums.push(photos);
+        if (albumFails) throw new Error('Telegram sendMediaGroup failed: boom');
+        return photos.map((_, i) => 110 + i);
+      },
+      editCaption: async (_chat: string, id: number, caption: string) => { calls.push(`editCaption ${id} ${caption}`); },
     },
     container: {
       agent: async (run: AgentRun) => agent(run),
@@ -258,5 +270,95 @@ describe('testing stage', () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })), 2);
     await expect(runStage(ctx, 7)).rejects.toThrow('checks failed twice');
     expect(queued()).toEqual({});
+  });
+});
+
+describe('testing stage evidence', () => {
+  type Feature = { name: string; kind: string };
+  const horn: Feature = { name: 'Horn', kind: 'other' };
+  const yard: Feature = { name: 'Yard', kind: 'location' };
+  // Writes real images view0..N-1 (view0 is screenshot.png) and a manifest. `covers[i]` names what image i shows.
+  function writeEvidence(run: AgentRun, features: Feature[], covers: string[][], commit = 'abc1234'): void {
+    const out = `${run.clone}/${run.dir}/.factory`;
+    writeFileSync(`${out}/approval.json`, JSON.stringify({ description: 'd', howToTry: 'h' }));
+    const images = covers.map((names, i) => {
+      const file = i === 0 ? 'screenshot.png' : `view${i}.png`;
+      writeFileSync(`${out}/${file}`, pngBytes(i));
+      return { file, description: `View ${i}`, covers: names };
+    });
+    writeFileSync(`${out}/evidence.json`, JSON.stringify({ commit, features, images }));
+  }
+  const items = (count: number): Feature[] => Array.from({ length: count }, (_, i) => ({ name: `Item ${i}`, kind: 'item' }));
+  const each = (count: number): string[][] => Array.from({ length: count }, (_, i) => [`Item ${i}`]);
+
+  it('keeps one actionable primary post and sends no album for one image', async () => {
+    await runStage(fakeCtx((run) => writeEvidence(run, [horn], [['Horn']])), 7);
+    expect(calls.filter((call) => call.startsWith('photo'))).toHaveLength(1);
+    expect(albums).toEqual([]);
+  });
+
+  it('sends one reply photo to the primary for two images, and registers only the primary', async () => {
+    await runStage(fakeCtx((run) => writeEvidence(run, items(2), each(2))), 7);
+    expect(calls.filter((call) => call.startsWith('photo'))).toHaveLength(1);
+    expect(calls).toContain('album 1 100');
+    expect(albums[0]!.map((photo) => photo.caption)).toEqual(['2/2 View 1']);
+    expect(photoButtons).toEqual([[{ text: 'Approve', data: 'factory:approve:7' }, { text: 'Deny', data: 'factory:deny:7' }]]);
+    expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 100: 7 });
+    expect(Object.keys(readState(`${home}/state.json`).postCaptions)).toEqual(['100']);
+    expect(calls.indexOf('album 1 100')).toBeLessThan(calls.indexOf('move 7 Approval'));
+  });
+
+  it('sends nine supplements as one album in manifest order for ten images', async () => {
+    await runStage(fakeCtx((run) => writeEvidence(run, items(10), each(10))), 7);
+    expect(calls).toContain('album 9 100');
+    expect(albums[0]!.map((photo) => photo.caption)).toEqual(Array.from({ length: 9 }, (_, i) => `${i + 2}/10 View ${i + 1}`));
+    expect(albums[0]![0]!.path.endsWith('view1.png')).toBe(true);
+    expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 100: 7 });
+  });
+
+  it('fails the stage on more than ten images and posts nothing', async () => {
+    await expect(runStage(fakeCtx((run) => writeEvidence(run, items(11), each(11))), 7)).rejects.toThrow('limit is 10');
+    expect(calls.some((call) => call.startsWith('photo') || call.startsWith('album'))).toBe(false);
+  });
+
+  it('fails the stage when a location has fewer than three views', async () => {
+    await expect(runStage(fakeCtx((run) => writeEvidence(run, [yard], [['Yard'], ['Yard']])), 7)).rejects.toThrow('needs 3 different views');
+    expect(calls).not.toContain('move 7 Approval');
+  });
+
+  it('fails the stage when an image file is missing', async () => {
+    const ctx = fakeCtx((run) => {
+      writeEvidence(run, items(2), each(2));
+      rmSync(`${run.clone}/${run.dir}/.factory/view1.png`);
+    });
+    await expect(runStage(ctx, 7)).rejects.toThrow('does not exist');
+  });
+
+  it('requires evidence from the final head, so a fix round that changed code must capture again', async () => {
+    let round = 0;
+    const ctx = fakeCtx((run) => writeEvidence(run, [horn], [['Horn']], round++ === 0 ? 'abc1234' : 'deadbee'), 1);
+    await expect(runStage(ctx, 7)).rejects.toThrow('Capture the views again');
+    expect(calls).not.toContain('move 7 Approval');
+  });
+
+  it('retracts the primary and registers nothing when the album fails, so a retry posts once', async () => {
+    albumFails = true;
+    await expect(runStage(fakeCtx((run) => writeEvidence(run, items(3), each(3))), 7)).rejects.toThrow('boom');
+    expect(calls.find((call) => call.startsWith('editCaption 100'))).toContain('Superseded');
+    expect(calls).not.toContain('move 7 Approval');
+    expect(readState(`${home}/state.json`).approvalPosts).toEqual({});
+    expect(readState(`${home}/state.json`).postCaptions).toEqual({});
+    albumFails = false;
+    calls = [];
+    await runStage(fakeCtx((run) => writeEvidence(run, items(3), each(3))), 7);
+    expect(calls.filter((call) => call.startsWith('photo'))).toHaveLength(1);
+    expect(calls.filter((call) => call.startsWith('album'))).toHaveLength(1);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+  });
+
+  it('sends no images for a queued merge of an approved card', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
+    await runStage(fakeCtx((run) => writeEvidence(run, items(3), each(3))), 7);
+    expect(calls.some((call) => call.startsWith('photo') || call.startsWith('album'))).toBe(false);
   });
 });
