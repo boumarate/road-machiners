@@ -119,6 +119,7 @@ function playTurn(world: World, archetype: Archetype, options: BotOptions): Play
   const goals = topGoals(orders.world);
   const next = endTurn(orders.world, moveAllFar);
   failOnStall(next, goals);
+  failOnDryMajority(next);
   const events = [...orders.events, ...next.events];
   return { after: orders.world, next, lines: [...traceOf(orders.events, orders.world.turn), ...traceOf(next.events, next.turn)], events };
 }
@@ -179,6 +180,13 @@ function topGoals(w: World): Map<string, NpcActivity> {
 function failOnStall(w: World, goals: Map<string, NpcActivity>): void {
   const stalls = w.events.flatMap((e) => (e.t === 'stall' ? [describeStall(w, e, goals.get(e.vehicle))] : []));
   if (stalls.length > 0) throw new Error(`${stalls.length} stall${stalls.length > 1 ? 's' : ''}:\n${stalls.join('\n')}`);
+}
+
+// Fails when more than half the NPCs hold an empty tank at once, which means fuel supply or fuel buying is broken.
+function failOnDryMajority(w: World): void {
+  const drivers = w.vehicles.filter((v) => v.brain);
+  const dry = drivers.filter((v) => getResources(w, v).fuel <= 0).length;
+  if (dry * 2 > drivers.length) throw new Error(`turn ${w.turn}: ${dry} of ${drivers.length} NPCs are dry at once, a majority`);
 }
 
 function describeStall(w: World, e: Extract<GameEvent, { t: 'stall' }>, goal: NpcActivity | undefined): string {

@@ -24,6 +24,38 @@ async function checkVisibleReadouts(page) {
   }
 }
 
+async function checkInstruments(page) {
+  const clock = page.locator('.instrument-clock');
+  assert(await clock.isVisible(), 'Clock strip must be visible');
+  const m = await page.evaluate(() => {
+    const rect = selector => document.querySelector(selector)?.getBoundingClientRect().toJSON();
+    const visibleRect = selector => {
+      const node = document.querySelector(selector);
+      return node && node.offsetParent !== null ? node.getBoundingClientRect().toJSON() : null;
+    };
+    return {
+      panel: rect('.instruments'), clock: rect('.instrument-clock'), dial: rect('.truck-instrument'), readouts: rect('.readouts'),
+      log: visibleRect('.log'), weapons: visibleRect('.weapons'),
+      clockText: document.querySelector('.instrument-clock').innerText,
+      panelText: document.querySelector('.instruments').innerText,
+      actionsText: document.querySelector('.instrument-actions').innerText,
+      speedoText: document.querySelector('.speedometer').innerText,
+      heights: [...document.querySelectorAll('.instrument-actions > button')].map(node => node.getBoundingClientRect().height),
+    };
+  });
+  const { panel } = m;
+  assert(m.clock.x >= panel.x && m.clock.right <= panel.right && m.clock.y >= panel.y && m.clock.bottom <= panel.bottom, 'Clock must lie inside the instruments');
+  assert(m.clock.bottom <= m.dial.y && m.clock.bottom <= m.readouts.y, 'Clock must sit above the dial and readouts');
+  assert(/Day \d+ \d+:\d\d/.test(m.clockText), `Clock must show day and time, got ${m.clockText}`);
+  assert.equal(m.panelText.match(/Day \d+ \d+:\d\d/g).length, 1, 'Time must show once');
+  assert(!m.actionsText.includes('broken'), 'No broken badge in the action row');
+  assert(!/km\/h|·/.test(m.speedoText), 'No unit text under the dial');
+  assert(m.heights.every(h => Math.abs(h - m.heights[0]) <= 1), `Action buttons must share one height: ${m.heights}`);
+  for (const other of [m.log, m.weapons].filter(Boolean)) {
+    assert(!doRectsOverlap(panel, other), 'Instruments must not overlap the log or weapons');
+  }
+}
+
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   const errors = [];
@@ -31,11 +63,12 @@ try {
   await page.goto(url);
   await page.waitForFunction(() => window.__ROAM__?.state);
   assert(await page.locator('.icon').evaluateAll(nodes => nodes.every(node => node.title)), 'Every icon needs a hover name');
-  assert(await page.locator('#ui *').evaluateAll(nodes => nodes.every(node => !getComputedStyle(node).backgroundImage.includes('gradient'))), 'UI must use flat surfaces');
+  assert(await page.locator('#ui *').evaluateAll(nodes => nodes.filter(node => !node.closest('button.switch')).every(node => !getComputedStyle(node).backgroundImage.includes('gradient'))), 'UI must use flat surfaces, apart from the metal switches');
+  await checkInstruments(page);
   await page.keyboard.press('i');
   await checkVisibleReadouts(page);
   const movable = page.locator('.inv-item:not(.fixed)').first();
-  const name = (await movable.getAttribute('title')).split('\n')[0];
+  const name = (await movable.getAttribute('title')).split('\n')[0].split(' (')[0];
   await movable.click();
   assert((await page.locator('.inv-inspection').innerText()).includes(name), 'Clicking a movable item must inspect it before drag/drop replaces its node');
   const inventoryFrame = await page.locator('.modal:visible').boundingBox();
@@ -44,18 +77,24 @@ try {
   await checkVisibleReadouts(page);
   assert.deepEqual(await page.locator('.modal:visible').boundingBox(), inventoryFrame, 'Character and inventory must share one frame');
   await page.keyboard.press('Escape');
+  // The truck starts in the wasteland now, so the town frame is checked only when E opens a modal.
   await page.keyboard.press('e');
-  assert(await page.locator('.modal:visible').isVisible(), 'Start location must offer a town for the UI regression');
-  await checkVisibleReadouts(page);
-  assert.deepEqual(await page.locator('.modal:visible').boundingBox(), inventoryFrame, 'Town and inventory must share one frame');
-  for (const width of [1024, 700]) {
+  if (await page.locator('.modal:visible').count()) {
+    await checkVisibleReadouts(page);
+    assert.deepEqual(await page.locator('.modal:visible').boundingBox(), inventoryFrame, 'Town and inventory must share one frame');
+  } else {
+    await page.keyboard.press('i');
+    await checkVisibleReadouts(page);
+  }
+  for (const width of [1024, 800, 700]) {
     await page.setViewportSize({ width, height: 800 });
     await checkVisibleReadouts(page);
+    await checkInstruments(page);
   }
   assert.deepEqual(errors, [], 'No uncaught page errors');
   await mkdir('.playtest', { recursive: true });
   await page.screenshot({ path: '.playtest/ui-regression.png' });
-  console.log('PASS: hover names, flat surfaces, persistent resources/log, stable modal frames, movable-item inspection, and laptop/narrow layouts');
+  console.log('PASS: hover names, flat surfaces, persistent resources/log, stable modal frames, movable-item inspection, and laptop/narrow layouts, clock strip, speedometer and action row');
 } finally {
   await browser.close();
 }

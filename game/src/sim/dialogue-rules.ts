@@ -15,12 +15,19 @@ import { answerPlea, standDownBeggar, backOffClaims, defyClaims, guardsClaim, an
 import { hasCargo, hasSalvage } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
 import { decide, isWeak, npcProfile, wantsLoot } from './npc-decisions';
+import { isStranded } from './stats';
 import { aidData, stateOf, towData } from './states';
 import { agreeAid, aidPrice, canSpareFor, hasAid, isLow, playerAid, refuseAid, spareAid, wantedAid, type AidAmounts } from './aid';
 import { buyPrice, sellPrice, startTrade, tradeWith, transfer } from './economy';
 import { acceptOffer, canTowNpc, hitchNpc, isOnRope, npcTowTerms, playerTow, playerTowing, refuseOffer, releaseNpc, strandedPlayerAt } from './tow';
 import type { Call, CallVar, CallVars, NpcState, Plea, SalvageStock, TopicOutcome, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
+
+// The top goal is a fight on the player that rolled a demand, and the player has cargo.
+function demandsOnTop(world: World, npc: Vehicle): boolean {
+  const top = topGoal(npc);
+  return top?.kind === 'fight' && top.targetId === world.player.vehicleId && top.demands === true && hasCargo(playerVehicle(world));
+}
 
 // `vars` are the call values, empty on the hub and before a topic's prepare step.
 export type Condition = (world: World, npc: Vehicle, vars: CallVars) => boolean;
@@ -146,7 +153,14 @@ function aidAnswer(world: World, npc: Vehicle): CallVars {
 
 export const CONDITIONS: Record<ConditionId, Condition> = {
   knowsTown: (_world, npc) => knownTowns(npc).length > 0,
-  offersTow: (world, npc) => offerBy(world, npc) !== null,
+  offersPaidTow: (world, npc) => {
+    const tow = offerBy(world, npc);
+    return tow !== null && towData(tow).fee > 0;
+  },
+  offersFreeTow: (world, npc) => {
+    const tow = offerBy(world, npc);
+    return tow !== null && towData(tow).fee === 0;
+  },
   // A driver already on its way does not need asking.
   canTowPlayer: (world, npc) => strandedPlayerAt(world, npc) !== null && topGoal(npc)?.kind !== 'tow',
   playerNeedsPatch: (world) => needsPatch(world, playerVehicle(world)) && !inPatch(world, world.player.vehicleId),
@@ -159,11 +173,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   hasDeal: (_world, _npc, vars) => vars.deal !== undefined,
   noDeal: (_world, _npc, vars) => vars.deal === undefined,
   // About to attack the player, who carries something worth taking, and chose to call first.
-  demandsCargo: (world, npc) => {
-    if (hasStrandedPrey(world, npc)) return false;
-    const top = topGoal(npc);
-    return top?.kind === 'fight' && top.targetId === world.player.vehicleId && top.demands === true && hasCargo(playerVehicle(world));
-  },
+  demandsCargo: (world, npc) => !isStranded(world, npc) && !hasStrandedPrey(world, npc) && demandsOnTop(world, npc),
   // The stranded player is alone with a robber and has cargo or parts to lose.
   demandsSurrender: (world, npc) => hasStrandedPrey(world, npc) && wantsLoot(world, npc, playerVehicle(world)) && hasStrippable(playerVehicle(world)),
   // The stranded player is alone with a driver that takes nothing: not a robber, or a robber with nothing to take.

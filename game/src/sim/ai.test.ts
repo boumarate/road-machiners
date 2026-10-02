@@ -155,6 +155,78 @@ describe('NPC traffic', () => {
   });
 });
 
+describe('oncoming NPCs', () => {
+  // Two traders on open ground closing head-on, each bound past the other. The first has the lower id.
+  function headOn(): { w: World; first: Vehicle; second: Vehicle } {
+    const w = emptyWorld({ x: 100, y: 130 });
+    const first = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 100, y: 100 });
+    first.brain = npcBrain('trader', first.pos, ['trader']);
+    first.heading = 0;
+    first.speed = 4;
+    first.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 150, y: 100 }, phase: 'travel', reason: 'test trip east' });
+    const second = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 114, y: 100.5 }, Math.PI);
+    second.brain = npcBrain('trader', second.pos, ['trader']);
+    second.speed = 4;
+    second.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 50, y: 100 }, phase: 'travel', reason: 'test trip west' });
+    expect(first.id < second.id).toBe(true);
+    return { w, first, second };
+  }
+
+  it('of two NPCs closing head-on, the lower id brakes and the higher drives on', () => {
+    const { w, first, second } = headOn();
+    planNpcOrders(w);
+    expect(first.order?.kind).toBe('brake');
+    expect(second.order?.kind).toBe('stopAt');
+  });
+
+  // Two scouts nose to nose and slightly askew, each bound past the other, at the poses of a crash found in
+  // physics traffic. The first stands still and has the lower id. The second routes around it like any parked
+  // truck, so if the first set off around the second's path, both would swerve the same way.
+  it('a lower id at rest waits for the higher id closing on it, which goes around', () => {
+    const w = emptyWorld({ x: 270, y: 190 });
+    const first = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 268.77, y: 160.4 }, (-40.78 * Math.PI) / 180);
+    first.brain = npcBrain('scavenger', first.pos, ['scavenger']);
+    first.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 317, y: 102.75 }, phase: 'travel', reason: 'test trip northeast' });
+    const second = addVehicle(w, 'roamers', 'scout', ['mg', 'stockEngine'], { x: 270.6, y: 156.71 }, (141.44 * Math.PI) / 180);
+    second.brain = npcBrain('roamer', second.pos, ['roamer']);
+    second.speed = 3.22;
+    second.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 223.7, y: 194.2 }, phase: 'travel', reason: 'test trip southwest' });
+    expect(first.id < second.id).toBe(true);
+    planNpcOrders(w);
+    expect(first.order?.kind).toBe('brake');
+    expect(second.order?.kind).toBe('stopAt');
+  });
+
+  it('a lower id at rest sets off when the higher id passes in the next lane', () => {
+    const { w, first, second } = headOn();
+    first.speed = 0;
+    second.pos = { x: 107, y: 104 };
+    planNpcOrders(w);
+    expect(first.order?.kind).toBe('stopAt');
+  });
+
+  it.each(['first', 'second'] as const)('a fleeing truck is not yielded to and does not yield: %s flees', (who) => {
+    const { w, first, second } = headOn();
+    const fleer = who === 'first' ? first : second;
+    fleer.brain!.goals.push({ kind: 'flee', targetId: null, destination: { x: 100, y: 60 }, phase: 'travel', reason: 'test flight' });
+    expect(trafficStops(w, first, DEST)).toBe(false);
+  });
+
+  it('a far pair does not use the rule', () => {
+    const { w, first } = headOn();
+    w.vehicles[0].pos = { x: 100, y: 100 + TERRAIN.vision.radius + PERF.liveMargin + 10 };
+    expect(trafficStops(w, first, DEST)).toBe(false);
+  });
+
+  it('a truck behind on the same heading does not make the leader brake', () => {
+    const { w, first, second } = headOn();
+    second.pos = { x: 94, y: 100 };
+    second.heading = 0;
+    second.speed = 5;
+    expect(trafficStops(w, first, DEST)).toBe(false);
+  });
+});
+
 describe('getting unstuck', () => {
   // A leader bound east whose following escort lags far behind, so the leader waits for it.
   function waitingLeader(): { w: World; leader: Vehicle } {

@@ -11,6 +11,14 @@ telegram:
 # Keep Hermes's own notices out of the committee chat.
 compression:
   codex_gpt55_autoraise_notice: false
+  # Compress the context once the estimated prompt reaches this many tokens.
+  threshold_tokens: 100000
+
+# The summary of a long chat used the main model's default reasoning. It thought silently past the 60-second stall limit, failed, and left the chat over the threshold.
+auxiliary:
+  compression:
+    reasoning_effort: low
+    no_progress_timeout: 180
 
 display:
   # A message sent while Hermes works waits for the next turn, instead of cutting the running task off. /stop still interrupts.
@@ -21,6 +29,7 @@ display:
       interim_assistant_messages: false
       long_running_notifications: false
       streaming: false
+      memory_notifications: "off"
 
 # Hermes's shell and scripts get only the env keys named here. allowlist.py copies them into the Hermes .env.
 terminal:
@@ -37,9 +46,15 @@ approvals:
 cron:
   wrap_response: false
 
+# Hermes core ignores session_reset since v2026.9.11. The hermes-session-reset-policy plugin reads this block and resets a chat that sat idle, on its next message. A chat with a turn in flight never resets.
+session_reset:
+  mode: idle
+  idle_minutes: 60
+
 plugins:
   enabled:
     - factory
+    - hermes-session-reset-policy
 
 # The file toolset also holds write and patch. Hermes has no read-only file toolset.
 platform_toolsets:

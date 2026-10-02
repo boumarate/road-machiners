@@ -201,7 +201,7 @@ export type ShopDef = {
   pressurePerUnit: number; // fraction of base price a single unit traded moves the price
   driftPerTurn: number; // fraction of standing pressure removed each turn
   contractSlots: number; // contracts this shop can post at once; used from PH4
-  supplies: ('fuel' | 'supplies')[]; // which of fuel and food this shop sells
+  supplies: ('fuel' | 'supplies')[]; // which of fuel and food the player buys here; repairs and NPC service do not read it
 };
 
 // Fraction pressure is clamped to either side of base price. A good can never trade for more than
@@ -268,7 +268,7 @@ export const SHOPS: Record<string, ShopDef> = {
     pressurePerUnit: STALL_PRESSURE_PER_UNIT,
     driftPerTurn: 0.0075,
     contractSlots: 1,
-    supplies: [],
+    supplies: ['fuel', 'supplies'],
   },
   // The Granary: a farm stop. Sells its own grain cheap, and buys in salt and textiles for the
   // caravans that pass through, so those cost more here.
@@ -288,7 +288,7 @@ export const SHOPS: Record<string, ShopDef> = {
     pressurePerUnit: STALL_PRESSURE_PER_UNIT,
     driftPerTurn: 0.0075,
     contractSlots: 1,
-    supplies: [],
+    supplies: ['fuel', 'supplies'],
   },
   // Pump Station: sells the batteries it charges cheap, and pays well for scrap and parts to keep
   // its pumps and generators running.
@@ -308,7 +308,7 @@ export const SHOPS: Record<string, ShopDef> = {
     pressurePerUnit: STALL_PRESSURE_PER_UNIT,
     driftPerTurn: 0.0075,
     contractSlots: 1,
-    supplies: ['fuel'],
+    supplies: ['fuel', 'supplies'],
   },
 };
 

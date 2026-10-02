@@ -20,7 +20,7 @@ import { npcTraits } from '../sim/npc-decisions';
 import { hasPerk } from '../sim/progress';
 import { aidData, pleaData, statesHeld, strayData, towData } from '../sim/states';
 import { RULES } from '../data/rules';
-import { isJunk } from '../sim/wear';
+import { isJunk, maxHp } from '../sim/wear';
 import { clockOf } from '../sim/sun';
 import type { PartHit } from '../sim/armor';
 import { shotDamage } from '../sim/combat';
@@ -89,7 +89,7 @@ function aidWorkLabel(world: World, v: Vehicle, s: NpcState): string {
 export function workProgress(work: WorkLeft): number {
   return 1 - work.turnsLeft / work.total;
 }
-import { damage, fuelLiters } from './units';
+import { damage, fuelLiters, hp } from './units';
 import { npcName } from '../sim/spawn';
 
 // A part's condition in one word: junk, pristine, or a rebuild count for a part that has broken and
@@ -98,6 +98,27 @@ export function wearLabel(part: PartInstance): string {
   if (isJunk(part)) return 'junk';
   if (part.wear === 0) return 'pristine';
   return `rebuilt x${part.wear}`;
+}
+
+export type ConditionTier = 'pristine' | `w${number}` | 'junk';
+
+// The color step of a part's condition: one per wear level, so brightness can fall as wear grows.
+export function conditionTier(part: PartInstance): ConditionTier {
+  if (isJunk(part)) return 'junk';
+  if (part.wear === 0) return 'pristine';
+  return `w${part.wear}`;
+}
+
+// Built-in parts are never swapped, bought or sold, so their wear decides no choice.
+export function showsCondition(part: PartInstance): boolean {
+  return partDef(part.defId).kind !== 'core';
+}
+
+// Whether the part works, apart from its wear: scrap only, broken, or its HP.
+export function conditionStatus(part: PartInstance): { text: string; tone: 'dim' | 'bad' } {
+  if (isJunk(part)) return { text: 'scrap only', tone: 'dim' };
+  if (part.hp === 0) return { text: 'broken', tone: 'bad' };
+  return { text: `${hp(part.hp)}/${hp(maxHp(part))} HP`, tone: 'dim' };
 }
 
 export function vehicleName(world: World, id: string): string {
@@ -376,7 +397,7 @@ function sayText(world: World, e: Extract<GameEvent, { t: 'say' }>): LogLine {
 }
 
 function towOfferText(world: World, e: Extract<GameEvent, { t: 'towOffer' }>): LogLine {
-  return { text: `${vehicleName(world, e.by)} offers to tow you to ${siteName(e.town)} for ${e.fee}.`, cls: '' };
+  return { text: `${vehicleName(world, e.by)} offers to tow you to ${siteName(e.town)} for ${e.fee > 0 ? e.fee : 'free'}.`, cls: '' };
 }
 
 function towHitchedText(world: World, e: Extract<GameEvent, { t: 'towHitched' }>): LogLine {
@@ -385,8 +406,11 @@ function towHitchedText(world: World, e: Extract<GameEvent, { t: 'towHitched' }>
 
 function towDoneText(world: World, e: Extract<GameEvent, { t: 'towDone' }>): LogLine {
   const by = vehicleName(world, e.by);
-  if (e.client === world.player.vehicleId) return { text: `${by} tows you into town and takes ${e.fee}.`, cls: 'bad' };
-  return { text: `${by} tows ${vehicleName(world, e.client)} in and takes ${e.fee}.`, cls: 'dim' };
+  const free = e.fee === 0;
+  if (e.client === world.player.vehicleId) {
+    return free ? { text: `${by} tows you into town for free.`, cls: '' } : { text: `${by} tows you into town and takes ${e.fee}.`, cls: 'bad' };
+  }
+  return { text: `${by} tows ${vehicleName(world, e.client)} in${free ? ' for free' : ` and takes ${e.fee}`}.`, cls: 'dim' };
 }
 
 function escortPaidText(world: World, e: Extract<GameEvent, { t: 'escortPaid' }>): LogLine {
@@ -423,6 +447,7 @@ const PLAYER_TOW_DROPPED: Record<Extract<GameEvent, { t: 'towDropped' }>['reason
   danger: (by) => `${by} drops the tow. There is danger.`,
   stranded: (by) => `${by} can no longer drive. The tow is off.`,
   gone: (by) => `${by} is gone. The tow is off.`,
+  blocked: (by) => `${by} cannot get through to you. The tow is off.`,
 };
 
 function playerTowDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped' }>['reason']): LogLine {

@@ -9,9 +9,9 @@ import { newId } from './factory';
 import { lootRobbed } from './npc-activities';
 import { checkPatch, isPatching, breakPatch, lapsePatch, patchWork, settlePatch } from './patch';
 import { practice } from './progress';
-import { checkEscort, checkPlayerTow, payEscort } from './tow';
+import { checkEscort, checkPlayerTow, lapseClaim, payEscort } from './tow';
 import { checkTrade, isMeeting } from './economy';
-import { isHostile } from './combat';
+import { inCombat, isHostile } from './combat';
 import { getResources } from './resources';
 import type { Job, NpcState, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
 import { canVehicleSee } from './vision';
@@ -73,8 +73,15 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   turnedDown: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
   towPromise: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
   // The holder has taken the job of towing the other party, so no other driver answers. It is fulfilled by the offer
-  // in src/sim/tow.ts, and broken once the holder's tow goal is gone from its stack.
-  answering: { refresh: never, check: (w, s) => (answerDropped(w, s) ? 'broken' : null), hooks: {}, work: noWork, binds: true },
+  // in src/sim/tow.ts, and broken once the holder's tow goal is gone from its stack. It lapses after its turns with the
+  // other party in sight and out of combat, since a blocked tower never gets to offer.
+  answering: {
+    refresh: answerWaits,
+    check: (w, s) => (answerDropped(w, s) ? 'broken' : null),
+    hooks: { expired: lapseClaim },
+    work: noWork,
+    binds: true,
+  },
   // The holder patches the other party's truck. See src/sim/patch.ts. Work keeps it going, and the fulfilled hook
   // pays once.
   // The two parties are not foes while it lasts, unless a feud says otherwise. See isFoe() in src/sim/combat.ts.
@@ -120,6 +127,14 @@ function checkCombat(w: World, s: NpcState): StateEnding | null {
   const other = w.vehicles.find((v) => v.id === s.other);
   if (!holder || !other) return null;
   return isHostile(w, holder, other) || isHostile(w, other, holder) ? null : 'broken';
+}
+
+// An answering tower's clock holds while it cannot see its client, as on a beacon answer from far off, or while the
+// client is in combat, when the tower waits out the fight. Both parties exist here.
+function answerWaits(w: World, s: NpcState): boolean {
+  const holder = vehicleById(w, s.holder);
+  const other = vehicleById(w, s.other);
+  return !canVehicleSee(w, holder, other.pos) || inCombat(w, other);
 }
 
 // A missing holder is left to the missing-party rule.

@@ -9,6 +9,7 @@ import { playerVehicle } from '../sim/damage';
 import { NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
 import { siteGates } from '../sim/sites';
+import { chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
 import { topGoal } from '../sim/npc-activities';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from '../sim/testkit';
@@ -112,6 +113,52 @@ describe('hitched tower traffic', () => {
     const r = runUntil(w, 20, passed);
     expect(crashes(r.events, tower.id)).toEqual([]);
     expect(passed(r.w)).toBe(true);
+  });
+});
+
+describe('tow approach traffic', () => {
+  const crashes = (events: GameEvent[], id: string) => events.filter((e) => e.t === 'collision' && (e.a === id || e.b === id));
+  const feuds = (events: GameEvent[]) => events.filter((e) => e.t === 'hostile');
+  // The tower ends the job hitched, or its claim lapsed.
+  const settled = (w: World) => playerTow(w) !== null || !w.states.some((st) => st.kind === 'answering');
+
+  function patrolled(place: (client: Vec) => Vec): { w: World; tower: Vehicle; patrol: Vehicle } {
+    const s = stranded();
+    const client = playerVehicle(s.w).pos;
+    const patrol = withTower(s.w, 'bowlFarmer', 'bowl', 'hauler', place(client));
+    patrol.brain!.goals = [];
+    return { w: s.w, tower: s.trader, patrol };
+  }
+
+  it('a tower parks beside a stranded truck without ramming a patrol parked at its approach spot', () => {
+    forceOption('strandedSeen', 'tow');
+    forceOption('idle', 'wait');
+    // The tower comes from the east, so the approach-side spot lies a few tiles east of the client.
+    const reach = chassisDef('hauler').radius * 2 + RULES.arriveRadius;
+    const { w, tower, patrol } = patrolled((c) => ({ x: c.x + reach, y: c.y }));
+    const r = runUntil(w, 40, settled);
+    expect(crashes(r.events, tower.id)).toEqual([]);
+    expect(feuds(r.events)).toEqual([]);
+    expect(settled(r.w)).toBe(true);
+    expect(patrol.id).not.toBe(tower.id);
+  });
+
+  it('a tower arriving as a patrol drives across its approach spot does not crash into it', () => {
+    forceOption('strandedSeen', 'tow');
+    const { w, tower, patrol } = patrolled((c) => ({ x: c.x + 5, y: c.y + 14 }));
+    const to = { x: patrol.pos.x, y: patrol.pos.y - 28 };
+    patrol.heading = -Math.PI / 2;
+    patrol.brain!.goals = [{ kind: 'raid', targetId: null, destination: to, phase: 'travel', reason: 'drive across the approach' }];
+    const r = runUntil(w, 40, settled);
+    expect(crashes(r.events, tower.id)).toEqual([]);
+    expect(feuds(r.events)).toEqual([]);
+  });
+
+  it('a free approach still offers, hitches and tows', () => {
+    const s = stranded();
+    forceOption('strandedSeen', 'tow');
+    const r = runUntil(s.w, 30, (x) => playerTow(x) !== null);
+    expect(playerTow(r.w)?.holder).toBe(s.trader.id);
   });
 });
 
