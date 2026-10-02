@@ -1,47 +1,97 @@
-// Territory layer: hull pieces, the reactor, caches, rim rocks, field spots and debris inside each territory, placed
-// by the rules in TERRITORIES. It runs after the new-world layer, so ground rules read these props and the seated
-// heights. Pieces, the reactor and caches are authored; rim rocks, field spots and debris are drawn from the map seed
-// and the territory's own seed offset, on open ground off the pieces, tracks and roads.
+// Territory layer: a wreck's hull pieces, caches, rim rocks, field spots and debris, the reactor, and a farm's layout
+// (./farm) and debris inside each territory, placed by the rules in TERRITORIES. It runs after the new-world layer, so
+// ground rules read these props, the seated heights and the farm's marks. Pieces, the reactor, caches and farms are
+// authored; rim rocks, field spots and debris are drawn from the map seed and the territory's own seed offset, on open
+// ground off the pieces, tracks, roads and the farm's marks.
 
 import { PHYSICS } from '../data/physics';
 import { REGION, type TerritoryDef } from '../data/region';
-import { TERRITORIES, type TerritoryRules } from '../data/territory';
+import { TERRITORIES, type FarmRules, type Patch, type TerritoryRules, type WreckRules } from '../data/territory';
 import { TERRAIN } from '../data/terrain';
 import { boxDistance, propBoxes, type PosedBox } from '../sim/mapgen';
 import { ROAD_INDEX } from '../sim/road-index';
 import { randRange, type Rng } from '../sim/rng';
+import { siteGap } from '../sim/sites';
 import { isTerritory, reactorPos, territoryCaches, territoryPieces, territoryTracks, type BakedPiece } from '../sim/territory';
 import { groundAt, type BakedProp } from '../sim/terrain';
 import { dist, polylineDist, type Vec } from '../sim/vec';
 import { tileSteepness, type MapDraft } from './bake';
+import { fillFarm, touchesMarks } from './farm';
 import { prop, ruleRng, tileOf } from './oldworld';
 
 const TERRITORY_SEED_OFFSET = 9100; // one block of offsets per territory, so a new territory shifts no other
-const TRIES = 200; // draws for one prop before the layer gives up
+// Draws for one prop before the layer gives up: the orchard's groves leave little open band. The Fallen Sun's
+// draws succeed early, so its bake does not depend on this number.
+const TRIES = 1000;
 const REACTOR_MARGIN = 2; // tiles between the hazard's edge and any drawn prop
 const TRACK_GAP = 1; // tiles between a track and the footprint of a drawn prop, so the ruts stay open
+const DEBRIS_BAND: [number, number] = [0, 1.5]; // a farm's debris spills half a band past its spine band, toward the rim
 
 export function territoryLayer(seed: number, d: MapDraft): MapDraft {
-  REGION.locations.filter(isTerritory).forEach((t, k) => fill(d, t, TERRITORIES[t.id], ruleRng(seed, TERRITORY_SEED_OFFSET + k)));
+  for (const t of REGION.locations.filter(isTerritory)) {
+    const rules = TERRITORIES[t.id];
+    fill(d, t, rules, ruleRng(seed, TERRITORY_SEED_OFFSET + rules.seed));
+  }
   return d;
 }
 
+// What every draw reads: the draft, the territory and its draws.
+type Draws = { d: MapDraft; t: TerritoryDef; rng: Rng };
 // pieces are the authored piece props: drawn props keep clear of their boxes, not of their placement circles, which
 // are half a long piece's length.
-type Ground = { d: MapDraft; t: TerritoryDef; rules: TerritoryRules; rng: Rng; pieces: ReadonlySet<BakedProp>; pieceBoxes: readonly PosedBox[]; tracks: Vec[][] };
+type Ground = Draws & { rules: TerritoryRules; wreck: WreckRules; pieces: ReadonlySet<BakedProp>; pieceBoxes: readonly PosedBox[]; tracks: Vec[][] };
 
 function fill(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, rng: Rng): void {
-  const pieces = territoryPieces(t);
-  seatPieces(d, pieces, rules.seatEase);
-  const pieceProps = pieces.map((p) => prop(p.look, p.pos, p.r, p.yaw));
-  d.props.push(...pieceProps);
+  const pieces = rules.wreck ? placePieces(d, t, rules.wreck) : [];
   if (rules.reactor) d.props.push(prop(rules.reactor.look, reactorPos(t), rules.reactor.radius, 0));
-  const caches = territoryCaches(t).map((pos) => prop(rules.cacheLook, pos, rules.cacheRadius, 0));
+  if (rules.wreck) fillWreck({ d, t, rng }, rules, rules.wreck, pieces);
+  if (rules.farm) fillFarmBand({ d, t, rng }, rules, rules.farm);
+}
+
+// The wreck's pieces on their seated ground. Returns the piece props.
+function placePieces(d: MapDraft, t: TerritoryDef, wreck: WreckRules): BakedProp[] {
+  const pieces = territoryPieces(t);
+  seatPieces(d, pieces, wreck.seatEase);
+  const props = pieces.map((p) => prop(p.look, p.pos, p.r, p.yaw));
+  d.props.push(...props);
+  return props;
+}
+
+// Caches, rim rocks and the patches round the placed pieces.
+function fillWreck(draws: Draws, rules: TerritoryRules, wreck: WreckRules, pieceProps: readonly BakedProp[]): void {
+  const { d, t } = draws;
+  const caches = territoryCaches(t).map((pos) => prop(wreck.cacheLook, pos, wreck.cacheRadius, 0));
   d.props.push(...caches);
-  const g: Ground = { d, t, rules, rng, pieces: new Set(pieceProps), pieceBoxes: pieces.flatMap((p) => propBoxes(pieceObstacle(p, 'piece'))), tracks: territoryTracks(t) };
+  const pieceBoxes = territoryPieces(t).flatMap((p) => propBoxes(pieceObstacle(p, 'piece')));
+  const g: Ground = { ...draws, rules, wreck, pieces: new Set(pieceProps), pieceBoxes, tracks: territoryTracks(t) };
   placeRimRocks(g);
   let spots: BakedProp[] = [...caches];
-  for (const patch of rules.patches) spots = placePatch(g, patch, spots);
+  for (const patch of wreck.patches) spots = placePatch(g, patch, spots);
+}
+
+// The farm's layout, then debris along its spine band. Its buildings are its loot spots, so debris keeps the debris
+// gap from them and a truck can still park beside one.
+function fillFarmBand(draws: Draws, rules: TerritoryRules, farm: FarmRules): void {
+  const { d, t, rng } = draws;
+  const buildings = fillFarm(d, t, rules, farm, rng);
+  const hazard = rules.reactor?.hazard ? { pos: reactorPos(t), reach: rules.reactor.hazard.radius + REACTOR_MARGIN } : null;
+  const open = (pos: Vec, r: number): boolean =>
+    siteGap(t, pos) < -r && (!hazard || dist(pos, hazard.pos) > hazard.reach + r) && clearOf(d.props, pos, r, 0) && clearOf(buildings, pos, r, rules.debrisGap);
+  for (const rule of farm.debris) {
+    for (let i = 0; i < rule.count; i++) d.props.push(draw(draws, rule.look, 'in the spine band', () => bandPoint(draws, farm, DEBRIS_BAND), rule.radius, open));
+  }
+}
+
+// A point along the farm's spine, to either side of it between shares of the band.
+function bandPoint({ t, rng }: Draws, farm: FarmRules, band: [number, number]): Vec {
+  const { from, to } = farm.spine;
+  const share = randRange(rng, 0, 1);
+  const off = farm.spine.band * randRange(rng, band[0], band[1]) * (randRange(rng, 0, 1) < 0.5 ? -1 : 1);
+  const length = dist(from, to);
+  return {
+    x: t.pos.x + from.x + (to.x - from.x) * share - ((to.y - from.y) / length) * off,
+    y: t.pos.y + from.y + (to.y - from.y) * share + ((to.x - from.x) / length) * off,
+  };
 }
 
 // The landmark obstacle world creation makes of a baked piece, so the bake reads the boxes trucks will hit.
@@ -98,7 +148,7 @@ function smooth(s: number): number {
 // Rim rocks drawn on the arc of the bank, off roads and other props. They overlap each other by up to two thirds and run
 // along the rim, so they read as one broken rock wall.
 function placeRimRocks(g: Ground): void {
-  const { from, to, radius, count, size } = g.rules.rimRocks;
+  const { from, to, radius, count, size } = g.wreck.rimRocks;
   const pick = (): Vec => {
     const a = randRange(g.rng, from, to);
     const r = randRange(g.rng, radius[0], radius[1]);
@@ -117,7 +167,7 @@ function placeRimRocks(g: Ground): void {
 
 // A patch's field spots go first, so its debris never boxes one in. Field spots keep the spot gap from every loot
 // spot placed before them, caches included. Returns the loot spots so far.
-function placePatch(g: Ground, patch: TerritoryRules['patches'][number], before: BakedProp[]): BakedProp[] {
+function placePatch(g: Ground, patch: Patch, before: BakedProp[]): BakedProp[] {
   const spots = [...before];
   const centre = { x: g.t.pos.x + patch.at.x, y: g.t.pos.y + patch.at.y };
   const where = `in the patch at ${patch.at.x},${patch.at.y}`;
@@ -128,7 +178,7 @@ function placePatch(g: Ground, patch: TerritoryRules['patches'][number], before:
   };
   const apart = (pos: Vec, r: number): boolean => open(g, pos, r) && spots.every((o) => dist(o.pos, pos) >= g.rules.spotGap) && clearOf(drawn(g), pos, r, 0);
   for (let i = 0; i < patch.spots; i++) {
-    const p = draw(g, g.rules.spotLook, where, pick, g.rules.spotRadius, apart);
+    const p = draw(g, g.wreck.spotLook, where, pick, g.wreck.spotRadius, apart);
     spots.push(p);
     g.d.props.push(p);
   }
@@ -144,7 +194,7 @@ function drawn(g: Ground): BakedProp[] {
 
 // Inside the territory, outside the hazard and its margin, off every piece's boxes and off the tracks.
 function open(g: Ground, pos: Vec, r: number): boolean {
-  if (dist(pos, g.t.pos) + r >= g.t.radius) return false;
+  if (siteGap(g.t, pos) >= -r) return false;
   const reactor = g.rules.reactor;
   if (reactor?.hazard && dist(pos, reactorPos(g.t)) <= reactor.hazard.radius + REACTOR_MARGIN + r) return false;
   if (!clearOfPieces(g, pos, r)) return false;
@@ -153,7 +203,7 @@ function open(g: Ground, pos: Vec, r: number): boolean {
 
 // The first drawn prop at a picked point that stands on open ground and passes ok. Fails loudly: a territory that
 // cannot hold its props is a data problem, not something to place fewer of.
-function draw(g: Ground, look: BakedProp['kind'], where: string, pick: () => Vec, radius: [number, number], ok: (pos: Vec, r: number) => boolean): BakedProp {
+function draw(g: Draws, look: BakedProp['kind'], where: string, pick: () => Vec, radius: [number, number], ok: (pos: Vec, r: number) => boolean): BakedProp {
   for (let k = 0; k < TRIES; k++) {
     const pos = pick();
     const r = randRange(g.rng, radius[0], radius[1]);
@@ -169,11 +219,12 @@ function clearOfPieces(g: Ground, pos: Vec, r: number): boolean {
   return g.pieceBoxes.every((b) => boxDistance(b, pos) >= r + REGION.obstacles.gap);
 }
 
-// Inside the map margin, off every road and off cliffs.
+// Inside the map margin, off every road, off a farm's old road, pads and tracks, and off cliffs.
 function standable(d: MapDraft, pos: Vec, r: number): boolean {
   if (Math.min(pos.x, pos.y, d.size - pos.x, d.size - pos.y) < REGION.obstacles.edgeMargin + r) return false;
   const reach = REGION.roadWidth / 2 + r;
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, reach) < reach) return false;
+  if (touchesMarks(d, pos, r)) return false;
   return tileSteepness(d.heights, d.size, tileOf(d.size, pos)) <= TERRAIN.drive.maxSlope;
 }
 

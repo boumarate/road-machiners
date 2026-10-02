@@ -12,7 +12,7 @@ import { aimWithin, fireSpans, openSides, type FireSpan } from '../../sim/armor'
 import { bodyOf, cellCenter, cellRect, engineAnchor, highestUnder, restOn, surfaceAt, type Body, type CellRect, type Rest } from '../../sim/body';
 import { headingOf, headingQuat, type V3, type VehicleFrame } from '../../phys/frames';
 import { FACTION_COLORS, PAL } from '../../render/palette';
-import { BODY_PARTS, baseModel, partModel, weaponLook } from '../../render/partLooks';
+import { BODY_PARTS, baseModel, grayShare, grayed, jagOffset, partModel, weaponLook, wearLookStep } from '../../render/partLooks';
 import { baseGrid, isMounted, itemCells, itemSize, sideOf, type SideLetter } from '../../sim/grid';
 import type { GridItem, Vehicle } from '../../sim/types';
 import { angleDiff, DEG } from '../../sim/vec';
@@ -67,14 +67,23 @@ const CHAIN_SIDE = 0.4; // fraction of the half width from the center line to th
 // A turning weapon head, its barrel tip in head space, and where its gun can fire in degrees off the truck heading.
 type Turret = { head: THREE.Group; tip: THREE.Vector3; spans: FireSpan[] };
 
+// How a part draws: the broken tone, its wear look step and the id that seeds its jag. A good has step 0 and no id.
+type Look = { tone: number; step: number; partId: string | null };
+// A flat model has no thickness, so its jag measures from this extent instead.
+const THINNEST_FLOOR = 0.01;
+const PRISTINE: Look = { tone: 1, step: 0, partId: null };
+
+// A point on a part, local to a parent that moves with the truck.
+type Anchor = { local: THREE.Vector3; parent: THREE.Object3D };
+
 // Where a model goes in body space.
 type Placement = { pos: THREE.Vector3; yaw: number; scale: THREE.Vector3 };
 
-// A model rebuilds only when this changes: chassis, faction, and every grid item with its place and damage state.
-function signatureOf(v: Vehicle): string {
+// A model rebuilds only when this changes: chassis, faction, and every grid item with its place and wear look step.
+export function signatureOf(v: Vehicle): string {
   const items = v.items
     .map((it) => {
-      const what = it.kind === 'part' ? `${it.part.defId}#${it.part.id}:${it.part.hp > 0 ? 1 : 0}` : it.good;
+      const what = it.kind === 'part' ? `${it.part.defId}#${it.part.id}:${wearLookStep(it.part)}` : it.good;
       return `${what}@${it.x},${it.y},${it.rot}`;
     })
     .join(',');
@@ -100,6 +109,7 @@ export class VehicleView {
   private motion!: TruckMotion; // set by rebuild
   private running = false;
   private turrets = new Map<string, Turret>(); // key: weapon part id
+  private anchors = new Map<string, Anchor>(); // key: part id
   private heading = 0;
   private lampMat = new THREE.MeshBasicMaterial({ color: PAL.lamp.off });
   private glassMat = new THREE.MeshLambertMaterial({ flatShading: true });
@@ -210,6 +220,7 @@ export class VehicleView {
     this.shocks = [];
     this.axles = [];
     this.turrets.clear();
+    this.anchors.clear();
     const body = bodyOf(v.chassisId);
     this.motion = new TruckMotion(this.body, new THREE.Vector3(0, body.wheelY, 0), hashStr(v.id));
     const paint = FACTION_COLORS[v.faction].top;
@@ -220,7 +231,7 @@ export class VehicleView {
 
     const still = new THREE.Group();
     const onBody = v.items.filter((item) => onChassis(v, item));
-    this.buildBase(v, body, baseModel(v.chassisId), still, paint, FACTION_COLORS[v.faction].cab, bumperlessCells(v, onBody));
+    this.buildBase(v, body, baseModel(v.chassisId), still, paint, FACTION_COLORS[v.faction].cab, bumperlessCells(v, onBody), cabLook(v));
     const wheelItems: PartItem[] = [];
     // The transmission and the tank of a truck that does not show its cores sit inside the body. A part with no surface
     // to rest on would float, so it is not drawn either.
@@ -229,21 +240,10 @@ export class VehicleView {
         still.add(this.placeItem(v, item, paint, standingY(v, item)));
         continue;
       }
-      const def = partDef(item.part.defId);
-      const mounted = isMounted(v.chassisId, item);
-      // The cab core has no model: the base draws the cab.
-      if (BODY_PARTS.has(def.id)) continue;
-      const wheel = isWheel(def);
-      if (wheel && mounted) wheelItems.push(item);
-      else if (wheel) still.add(this.spareWheel(v, body, item, paint, standingY(v, item)));
-      else if (def.kind === 'weapon') this.buildWeapon(v, item, mounted, still, paint, this.riser(v, item, paint, still));
-      // A mounted plate hangs on the model's outer face, so it rests on no surface.
-      else if (def.kind === 'armor') still.add(this.placeArmor(v, body, item, paint, mounted));
-      // An engine on its mount stands in the engine bay and shows through the cutout.
-      else if (def.kind === 'engine' && mounted) still.add(this.placeEngine(v, item, paint));
-      else still.add(this.placeItem(v, item, paint, standingY(v, item)));
+      this.drawPart(v, body, item, still, paint, wheelItems);
     }
     this.buildWheels(v, body, wheelItems, paint);
+    this.anchorUndrawn(v, body);
     this.buildSuspension(body, paint);
     this.buildLooseParts(v, body, onBody.length === v.items.length);
     this.body.add(mergeStatic(still));
@@ -251,6 +251,57 @@ export class VehicleView {
     this.darkMat = new THREE.MeshBasicMaterial({ color: PAL.outline });
     markStencil(this.darkMat);
     this.dark = false;
+  }
+
+  // One part's model. The cab core has no model: the base draws the cab.
+  private drawPart(v: Vehicle, body: Body, item: PartItem, still: THREE.Group, paint: number, wheelItems: PartItem[]): void {
+    const def = partDef(item.part.defId);
+    const mounted = isMounted(v.chassisId, item);
+    if (BODY_PARTS.has(def.id)) return;
+    if (def.kind === 'weapon') this.buildWeapon(v, item, mounted, still, paint, this.riser(v, item, paint, still));
+    else if (isWheel(def) && mounted) wheelItems.push(item);
+    else this.addPart(still, item, this.placedPart(v, body, item, def, paint));
+  }
+
+  private placedPart(v: Vehicle, body: Body, item: PartItem, def: PartDef, paint: number): THREE.Object3D {
+    const mounted = isMounted(v.chassisId, item);
+    if (isWheel(def)) return this.spareWheel(v, body, item, paint, standingY(v, item));
+    // A mounted plate hangs on the model's outer face, so it rests on no surface.
+    if (def.kind === 'armor') return this.placeArmor(v, body, item, paint, mounted);
+    // An engine on its mount stands in the engine bay and shows through the cutout.
+    if (def.kind === 'engine' && mounted) return this.placeEngine(v, item, paint);
+    return this.placeItem(v, item, paint, standingY(v, item));
+  }
+
+  // Adds a placed part model and anchors the part at the center of the model, in body space.
+  private addPart(still: THREE.Group, item: PartItem, obj: THREE.Object3D): void {
+    still.add(obj);
+    this.anchors.set(item.part.id, { local: new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3()), parent: this.body });
+  }
+
+  // Parts with no model of their own sit on the body surface at their cells: a hidden tank, a floating spare and the cab.
+  // A part in the cargo rows past the grid rides at the rear, where the cargo model stands for it.
+  private anchorUndrawn(v: Vehicle, body: Body): void {
+    for (const item of v.items) {
+      if (item.kind !== 'part' || this.anchors.has(item.part.id)) continue;
+      const local = onChassis(v, item) ? surfacePoint(v, item) : new THREE.Vector3(-body.half.x, body.half.y, 0);
+      this.anchors.set(item.part.id, { local, parent: this.body });
+    }
+  }
+
+  // The world point of a part, in meters, valid after pose().
+  partPoint(partId: string): V3 {
+    const anchor = this.anchors.get(partId);
+    if (!anchor) throw new Error(`Vehicle view has no part ${partId}`);
+    anchor.parent.updateWorldMatrix(true, false);
+    const p = anchor.local.clone().applyMatrix4(anchor.parent.matrixWorld);
+    return { x: p.x, y: p.y, z: p.z };
+  }
+
+  // The world point of the truck's center.
+  center(): V3 {
+    const { x, y, z } = this.root.position;
+    return { x, y, z };
   }
 
   // Every truck mesh marks its pixels in the stencil and gets a twin with the silhouette material under the same parent.
@@ -291,12 +342,12 @@ export class VehicleView {
   }
 
   // The chassis base model at the collider center, and kit bumpers on its front and back row cells unless a ram or cage covers them.
-  private buildBase(v: Vehicle, body: Body, name: ModelName, into: THREE.Group, paint: number, trim: number, bumperless: Set<string>): void {
+  private buildBase(v: Vehicle, body: Body, name: ModelName, into: THREE.Group, paint: number, trim: number, bumperless: Set<string>, look: Look): void {
     const obj = model(name);
-    tint(obj, paint, 1);
     obj.traverse((o) => {
       if (o instanceof THREE.Mesh && o.material.name === TRIM) o.material.color.setHex(trim);
     });
+    tint(obj, paint, look);
     this.useLamp(obj);
     into.add(obj);
     const grid = baseGrid(v.chassisId);
@@ -307,7 +358,7 @@ export class VehicleView {
         if (grid.cells[y][x] === null || bumperless.has(`${x},${y}`)) continue;
         const bumper = model(bumperName);
         place(bumper, bumperPlacement(cellRect(v.chassisId, [{ x, y }]), y === 0, body.half.y, yaw, stretch));
-        tint(bumper, paint, 1);
+        tint(bumper, paint, look);
         into.add(bumper);
       }
     }
@@ -318,7 +369,7 @@ export class VehicleView {
     const obj = model(itemModel(item));
     place(obj, footprint(v, item, y));
     lean(obj, restOf(v, item).slope);
-    tint(obj, paint, toneOf(item));
+    tint(obj, paint, lookOf(item));
     return obj;
   }
 
@@ -328,7 +379,7 @@ export class VehicleView {
     const at = footprint(v, item, 0);
     const anchor = engineAnchor(v.chassisId);
     place(obj, { ...at, pos: new THREE.Vector3(anchor.x, anchor.y, anchor.z) });
-    tint(obj, paint, toneOf(item));
+    tint(obj, paint, lookOf(item));
     return obj;
   }
 
@@ -352,7 +403,7 @@ export class VehicleView {
     }
     const n = Math.max(def.w, def.h);
     place(obj, { pos: at.pos, yaw: SIDE_YAW[side], scale: new THREE.Vector3(depth / CELL.along, 1, armorSpan(item, rect, mounted, across) / (n * CELL.across)) });
-    tint(obj, paint, toneOf(item));
+    tint(obj, paint, lookOf(item));
     return obj;
   }
 
@@ -364,7 +415,7 @@ export class VehicleView {
     if (bottom >= top) return mount;
     const post = model('wmount_riser');
     place(post, { pos: at.pos.clone().setY(bottom), yaw: 0, scale: new THREE.Vector3(1, (top - bottom) / socket('wmount_riser', 'top').y, 1) });
-    tint(post, paint, toneOf(item));
+    tint(post, paint, lookOf(item));
     into.add(post);
     return mount;
   }
@@ -373,10 +424,10 @@ export class VehicleView {
   // The receiver is the head's origin, the barrel joins at its muzzle socket and the extra at its extra socket.
   private buildWeapon(v: Vehicle, item: PartItem, active: boolean, still: THREE.Group, paint: number, at: Placement): void {
     const look = weaponLook(item.part.id, item.part.defId);
-    const tone = toneOf(item);
+    const wear = lookOf(item);
     const mount = model(look.mount);
     place(mount, at);
-    tint(mount, paint, tone);
+    tint(mount, paint, wear);
     still.add(mount);
 
     const parts = new THREE.Group();
@@ -391,10 +442,11 @@ export class VehicleView {
       extra.position.copy(socket(look.receiver, 'extra'));
       parts.add(extra);
     }
-    for (const p of parts.children) tint(p, paint, tone);
+    for (const p of parts.children) tint(p, paint, wear);
     const head = mergeStatic(parts);
     mount.updateMatrix();
     head.position.copy(socket(look.mount, 'head').applyMatrix4(mount.matrix));
+    this.anchors.set(item.part.id, { local: head.position.clone(), parent: this.body });
     if (!active) {
       still.add(head);
       return;
@@ -409,19 +461,20 @@ export class VehicleView {
     const mounts = wheelMounts(body);
     if (items.length !== mounts.length) throw new Error(`${v.id} has ${items.length} mounted wheels, expected ${mounts.length}`);
     // A grid wheel belongs to the physics wheel of its corner of the truck.
-    const tones = mounts.map((m) => {
+    const cornered = mounts.map((m) => {
       const inCorner = items.filter((it) => {
         const c = cellCenter(v.chassisId, it.x, it.y);
         return Math.sign(c.x) === Math.sign(m.x) && Math.sign(c.z) === Math.sign(m.z);
       });
       if (inCorner.length !== 1) throw new Error(`${v.id} has ${inCorner.length} wheel items in the corner of the wheel mount ${m.x},${m.z}, expected 1`);
-      return toneOf(inCorner[0]);
+      return inCorner[0];
     });
     mounts.forEach((m, i) => {
       const mount = new THREE.Group();
       mount.position.set(m.x, m.y - T.suspensionRest, m.z);
-      const spin = this.wheelModel(body, paint, tones[i]);
+      const spin = this.wheelModel(body, paint, lookOf(cornered[i]));
       mount.add(spin);
+      this.anchors.set(cornered[i].part.id, { local: new THREE.Vector3(), parent: mount });
       this.root.add(mount);
       this.wheels.push({ mount, spin, restY: m.y });
     });
@@ -442,7 +495,7 @@ export class VehicleView {
 
   private stretchModel(name: ModelName, thick: THREE.Vector3, paint: number): THREE.Object3D {
     const raw = model(name);
-    tint(raw, paint, 1);
+    tint(raw, paint, PRISTINE);
     const inner = new THREE.Group();
     inner.add(raw);
     const merged = mergeStatic(inner);
@@ -457,7 +510,7 @@ export class VehicleView {
   // A whip antenna at the back corner of the cab roof, and a tow chain under the rear bumper.
   // A truck with cargo rows past its grid has the cargo model at its rear, so it gets no chain.
   private buildLooseParts(v: Vehicle, body: Body, bareRear: boolean): void {
-    const cab = v.items.find((it) => it.kind === 'part' && BODY_PARTS.has(it.part.defId));
+    const cab = cabOf(v);
     if (!cab) throw new Error(`${v.id} has no cab`);
     const row = Math.max(...itemCells(cab).map((c) => c.y));
     const rear = cellRect(v.chassisId, itemCells(cab).filter((c) => c.y === row));
@@ -474,15 +527,15 @@ export class VehicleView {
 
   // A spare wheel stands on its row surface at its cell.
   private spareWheel(v: Vehicle, body: Body, item: PartItem, paint: number, y: number): THREE.Object3D {
-    const wheel = this.wheelModel(body, paint, toneOf(item));
+    const wheel = this.wheelModel(body, paint, lookOf(item));
     const at = footprint(v, item, y);
     wheel.position.set(at.pos.x, at.pos.y + body.wheelRadius, at.pos.z);
     return wheel;
   }
 
-  private wheelModel(body: Body, paint: number, tone: number): THREE.Object3D {
+  private wheelModel(body: Body, paint: number, look: Look): THREE.Object3D {
     const raw = model('wheel');
-    tint(raw, paint, tone);
+    tint(raw, paint, look);
     const wrap = new THREE.Group();
     wrap.add(raw);
     const wheel = mergeStatic(wrap);
@@ -584,6 +637,12 @@ function highestAhead(chassisId: string, rect: CellRect): number {
   return highestUnder(chassisId, { ...rect, x0: rect.x1, x1: nose });
 }
 
+// The center of an item's cells on the body surface, in body meters.
+function surfacePoint(v: Pick<Vehicle, 'chassisId'>, item: GridItem): THREE.Vector3 {
+  const rect = rectOf(v, item);
+  return new THREE.Vector3((rect.x0 + rect.x1) / 2, surfaceAt(v.chassisId, rect), (rect.z0 + rect.z1) / 2);
+}
+
 function rectOf(v: Pick<Vehicle, 'chassisId'>, item: GridItem): CellRect {
   return cellRect(v.chassisId, itemCells(item));
 }
@@ -653,9 +712,20 @@ function itemModel(item: GridItem) {
   return partModel(item.kind === 'part' ? item.part.defId : item.good);
 }
 
-function toneOf(item: GridItem): number {
-  if (item.kind === 'good' || item.part.hp > 0) return 1;
-  return BROKEN_TONE[partDef(item.part.defId).kind];
+function cabOf(v: Vehicle): GridItem | undefined {
+  return v.items.find((it) => it.kind === 'part' && BODY_PARTS.has(it.part.defId));
+}
+
+// The base body and bumpers wear like the cab part. A truck with no cab part keeps the pristine base.
+function cabLook(v: Vehicle): Look {
+  const cab = cabOf(v);
+  return cab ? lookOf(cab) : PRISTINE;
+}
+
+function lookOf(item: GridItem): Look {
+  if (item.kind === 'good') return PRISTINE;
+  const step = wearLookStep(item.part);
+  return { tone: item.part.hp > 0 ? 1 : BROKEN_TONE[partDef(item.part.defId).kind], step, partId: item.part.id };
 }
 
 // Center of an item's projected footprint at height y, with the turn and stretch that fit the model to the footprint.
@@ -689,14 +759,50 @@ function place(obj: THREE.Object3D, at: Placement): void {
   obj.scale.copy(at.scale);
 }
 
-// Paint materials take the faction color. A broken part darkens all its materials.
-function tint(obj: THREE.Object3D, paint: number, tone: number): void {
+// Paint materials take the faction color. A worn part grays and jags, and a broken part darkens all its materials.
+function tint(obj: THREE.Object3D, paint: number, look: Look): void {
+  const share = grayShare(look.step);
   obj.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     const mat = o.material;
     if (!(mat instanceof THREE.MeshLambertMaterial)) throw new Error(`Part mesh ${o.name} has material ${mat.type}, expected one Lambert material`);
     if (mat.name === PAINT) mat.color.setHex(paint);
-    mat.color.multiplyScalar(tone);
+    mat.color.setHex(grayed(mat.color.getHex(), share));
+    mat.color.multiplyScalar(look.tone);
+  });
+  if (look.partId && look.step > 0) jag(obj, look.partId, look.step);
+}
+
+// Moves each vertex by an offset seeded by the part id and its position in the model's own space, so it ignores how the
+// model is placed. Corners that share a position move together, so faces stay closed.
+function jag(obj: THREE.Object3D, partId: string, step: number): void {
+  obj.updateMatrixWorld(true);
+  const toModel = obj.matrixWorld.clone().invert();
+  const box = new THREE.Box3();
+  obj.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    const geo = o.geometry as THREE.BufferGeometry;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    box.union((geo.boundingBox as THREE.Box3).clone().applyMatrix4(o.matrixWorld).applyMatrix4(toModel));
+  });
+  const size = box.getSize(new THREE.Vector3());
+  const thinnest = Math.max(THINNEST_FLOOR, Math.min(size.x, size.y, size.z));
+  obj.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    const geo = o.geometry as THREE.BufferGeometry;
+    const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+    const toMesh = toModel.clone().multiply(o.matrixWorld).invert();
+    const p = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      p.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld).applyMatrix4(toModel);
+      const d = jagOffset(partId, p.x, p.y, p.z, step, thinnest);
+      p.add(new THREE.Vector3(d.x, d.y, d.z)).applyMatrix4(toMesh);
+      pos.setXYZ(i, p.x, p.y, p.z);
+    }
+    pos.needsUpdate = true;
+    if (geo.getAttribute('normal')) geo.computeVertexNormals();
+    geo.computeBoundingSphere();
+    geo.computeBoundingBox();
   });
 }
 

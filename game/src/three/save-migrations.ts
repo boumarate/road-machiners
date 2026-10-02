@@ -186,6 +186,21 @@ function withoutRetiredStock_7_8(world: SavedJson): SavedJson {
   };
 }
 
+// Old Orchard became a territory with no stock of its own: its loot lies in baked spots. A search of the old stock
+// ends with it. The step repeats the 7 to 8 one, since a committed step is never edited.
+const RETIRED_STOCK_8_9 = 'orchard';
+
+function withoutRetiredStock_8_9(world: SavedJson): SavedJson {
+  const idle = (v: SavedJson): SavedJson => ((v.job as SavedJson | null | undefined)?.stockId === RETIRED_STOCK_8_9 ? { ...v, job: null } : v);
+  const player = world.player as SavedJson;
+  return {
+    ...world,
+    salvage: (world.salvage as SavedJson[]).filter((stock) => stock.id !== RETIRED_STOCK_8_9),
+    player: { ...player, scavenged: (player.scavenged as string[]).filter((id) => id !== RETIRED_STOCK_8_9) },
+    vehicles: (world.vehicles as SavedJson[]).map(idle),
+  };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -238,6 +253,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   }),
   // 7 to 8: the Fallen Sun is a territory, so its site stock goes.
   withoutRetiredStock_7_8,
+  // 8 to 9: Old Orchard is a territory, so its site stock goes.
+  withoutRetiredStock_8_9,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

@@ -4,13 +4,15 @@
 
 import { REGION, type TerritoryDef } from '../data/region';
 import { SALVAGE, type LootTable } from '../data/salvage';
-import { TERRITORIES, type Hazard, type SpotTable } from '../data/territory';
-import { edgeCrossings, isTerritory } from './sites';
+import { TERRITORIES, type FarmRules, type Hazard, type SpotTable, type TerritoryRules, type WreckRules } from '../data/territory';
+import { isTerritory, siteEdgeCrossings, siteGap } from './sites';
 import { randInt } from './rng';
 import type { LandmarkLook, NpcActivity, Obstacle, SalvageStock, Vehicle, World } from './types';
-import { dist, type Vec } from './vec';
+import { dist, lerp, type Vec } from './vec';
 
 export { isTerritory };
+
+const GROUND_POINTS = 8; // hunting grounds beside a farm's spine, half on each side
 
 export type HazardZone = Hazard & { id: string; pos: Vec };
 // An authored hull piece in map tiles.
@@ -20,20 +22,28 @@ const TERRITORY_DEFS: readonly TerritoryDef[] = REGION.locations.filter(isTerrit
 const TRACK_SMOOTHING = 3; // corner-cutting passes over each traced track
 
 export function territoryAt(pos: Vec): TerritoryDef | null {
-  return TERRITORY_DEFS.find((t) => dist(pos, t.pos) < t.radius) ?? null;
+  return TERRITORY_DEFS.find((t) => siteGap(t, pos) < 0) ?? null;
 }
 
 // The SALVAGE table a prop of this kind at pos rolls as a loot spot of its territory, or null when it is none.
 function spotTableAt(kind: string, pos: Vec): SpotTable | null {
   const t = territoryAt(pos);
-  if (!t) return null;
-  const rules = TERRITORIES[t.id];
-  if (kind === rules.cacheLook && rules.caches.length > 0) return rules.cacheTable;
-  if (kind === rules.spotLook && rules.patches.some((p) => p.spots > 0)) return rules.spotTable;
+  return t ? tableOfKind(TERRITORIES[t.id], kind) : null;
+}
+
+function tableOfKind(rules: TerritoryRules, kind: string): SpotTable | null {
+  const fromWreck = rules.wreck ? wreckTableOfKind(rules.wreck, kind) : null;
+  return fromWreck ?? rules.farm?.buildings.find((b) => b.look === kind)?.table ?? null;
+}
+
+function wreckTableOfKind(wreck: WreckRules, kind: string): SpotTable | null {
+  if (kind === wreck.cacheLook && wreck.caches.length > 0) return wreck.cacheTable;
+  if (kind === wreck.spotLook && wreck.patches.some((p) => p.spots > 0)) return wreck.spotTable;
   return null;
 }
 
-// A baked prop of a spot kind inside the territory that makes that kind a spot: a cache or a field spot.
+// A baked prop of a spot kind inside the territory that makes that kind a spot: a cache, a field spot or a farm
+// building.
 export function isLootSpot(o: Obstacle): boolean {
   return o.kind === 'landmark' && spotTableAt(o.look, o.pos) !== null;
 }
@@ -56,16 +66,33 @@ export function territorySpots(world: World, id: string): SalvageStock[] {
 
 // Where roads meet the territory's edge: the ends of its approach roads, in road order.
 export function territoryEntries(t: TerritoryDef): Vec[] {
-  const crossings = REGION.roads.flatMap((road) => road.slice(1).flatMap((b, i) => edgeCrossings(road[i], b, t.pos, t.radius)));
+  const crossings = REGION.roads.flatMap((road) => road.slice(1).flatMap((b, i) => siteEdgeCrossings(t, road[i], b)));
   return crossings.filter((p, i) => !crossings.slice(0, i).some((q) => dist(q, p) < REGION.sites.gateSpacing));
 }
 
-// Open points inside a territory where raiders and vultures wait for scavengers: its entries, and the centres of its
-// patches that lie clear of the hazard.
+// Open points inside a territory where raiders and vultures wait for scavengers: its entries, and the centres of a
+// wreck's patches or points beside a farm's spine. They lie inside it and clear of the hazard.
 export function territoryGrounds(t: TerritoryDef): Vec[] {
+  const { wreck, farm } = TERRITORIES[t.id];
   const zones = hazardZones().filter((z) => z.id === t.id);
-  const centres = TERRITORIES[t.id].patches.map((p) => onMap(t, p.at)).filter((p) => zones.every((z) => dist(p, z.pos) > z.radius));
-  return [...territoryEntries(t), ...centres];
+  const points = [...(wreck ? wreck.patches.map((p) => onMap(t, p.at)) : []), ...(farm ? spineGrounds(t, farm) : [])];
+  return [...territoryEntries(t), ...points.filter((p) => siteGap(t, p) < 0 && zones.every((z) => dist(p, z.pos) > z.radius))];
+}
+
+// Points spread along both sides of a farm's spine, through its grounds band.
+function spineGrounds(t: TerritoryDef, farm: FarmRules): Vec[] {
+  const [lo, hi] = farm.grounds;
+  const { from, to, band } = farm.spine;
+  const off = (band * (lo + hi)) / 2;
+  const length = dist(from, to);
+  const across = { x: -(to.y - from.y) / length, y: (to.x - from.x) / length };
+  const perSide = GROUND_POINTS / 2;
+  return [-1, 1].flatMap((side) =>
+    Array.from({ length: perSide }, (_, i) => {
+      const share = (i + 0.5) / perSide;
+      return { x: t.pos.x + lerp(from.x, to.x, share) + across.x * off * side, y: t.pos.y + lerp(from.y, to.y, share) + across.y * off * side };
+    }),
+  );
 }
 
 export function hazardZones(): HazardZone[] {
@@ -82,17 +109,17 @@ function onMap(t: TerritoryDef, at: Vec): Vec {
 }
 
 export function territoryPieces(t: TerritoryDef): BakedPiece[] {
-  return TERRITORIES[t.id].pieces.map((p) => ({ look: p.look, pos: onMap(t, p.at), yaw: p.yaw, r: p.r }));
+  return (TERRITORIES[t.id].wreck?.pieces ?? []).map((p) => ({ look: p.look, pos: onMap(t, p.at), yaw: p.yaw, r: p.r }));
 }
 
 export function territoryCaches(t: TerritoryDef): Vec[] {
-  return TERRITORIES[t.id].caches.map((c) => onMap(t, c.at));
+  return (TERRITORIES[t.id].wreck?.caches ?? []).map((c) => onMap(t, c.at));
 }
 
 // Each traced track with its corners cut, so it curves like the concept's ruts. The ends stay, so tracks that meet
 // stay joined.
 export function territoryTracks(t: TerritoryDef): Vec[][] {
-  return TERRITORIES[t.id].tracks.map((track) => cutCorners(track.map((p) => onMap(t, p)), TRACK_SMOOTHING));
+  return (TERRITORIES[t.id].wreck?.tracks ?? []).map((track) => cutCorners(track.map((p) => onMap(t, p)), TRACK_SMOOTHING));
 }
 
 // Chaikin corner cutting, passes times.

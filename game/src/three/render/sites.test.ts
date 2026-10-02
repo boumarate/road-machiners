@@ -88,10 +88,4 @@ describe('landmark scale', () => {
       expect.soft(worst, site.id).toBeLessThanOrEqual(0.05);
     }
   });
-
-  it('gives the orchard a field-sized footprint', () => {
-    const orchard = measureSite('orchard');
-    expect(orchard.x).toBeGreaterThan(80);
-    expect(orchard.z).toBeGreaterThan(80);
-  });
 });

@@ -45,11 +45,11 @@ function createTrader() {
   return { w, npc };
 }
 
-// The fuel a trader from createTrader keeps for the straight way to its nearest pump, a town or the fuel stall,
+// The fuel a trader from createTrader keeps for the straight way to its nearest pump, a town or a service stall,
 // with no misjudgment.
 function reserveOfTrader(): number {
   const { w, npc } = createTrader();
-  const pumps = [...TRAITS.trader.towns, 'pump-station'].map((id) => [...REGION.towns, ...REGION.locations].find((s) => s.id === id)!);
+  const pumps = [...TRAITS.trader.towns, ...Object.values(SHOPS).filter((s) => s.kind === 'stall').map((s) => s.id)].map((id) => [...REGION.towns, ...REGION.locations].find((s) => s.id === id)!);
   const pump = Math.min(...pumps.map((site) => dist(npc.pos, site.pos)));
   return pump * vehicleStats(w, npc).fuelPerTile * heatAt(w, npc.pos) * NPC_UPKEEP.fuelReserve * TRAITS.trader.fuelMargin;
 }

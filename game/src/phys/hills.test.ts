@@ -3,7 +3,7 @@ import { PHYSICS } from '../data/physics';
 import { START_KITS } from '../data/start';
 import { beforeAll, expect, it } from 'vitest';
 import { randRange } from '../sim/rng';
-import { deckAlong } from '../sim/bridge';
+import { deckAt } from '../sim/bridge';
 import { heightAt } from '../sim/terrain';
 import { dist, type Vec } from '../sim/vec';
 import { endTurn, newWorld, setMoveOrder } from '../sim/world';
@@ -34,7 +34,7 @@ function driveRoute(start: Vec, target: Vec): { maxTilt: number; remaining: numb
       const q = frame.rot;
       maxTilt = Math.max(maxTilt, Math.acos(Math.min(1, 1 - 2 * (q.x * q.x + q.z * q.z))));
       const p = toMap(frame.pos);
-      if (deckAlong(p.x, p.y) !== null) minDeckRise = Math.min(minDeckRise, frame.pos.y - heightAt(w.terrain, p.x, p.y) * PHYSICS.metersPerTile);
+      if (deckAt(p.x, p.y) !== null) minDeckRise = Math.min(minDeckRise, frame.pos.y - heightAt(w.terrain, p.x, p.y) * PHYSICS.metersPerTile);
     }
     freeDrive(drive);
     drive = result!.next;
