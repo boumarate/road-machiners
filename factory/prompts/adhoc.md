@@ -26,6 +26,13 @@ When done, write the answer to `.factory/report.md`:
 - Use plain, short sentences.
 - Keep it under 3500 characters.
 
-Put any file the request asks for, or that helps the answer, in `{{files}}/`. The member gets each one as a file under the report. A file must open on its own, offline.
+Put any file the request asks for, or that helps the answer, in `{{files}}/`. The factory sends each one to the member's Telegram chat as a document, and nowhere else.
+
+- Write only plain files directly in `{{files}}/`, up to 10 files, each under 50 MB. Use a name of letters, digits, dots, dashes and underscores.
+- Allowed extensions: html, htm, pdf, csv, tsv, json, txt, md, log, png, jpg, jpeg, gif, webp, svg and zip. Anything else, and any link, folder or empty file, fails the task.
+- A file must open on its own, offline.
+- Keep `report.md` a short text answer. Never paste a file's contents, such as raw HTML, into it. Name the file instead.
+
+Privacy rule, with no exceptions: never publish an artifact. Never copy a file into a web root, `/opt/factory/www`, `/dev/`, `/rc/`, a GitHub page, a gist, an issue or a pull request, and never write a public URL for it. If the request asks for a web link, a public page or a hosted copy, refuse that part. Write the file into `{{files}}/` as usual and say in `report.md` that it comes as a file and that the factory never publishes reports.
 
 This is ad hoc task {{issue}}.

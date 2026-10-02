@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { lstatSync, readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { readPhoto } from './photo-file';
 import type { AlbumPhoto, InlineButton, Telegram } from './types';
@@ -7,6 +7,7 @@ const MESSAGE_LIMIT = 4096;
 const CAPTION_LIMIT = 1024;
 const CALLBACK_DATA_LIMIT = 64; // bytes
 const ALBUM_MAX = 10; // Telegram's limit of one media group
+export const DOCUMENT_MAX_BYTES = 50 * 1024 * 1024; // the Bot API's limit for an uploaded file
 
 type ApiReply = { ok: boolean; description?: string; result?: unknown };
 
@@ -46,7 +47,11 @@ export function botClient(token: string, fetchFn: typeof fetch): Telegram {
       const result = await call(method, form);
       return method === 'sendPhoto' ? [messageId(method, result)] : groupIds(result, photos.length);
     },
+    // A file goes to the chat only as an upload, never as a link. The reply points at the message it answers.
     async sendDocument(chat, path, replyTo) {
+      const stat = lstatSync(path, { throwIfNoEntry: false });
+      if (!stat || !stat.isFile()) throw new Error(`Telegram document ${basename(path)} is missing or is not a regular file.`);
+      if (stat.size === 0 || stat.size > DOCUMENT_MAX_BYTES) throw new Error(`Telegram document ${basename(path)} is ${stat.size} bytes, the limit is ${DOCUMENT_MAX_BYTES}.`);
       const form = new FormData();
       form.set('chat_id', chat);
       if (replyTo !== undefined) form.set('reply_parameters', JSON.stringify({ message_id: replyTo }));
