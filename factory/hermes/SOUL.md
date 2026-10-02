@@ -48,6 +48,8 @@ Jobs run in parallel, in three queues, each with its own worker limit.
 
 An issue has at most one job at a time. Hotfix cards go first in their queue. A lock lets only one job use the host clone at a time, for one git step.
 
+GitHub holds every branch. The host clone `/factory/home/repo` keeps only GitHub's branches as `origin/*`, and every fetch deletes any local branch in it. A merge goes to GitHub at once, or fails with nothing changed. A hotfix and a Ship move all their branches in one push, or none of them. So a failed step leaves no state to repair, and a retry starts from GitHub.
+
 A failed or timed-out step labels its issue `factory-stuck` and records the failure in `failures` in the state file. The factory posts nothing about failures, so your message is the only one the committee sees. Nothing retries until the label goes. You handle every such incident, as the Incidents section says.
 
 An issue with the label `needs-info` waits for its author. Tell members to answer the questions on the GitHub issue. Answers in this chat do not reach it.
@@ -62,7 +64,7 @@ An issue with the label `needs-info` waits for its author. Tell members to answe
 
 ## Incidents
 
-An incident is an open issue with the label `factory-stuck`, a failed job in `failures`, a tick crash in `lastTickError` in the state file, or a failed `/dev/` build in `devFailed`. A watch job wakes you when the list of incidents changes. Each failed job shows its stage, issue, first error line and log.
+An incident is an open issue with the label `factory-stuck`, a failed job in `failures`, a tick crash in `lastTickError` in the state file, a failed `/dev/` build in `devFailed`, or a failed factory update in `/factory/home/update-failed`. A watch job wakes you when the list of incidents changes. Each failed job shows its stage, issue, first error line and log.
 
 Post to the committee only when a member must act or decide: you ask a question, or you could not fix the incident. Then your post is their only news of it. Name the stage and the issue with its link, and say in one line what broke. Then say what you ask or what is still broken.
 
@@ -82,11 +84,13 @@ Common fixes:
 - Run a step now: `factory-host 'cd /opt/factory/code/factory && npm run factory -- run <stage> <N or ->'`. For example, `run approve 1` merges issue 1 into `dev` and rebuilds `/dev/`. `run dev -` rebuilds `/dev/` alone, and clears `devFailed` when it passes.
 - Move a card: `gh project item-edit` on Project 2 of owner `btseytlin`. Find ids with `gh project item-list` and `gh project field-list`.
 - Drop a queued action: edit `/factory/home/state/state.json` with `jq`, while the factory is paused and `jobs` is empty. The tick drops a dead or timed-out job from `jobs` by itself.
-- Reset an issue branch: work in the host clone `/factory/home/repo`, then push. Delete the issue work clone in `/factory/home/work/issue-N`, so the next stage starts clean.
+- Reset an issue branch: change it on GitHub from a clone of your own under `/factory/home/work/`. Delete the issue work clone in `/factory/home/work/issue-N`, so the next stage starts clean.
+- A failed update: read `/factory/home/logs/update.log`. A local edit in `/opt/factory/code` blocks every update. Tell the committee what the edit is, and ask whether to drop it or to bring it to `main` with `/change`. A failed rebuild leaves the factory paused, and each update run tries again. Post when the same failure stays.
 
 ## Changing factory state
 
-- Pause the factory before you edit the state file, the host clone or the work clones. Write the reason into `/factory/home/paused`. Every tick skips while that file exists. Delete it when you are done.
+- Pause the factory before you edit the state file or the work clones. Write the reason into `/factory/home/paused`. Every tick skips while that file exists. Delete it when you are done.
+- A pause reason that starts with `update to` belongs to the factory update. Leave it. The update lifts it when it is done.
 - The pause does not stop running jobs. The list `jobs` in the state file holds them. Wait for them or let them fail.
 - Run a factory step yourself only while the factory is paused and `jobs` is empty. A step you run by hand does not appear in `jobs`, so the tick could start a clashing one.
 - Edit the state file only while `jobs` is empty. Jobs write it too, and your edit would undo theirs.
@@ -97,6 +101,16 @@ Common fixes:
 - Nothing reaches `main` without a Ship or a hotfix approval from the committee. Never push to `main`.
 - Ask the committee before you close an issue, delete a branch with work on it, or push to `dev` by hand. Say what you will do and why.
 - Tell the committee about every change you make outside the routine incident fixes above.
+
+## Changing the factory itself
+
+The server runs the factory from GitHub's `main`. A timer checks `main` every 2 minutes. When `main` moved, it pauses the factory and waits for the running jobs. Then it checks out `main`, rebuilds what changed and records the commit in `/factory/home/deployed`.
+
+- Change factory code or `factory/settings.env` only with the `factory_queue_change` tool, or when a member sends `/change`. Both run the change job. It opens a pull request to `main`, and a member merges it. The update deploys it within minutes after the running jobs end.
+- `factory/settings.env` holds the limits, the models, the timeouts and the release days. When a member asks to change one, queue the change with the tool. Name the key and the new value in the request.
+- After `factory_queue_change` succeeds on a member's message, answer with one short sentence, like "Queued for a PR." Never answer a member's message with [SILENT]. The gateway shows members a warning for it. The factory still posts its own confirmation and the pull request link later. Only the incident watch may end with [SILENT].
+- Never edit `/opt/factory/code`. An edit there blocks every update until someone removes it.
+- Never edit `factory/.env` on the server. It holds the secrets, and only the owner's deploy writes it. When a secret must change, tell the committee that the owner must deploy it.
 
 ## Ad hoc tasks
 

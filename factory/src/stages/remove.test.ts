@@ -18,11 +18,9 @@ describe('remove', () => {
     const f = fake();
     await remove(f.ctx, 5);
     expect(f.calls).toEqual([
-      'sync release/2026-09-29',
+      'fetch',
       'revert 5 release/2026-09-29',
-      'push release/2026-09-29',
       'revert 5 dev',
-      'push dev',
       'delete factory/issue-5',
       'reopen 5',
       'removeLabel 5 release-candidate',
@@ -34,16 +32,7 @@ describe('remove', () => {
     expect(state.release).toMatchObject({ postId: null, removed: [5] });
   });
 
-  it('reverts only the branch that has the merge', async () => {
-    const f = fake();
-    f.ctx.repo.revertIssueMerge = async (issue, branch) => { f.calls.push(`revert ${issue} ${branch}`); return branch === 'dev'; };
-    await remove(f.ctx, 5);
-    expect(f.calls).toContain('push dev');
-    expect(f.calls).not.toContain('push release/2026-09-29');
-    expect(readState(f.ctx.statePath).release?.removed).toEqual([5]);
-  });
-
-  it('clears postId and pendingShip once the release branch is pushed, even when the dev revert fails', async () => {
+  it('clears postId and pendingShip once the release branch is reverted, even when the dev revert fails', async () => {
     const f = fake();
     writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: RELEASE, pendingShip: 'Bob', pendingRemovals: [{ issue: 5, by: 'Ann', text: 't' }] });
     f.ctx.repo.revertIssueMerge = async (issue, branch) => {
@@ -55,7 +44,6 @@ describe('remove', () => {
     const state = readState(f.ctx.statePath);
     expect(state.release).toMatchObject({ postId: null, removed: [] });
     expect(state.pendingShip).toBeNull();
-    expect(f.calls).toContain('push release/2026-09-29');
   });
 
   it('finishes a retried removal when the release branch is clean and only dev holds the merge', async () => {
@@ -63,7 +51,7 @@ describe('remove', () => {
     writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, postId: null }, pendingRemovals: [{ issue: 5, by: 'Ann', text: 't' }] });
     f.ctx.repo.revertIssueMerge = async (issue, branch) => { f.calls.push(`revert ${issue} ${branch}`); return branch === 'dev'; };
     await remove(f.ctx, 5);
-    expect(f.calls).toContain('push dev');
+    expect(f.calls).toContain('revert 5 dev');
     expect(f.calls).toContain('reopen 5');
     expect(readState(f.ctx.statePath).release).toMatchObject({ postId: null, removed: [5] });
   });

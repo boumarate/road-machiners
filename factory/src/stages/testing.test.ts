@@ -60,11 +60,12 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
     },
     repo: {
       prepareWorkClone: async (_b: string, base: string, dir: string) => { bases.push(`prepare ${base}`); mkdirSync(dir, { recursive: true }); },
-      fetchFromWork: async () => undefined,
-      push: async (branch: string) => { calls.push(`push ${branch}`); },
+      fetchFromWork: async () => 'w1',
+      untrackFactoryFiles: async () => [],
+      push: async (commit: string, branch: string) => { calls.push(`push ${commit} ${branch}`); },
       diff: async (base: string) => { bases.push(`diff ${base}`); return ''; },
       headHash: async () => 'abc123',
-      sync: async (...extra: string[]) => { bases.push(`sync ${extra.join(' ')}`.trim()); },
+      fetch: async () => { bases.push('fetch'); },
       mergeBaseIntoWork: async (_dir: string, base: string) => { bases.push(`merge ${base}`); return { commit: 'base0001', conflicts }; },
       isMerged: async (base: string) => { bases.push(`isMerged ${base}`); return merged; },
     },
@@ -160,7 +161,7 @@ describe('testing stage', () => {
     labels = ['release-task'];
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
     await runStage(ctx, 7);
-    expect(new Set(bases)).toEqual(new Set(['prepare release/2026-09-29', 'sync release/2026-09-29', 'merge release/2026-09-29', 'isMerged base0001', 'diff release/2026-09-29']));
+    expect(new Set(bases)).toEqual(new Set(['prepare release/2026-09-29', 'fetch','merge release/2026-09-29', 'isMerged base0001', 'diff release/2026-09-29']));
     expect(calls.find((call) => call.startsWith('openPullRequest'))).toContain('openPullRequest factory/issue-7 release/2026-09-29 #7 Big horn');
     expect(calls.find((call) => call.startsWith('photo'))).toContain('Approve merges into release/2026-09-29.');
     expect(queued()).toEqual({});
@@ -169,7 +170,7 @@ describe('testing stage', () => {
   it('works on dev for an ordinary card even while a release is open', async () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
     await runStage(ctx, 7);
-    expect(new Set(bases)).toEqual(new Set(['prepare dev', 'sync', 'merge dev', 'isMerged base0001', 'diff dev']));
+    expect(new Set(bases)).toEqual(new Set(['prepare dev', 'fetch','merge dev', 'isMerged base0001', 'diff dev']));
   });
 
   it('merges dev into the branch before the agent runs, and lists conflicts for it', async () => {

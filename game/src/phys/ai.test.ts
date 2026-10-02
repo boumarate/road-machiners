@@ -125,4 +125,32 @@ describe('NPC driving', () => {
     expect(slowest).toBeGreaterThan(RULES.parkedSpeed);
     expect(closest).toBeGreaterThan(gap);
   }, 60_000);
+
+  // Two scouts closing head-on on the real road, at the poses of a crash found in all-physics traffic.
+  it.each([-3, -1.5].flatMap((dx) => [-3, -1.5, 0, 1.5, 3].map((dy) => [dx, dy])))(
+    'two NPCs closing head-on never touch: second goal offset %s,%s',
+    (dx, dy) => {
+      let w = newWorld(1337, START_KITS.standard, TEST_MAP);
+      w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
+      for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+      w.vehicles[0].pos = { x: 300, y: 200 };
+      const a = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 264.24, y: 165.07 }, (-48 * Math.PI) / 180);
+      const b = addVehicle(w, 'roamers', 'scout', ['mg', 'stockEngine'], { x: 283.01, y: 143.29 }, (129 * Math.PI) / 180);
+      a.speed = 6.46;
+      b.speed = 4.08;
+      a.brain = npcBrain('scavenger', a.pos, ['scavenger']);
+      b.brain = npcBrain('roamer', b.pos, ['roamer']);
+      a.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 317, y: 102.75 }, phase: 'travel', reason: 'test trip' }];
+      b.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 276.07 + dx, y: 157.15 + dy }, phase: 'travel', reason: 'test trip' }];
+      let d = buildDrive(w);
+      let touches = 0;
+      for (let i = 0; i < 10; i++) {
+        ({ w, d } = turn(w, d));
+        touches += w.events.filter((e) => e.t === 'collision' && [e.a, e.b].includes(a.id) && [e.a, e.b].includes(b.id)).length;
+      }
+      freeDrive(d);
+      expect(touches).toBe(0);
+    },
+    120_000,
+  );
 });
