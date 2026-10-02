@@ -34,6 +34,8 @@ function withTower(w: World, templateId: string, faction: Vehicle['faction'], ch
 // A player with an empty tank and a trader in sight.
 function stranded(playerPos: Vec = { x: 30, y: 30 }, traderPos: Vec = { x: 40, y: 30 }): Setup {
   const w = emptyWorld(playerPos);
+  // No region spawns, so NPCs elsewhere on the map never cross a long tow.
+  for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
   w.player.fuel = 0;
   const trader = withTower(w, 'trader', 'traders', 'hauler', traderPos);
   return { w, trader };
