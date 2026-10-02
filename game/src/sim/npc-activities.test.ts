@@ -895,3 +895,31 @@ describe('stall watchdog', () => {
     expect(w.events.some((e) => e.t === 'stall')).toBe(false);
   });
 });
+
+describe('parking beside a truck', () => {
+  function meeting() {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const tower = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 50, y: 30 }, Math.PI);
+    tower.brain = npcBrain('trader', tower.pos, NPCS.trader.traits);
+    const client = w.vehicles[0];
+    const stop = (): { x: number; y: number } =>
+      getActivityDestination(w, tower, { kind: 'tow', targetId: client.id, destination: { ...client.pos }, phase: 'travel', reason: 'test activity' })!;
+    return { w, tower, client, stop };
+  }
+
+  it('is on the side the driver comes from while that spot is free', () => {
+    const { client, stop } = meeting();
+    const spot = stop();
+    expect(spot.x).toBeGreaterThan(client.pos.x);
+    expect(spot.y).toBeCloseTo(client.pos.y);
+  });
+
+  it('moves to the nearest free spot around the truck when another truck stands on the approach spot', () => {
+    const { w, tower, client, stop } = meeting();
+    const taken = stop();
+    const blocker = addVehicle(w, 'bowl', 'hauler', ['stockEngine'], taken, 0);
+    const spot = stop();
+    expect(dist(spot, blocker.pos)).toBeGreaterThanOrEqual(chassisDef(blocker.chassisId).radius + vehicleStats(w, tower).radius);
+    expect(dist(spot, client.pos)).toBeCloseTo(dist(taken, client.pos));
+  });
+});

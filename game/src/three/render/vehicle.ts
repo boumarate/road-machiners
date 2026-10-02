@@ -5,15 +5,17 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { chassisDef } from '../../data/chassis';
-import { partDef, type PartDef, type PartKind } from '../../data/parts';
+import { partDef, type PartDef, type PartKind, type WeaponDef } from '../../data/parts';
 import { PHYSICS } from '../../data/physics';
 import { wheelMounts } from '../../phys/body';
+import { aimWithin, fireSpans, openSides, type FireSpan } from '../../sim/armor';
 import { bodyOf, cellCenter, cellRect, engineAnchor, highestUnder, restOn, surfaceAt, type Body, type CellRect, type Rest } from '../../sim/body';
 import { headingOf, headingQuat, type V3, type VehicleFrame } from '../../phys/frames';
 import { FACTION_COLORS, PAL } from '../../render/palette';
 import { BODY_PARTS, baseModel, partModel, weaponLook } from '../../render/partLooks';
 import { baseGrid, isMounted, itemCells, itemSize, sideOf, type SideLetter } from '../../sim/grid';
 import type { GridItem, Vehicle } from '../../sim/types';
+import { angleDiff, DEG } from '../../sim/vec';
 import { model, outlineOf, socket, TRUCK_BIT, type ModelName } from './models';
 import { hashStr } from '../../render/noise';
 import { TruckMotion, WHIPS } from './truckMotion';
@@ -62,8 +64,8 @@ const UP = new THREE.Vector3(0, 1, 0);
 const ANTENNA_INSET = 0.12; // meters from the body side and the cab's back edge
 const CHAIN_SIDE = 0.4; // fraction of the half width from the center line to the chain
 
-// A turning weapon head, and its barrel tip in head space.
-type Turret = { head: THREE.Group; tip: THREE.Vector3 };
+// A turning weapon head, its barrel tip in head space, and where its gun can fire in degrees off the truck heading.
+type Turret = { head: THREE.Group; tip: THREE.Vector3; spans: FireSpan[] };
 
 // Where a model goes in body space.
 type Placement = { pos: THREE.Vector3; yaw: number; scale: THREE.Vector3 };
@@ -174,10 +176,13 @@ export class VehicleView {
   }
 
   // yawOf gives each weapon part's map-space heading (radians, 0 = +x). null points its turret forward.
+  // A turret turns only within its fire spans, so its barrel shows where it can shoot.
   aim(yawOf: (partId: string) => number | null): void {
     for (const [id, turret] of this.turrets) {
       const yaw = yawOf(id);
-      const q = headingQuat(yaw === null ? 0 : yaw - this.heading);
+      const want = yaw === null ? 0 : angleDiff(this.heading, yaw) / DEG;
+      const turn = turret.spans.length ? aimWithin(turret.spans, want) : 0;
+      const q = headingQuat(turn * DEG);
       turret.head.quaternion.set(q.x, q.y, q.z, q.w);
     }
   }
@@ -395,7 +400,8 @@ export class VehicleView {
       return;
     }
     this.body.add(head);
-    this.turrets.set(item.part.id, { head, tip });
+    const spans = fireSpans((partDef(item.part.defId) as WeaponDef).arc, openSides(v, item));
+    this.turrets.set(item.part.id, { head, tip, spans });
   }
 
   // Wheels hang at the physics wheel mounts, scaled from the 1 m model to the look's radius and width.

@@ -1053,8 +1053,10 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   towPromise: null,
   // A grudge against the player fades after 10 days, unless the driver settles it first.
   revenge: 2000,
-  // A driver on its way to a stranded player holds the job until it offers, its tow goal pops, or it is gone.
-  answering: null,
+  // A driver on its way to a stranded player holds the job until it offers, its tow goal pops, or it is gone. A tower
+  // that has its client in sight and out of combat for 20 turns without hitching cannot get through and gives up the
+  // job, so another driver can answer.
+  answering: 20,
   // An escort lasts until the leader reaches its destination, or either party is gone, beaten or hostile.
   escort: null,
   // Hostile acts between two trucks reset it. 10 turns, like a feud, covers reloads and a chase out of sight behind a
