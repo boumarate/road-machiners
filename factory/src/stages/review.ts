@@ -1,5 +1,5 @@
 import { rmSync, writeFileSync } from 'node:fs';
-import { BRANCH, GAME_DIR, OUT_DIR, TASK_FILE, type Ctx } from '../types';
+import { BRANCH, GAME_DIR, OUT_DIR, REVIEW_HEADING, TASK_FILE, type Ctx } from '../types';
 import { agentHome, fillPrompt, readOutput, runAgent, workDir } from './common';
 
 type Class = 'P1' | 'P2' | 'P3';
@@ -87,14 +87,19 @@ async function reviewRound(ctx: Ctx, issue: number, base: string): Promise<Findi
   return parseReview(readOutput(home, 'review.json'));
 }
 
-// One adversarial review of the whole branch. A block gets one fix round and one more review. A second block throws.
-export async function reviewGate(ctx: Ctx, issue: number, base: string, fixRound: () => Promise<void>): Promise<void> {
+// One adversarial review of the whole branch. A block gets one fix round and one more review. Returns whether the
+// change passed. A second block sends the card back to Design, since two blocks in a row point at the design, not
+// at the code.
+export async function reviewGate(ctx: Ctx, issue: number, base: string, fixRound: () => Promise<void>): Promise<boolean> {
   const first = await reviewRound(ctx, issue, base);
-  if (!isBlocked(first)) return;
+  if (!isBlocked(first)) return true;
   const findingsFile = `${agentHome(workDir(ctx, issue), GAME_DIR)}/${OUT_DIR}/review-findings.md`;
   writeFileSync(findingsFile, findingsMarkdown(first));
   await fixRound();
   const again = await reviewRound(ctx, issue, base);
-  if (isBlocked(again)) throw new Error(`The review blocked the change twice.\n${findingsMarkdown(again)}`);
   rmSync(findingsFile);
+  if (!isBlocked(again)) return true;
+  await ctx.github.comment(issue, `${REVIEW_HEADING}\n\nThe review blocked this change twice. A fix round did not clear it, so the flaw is in the design. Revise the design to remove the root cause behind these findings, not to patch each one.\n\n${findingsMarkdown(again)}`);
+  await ctx.github.move(issue, 'Design');
+  return false;
 }

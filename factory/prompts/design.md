@@ -51,6 +51,11 @@ Read that feedback first.
 It comes before the original request.
 Revise the task file to answer it.
 
+Review findings sit in the issue comments under the heading "## Review findings".
+They mean the review blocked the built change twice.
+Treat them as a sign of a core flaw in the design, not as bugs to patch.
+Find the root cause behind them and revise the design to remove it.
+
 Triage already refused most requests that go against DESIGN.md.
 If one still does, do not plan it.
 Write the reason in plain words to `.factory/wont-do.md`.

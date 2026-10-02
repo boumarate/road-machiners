@@ -55,7 +55,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   let evidence = await agentRound(ctx, issue, 'test', base);
   await requireBaseMerged(ctx, issue, base, merged);
   // A fix round changes the code, so its evidence replaces the first round's.
-  await reviewGate(ctx, issue, base, async () => { evidence = await agentRound(ctx, issue, 'test-fix', base); });
+  if (!(await reviewGate(ctx, issue, base, async () => { evidence = await agentRound(ctx, issue, 'test-fix', base); }))) return;
   let build = await ctx.repo.headHash(BRANCH(issue));
   const failure = await runChecks(ctx, issue, base, build);
   // The agent gets one round to fix what the factory's own checks found. A second failure stops the card.

@@ -9,6 +9,7 @@ const { runStage, approvalCaption, approvalButtons } = await import('./testing')
 
 let home = '';
 let calls: string[] = [];
+let commentBodies: string[] = [];
 let shellScript = '';
 let shellEnv: Record<string, string> | undefined;
 let photoButtons: unknown;
@@ -36,6 +37,7 @@ beforeEach(() => {
   mkdirSync('tmp', { recursive: true });
   home = mkdtempSync('tmp/factory-testing-');
   calls = [];
+  commentBodies = [];
   openPr = null;
   labels = [];
   bases = [];
@@ -53,7 +55,7 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels, createdAt: '', state: 'OPEN', thumbsUp: [] }),
       comments: async () => [],
       move: async (issue: number, column: string) => { calls.push(`move ${issue} ${column}`); },
-      comment: async (issue: number) => { calls.push(`comment ${issue}`); },
+      comment: async (issue: number, body: string) => { calls.push(`comment ${issue}`); commentBodies.push(body); },
       pullRequestFor: async (branch: string) => { calls.push(`pullRequestFor ${branch}`); return openPr; },
       openPullRequest: async (branch: string, base: string, title: string, body: string) => { calls.push(`openPullRequest ${branch} ${base} ${title} | ${body}`); return 'https://github.com/o/r/pull/50'; },
     },
@@ -260,11 +262,16 @@ describe('testing stage', () => {
       expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(1);
     });
 
-    it('throws when the second review blocks again, before the checks and the post', async () => {
+    it('sends the card back to Design with the findings when the second review blocks again', async () => {
       reviews = [review(finding({})), review(finding({ class: 'P2' }), finding({ class: 'P2', line: 40 }))];
-      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('The review blocked the change twice.\n- P2 game/src/sim/vision.ts:29');
+      await runStage(fakeCtx(outputs), 7);
+      expect(commentBodies).toHaveLength(1);
+      expect(commentBodies[0]).toContain('## Review findings');
+      expect(commentBodies[0]).toContain('- P2 game/src/sim/vision.ts:29');
+      expect(calls.at(-1)).toBe('move 7 Design');
       expect(calls).not.toContain('checks');
       expect(calls).not.toContain('move 7 Approval');
+      expect(existsSync(`${home}/work/issue-7/game/.factory/review-findings.md`)).toBe(false);
     });
 
     it('throws when review.json is missing', async () => {
