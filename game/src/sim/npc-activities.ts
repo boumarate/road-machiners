@@ -8,7 +8,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
 import { callLawmen, inCombat, isHostile, startFeuds, turnPartHits } from './combat';
-import { affordableBuyCount, cargoSaleValue, sellAtCamp, sellVehicleCargo, serviceAtCamp, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
+import { affordableBuyCount, cargoSaleValue, sellAtCamp, sellVehicleCargo, serviceAtCamp, scrapFuel, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods, cargoRoom } from './inventory';
@@ -186,8 +186,15 @@ function serviceReason(lowFuel: boolean, lowSupplies: boolean): string {
   return lowFuel ? 'low fuel' : lowSupplies ? 'low supplies' : 'needs repairs';
 }
 
-// Where a driver buys fuel. A raider fuels at its camps, any other driver in its towns or at a service stall.
-function pumpsOf(vehicle: Vehicle, profile: NpcProfile): string[] {
+// The sites that serve a stranded driver: its bases if it has any, else any town.
+function servingSiteIds(profile: NpcProfile): string[] {
+  return profile.bases.length > 0 ? profile.bases : REGION.towns.map((t) => t.id);
+}
+
+// Where a driver buys fuel. A raider fuels at its camps, any other driver in its towns or at a service stall. A broke driver
+// counts only the sites that serve it, since a stall gives it nothing.
+function pumpsOf(vehicle: Vehicle, profile: NpcProfile, broke: boolean): string[] {
+  if (broke) return servingSiteIds(profile);
   if (profile.bases.length > 0) return profile.bases;
   if (profile.towns.length === 0) throw new Error(`${vehicle.id} knows no pump`);
   return [...profile.towns, ...SERVICE_STALLS];
@@ -197,7 +204,7 @@ const SERVICE_STALLS: readonly string[] = Object.values(SHOPS).filter((s) => s.k
 
 // The fuel a driver thinks the way to its nearest pump takes: the straight line at the heat where it stands.
 function fuelToPump(world: World, vehicle: Vehicle, profile: NpcProfile): number {
-  const pump = chooseNearestSite(vehicle, pumpsOf(vehicle, profile));
+  const pump = chooseNearestSite(vehicle, pumpsOf(vehicle, profile, isBroke(world, vehicle)));
   return dist(vehicle.pos, pump.pos) * vehicleStats(world, vehicle).fuelPerTile * heatAt(world, vehicle.pos);
 }
 
@@ -229,32 +236,32 @@ function isBroke(world: World, vehicle: Vehicle): boolean {
 }
 
 // The fixed survival rule. Null when no service is needed. An oasis refills supplies for free. A broke driver sells
-// its cargo first. With nothing to sell, it works on while it can drive, and once stranded it heads for service
-// anyway, where serveStranded gives it a fresh loadout.
+// its cargo first. With nothing to sell, it works on while its tank holds, low on fuel it heads for a town or its camp
+// for scrap fuel, and once stranded it heads for service anyway, where serveStranded gives it a fresh loadout.
 function serviceGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity | null {
   const need = serviceNeed(world, vehicle, profile);
   if (!need) return null;
   const oasis = need.suppliesOnly ? chooseNearestSite(vehicle, profile.supplySites) : undefined;
   if (oasis) return createSiteActivity('resupply', oasis.id, 'low supplies');
   if (isBroke(world, vehicle)) return brokeServiceGoal(world, vehicle, profile, need);
-  return serviceTrip(vehicle, profile, need);
+  return serviceTrip(world, vehicle, profile, need);
 }
 
 function brokeServiceGoal(world: World, vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): NpcActivity | null {
   if (hasSaleCargo(vehicle)) return saleGoal(world, vehicle, profile);
-  return isStranded(world, vehicle) ? serviceTrip(vehicle, profile, need) : null;
+  return isStranded(world, vehicle) || isLowOnFuel(world, vehicle, profile) ? serviceTrip(world, vehicle, profile, need) : null;
 }
 
-function serviceTrip(vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): NpcActivity {
-  const stop = chooseNearestSite(vehicle, serviceStops(vehicle, profile));
+function serviceTrip(world: World, vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): NpcActivity {
+  const stop = chooseNearestSite(vehicle, serviceStops(world, vehicle, profile));
   if (!stop) throw new Error(`${vehicle.id} knows no service stop`);
   return createSiteActivity('resupply', stop.id, need.reason);
 }
 
-// A raider is served at its camps. Anyone else is fuelled and repaired in a town or at a stall.
-function serviceStops(vehicle: Vehicle, profile: NpcProfile): string[] {
+// A raider is served at its camps. Anyone else is fuelled and repaired in a town or at a stall, a broke driver only in a town.
+function serviceStops(world: World, vehicle: Vehicle, profile: NpcProfile): string[] {
   if (profile.bases.length > 0) return profile.bases;
-  return pumpsOf(vehicle, profile);
+  return pumpsOf(vehicle, profile, isBroke(world, vehicle));
 }
 
 // The market that pays most for the carried cargo, of the driver's markets. Nearest wins a tie.
@@ -896,11 +903,6 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   return currentActivity(world, vehicle, profile);
 }
 
-// The sites that serve a stranded driver: its bases if it has any, else any town.
-function servingSiteIds(profile: NpcProfile): string[] {
-  return profile.bases.length > 0 ? profile.bases : REGION.towns.map((t) => t.id);
-}
-
 // A stranded truck parked on the pad of a site that serves it, however it got there, buys the service it can pay
 // for. If that leaves it stranded, it gets a fresh loadout from its pool.
 function serveStranded(world: World, vehicle: Vehicle, profile: NpcProfile): void {
@@ -908,7 +910,14 @@ function serveStranded(world: World, vehicle: Vehicle, profile: NpcProfile): voi
   const site = servingSiteIds(profile).map(getKnownSite).find((s) => canUseSite(vehicle.pos, s));
   if (!site) return;
   serviceAt(world, vehicle, site);
+  scrapFuelIfBroke(world, vehicle, profile, site.id);
   if (isStranded(world, vehicle)) refitAtHome(world, vehicle);
+}
+
+// A driver still broke after buying what it can, on a site that serves it, gets scrap fuel to a share of its tank. A stall
+// is no serving site.
+function scrapFuelIfBroke(world: World, vehicle: Vehicle, profile: NpcProfile, siteId: string): void {
+  if (isBroke(world, vehicle) && servingSiteIds(profile).includes(siteId)) scrapFuel(world, vehicle);
 }
 
 // A defeated driver makes no decisions. It heads home, or waits for a tower on its way.
@@ -1208,6 +1217,7 @@ function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity):
   if (!site) return;
   noteTown(vehicle, site.id);
   serviceAt(world, vehicle, site);
+  scrapFuelIfBroke(world, vehicle, npcProfile(vehicle), site.id);
   finishGoal(world, vehicle, 'finished service');
 }
 
