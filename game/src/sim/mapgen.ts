@@ -290,6 +290,14 @@ export function obstacleReach(o: Obstacle): number {
   return o.kind === 'site' || o.kind === 'water' ? o.r : propReach(o);
 }
 
+// Tiles from p to the part of an obstacle a truck hits, 0 inside it: a prop's boxes that start below truck roofs, so
+// a truck under a canopy or inside a hull is clear of it, or a site's or a pond's circle.
+export function obstacleGap(o: Obstacle, p: Vec): number {
+  if (o.kind === 'site' || o.kind === 'water') return Math.max(0, dist(o.pos, p) - o.r);
+  const low = propBoxes(o).filter((b) => b.z0 < PHYSICS.truckClearance);
+  return low.length ? Math.min(...low.map((b) => boxDistance(b, p))) : Infinity;
+}
+
 // Names a prop's model, turn, scale and position: two props with one key have the same boxes.
 export function propKey(o: Obstacle): string {
   return posedShape(o).key;
