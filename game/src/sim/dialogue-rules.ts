@@ -146,7 +146,14 @@ function aidAnswer(world: World, npc: Vehicle): CallVars {
 
 export const CONDITIONS: Record<ConditionId, Condition> = {
   knowsTown: (_world, npc) => knownTowns(npc).length > 0,
-  offersTow: (world, npc) => offerBy(world, npc) !== null,
+  offersPaidTow: (world, npc) => {
+    const tow = offerBy(world, npc);
+    return tow !== null && towData(tow).fee > 0;
+  },
+  offersFreeTow: (world, npc) => {
+    const tow = offerBy(world, npc);
+    return tow !== null && towData(tow).fee === 0;
+  },
   // A driver already on its way does not need asking.
   canTowPlayer: (world, npc) => strandedPlayerAt(world, npc) !== null && topGoal(npc)?.kind !== 'tow',
   playerNeedsPatch: (world) => needsPatch(world, playerVehicle(world)) && !inPatch(world, world.player.vehicleId),

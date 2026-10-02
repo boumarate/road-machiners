@@ -376,7 +376,7 @@ function sayText(world: World, e: Extract<GameEvent, { t: 'say' }>): LogLine {
 }
 
 function towOfferText(world: World, e: Extract<GameEvent, { t: 'towOffer' }>): LogLine {
-  return { text: `${vehicleName(world, e.by)} offers to tow you to ${siteName(e.town)} for ${e.fee}.`, cls: '' };
+  return { text: `${vehicleName(world, e.by)} offers to tow you to ${siteName(e.town)} for ${e.fee > 0 ? e.fee : 'free'}.`, cls: '' };
 }
 
 function towHitchedText(world: World, e: Extract<GameEvent, { t: 'towHitched' }>): LogLine {
@@ -385,8 +385,11 @@ function towHitchedText(world: World, e: Extract<GameEvent, { t: 'towHitched' }>
 
 function towDoneText(world: World, e: Extract<GameEvent, { t: 'towDone' }>): LogLine {
   const by = vehicleName(world, e.by);
-  if (e.client === world.player.vehicleId) return { text: `${by} tows you into town and takes ${e.fee}.`, cls: 'bad' };
-  return { text: `${by} tows ${vehicleName(world, e.client)} in and takes ${e.fee}.`, cls: 'dim' };
+  const free = e.fee === 0;
+  if (e.client === world.player.vehicleId) {
+    return free ? { text: `${by} tows you into town for free.`, cls: '' } : { text: `${by} tows you into town and takes ${e.fee}.`, cls: 'bad' };
+  }
+  return { text: `${by} tows ${vehicleName(world, e.client)} in${free ? ' for free' : ` and takes ${e.fee}`}.`, cls: 'dim' };
 }
 
 function escortPaidText(world: World, e: Extract<GameEvent, { t: 'escortPaid' }>): LogLine {
