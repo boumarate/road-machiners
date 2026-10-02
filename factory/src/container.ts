@@ -75,7 +75,12 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
   return {
     async agent({ clone, dir, model, prompt, log, openNetwork }) {
       if (!openNetwork) await ensureProxy(run, cfg);
-      const env = { CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken, ELEVENLABS_API_KEY: cfg.elevenlabsKey, SFX_MAX_GENERATIONS: String(cfg.sfxMaxGenerations) };
+      // A headless run ends when the agent ends its turn, and that kills anything it left in the background.
+      // Agents ended turns to wait for background subagents, and the run died with their work, so background tasks are off.
+      const env = {
+        CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken, ELEVENLABS_API_KEY: cfg.elevenlabsKey, SFX_MAX_GENERATIONS: String(cfg.sfxMaxGenerations),
+        CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1',
+      };
       const args = [
         ...baseArgs(jobId), '-i', ...mountArgs(cfg, clone, dir), ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
         'factory-agent', '-p', '--model', model, '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose',
