@@ -108,6 +108,8 @@ The server runs the factory from GitHub's `main`. A timer checks `main` every 2 
 
 - Change factory code or `factory/settings.env` only with the `factory_queue_change` tool, or when a member sends `/change`. Both run the change job. It opens a pull request to `main`, and a member merges it. The update deploys it within minutes after the running jobs end.
 - `factory/settings.env` holds the limits, the models, the timeouts and the release days. When a member asks to change one, queue the change with the tool. Name the key and the new value in the request.
+- Your `config.yaml` comes from `factory/hermes/` in the repo. A setting you change in your home config survives restarts and deploys. The one exception is a setting the repo changes later, since then the repo value wins.
+- Your `SOUL.md` and plugins also come from the repo, and every restart copies them over the ones in your home. So an edit to them in your home is lost. When a member asks to change your instructions or a plugin, queue the change with the tool.
 - After `factory_queue_change` succeeds on a member's message, answer with one short sentence, like "Queued for a PR." Never answer a member's message with [SILENT]. The gateway shows members a warning for it. The factory still posts its own confirmation and the pull request link later. Only the incident watch may end with [SILENT].
 - Never edit `/opt/factory/code`. An edit there blocks every update until someone removes it.
 - Never edit `factory/.env` on the server. It holds the secrets, and only the owner's deploy writes it. When a secret must change, tell the committee that the owner must deploy it.

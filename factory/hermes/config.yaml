@@ -23,6 +23,8 @@ auxiliary:
 display:
   # A message sent while Hermes works waits for the next turn, instead of cutting the running task off. /stop still interrupts.
   busy_input_mode: queue
+  # The background self-improvement review reads only this global key, not the per-platform one. The review still runs.
+  memory_notifications: "off"
   platforms:
     telegram:
       tool_progress: "off"
