@@ -226,7 +226,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         // R3, the south-west road: past the motor pool and the barn, down the west side and out of the south edge
         // toward the old asphalt road at map (100, 326).
         { points: [AT(-6, 1.5), AT(-10, 9), AT(-13, 21), AT(-22, 25), AT(-30, 22), AT(-35.4, 14)], width: 3, surface: 'track' },
-        // R4, the depot road: from the highway at s 20 along the hangar apron's south and east sides, through the
+        // R4, the depot road: from the highway at s 20 along the hangars' south and east sides, through the
         // north-east ground and out of the east edge beside the trunk road.
         { points: [AT(20, -1.5), AT(19, -10), AT(21, -31), AT(40, -33), AT(47, -41)], width: 3, surface: 'track' },
         // R5, the north field road: from the highway west through the north-west pocket, out of its west edge.
@@ -243,7 +243,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         // The gabled barn far left above the road and its shed beside it, door gables to the road, and the old
         // barn of the north-west pocket's fields.
         { look: 'barn', table: 'farmStores', turnJitter: 0.06, shift: 0.3, poses: [pose(-12, 29.5, 3.7, ACROSS), pose(-6, 30.5, 2.2, ACROSS), pose(53.5, 35, 3.7, ALONG)] },
-        // The army's hangars: three side by side on their apron right of centre, ends to the road, and one at the
+        // The army's hangars: three side by side on packed dirt right of centre, ends to the road, and one at the
         // north-east depot.
         { look: 'quonset', table: 'armyStores', turnJitter: 0.06, shift: 0.3, poses: [pose(26, -12, 3.2, ACROSS), pose(30, -19, 3.2, ACROSS), pose(34, -26, 3.2, ACROSS), pose(51, -33, 3.2, ALONG)] },
         // The sandbagged blockhouse below the road, commanding the crossroads.
@@ -273,10 +273,9 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { look: 'armyCache', table: 'armyStores', turnJitter: 0.3, shift: 0.3, poses: [pose(32, 11, 0.9, ALONG), pose(24, -5.5, 0.9, ACROSS), pose(21, -34, 0.9, ALONG), pose(43, 5.5, 0.9, ALONG)] },
       ],
       pads: [
-        // The concrete motor pool under the army trucks, beside the south-west road.
+        // The concrete motor pool under the army trucks, beside the south-west road. The hangars stand on packed dirt,
+        // as in the concept: an apron under them read as a dark slab bigger than the farmhouse yard.
         { at: AT(-22, 16), size: { x: 12, y: 10 }, turn: ALONG },
-        // The hangar apron under the three hangars.
-        { at: AT(30, -19), size: { x: 16, y: 20 }, turn: ALONG },
       ],
       // Blue-grey irrigation canals: a wide one beside each side of the highway, broken where roads cross, and
       // feeders along the block edges that carried the water into the rows.
@@ -316,7 +315,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         block(-29, -19.5, 28.5, 32.5, 'along', -0.02),
         // Right of the blockhouse, below the road.
         block(8, 16.4, -5, -20, 'across', 0.02),
-        // Between the highway and the hangar apron.
+        // Between the highway and the hangars.
         block(33, 45, -4.6, -9, 'along', -0.02),
         // The north-east ground, east of the highway.
         block(44, 55, -4.6, -13.5, 'across', 0.05),
