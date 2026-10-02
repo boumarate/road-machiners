@@ -155,8 +155,8 @@ export function itemName(it: GridItem): string {
 
 export function itemState(it: GridItem, mounted: boolean): string {
   if (it.kind === "good") return `Cargo, ${kg(GOODS[it.good].mass)}`;
-  if (partDef(it.part.defId).kind === "core") return `Built in, ${wearLabel(it.part)}`;
-  return `${mounted ? "Mounted" : "Spare"}, ${wearLabel(it.part)}`;
+  if (partDef(it.part.defId).kind === "core") return "Built in";
+  return mounted ? "Mounted" : "Spare";
 }
 
 // Fire view: where a mounted gun can fire, shown on the grid as a fan from the gun, the same shape as its range

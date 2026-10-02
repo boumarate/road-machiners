@@ -245,11 +245,17 @@ describe('teleport', () => {
 describe('places and time', () => {
   it('teleports to a spot where every town and location can be used', () => {
     const w = newWorld(1, START_KITS.standard, TEST_MAP);
-    for (const place of [...REGION.towns, ...REGION.locations]) {
+    for (const place of [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')]) {
       const next = teleport(w, placeSpot(w, place.id));
       expect(canUseSite(playerVehicle(next).pos, place), place.id).toBe(true);
     }
     expect(() => placeSpot(w, 'atlantis')).toThrow(new RegExp(REGION.towns[0].id));
+  });
+
+  it('sends a teleport to a territory to where its road ends', () => {
+    const w = newWorld(1, START_KITS.standard, TEST_MAP);
+    const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
+    expect(dist(placeSpot(w, sun.id), sun.pos)).toBeCloseTo(sun.radius, 6);
   });
 
   it('skips to the first later turn at the hour', () => {

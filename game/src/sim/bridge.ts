@@ -1,80 +1,122 @@
-// Canyon Bridge geometry. The map stays one level: inside the deck outline, the deck is the ground,
-// and the canyon under it is out of reach. Both side rails block driving, so trucks get on and off
-// only over the two ends.
+// Deck geometry: straight road decks like Canyon Bridge, listed in TERRAIN.features.decks. The map stays
+// one level on every deck: inside a deck outline, the deck is the ground, and whatever lies under it is
+// out of reach. Both side rails of each deck block driving, so trucks get on and off only over the ends.
 
 import { REGION } from '../data/region';
-import { TERRAIN } from '../data/terrain';
+import { TERRAIN, type DeckSpec } from '../data/terrain';
 import { segmentDist, type Vec } from './vec';
 
-const B = TERRAIN.features.bridge;
-export const BRIDGE_LENGTH = Math.hypot(B.to.x - B.from.x, B.to.y - B.from.y);
-// Unit vector from the from end to the to end. Across is this turned a quarter toward +y.
-export const BRIDGE_AXIS: Vec = { x: (B.to.x - B.from.x) / BRIDGE_LENGTH, y: (B.to.y - B.from.y) / BRIDGE_LENGTH };
-const HALF_WIDTH = B.width / 2;
-// The road's flattening reaches this far across; the cut clears all of it.
+// A deck with its derived geometry. axis is the unit vector from the from end to the to end; across is
+// axis turned a quarter toward +y. rails holds each rail as a map segment along a deck edge.
+export type Deck = DeckSpec & { axis: Vec; length: number; rails: [Vec, Vec][] };
+
+// A point's deck and its distance along that deck from the from end.
+export type DeckPoint = { deck: Deck; along: number };
+
+// The road's flattening reaches this far across; a cut clears all of it.
 const CUT_REACH = REGION.roadWidth / 2 + TERRAIN.flattenMargin;
 
-// Each rail as a map segment along a deck edge.
-export const BRIDGE_RAILS: [Vec, Vec][] = [-1, 1].map((side) => {
-  const off = { x: -BRIDGE_AXIS.y * side * HALF_WIDTH, y: BRIDGE_AXIS.x * side * HALF_WIDTH };
-  return [{ x: B.from.x + off.x, y: B.from.y + off.y }, { x: B.to.x + off.x, y: B.to.y + off.y }];
-});
+function buildDeck(spec: DeckSpec): Deck {
+  const length = Math.hypot(spec.to.x - spec.from.x, spec.to.y - spec.from.y);
+  const axis = { x: (spec.to.x - spec.from.x) / length, y: (spec.to.y - spec.from.y) / length };
+  const half = spec.width / 2;
+  const rails = [-1, 1].map((side): [Vec, Vec] => {
+    const off = { x: -axis.y * side * half, y: axis.x * side * half };
+    return [{ x: spec.from.x + off.x, y: spec.from.y + off.y }, { x: spec.to.x + off.x, y: spec.to.y + off.y }];
+  });
+  return { ...spec, axis, length, rails };
+}
+
+export const DECKS: readonly Deck[] = TERRAIN.features.decks.map(buildDeck);
+
+// The deck with this id. An unknown id is a bug.
+export function deckById(id: string): Deck {
+  const deck = DECKS.find((d) => d.id === id);
+  if (!deck) throw new Error(`Unknown deck ${id}`);
+  return deck;
+}
 
 function smooth(t: number): number {
   return t * t * (3 - 2 * t);
 }
 
-function along(x: number, y: number): number {
-  return (x - B.from.x) * BRIDGE_AXIS.x + (y - B.from.y) * BRIDGE_AXIS.y;
+function alongOf(deck: Deck, x: number, y: number): number {
+  return (x - deck.from.x) * deck.axis.x + (y - deck.from.y) * deck.axis.y;
 }
 
-function across(x: number, y: number): number {
-  return (y - B.from.y) * BRIDGE_AXIS.x - (x - B.from.x) * BRIDGE_AXIS.y;
+function acrossOf(deck: Deck, x: number, y: number): number {
+  return (y - deck.from.y) * deck.axis.x - (x - deck.from.x) * deck.axis.y;
 }
 
-// Distance along the deck from its from end, or null off the deck outline.
-export function deckAlong(x: number, y: number): number | null {
-  const a = spanAlong(x, y);
-  if (a === null || Math.abs(across(x, y)) > HALF_WIDTH) return null;
-  return a;
+// The deck whose outline holds a map point, with the distance along it, or null off every deck.
+export function deckAt(x: number, y: number): DeckPoint | null {
+  for (const deck of DECKS) {
+    const along = alongOf(deck, x, y);
+    if (along >= 0 && along <= deck.length && Math.abs(acrossOf(deck, x, y)) <= deck.width / 2) return { deck, along };
+  }
+  return null;
 }
 
-// Distance along the deck for any point between the two deck ends, however far to the side, or null
-// past either end.
-export function spanAlong(x: number, y: number): number | null {
-  const a = along(x, y);
-  return a < 0 || a > BRIDGE_LENGTH ? null : a;
+// For a point between a deck's two ends, however far to the side, that deck and the distance along it,
+// or null past the ends of every deck. Of several decks, the nearest across wins.
+export function spanAt(x: number, y: number): DeckPoint | null {
+  let best: DeckPoint | null = null;
+  let bestAcross = Infinity;
+  for (const deck of DECKS) {
+    const along = alongOf(deck, x, y);
+    if (along < 0 || along > deck.length) continue;
+    const across = Math.abs(acrossOf(deck, x, y));
+    if (across < bestAcross) {
+      best = { deck, along };
+      bestAcross = across;
+    }
+  }
+  return best;
 }
 
-// Share of the road and site flattening removed at a map point: 1 in the gap under the deck, 0 on
-// the abutments and away from the bridge.
+// Share of the road and site flattening removed at a map point: 1 in the gap under a deck with a cut,
+// 0 on its abutments and away from every such deck.
 export function bridgeCut(x: number, y: number): number {
-  const a = along(x, y);
-  const into = Math.min(a, BRIDGE_LENGTH - a) - B.abutment;
+  let most = 0;
+  for (const deck of DECKS) if (deck.cut) most = Math.max(most, deckCut(deck, deck.cut, x, y));
+  return most;
+}
+
+function deckCut(deck: Deck, cut: { abutment: number; ramp: number }, x: number, y: number): number {
+  const a = alongOf(deck, x, y);
+  const into = Math.min(a, deck.length - a) - cut.abutment;
   if (into <= 0) return 0;
-  const side = Math.abs(across(x, y)) - CUT_REACH;
-  if (side >= B.ramp) return 0;
-  return smooth(Math.min(1, into / B.ramp)) * (side <= 0 ? 1 : 1 - smooth(side / B.ramp));
+  const side = Math.abs(acrossOf(deck, x, y)) - CUT_REACH;
+  if (side >= cut.ramp) return 0;
+  return smooth(Math.min(1, into / cut.ramp)) * (side <= 0 ? 1 : 1 - smooth(side / cut.ramp));
 }
 
-// Bounding box of both rails. Nav layers test every map cell, and nearly all lie far outside it.
-const RAILS_BOX = {
-  minX: Math.min(...BRIDGE_RAILS.flat().map((p) => p.x)),
-  maxX: Math.max(...BRIDGE_RAILS.flat().map((p) => p.x)),
-  minY: Math.min(...BRIDGE_RAILS.flat().map((p) => p.y)),
-  maxY: Math.max(...BRIDGE_RAILS.flat().map((p) => p.y)),
-};
+// Bounding box of each deck's rails. Nav layers test every map cell, and nearly all lie far outside them.
+const RAIL_BOXES = DECKS.map((deck) => {
+  const points = deck.rails.flat();
+  return {
+    deck,
+    minX: Math.min(...points.map((p) => p.x)),
+    maxX: Math.max(...points.map((p) => p.x)),
+    minY: Math.min(...points.map((p) => p.y)),
+    maxY: Math.max(...points.map((p) => p.y)),
+  };
+});
 
-// True when a point lies within reach of a rail.
+// True when a point lies within reach of any deck's rail.
 export function nearRail(x: number, y: number, reach: number): boolean {
-  if (x <= RAILS_BOX.minX - reach || x >= RAILS_BOX.maxX + reach || y <= RAILS_BOX.minY - reach || y >= RAILS_BOX.maxY + reach) return false;
   const p = { x, y };
-  return BRIDGE_RAILS.some(([a, b]) => segmentDist(p, a, b) < reach);
+  return RAIL_BOXES.some((box) => {
+    if (x <= box.minX - reach || x >= box.maxX + reach || y <= box.minY - reach || y >= box.maxY + reach) return false;
+    return box.deck.rails.some(([a, b]) => segmentDist(p, a, b) < reach);
+  });
 }
 
-// True when segment a-b comes within reach of a rail.
+// True when segment a-b comes within reach of any deck's rail.
 export function crossesRail(a: Vec, b: Vec, reach: number): boolean {
-  return BRIDGE_RAILS.some(([c, d]) => segmentsIntersect(a, b, c, d) || Math.min(segmentDist(a, c, d), segmentDist(b, c, d), segmentDist(c, a, b), segmentDist(d, a, b)) < reach);
+  return DECKS.some((deck) =>
+    deck.rails.some(([c, d]) => segmentsIntersect(a, b, c, d) || Math.min(segmentDist(a, c, d), segmentDist(b, c, d), segmentDist(c, a, b), segmentDist(d, a, b)) < reach),
+  );
 }
 
 function segmentsIntersect(a: Vec, b: Vec, c: Vec, d: Vec): boolean {

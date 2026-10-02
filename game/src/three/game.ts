@@ -56,6 +56,7 @@ import { playBreaks } from "./render/partDebris";
 import { PathView } from "./render/path";
 import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
+import { addHullDecks } from "./render/hull-decks";
 import { terrainMesh } from "./render/terrain";
 import { VehicleView } from "./render/vehicle";
 import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
@@ -206,11 +207,11 @@ export class Game {
     this.pickRing.renderOrder = 5;
     this.scene.add(this.pickRing);
 
-    // Ground and props cull separately, so ground picking only hits terrain and the bridge deck.
+    // Ground and props cull separately, so ground picking only hits terrain and the decks.
     this.sightLimit = new SightLimit(this.world.size);
     const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit, false, false);
     const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true, true);
-    this.scopes = [groundScope, propScope];
+    this.scopes = [groundScope, propScope, addHullDecks(this.world.terrain, this.props, this.sightLimit)];
     const groundChunks = terrainMesh(this.world, groundScope);
     addSites(this.world.terrain, propScope);
     this.obstacles = new ObstacleViews(propScope, this.world.terrain);

@@ -3,15 +3,16 @@
 // stamps them per query. Breakable props make their cells costly instead of blocked. Per-driver route taste
 // scales these costs.
 
-import { PHYSICS } from '../../data/physics';
+import { hazardZones } from '../territory';
 import { REGION } from '../../data/region';
 import { BREAKABLE } from '../../data/rules';
 import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../../data/terrain';
 import { nearRail } from '../bridge';
-import { boxDistance, isBreakable, isDriveObstacle, propBoxes, propKey, propReach, type PosedBox } from '../mapgen';
+import { blockingBoxes, boxDistance, isBreakable, isDriveObstacle, propKey, propReach, type PosedBox } from '../mapgen';
 import { isCliff, tileSlope, type Terrain } from '../terrain';
 import { hashRandom } from '../rng';
 import type { Obstacle, Vehicle, World } from '../types';
+import { siteGap } from '../sites';
 import { dist, type Vec } from '../vec';
 import { ObstacleBuckets, type Blocker } from './buckets';
 
@@ -107,11 +108,12 @@ function slopeCost(t: Terrain, tile: number): number {
   return 1 + REGION.navigation.slopeCost * (Math.hypot(s.x, s.y) / TERRAIN.drive.maxSlope) ** 2;
 }
 
-const SITES = [...REGION.towns, ...REGION.locations];
+// A territory has no edge to keep near.
+const SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 
 // Within one road width of a site's edge.
 function nearSite(x: number, y: number): boolean {
-  return SITES.some((s) => (s.pos.x - x) ** 2 + (s.pos.y - y) ** 2 < (s.radius + REGION.roadWidth) ** 2);
+  return SITES.some((s) => siteGap(s, { x, y }) < REGION.roadWidth);
 }
 
 export function terrainNav(t: Terrain): TerrainNav {
@@ -140,7 +142,8 @@ export function staticSet(obstacles: Obstacle[], size: number): StaticSet {
   const hit = staticSets.get(obstacles);
   if (hit && sameItems(hit.items, obstacles)) return hit.set;
   const statics = obstacles.filter((o) => isDriveObstacle(o) && !isTransientWreck(o));
-  const all = statics.map(driveBlocker);
+  // A hazard zone blocks routes like a rock, but not driving: the player may still go in by hand.
+  const all = [...statics.map(driveBlocker), ...hazardZones().map((z) => ({ pos: z.pos, r: z.radius }))];
   const breakable = statics.map(isBreakable);
   const solid = all.filter((_, i) => !breakable[i]);
   const set = {
@@ -169,19 +172,7 @@ export function dynamicBlockers(obstacles: Obstacle[], extra: Blocker[]): Blocke
 // under canopies.
 function driveBlocker(o: Obstacle): Blocker {
   if (o.kind === 'site') return { pos: o.pos, r: o.r };
-  return { pos: o.pos, r: propReach(o), prop: { key: propKey(o), boxes: lowBoxes(propBoxes(o)) } };
-}
-
-// World clones share posed boxes, so each box list is filtered once.
-const lowBoxCache = new WeakMap<readonly PosedBox[], PosedBox[]>();
-
-function lowBoxes(boxes: readonly PosedBox[]): PosedBox[] {
-  let low = lowBoxCache.get(boxes);
-  if (!low) {
-    low = boxes.filter((b) => b.z0 < PHYSICS.truckClearance);
-    lowBoxCache.set(boxes, low);
-  }
-  return low;
+  return { pos: o.pos, r: propReach(o), prop: { key: propKey(o), boxes: blockingBoxes(o) } };
 }
 
 // Exact content key: number-to-string round-trips, so equal keys mean equal circles, and a prop key names its pose.

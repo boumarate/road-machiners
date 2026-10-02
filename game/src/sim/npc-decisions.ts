@@ -33,11 +33,12 @@ import { getResources } from './resources';
 import { skillEffect } from './progress';
 import { randRange } from './rng';
 import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable } from './salvage';
-import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
-import { boundTo, givesWord, stateOf, statesHeld } from './states';
+import { canUseSite, isTerritory, siteGates, sitePads, siteUnder, type Site } from './sites';
+import { territoryAt, territoryGrounds } from './territory';
+import { addState, boundTo, endState, givesWord, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
-import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
+import type { Contact, NpcActivity, NpcState, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 
@@ -283,22 +284,28 @@ export function truckLootInvalid(vehicle: Vehicle, truck: Vehicle): string | nul
   return canTakeFromTruck(vehicle, truck) ? null : 'cargo cannot hold the loot';
 }
 
+// Whether the vehicle is where a site's services work: on a pad, or inside a territory, which has none.
+function stands(vehicle: Vehicle, site: Site): boolean {
+  return isTerritory(site) ? territoryAt(vehicle.pos)?.id === site.id : canUseSite(vehicle.pos, site);
+}
+
 // Known salvage sites other than the one the NPC stands at.
 export function salvageSitesAway(vehicle: Vehicle) {
-  return npcProfile(vehicle).salvageSites.map(getKnownSite).filter((site) => !canUseSite(vehicle.pos, site));
+  return npcProfile(vehicle).salvageSites.map(getKnownSite).filter((site) => !stands(vehicle, site));
 }
 
 let grounds: readonly Vec[] | null = null;
 
 // Where raiders look for prey and vultures prowl for wrecks: points every HUNT.roadSpacing tiles along the roads, kept
-// only far from every site, and the pads of every location with salvage. Built once from the region.
+// only far from every site, the pads of every location with salvage and the grounds inside each territory. Built once from the region.
 export function huntingGrounds(): readonly Vec[] {
   if (grounds) return grounds;
   const sites = [...REGION.towns, ...REGION.locations];
   const lonely = (p: Vec) => sites.every((site) => dist(p, site.pos) - site.radius >= HUNT.siteDistance);
   const roadPoints = REGION.roads.flatMap((road) => pointsAlong(road, HUNT.roadSpacing)).filter(lonely);
   const lootPads = REGION.locations.filter((site) => site.kind !== 'camp' && siteLootTable(site)).flatMap((site) => sitePads(site));
-  grounds = [...roadPoints, ...lootPads];
+  const inTerritories = REGION.locations.filter(isTerritory).flatMap(territoryGrounds);
+  grounds = [...roadPoints, ...lootPads, ...inTerritories];
   return grounds;
 }
 
@@ -385,7 +392,7 @@ export function patrolPoints(site: Site): readonly Vec[] {
 
 // Known trip destinations other than the one the driver stands at.
 export function travelSitesAway(vehicle: Vehicle) {
-  return npcProfile(vehicle).travelSites.map(getKnownSite).filter((site) => !canUseSite(vehicle.pos, site));
+  return npcProfile(vehicle).travelSites.map(getKnownSite).filter((site) => !stands(vehicle, site));
 }
 
 // The goods a source site gives for free.
@@ -960,4 +967,20 @@ function checkWeights(vehicle: Vehicle, decision: DecisionId, weights: Partial<R
   for (const [option, weight] of Object.entries(weights) as [OptionName, number][]) {
     if (!Number.isFinite(weight) || weight < 0) throw new Error(`${vehicle.id} has weight ${weight} for ${option} at ${decision}`);
   }
+}
+
+// A stranded driver ends each robbery feud whose target is not fighting it and backs off that target, as a robbery
+// that went quiet does.
+export function giveUpStrandedRobberies(world: World, vehicle: Vehicle): void {
+  if (!isStranded(world, vehicle)) return;
+  for (const s of statesHeld(world, vehicle.id).filter(isRobberyFeud)) {
+    const other = world.vehicles.find((v) => v.id === s.other);
+    if (!other || !holdsOffRobbery(world, vehicle, other)) continue;
+    endState(world, s, 'broken');
+    addState(world, 'backedOff', vehicle.id, s.other, { kind: 'none' });
+  }
+}
+
+function isRobberyFeud(s: NpcState): boolean {
+  return s.kind === 'feud' && s.data.kind === 'feud' && s.data.robbery;
 }

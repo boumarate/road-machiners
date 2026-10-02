@@ -43,7 +43,7 @@ import type {
 } from "../sim/types";
 import { el, isBrowserChord, panel } from "./dom";
 import type { UiHost } from "./host";
-import { baselinePart, conditionMeter, createIcon, diffStats, footprint as footprintEl, itemIconEl, partIconEl, partStats, statGrid } from "./cards";
+import { baselinePart, conditionMeter, conditionRow, conditionTag, createIcon, diffStats, footprint as footprintEl, itemIconEl, partIconEl, partStats, statGrid } from "./cards";
 import { vehicleMass } from "../sim/mass";
 import {
   blockerIds,
@@ -534,6 +534,7 @@ export class InventoryView {
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
         partIconEl(p),
         el("span", {}, d.name),
+        conditionTag(p),
         footprintEl(d.w, d.h),
         conditionMeter(p),
       );
@@ -563,6 +564,7 @@ export class InventoryView {
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
         partIconEl(p),
         el("span", {}, d.name),
+        conditionTag(p),
         footprintEl(d.w, d.h),
         conditionMeter(p),
       );
@@ -1014,9 +1016,11 @@ function shopOnlyPatch(part: PartInstance): HTMLElement | null {
 function partDetails(me: Vehicle, part: PartInstance, mounted: boolean): HTMLElement[] {
   const kind = partDef(part.defId).kind;
   const base = mounted ? null : baselinePart(me, kind);
+  const row = conditionRow(part);
   return [
+    ...(row ? [row] : []),
     conditionMeter(part),
     statGrid(diffStats(partStats(part), base ? partStats(base) : null)),
-    base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name}`) : el("span"),
+    base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name} `, conditionTag(base)) : el("span"),
   ];
 }
