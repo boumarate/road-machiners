@@ -3,6 +3,7 @@
 import { MIX, type Bus } from "../data/sounds";
 import type { Mixer } from "../audio/mixer";
 import { el } from "./dom";
+import { createSwitch } from "./switch";
 
 const KEY = "roam-sound";
 const BUSES: Bus[] = ["music", "sfx", "ambient", "ui"];
@@ -50,8 +51,8 @@ export class SoundSettings {
   // The controls live on the radio's faceplate.
   constructor(private mixer: Mixer, private storage: Storage, faceplate: HTMLElement) {
     this.settings = parseSettings(storage.getItem(KEY));
-    this.muteSwitch = el("button", { class: "radio-switch", role: "switch", onclick: () => this.toggleMute() }, el("span", { class: "radio-switch-lever" }));
-    faceplate.append(...BUSES.map((b) => this.knob(b)), el("label", { class: "radio-mute" }, this.muteSwitch, "Mute"));
+    this.muteSwitch = el("div", { class: "radio-mute" });
+    faceplate.append(...BUSES.map((b) => this.knob(b)), this.muteSwitch);
     this.apply();
   }
 
@@ -106,8 +107,10 @@ export class SoundSettings {
       knob.style.setProperty("--knob-angle", `${knobAngle(this.settings.volume[b])}deg`);
     }
     this.mixer.setMuted(this.settings.muted);
-    this.muteSwitch.setAttribute("aria-checked", String(this.settings.muted));
-    this.muteSwitch.title = this.settings.muted ? "Unmute [M]" : "Mute [M]";
+    const muted = this.settings.muted;
+    this.muteSwitch.replaceChildren(
+      createSwitch({ on: "Mute", off: "Sound", checked: muted, key: "M", title: muted ? "Unmute [M]" : "Mute [M]", onclick: () => this.toggleMute() }),
+    );
   }
 
   // Only the player's own changes are stored, so untouched groups follow new mix defaults.

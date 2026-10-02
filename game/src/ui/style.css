@@ -527,7 +527,7 @@ body {
 }
 #ui .contracts {
   right: 16px;
-  bottom: 246px;
+  bottom: 371px;
   width: 282px;
   box-sizing: border-box;
   padding: 8px 10px;
@@ -535,6 +535,125 @@ body {
   border: 0;
   border-left: 2px solid #777e81;
   font-size: 12px;
+}
+/* Waste Of Time Radio: a pager screen over a faceplate of volume knobs, between the log and the contracts. */
+#ui .radio {
+  --radio-line: 14px;
+  --radio-lines: 3;
+  --knob-size: 28px;
+  right: 16px;
+  bottom: 242px;
+  width: 282px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #30363a;
+  border: 0;
+  border-left: 2px solid #777e81;
+  box-shadow: inset 0 1px 0 #ffffff1a;
+}
+.radio-screen {
+  padding: 2px 6px 4px;
+  background: #8e9a80;
+  border: 2px solid #15191b;
+  border-radius: 3px;
+  box-shadow: inset 0 2px 4px #0000006b;
+  color: #1d2318;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+.radio-band {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  border-bottom: 1px solid #1d231840;
+  margin-bottom: 2px;
+}
+.radio-lcd {
+  position: relative;
+  height: calc(var(--radio-line) * var(--radio-lines));
+  overflow: hidden;
+  font-size: 12px;
+  line-height: var(--radio-line);
+}
+.radio-ghost {
+  position: absolute;
+  inset: 0;
+  color: #1d231812;
+  word-break: break-all;
+  user-select: none;
+}
+.radio-text {
+  position: relative;
+}
+.radio-text.streaming::after {
+  content: "\2588";
+  animation: radio-cursor 0.5s steps(1) infinite;
+}
+@keyframes radio-cursor {
+  50% {
+    opacity: 0;
+  }
+}
+.radio-faceplate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.knob-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font: 9px var(--font-mono);
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.knob {
+  width: var(--knob-size);
+  height: var(--knob-size);
+  border-radius: 50%;
+  cursor: ns-resize;
+  touch-action: none;
+  background: #1c1f21;
+  border: 2px dotted #3a4043;
+  box-sizing: border-box;
+  box-shadow: 0 2px 3px #000000a0;
+}
+.knob:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.knob-dial {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #4a5155;
+  box-shadow: inset 0 1px 0 #ffffff26, inset 0 -2px 0 #0000004d;
+  transform: scale(0.82) rotate(var(--knob-angle, 0deg));
+}
+.knob-notch {
+  position: absolute;
+  left: calc(50% - 1px);
+  top: 2px;
+  width: 2px;
+  height: 35%;
+  border-radius: 1px;
+  background: var(--ink);
+}
+/* The mute switch is the metal toggle, shrunk to the knobs' height. */
+#ui .radio-faceplate button.switch {
+  gap: 0;
+  padding: 1px 8px;
+}
+.radio-faceplate .switch-lever {
+  transform: scale(0.6);
+  margin: -5px 0;
 }
 .contracts h3 {
   font-size: 12px !important;
@@ -673,7 +792,8 @@ body {
   top: 64px;
   width: var(--inspection-width);
   min-height: var(--inspection-height);
-  max-height: calc(100dvh - 64px - 234px - 8px);
+  /* Stops above the radio. */
+  max-height: calc(100dvh - 64px - 363px - 8px);
   max-width: calc(100vw - 28px);
   box-sizing: border-box;
   overflow: auto;
@@ -1307,7 +1427,9 @@ body {
   #ui .weapons {
     max-width: calc(100vw - 644px);
   }
-  #ui .log {
+  #ui .log,
+  #ui .radio,
+  #ui .contracts {
     width: 246px;
   }
 }
@@ -1337,13 +1459,31 @@ body {
   .log-lines {
     max-height: 48px;
   }
+  #ui .radio {
+    --radio-line: 12px;
+    --radio-lines: 4;
+    --knob-size: 22px;
+    bottom: 264px;
+    right: 14px;
+    width: 200px;
+    gap: 4px;
+    padding: 4px 6px;
+  }
+  .radio-lcd {
+    font-size: 10px;
+  }
+  #ui .contracts {
+    bottom: 393px;
+    right: 14px;
+    width: 200px;
+  }
   #ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded {
     width: calc(100vw - 28px);
     height: calc(100dvh - 176px - 72px);
   }
   .info {
     top: 190px;
-    max-height: calc(100dvh - 190px - 256px - 8px);
+    max-height: calc(100dvh - 190px - 385px - 8px);
   }
   #ui .modal {
     padding: 20px 16px;
@@ -1444,23 +1584,10 @@ canvas.view {
   padding: 0;
   border: 0;
 }
-.sound {
-  font-size: 12px;
-}
 .game-menu {
   display: flex;
   gap: 6px;
   font-size: 12px;
-}
-.sound .row {
-  display: flex;
-  gap: 6px;
-}
-.sound .sound-sliders label {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 4px;
 }
 
 #ui .dialogue {

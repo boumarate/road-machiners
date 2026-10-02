@@ -56,6 +56,26 @@ async function checkInstruments(page) {
   }
 }
 
+// The radio sits above the log, clear of the other right-hand panels, with its knobs and a broadcast on screen.
+async function checkRadio(page) {
+  await page.waitForFunction(() => document.querySelector('.radio-text')?.textContent.trim(), null, { timeout: 30000 });
+  const m = await page.evaluate(() => {
+    const visibleRect = selector => {
+      const node = document.querySelector(selector);
+      return node && node.offsetParent !== null && getComputedStyle(node).visibility !== 'hidden' ? node.getBoundingClientRect().toJSON() : null;
+    };
+    return {
+      radio: visibleRect('.radio'), log: visibleRect('.log'), others: ['.instruments', '.contracts', '.info'].map(visibleRect).filter(Boolean),
+      knobs: document.querySelectorAll('.radio [role=slider]').length, oldSound: document.querySelectorAll('.top-right .sound').length,
+    };
+  });
+  assert(m.radio, 'Radio must be visible');
+  assert.equal(m.knobs, 4, 'Radio must carry four volume knobs');
+  assert.equal(m.oldSound, 0, 'The top-right Sound panel must be gone');
+  assert(m.radio.bottom <= m.log.y, 'Radio must sit above the log');
+  for (const other of [m.log, ...m.others]) assert(!doRectsOverlap(m.radio, other), 'Radio must not overlap the log, instruments, contracts or info');
+}
+
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   const errors = [];
@@ -65,6 +85,7 @@ try {
   assert(await page.locator('.icon').evaluateAll(nodes => nodes.every(node => node.title)), 'Every icon needs a hover name');
   assert(await page.locator('#ui *').evaluateAll(nodes => nodes.filter(node => !node.closest('button.switch')).every(node => !getComputedStyle(node).backgroundImage.includes('gradient'))), 'UI must use flat surfaces, apart from the metal switches');
   await checkInstruments(page);
+  await checkRadio(page);
   await page.keyboard.press('i');
   await checkVisibleReadouts(page);
   const movable = page.locator('.inv-item:not(.fixed)').first();
@@ -91,10 +112,15 @@ try {
     await checkVisibleReadouts(page);
     await checkInstruments(page);
   }
+  await page.keyboard.press('Escape');
+  for (const [width, height] of [[1280, 768], [700, 800]]) {
+    await page.setViewportSize({ width, height });
+    await checkRadio(page);
+  }
   assert.deepEqual(errors, [], 'No uncaught page errors');
   await mkdir('.playtest', { recursive: true });
   await page.screenshot({ path: '.playtest/ui-regression.png' });
-  console.log('PASS: hover names, flat surfaces, persistent resources/log, stable modal frames, movable-item inspection, and laptop/narrow layouts, clock strip, speedometer and action row');
+  console.log('PASS: hover names, flat surfaces, persistent resources/log, the radio above the log, stable modal frames, movable-item inspection, and laptop/narrow layouts, clock strip, speedometer and action row');
 } finally {
   await browser.close();
 }
