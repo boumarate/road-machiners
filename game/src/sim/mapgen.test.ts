@@ -67,7 +67,7 @@ describe('baked map obstacles', () => {
 });
 
 describe('breakable props', () => {
-  it('only fences and junk piles break', () => {
+  it('only fences, junk piles and dead trees break', () => {
     const landmarks = mapObstacles(mapWith(PROP_KINDS.filter((k) => k !== 'rock').map((kind, i) => prop(kind, 10 + i * 10))));
     const others: Obstacle[] = [
       { id: 'rock0', pos: { x: 10, y: 50 }, r: 1, kind: 'rock' },
@@ -77,7 +77,7 @@ describe('breakable props', () => {
       { id: 'site-a', pos: { x: 10, y: 50 }, r: 1, kind: 'site' },
     ];
 
-    expect(landmarks.filter(isBreakable).map((o) => (o as Landmark).look).sort()).toEqual(['fence', 'junk']);
+    expect(landmarks.filter(isBreakable).map((o) => (o as Landmark).look).sort()).toEqual(['deadTree', 'fence', 'junk']);
     expect(others.filter(isBreakable)).toEqual([]);
   });
 });

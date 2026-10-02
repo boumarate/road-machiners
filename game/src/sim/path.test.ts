@@ -296,7 +296,7 @@ describe('routes prefer roads', () => {
     const w = emptyWorld();
     editableTerrain(w).types.fill('hardpan');
     const nav = terrainNav(w.terrain);
-    const site = REGION.locations[0];
+    const site = REGION.locations.find((l) => l.kind !== 'territory')!; // a territory has no pads or edge to price
     const at = (d: number) => nav.tileCost[tileIndex(nav.size, site.pos.x + d, site.pos.y)];
     expect(at(site.radius + REGION.roadWidth - 1)).toBeCloseTo(1 / TERRAIN_TYPES.hardpan.speed, 9);
     expect(at(site.radius + REGION.roadWidth + 1)).toBeCloseTo(REGION.navigation.offRoadCost / TERRAIN_TYPES.hardpan.speed, 9);
