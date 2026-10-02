@@ -179,6 +179,18 @@ describe("terrain grid", () => {
     expect(track.color).not.toBe(sand.color);
   });
 
+  it('paints the Old Orchard pads as pale concrete, which drives like asphalt', () => {
+    const orchard = REGION.locations.find((site) => site.id === 'orchard')!;
+    for (const pad of TERRITORIES.orchard.farm!.pads) {
+      const mid = { x: orchard.pos.x + pad.at.x, y: orchard.pos.y + pad.at.y };
+      expect(TEST_MAP.terrain.types[tileAt(TEST_MAP.terrain, mid)], `pad at ${mid.x},${mid.y}`).toBe('concrete');
+    }
+    const { concrete, asphalt } = TERRAIN_TYPES;
+    expect([concrete.speed, concrete.wear, concrete.dust]).toEqual([asphalt.speed, asphalt.wear, asphalt.dust]);
+    // Paler than the asphalt road in every channel.
+    for (const shift of [0, 8, 16]) expect((concrete.color >> shift) & 0xff).toBeGreaterThan((asphalt.color >> shift) & 0xff);
+  });
+
   it('paints the Old Orchard canals as canal, which drives like dirty water but shows blue-grey', () => {
     const orchard = REGION.locations.find((site) => site.id === 'orchard')!;
     for (const canal of TERRITORIES.orchard.farm!.canals) {

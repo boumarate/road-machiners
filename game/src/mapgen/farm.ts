@@ -15,7 +15,7 @@ import { siteGap } from '../sim/sites';
 import type { BakedProp } from '../sim/terrain';
 import { angleDiff, bearing, dist, segmentDist, type Vec } from '../sim/vec';
 import { tileSteepness, type MapDraft } from './bake';
-import { BUILT_CANAL, BUILT_TRACK } from './newworld';
+import { BUILT_CANAL, BUILT_PAD, BUILT_TRACK } from './newworld';
 import { BUILT_FIELD, BUILT_NONE, BUILT_OLD_ROAD, facing, prop, RoadLine, tileCenter, tileOf, tilesWithin } from './oldworld';
 
 const LENGTH_SLACK = 1e-6; // share of a segment a run's length may miss by rounding and still count it whole
@@ -81,7 +81,7 @@ function touchedTiles(size: number, pos: Vec, r: number): number[] {
 
 // Whether a circle overlaps a tile of old road, a pad, a dirt road or track, or a canal, where no prop may stand.
 export function touchesMarks(d: MapDraft, pos: Vec, r: number): boolean {
-  return touchedTiles(d.size, pos, r).some((tile) => d.built[tile] === BUILT_OLD_ROAD || d.built[tile] === BUILT_TRACK || d.built[tile] === BUILT_CANAL);
+  return touchedTiles(d.size, pos, r).some((tile) => d.built[tile] === BUILT_OLD_ROAD || d.built[tile] === BUILT_TRACK || d.built[tile] === BUILT_CANAL || d.built[tile] === BUILT_PAD);
 }
 
 function frameOf(spine: TerritoryRules['spine']): Frame {
@@ -121,7 +121,7 @@ function markPadTile(d: MapDraft, t: TerritoryDef, tile: number, centre: Vec): v
   const c = tileCenter(d.size, tile);
   if (steep(d, tile)) throw new Error(`${t.id} pad at ${at(centre)} lies on a cliff at ${at(c)}`);
   if (onNewRoad(c, 0)) throw new Error(`${t.id} pad at ${at(centre)} lies on a road at ${at(c)}`);
-  mark(d, tile, BUILT_OLD_ROAD);
+  mark(d, tile, BUILT_PAD);
 }
 
 // Marks code on every unmarked tile inside the territory whose centre lies within width / 2 of the line.

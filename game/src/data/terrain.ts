@@ -20,7 +20,8 @@ export type TerrainTypeId =
   | "toxic"
   | "hull"
   | "track"
-  | "canal";
+  | "canal"
+  | "concrete";
 
 export type TerrainType = {
   id: TerrainTypeId;
@@ -62,6 +63,10 @@ export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   // like dirty water. Its blue-grey shows the concrete and the clear water apart from the olive dirty pools. Last, so
   // earlier type codes keep their values.
   canal: { id: "canal", name: "Irrigation canal", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x5f6f7a },
+  // Concrete pads: the poured slabs of the Old Orchard's motor pool. They drive and wear like cracked asphalt, and
+  // their pale grey shows the slab apart from the dark road, as in the concept. Last, so earlier type codes keep
+  // their values.
+  concrete: { id: "concrete", name: "Cracked concrete", speed: 0.98, wear: 0.6, dust: 0.3, color: 0xa39e94 },
 };
 
 export const TERRAIN = {

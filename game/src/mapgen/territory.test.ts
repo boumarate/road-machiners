@@ -16,7 +16,7 @@ import { angleDiff, dist, lerp, type Vec } from '../sim/vec';
 import { TEST_MAP } from '../test/map';
 import { newDraft, tileSteepness, type MapDraft } from './bake';
 import { fillFarm } from './farm';
-import { BUILT_CANAL, BUILT_TRACK } from './newworld';
+import { BUILT_CANAL, BUILT_PAD, BUILT_TRACK } from './newworld';
 import { BUILT_FIELD, BUILT_OLD_ROAD, ruleRng, tileOf, tilesWithin } from './oldworld';
 import { territoryLayer } from './territory';
 
@@ -282,7 +282,7 @@ describe('the orchard farm', () => {
 
   it('marks the pads as concrete, the canals as canal and the blocks as field', () => {
     const at = (p: Vec) => baked.built[tileOf(baked.size, abs(p))];
-    for (const pad of farm.pads) expect(at(pad.at)).toBe(BUILT_OLD_ROAD);
+    for (const pad of farm.pads) expect(at(pad.at)).toBe(BUILT_PAD);
     for (const canal of farm.canals) expect(at({ x: (canal.points[0].x + canal.points[1].x) / 2, y: (canal.points[0].y + canal.points[1].y) / 2 })).toBe(BUILT_CANAL);
     for (const block of farm.blocks) {
       const centre = frameOf(abs(block.at), block.turn);
@@ -304,7 +304,7 @@ describe('the orchard farm', () => {
     for (const p of [...loose, ...trees, ...segments]) {
       const where = `${p.kind} at ${p.pos.x},${p.pos.y}`;
       expect(siteGap(orchard, p.pos), where).toBeLessThan(-p.r);
-      if (!segments.includes(p)) for (const tile of footprint(baked, p)) expect([BUILT_OLD_ROAD, BUILT_TRACK, BUILT_CANAL], where).not.toContain(baked.built[tile]);
+      if (!segments.includes(p)) for (const tile of footprint(baked, p)) expect([BUILT_OLD_ROAD, BUILT_TRACK, BUILT_CANAL, BUILT_PAD], where).not.toContain(baked.built[tile]);
       expect(ROAD_INDEX.nearestWithin(p.pos.x, p.pos.y, REGION.roadWidth / 2 + p.r), where).toBe(Infinity);
       expect(tileSteepness(baked.heights, baked.size, tileOf(baked.size, p.pos)), where).toBeLessThanOrEqual(TERRAIN.drive.maxSlope);
     }
@@ -317,7 +317,7 @@ describe('the orchard farm', () => {
       // The ends are taken a hair inside, since a segment's end may meet a marked tile's edge exactly.
       for (const o of [-seg.r * 0.99, 0, seg.r * 0.99]) {
         const p = { x: seg.pos.x + Math.cos(seg.yaw) * o, y: seg.pos.y + Math.sin(seg.yaw) * o };
-        expect([BUILT_OLD_ROAD, BUILT_TRACK, BUILT_CANAL], `${seg.kind} at ${p.x},${p.y}`).not.toContain(baked.built[tileOf(baked.size, p)]);
+        expect([BUILT_OLD_ROAD, BUILT_TRACK, BUILT_CANAL, BUILT_PAD], `${seg.kind} at ${p.x},${p.y}`).not.toContain(baked.built[tileOf(baked.size, p)]);
       }
     }
   });

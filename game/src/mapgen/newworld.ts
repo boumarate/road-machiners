@@ -52,6 +52,8 @@ export const BUILT_HULL = 6;
 export const BUILT_TRACK = 7;
 // The territory layer's mark for a farm's irrigation canals.
 export const BUILT_CANAL = 8;
+// The territory layer's mark for a farm's concrete pads.
+export const BUILT_PAD = 9;
 
 // A squatter camp: its center and the radius of its fence ring.
 export type Camp = { pos: Vec; radius: number };

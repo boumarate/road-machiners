@@ -21,7 +21,7 @@ from shapes import strut  # noqa: E402
 
 # Colors from src/render/palette.ts.
 COLORS = {
-    "trunk_dark": 0x3A2418,  # PAL.rust.dark, the near-black wood of the concept's trees
+    "trunk_dark": 0x5C4733,  # mix(PAL.trunk, PAL.rock.dark, 0.5), the weathered grey-brown wood of the concept's trees
     "trunk_dead": 0x877059,  # mix(PAL.trunk, PAL.rock.top, 0.6), sun-bleached dead wood
 }
 SEED = 41
