@@ -46,8 +46,8 @@ async function checkInstruments(page) {
   const { panel } = m;
   assert(m.clock.x >= panel.x && m.clock.right <= panel.right && m.clock.y >= panel.y && m.clock.bottom <= panel.bottom, 'Clock must lie inside the instruments');
   assert(m.clock.bottom <= m.dial.y && m.clock.bottom <= m.readouts.y, 'Clock must sit above the dial and readouts');
-  assert(/Day \d+ \d+:\d\d/.test(m.clockText), `Clock must show day and time, got ${m.clockText}`);
-  assert.equal(m.panelText.match(/Day \d+ \d+:\d\d/g).length, 1, 'Time must show once');
+  assert(/Day \d+\s+\d+:\d\d/.test(m.clockText), `Clock must show day and time, got ${m.clockText}`);
+  assert.equal(m.panelText.match(/Day \d+\s+\d+:\d\d/g).length, 1, 'Time must show once');
   assert(!m.actionsText.includes('broken'), 'No broken badge in the action row');
   assert(!/km\/h|·/.test(m.speedoText), 'No unit text under the dial');
   assert(m.heights.every(h => Math.abs(h - m.heights[0]) <= 1), `Action buttons must share one height: ${m.heights}`);
