@@ -12,6 +12,7 @@ import FORMAT_2_6 from './save-fixtures/format-2-6.json';
 import FORMAT_2_7 from './save-fixtures/format-2-7.json';
 import FORMAT_2_8 from './save-fixtures/format-2-8.json';
 import FORMAT_2_9 from './save-fixtures/format-2-9.json';
+import FORMAT_2_10 from './save-fixtures/format-2-10.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS } from './save-migrations';
@@ -220,5 +221,14 @@ describe('save migration 9 to 10', () => {
   it('keeps dust clouds, contacts and clouds', () => {
     expect(next.dustClouds).toEqual(FORMAT_2_9.dustClouds);
     expect(next.turn).toBe(FORMAT_2_9.turn);
+  });
+});
+
+describe('save migration 10 to 11', () => {
+  it('drops the contacts and seen clouds and keeps the dust clouds', () => {
+    const next = MIGRATIONS[10](FORMAT_2_10);
+    const { contacts: _c, clouds: _s, ...player } = FORMAT_2_10.player;
+
+    expect(next).toEqual({ ...FORMAT_2_10, player });
   });
 });

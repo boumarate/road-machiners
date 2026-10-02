@@ -2,7 +2,7 @@ import type { BakedMap } from '../sim/terrain';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
 import type { BrokenProp, Obstacle, Player, Vehicle, World } from '../sim/types';
-import { playerVisible } from '../sim/vision';
+import { refreshVision } from '../sim/vision';
 import { clearTips } from '../ui/tips';
 import { settleAims } from '../sim/combat';
 import { clockOf } from '../sim/sun';
@@ -66,13 +66,16 @@ export function savedRunId(envelope: unknown): string | null {
 // A broken prop as a save holds it. The map file holds the prop itself.
 type SavedBroken = { id: string; turn: number };
 
-// A world as a save holds it. Load rebuilds the rest: the terrain and baked props from the map, the visible tiles
-// from the player's position, and empty trails, events and removed vehicles, which only animate the last turn.
+// A world as a save holds it. Load rebuilds the rest: the terrain and baked props from the map, the player's view
+// with refreshVision(), and empty trails, events and removed vehicles, which only animate the last turn.
 type SavedWorld = Omit<World, 'terrain' | 'events' | 'removed' | 'broken' | 'vehicles' | 'player'> & {
   broken: SavedBroken[];
   vehicles: Omit<Vehicle, 'trail'>[];
-  player: Omit<Player, 'visible'>;
+  player: Omit<Player, ViewField>;
 };
+
+// The player's view: what refreshVision() writes from the rest of the world.
+type ViewField = 'visible' | 'contacts' | 'clouds';
 
 // The saved world on the given map. A save made on another map fails, since its terrain is gone.
 export function loadWorld(slots: SaveSlots, slot: SlotId, map: BakedMap): World | null {
@@ -87,7 +90,7 @@ export function loadWorld(slots: SaveSlots, slot: SlotId, map: BakedMap): World 
   const gone = new Set(world.broken.map((b) => b.id));
   const loaded: World = {
     ...world,
-    player: { ...world.player, explored, visible: [] },
+    player: { ...world.player, explored, visible: [], contacts: [], clouds: [] },
     vehicles: world.vehicles.map((v) => ({ ...v, trail: [] })),
     obstacles: [...baked.filter((o) => !gone.has(o.id)), ...world.obstacles],
     broken,
@@ -95,7 +98,8 @@ export function loadWorld(slots: SaveSlots, slot: SlotId, map: BakedMap): World 
     removed: [],
     terrain: map.terrain,
   };
-  loaded.player.visible = [...playerVisible(loaded)].sort((a, b) => a - b);
+  // Every contact is new to an empty view. Load pays nothing for them, since the save's turn already did.
+  refreshVision(loaded);
   settleAims(loaded);
   return loaded;
 }
@@ -166,7 +170,7 @@ function isWorld(value: unknown): value is SavedWorld {
     && !!world.spawnTimer && typeof world.spawnTimer === 'object' && !Array.isArray(world.spawnTimer)
     && WORLD_LISTS.every((key) => Array.isArray(world[key]))
     && !!world.player && typeof world.player === 'object'
-    && typeof world.player.vehicleId === 'string' && Array.isArray(world.player.contacts) && Array.isArray(world.player.clouds);
+    && typeof world.player.vehicleId === 'string';
 }
 
 // The first turn of a game day, which the Day start autosave keeps.
@@ -196,7 +200,7 @@ export function writeSave(slots: SaveSlots, slot: SlotId, world: World, runId: s
 // The save of a world, holding only what load cannot rebuild.
 export function saveOf(world: World): { format: typeof SAVE_FORMAT; world: object } {
   const { terrain: _terrain, events: _events, removed: _removed, ...saved } = world;
-  const { visible: _visible, ...player } = saved.player;
+  const { visible: _visible, contacts: _contacts, clouds: _clouds, ...player } = saved.player;
   const vehicles = saved.vehicles.map(({ trail: _trail, ...vehicle }) => vehicle);
   const obstacles = saved.obstacles.filter((o) => !isBakedObstacle(o));
   const broken = saved.broken.map(({ obstacle, turn }) => ({ id: obstacle.id, turn }));

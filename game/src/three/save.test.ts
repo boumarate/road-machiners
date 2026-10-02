@@ -12,6 +12,9 @@ import { sitePads } from '../sim/sites';
 import { TEST_MAP } from '../test/map';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { breakProp } from '../sim/salvage';
+import { sunAt } from '../sim/sun';
+import { practiceContacts, refreshVision } from '../sim/vision';
+import { TIME } from '../data/time';
 import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR } from './save-migrations';
 import SAVED_SHAPE from './save-shape.json';
 import { allSlots, type SlotId } from './save-slots';
@@ -231,6 +234,24 @@ describe('game save', () => {
     expect(loaded.player.visible).toEqual(world.player.visible);
     expect(loaded.broken).toEqual(world.broken);
     expect([loaded.events, loaded.removed, loaded.vehicles[0].trail]).toEqual([[], [], []]);
+  });
+
+  it('rebuilds contacts on load without paying perception XP for them again', () => {
+    const slots = makeSlots();
+    const world = emptyWorld({ x: 30, y: 30 });
+    world.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
+    const buggy = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 });
+    buggy.speed = 6;
+    practiceContacts(world, refreshVision(world));
+    writeSave(slots, 'auto', world, RUN, 1000);
+
+    expect(savedWorldOf(slots, 'auto').player).not.toHaveProperty('contacts');
+    const loaded = loadWorld(slots, 'auto', TEST_MAP)!;
+    expect(loaded.player.contacts).toEqual(world.player.contacts);
+    expect(loaded.player.clouds).toEqual(world.player.clouds);
+    expect([loaded.player.skills, loaded.player.repeats]).toEqual([world.player.skills, world.player.repeats]);
+    practiceContacts(loaded, refreshVision(loaded));
+    expect(loaded.player.skills).toEqual(world.player.skills);
   });
 
   it('rejects a save whose broken props do not match the map', () => {

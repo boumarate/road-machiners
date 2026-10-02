@@ -14,7 +14,7 @@
 - `src/three/save-slots.ts` owns the slots: `CONFIG.saveSlots` manual slots, the Autosave (every `CONFIG.saveTurns` completed turns and after each command in town) and the Day start autosave (the first turn of each game day). The Save and Load panels in `src/ui/save-panel.ts` pick a slot. The Save button in the top right opens the Save panel.
 - Load and New game leave a boot request in session storage and reload. Boot reads the request and removes it. Without one, it loads the newest save by `savedAt`.
 - Boot's New game runs `clearGame()`, which deletes the autosaves and the seen tips but not the manual slots or sound settings, then writes the Autosave at once. Later unsaved changes are lost on reload.
-- A save holds only what load cannot rebuild. Load takes the terrain and the baked props from the map file, rebuilds `player.visible` from the player's position, and starts trails, events and removed vehicles empty, since they only animate the last turn. A broken prop is saved as its id and turn.
+- A save holds only what load cannot rebuild. Load takes the terrain and the baked props from the map file, rebuilds the player's visible tiles, contacts and seen clouds with `refreshVision()`, and starts trails, events and removed vehicles empty, since they only animate the last turn. A broken prop is saved as its id and turn.
 - `player.explored` is saved as a base64 bitset.
 - A save records the map file's hash and does not load on another map.
 - A build with `SAVE_SCOPE` set stores its saves in its own database, so builds served from one site keep separate saves.

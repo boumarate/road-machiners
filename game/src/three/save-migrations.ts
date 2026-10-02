@@ -264,6 +264,11 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     const broken = (world.broken as SavedJson[]).map((b) => ({ id: (b.obstacle as SavedJson).id, turn: b.turn }));
     return { ...rest, player, vehicles, broken };
   },
+  // 10 to 11: contacts and seen clouds go, since load rebuilds them with the rest of the player's view.
+  (world) => {
+    const { contacts: _contacts, clouds: _clouds, ...player } = world.player as SavedJson;
+    return { ...world, player };
+  },
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
