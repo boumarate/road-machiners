@@ -40,6 +40,7 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
     statePath: `${home}/state.json`,
     github: {
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels, createdAt: '', state: 'OPEN', thumbsUp: [] }),
+      comments: async () => [],
       move: async (issue: number, column: string) => { calls.push(`move ${issue} ${column}`); },
       comment: async (issue: number) => { calls.push(`comment ${issue}`); },
       pullRequestFor: async (branch: string) => { calls.push(`pullRequestFor ${branch}`); return openPr; },

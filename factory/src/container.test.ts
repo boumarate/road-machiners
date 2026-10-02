@@ -42,6 +42,13 @@ describe('dockerContainer', () => {
     expect(call.args.slice(call.args.indexOf('img:1'))).toEqual(['img:1', 'factory-agent', '-p', '--model', 'opus', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose']);
   });
 
+  it('mounts the reference images read only inside the clone, and only when the run has them', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', mediaDir: '/h/media/issue-7' });
+    expect(runCall(calls).args).toContain('/h/media/issue-7:/work/.factory-media:ro');
+    expect(runCall(calls).args.filter((a) => a === '-v')).toHaveLength(3);
+  });
+
   it('puts a restricted agent on the internal network with the proxy env', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', openNetwork: false });

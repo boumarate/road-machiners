@@ -18,7 +18,7 @@ function fakeCtx(labels: string[], models: string[]): Ctx {
     cfg: { home, designModel: 'opus', buildModel: 'sonnet' },
     log: () => undefined,
     statePath: `${home}/state.json`,
-    github: { issue: async () => ({ labels }), move: async () => undefined },
+    github: { issue: async () => ({ labels, body: '' }), comments: async () => [], move: async () => undefined },
     container: { agent: async (run: AgentRun) => { models.push(run.model); mkdirSync(`${run.clone}/${run.dir}/.factory`, { recursive: true }); } },
     repo: {
       prepareWorkClone: async (_b: string, _base: string, dir: string) => { mkdirSync(dir, { recursive: true }); },
