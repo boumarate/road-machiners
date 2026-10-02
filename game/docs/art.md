@@ -23,7 +23,18 @@ Some models come from Blender scripts in `tools/blender/`. Blender is installed 
 
 When a place has a concept image, like Old Orchard's `docs/concepts/old-orchard-issue-111.jpg`, model each building it shows from a crop of the image with the `blender-image-to-3d` skill, then write the result as a Kit script by the steps above. Keep the briefs and review sheets in `tmp/models/<name>/`. The concept is a perspective painting, so take sizes from scale cues (a road about 10 m wide, a truck about 8 m long, a storey about 3.2 m) and judge the review sheets by eye.
 
-Old Orchard's models were built this way: `farmhouse`, `barn`, `quonset`, `guard_post`, `army_truck` and `barrier`, the reworked `bunker` blockhouse with its sandbag ring, and a shorter, wider `dead_tree`. `LANDMARK_MODELS` in `src/sim/mapgen.ts` maps each prop look to its model, and `MODEL_RADIUS` holds the footprint radius from each script's docstring.
+Old Orchard's models were built this way: `farmhouse`, `barn`, `quonset`, `guard_post`, `army_truck`, `barrier`, `drums`, `woodpile`, the `bunker` blockhouse with its sandbag ring, and `dead_tree`. `LANDMARK_MODELS` in `src/sim/mapgen.ts` maps each prop look to its model, and `MODEL_RADIUS` holds the footprint radius from each script's docstring.
+
+Size a building against the 8.1 m army truck, the one size cue a concept and the game share. The orchard's models are measured from the concept in army trucks and pinned by the size table in `src/data/prop-shapes.test.ts`:
+
+- `quonset` 22 m long (2.7 trucks), 12 m wide, 6.5 m tall;
+- `barn` 24 m long (3 trucks), 16 m wide, 10 m tall; its shed is the same model posed smaller;
+- `farmhouse` 26 m with its wing, 14 m deep, 11 m tall;
+- `bunker` blockhouse 14 m square and 5 m tall, 22 m with its sandbag ring;
+- `dead_tree` crown 6.5 m across and 5.5 m tall;
+- `drums` about 2.5 m across, `woodpile` about 4 m long.
+
+A prop that trucks drive under keeps every box below `PHYSICS.truckClearance` (2.8 m) inside its trunk's footprint. Boxes whose bottom is at or above it block neither driving nor nav, but they still block sight. `scripts/prop-shapes.mjs` merges the dead tree's boxes below and above that height apart, so the crown never reaches down to the ground.
 
 ## Trucks
 
