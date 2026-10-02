@@ -9,7 +9,7 @@ import { RULES } from '../data/rules';
 import { MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, NPCS, TRAITS, type TraitId } from '../data/npcs';
 import { SHOPS } from '../data/market';
 import { optionChances, optionWeights, visibleDowned, visibleSalvage } from './npc-decisions';
-import { endTurn } from './world';
+import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods } from './inventory';
@@ -19,10 +19,13 @@ import { knockOutNpc } from './defeat';
 import { chassisDef } from '../data/chassis';
 import { cloneWorld } from './world';
 import { canUseSite, siteGates, sitePads } from './sites';
-import { territoryEntries, territoryOfStock, territorySpots } from './territory';
+import { bayPoints, deckAlongAt, hullDecks, territoryEntries, territoryOfStock, territorySpots } from './territory';
+import { heightAt, isCliff, tileAt } from './terrain';
+import { START_KITS } from '../data/start';
+import { TEST_MAP } from '../test/map';
 import { fuelCap, vehicleStats } from './stats';
 import { heatAt } from './sun';
-import { dist } from './vec';
+import { dist, type Vec } from './vec';
 import { advanceFar } from './far';
 import type { NpcActivity, Vehicle, World } from './types';
 import { addState } from './states';
@@ -345,6 +348,44 @@ describe('NPC activities', () => {
       } finally {
         restore();
       }
+    });
+
+    it('drives up a hull deck by its low end to the bay at its top, searches it and takes its loot', () => {
+      // The real map, with the decks stamped into the ground, and the scavenger on the floor before the bow's low end.
+      const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+      w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
+      const bow = hullDecks().find((d) => d.section.id === 'bow')!;
+      const back = { x: bow.low.x - (bow.high.x - bow.low.x) / bow.section.length * 3, y: bow.low.y - (bow.high.y - bow.low.y) / bow.section.length * 3 };
+      const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], back);
+      npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+      const top = bayPoints(bow).at(-1)!;
+      const bay = w.salvage.find((s) => dist(s.pos, top) < 1e-3)!;
+      expect(bay.id).toMatch(/^deckBay-/);
+      npc.brain.goals = [{ kind: 'scavenge', targetId: bay.id, destination: { ...bay.pos }, phase: 'travel', reason: 'search a loot spot' }];
+      const moveFar = (next: World) => next.vehicles.forEach((v) => v.brain && advanceFar(next, v));
+      // The lower bays on the way would pull the driver off the top one.
+      forceOption('salvageSeen', 'keep');
+      const scrapIn = (world: World) => world.salvage.find((s) => s.id === bay.id)!.goods.scrap ?? 0;
+      const before = scrapIn(w);
+
+      let next = w;
+      const path: Vec[] = [{ ...npc.pos }];
+      let took: Vehicle | null = null;
+      for (let turn = 0; turn < 40 && !took; turn++) {
+        next = endTurn(next, moveFar);
+        const me = next.vehicles.find((v) => v.id === npc.id)!;
+        path.push(...me.trail.map((p) => ({ x: p.x, y: p.y })));
+        if ((goodsCount(me).scrap ?? 0) > 0) took = me;
+      }
+
+      expect(took).not.toBeNull();
+      expect(scrapIn(next)).toBeLessThan(before);
+      const t = next.terrain;
+      expect(path.filter((p) => isCliff(t, tileAt(t, p)))).toEqual([]);
+      const firstOnDeck = path.map((p) => deckAlongAt(bow, p)).find((a) => a !== null)!;
+      expect(firstOnDeck).toBeLessThan(0.25);
+      expect(deckAlongAt(bow, took!.pos)).toBeGreaterThan(0.6);
+      expect(heightAt(t, took!.pos.x, took!.pos.y) - heightAt(t, back.x, back.y)).toBeGreaterThan(bow.section.rise / 2);
     });
 
     it('ends a trip to a territory at its road end, not at its centre', () => {

@@ -9,7 +9,7 @@ import { addGoods } from './inventory';
 import { decide, huntingGrounds, isWeak, lawmanTowns, raiderGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
 import { siteLootTable } from './salvage';
 import { isTerritory, siteGates, sitePads } from './sites';
-import { hazardZones, territoryGrounds } from './territory';
+import { hazardZones, territoryEntries, territoryGrounds } from './territory';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
 import { addState, endState, stateOf } from './states';
 import { playerVehicle } from './damage';
@@ -500,6 +500,12 @@ describe('hunting grounds', () => {
     expect(lootPads.length).toBeGreaterThan(0);
     for (const pad of lootPads) expect(grounds).toContainEqual(pad);
     expect(grounds.filter(onRoad).length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('wait at every road into the Fallen Sun', () => {
+    const entries = territoryEntries(territories.find((t) => t.id === 'fallen-sun')!);
+    expect(entries).toHaveLength(3);
+    for (const p of entries) expect(grounds).toContainEqual(p);
   });
 
   it('reach into each territory, outside every hazard', () => {
