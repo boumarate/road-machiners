@@ -96,8 +96,8 @@ const TURN = Math.PI * 2;
 
 type Scored = { pos: Vec; score: number };
 
-// The ship's wing over the road at Broken Wing. It goes down first and straight into the draft, since place() would
-// reject a prop on a road. Every later rule keeps away through the prop's circle.
+// The hoop over the road at Broken Wing, the wing's torn root bent up and over. It goes down first and straight into
+// the draft, since place() would reject a prop on a road. Every later rule keeps away through the prop's circle.
 export function shipWing(d: MapDraft): void {
   const W = TERRAIN.features.wing;
   d.props.push(prop('shipWing', W.pos, W.r, W.yaw));

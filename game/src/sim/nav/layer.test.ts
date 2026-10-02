@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { PHYSICS } from '../../data/physics';
-import { REGION } from '../../data/region';
-import { TERRAIN } from '../../data/terrain';
+import { BROKEN_WING, BROKEN_WING_POINT, REGION } from '../../data/region';
+import { START_KITS } from '../../data/start';
 import { BREAKABLE } from '../../data/rules';
+import { deckById } from '../bridge';
 import { boxDistance, boxSegmentDistance, propBoxes } from '../mapgen';
 import { route } from '../path';
 import type { Obstacle } from '../types';
@@ -10,6 +11,8 @@ import { dist, type Vec } from '../vec';
 import { stampOverlay } from './astar';
 import { CELL, CLEARANCE, dynamicBlockers, makeTaste, navLayer, tasteAt, tasteOf } from './layer';
 import { emptyWorld, npcBrain } from '../testkit';
+import { newWorld } from '../world';
+import { TEST_MAP } from '../../test/map';
 
 const { scale, strength } = REGION.navigation.taste;
 
@@ -89,24 +92,31 @@ describe('prop footprints', () => {
     expect(stamped).toBeGreaterThan(0);
   });
 
-  it('leaves the road under the ship wing open and blocks its fuselage and buried tip', () => {
-    const w = emptyWorld();
-    const wing: Obstacle = { id: 'shipWing-0', pos: { x: 40, y: 40 }, r: TERRAIN.features.wing.r, kind: 'landmark', look: 'shipWing', yaw: 0 };
-    w.obstacles = [wing];
+  it('leaves the Broken Wing road under the hoop and along the deck open, and blocks the hoop feet and the deck rails', () => {
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
     const layer = navLayer(w.terrain, w.obstacles, radius);
-    const roof = propBoxes(wing).filter((b) => b.z0 >= PHYSICS.truckClearance);
-    // Model y runs toward map -y. The road band is model y -12 to 12. The tip mound is at model y 34 and the
-    // fuselage at model y -40.
-    for (const at of [-12, -6, 0]) {
-      for (const across of [-10, 0, 10]) {
-        const spot = { x: 40 + at / S, y: 40 - across / S };
+    const hoop = w.obstacles.find((o) => o.kind === 'landmark' && o.look === 'shipWing');
+    if (hoop === undefined) throw new Error('The baked map has no hoop');
+    const roof = propBoxes(hoop).filter((b) => b.z0 >= PHYSICS.truckClearance);
+    const open = REGION.roadWidth / 2 - radius - CLEARANCE;
+    // The hoop: road cells under its band are open. Model y runs toward map -y, and its feet stand at model y +-17.5.
+    for (const along of [-1, 0, 1]) {
+      for (const across of [-open, 0, open]) {
+        const spot = center(BROKEN_WING_POINT(BROKEN_WING.hoopAt + along, across));
         expect(roof.some((b) => boxDistance(b, spot) === 0)).toBe(true);
         expect(layer.blocked[cellAt(layer.n, spot)]).toBe(0);
       }
     }
-    expect(layer.blocked[cellAt(layer.n, { x: 40 - 10 / S, y: 40 - 34 / S })]).toBe(1);
-    expect(layer.blocked[cellAt(layer.n, { x: 40, y: 40 + 40 / S })]).toBe(1);
-  });
+    for (const foot of [{ x: -4, y: -19 }, { x: 4, y: 17 }]) {
+      expect(layer.blocked[cellAt(layer.n, { x: hoop.pos.x + foot.x / S, y: hoop.pos.y - foot.y / S })]).toBe(1);
+    }
+    // The deck: its center line is open, and each rail blocks.
+    const deck = deckById('broken-wing');
+    for (let along = -BROKEN_WING.deckHalf + 1; along <= BROKEN_WING.deckHalf - 1; along += 1) {
+      expect(layer.blocked[cellAt(layer.n, BROKEN_WING_POINT(along, 0))]).toBe(0);
+      for (const side of [-1, 1]) expect(layer.blocked[cellAt(layer.n, BROKEN_WING_POINT(along, (side * deck.width) / 2))]).toBe(1);
+    }
+  }, 60_000);
 
   // The gas station at scale 3. Model point (-3.1, -4.8) m lies under the canopy, 3.1 m from the nearest box
   // that reaches below truck roofs.

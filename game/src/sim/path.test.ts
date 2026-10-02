@@ -164,9 +164,13 @@ describe("route", () => {
 
 describe('driver taste', () => {
   const brain = npcBrain('trader', { x: 0, y: 0 }, ['trader']);
-  const [bowl, nose] = REGION.towns;
-  const from = siteGates(nose)[0];
-  const to = siteGates(bowl)[0];
+  const site = (id: string) => {
+    const found = [...REGION.towns, ...REGION.locations].find((s) => s.id === id);
+    if (found === undefined) throw new Error(`No site ${id}`);
+    return found;
+  };
+  const from = siteGates(site('nose'))[0];
+  const to = siteGates(site('dustwell'))[0];
   const w = w1337;
   // Largest distance of either route's corners from the other route.
   const apart = (p: Vec[], q: Vec[]) => Math.max(...p.map((x) => polylineDist(x, q)), ...q.map((x) => polylineDist(x, p)));
@@ -174,7 +178,8 @@ describe('driver taste', () => {
   it('sends drivers between the same towns along different ways', () => {
     const routes = Array.from({ length: 10 }, (_, i) => [from, ...route(w, from, to, 0.8, [], { id: `v${100 + i}`, brain })]);
     const ways = routes.filter((r, i) => routes.slice(0, i).every((q) => apart(r, q) > 10));
-    // Bowl and Nose have two roads of close length, the north trunk and the middle road past Pump Station.
+    // Nose and Dustwell have two roads of close length, the north trunk past Burnt Convoy and the middle road over
+    // Broken Wing.
     expect(ways.length).toBeGreaterThanOrEqual(2);
   });
 

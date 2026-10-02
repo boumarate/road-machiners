@@ -1,7 +1,8 @@
 // Terrain: corner heights, tile types, driving costs and fog of war.
 // Heights are in height units; one unit rises reliefPx screen pixels. Slopes are height units per tile.
 
-import { BROKEN_WING, MAP_SCALE, REGION, scalePoint } from "./region";
+import { PHYSICS } from "./physics";
+import { BROKEN_WING, BROKEN_WING_POINT, MAP_SCALE, REGION, scalePoint } from "./region";
 import type { Vec } from "../sim/vec";
 
 export type TerrainTypeId =
@@ -72,6 +73,33 @@ const CANYON_BRIDGE: DeckSpec = {
   skirt: false,
 };
 
+// The Broken Wing deck: the wing's top, with the road on it. The road's flattening stays under it, so the graded
+// road dips between the two ramps and the ground cannot rise through the deck. Its skirt is the wing's lattice
+// and pylons, so trucks on the ground beside it cannot drive in under it.
+const WING_DECK: DeckSpec = {
+  id: "broken-wing",
+  from: BROKEN_WING_POINT(-BROKEN_WING.deckHalf, 0),
+  to: BROKEN_WING_POINT(BROKEN_WING.deckHalf, 0),
+  width: REGION.roadWidth, // as wide as the road, from the concept art: about 4 truck lengths
+  cut: null,
+  skirt: true,
+};
+
+// A raised bowl: a crater with its depth turned to height, cut by the same rule. Roads do not flatten it, and road
+// grading turns it into a ramp at the road grade. radius is the flat top's, bank the tiles it falls over, and height
+// is in height units, after heightFromElevation() in src/sim/terrain.ts, so a mound is as tall on any ground.
+export type Mound = { center: Vec; radius: number; bank: number; height: number };
+
+// Broken Wing's two ramps, one past each deck end.
+const WING_MOUNDS: Mound[] = [-1, 1].map((end) => ({
+  center: BROKEN_WING_POINT(end * (BROKEN_WING.deckHalf + BROKEN_WING.mound.gap), 0),
+  radius: BROKEN_WING.mound.flat,
+  bank: BROKEN_WING.mound.bank,
+  height: BROKEN_WING.mound.height,
+}));
+
+const TRENCH = BROKEN_WING.trench;
+
 export const TERRAIN = {
   // Elevation noise: a fractal sum of value-noise octaves. freq is cycles per tile.
   // seedOffset keeps each octave sampling a different part of the hash space.
@@ -107,13 +135,21 @@ export const TERRAIN = {
       bank: 18,
       depth: 2.9,
     },
+    // Broken Wing's crash trench, a channel beside the wing, past the reach of the road's flattening.
+    trench: {
+      path: [BROKEN_WING_POINT(-TRENCH.half, TRENCH.side), BROKEN_WING_POINT(TRENCH.half, TRENCH.side)] as Vec[],
+      width: TRENCH.width,
+      bank: TRENCH.bank,
+      depth: TRENCH.depth,
+    },
     // Straight road decks, each between two road points. See src/sim/bridge.ts.
-    decks: [CANYON_BRIDGE] as readonly DeckSpec[],
-    // Broken Wing: the crashed ship section, a baked prop. Its fuselage lies beside the road and its high wing boxes
-    // leave the road open to trucks. pos and yaw come from BROKEN_WING, and r is the model's bake circle in tiles.
+    decks: [CANYON_BRIDGE, WING_DECK] as readonly DeckSpec[],
+    // Broken Wing's hoop: the wing's torn root bent up over the road, a baked prop at its built size. Its feet stand
+    // beside the road and its boxes over the road start high, so trucks pass under it. pos and yaw come from
+    // BROKEN_WING, and r is the model's bake circle in tiles: 26.5 m.
     wing: {
-      pos: BROKEN_WING.road,
-      r: 16.5,
+      pos: BROKEN_WING_POINT(BROKEN_WING.hoopAt, 0),
+      r: 26.5 / PHYSICS.metersPerTile,
       yaw: BROKEN_WING.yaw,
     },
     dryRiver: {
@@ -143,6 +179,7 @@ export const TERRAIN = {
         depth: 1.8,
       },
     ] as { center: Vec; radius: number; bank: number; depth: number }[],
+    mounds: WING_MOUNDS,
   },
   reliefPx: 45, // screen pixels per height unit
   // Tile types. Roads and sites first, then old-world and new-world marks, then steep ground and the
@@ -578,6 +615,8 @@ export const MAPGEN = {
   closeUps: [
     ...[...REGION.towns, ...REGION.locations].map((site) => ({ name: site.id, center: site.pos, side: 2 * (site.radius + SITE_SURROUND) })),
     { name: 'bridge', center: { x: (CANYON_BRIDGE.from.x + CANYON_BRIDGE.to.x) / 2, y: (CANYON_BRIDGE.from.y + CANYON_BRIDGE.to.y) / 2 }, side: 60 },
+    // The whole Broken Wing stretch: hoop, ramps, deck, trench and site.
+    { name: 'wing', center: BROKEN_WING_POINT(0, -2), side: 120 },
     { name: 'dry-river', center: scalePoint({ x: 48, y: 87 }), side: 120 },
     // The canyon floor, where blown sand gathers most.
     { name: 'canyon', center: { x: 470, y: 240 }, side: 100 },

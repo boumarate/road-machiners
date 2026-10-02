@@ -400,7 +400,7 @@ describe('old-world layer', () => {
 
     const standing = d.props;
     expect(new Set(standing.map((p) => p.kind)).size).toBeGreaterThan(5);
-    // The ship wing hangs over its road by design, and its circle reaches the Broken Wing hull.
+    // The Broken Wing hoop arches over its road by design.
     for (const p of standing.filter((q) => q.kind !== 'shipWing')) expectOffBuilt(p);
     for (let a = 0; a < standing.length; a++) for (let b = a + 1; b < standing.length; b++) {
       expect(dist(standing[a].pos, standing[b].pos)).toBeGreaterThanOrEqual(standing[a].r + standing[b].r);

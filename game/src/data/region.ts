@@ -57,19 +57,38 @@ function bend(a: Vec, b: Vec): Vec[] {
 const FALLEN_SUN_POS = scalePoint({ x: 64, y: 54 });
 const FALLEN_SUN_RADIUS = 44;
 
-// Broken Wing, a ship section beside the road with a wing over it. One pose places both the baked ship_wing prop
-// (TERRAIN.features.wing) and the site behind its fuselage. road is the road's center line at the middle of the
-// covered stretch, yaw lays the model's x axis along that road, and siteOffset is the distance in tiles from the
-// road across it toward the hull side.
+// Broken Wing: a crashed ship's wing lying along the road, which runs straight east-west (map yaw 0) so the wing
+// lies on screen as in the concept art. From the west, the road passes under the hoop, the wing's torn root bent up
+// and over it (the baked ship_wing prop, TERRAIN.features.wing). It climbs the root ramp, a sand mound, onto the wing
+// deck, runs along the deck's top, and comes down the tip ramp. The site stands past the tip ramp on the +y side,
+// and a crash trench runs beside the wing on the -y side. Distances are in tiles: `along` from the deck's middle
+// toward +x, `across` toward +y. Everything at Broken Wing derives from this one constant.
+// - road: the road's center point at the deck's middle; yaw: the road's direction, radians from map +x toward +y.
+// - deckHalf: half the deck's length. The deck is TERRAIN.features.decks' broken-wing entry.
+// - mound: the two ramps, TERRAIN.features.mounds. Each has a flat top of radius `flat`, falls over `bank` and stands
+//   `height` height units over the ground. Its center lies `gap` past a deck end, so the end rests on the inner bank,
+//   where the ground already falls away under the deck.
+// - hoopAt: the hoop's place along the road, past the root ramp's foot, so the hoop and the deck never meet.
+// - siteAt, siteSide: the spur leaves the road at siteAt, and the site stands siteSide across from it.
+// - trench: a channel like the canyon, TERRAIN.features.trench, `side` across from the road, `half` long each way.
 export const BROKEN_WING = {
-  road: scalePoint({ x: 67, y: 36 }),
-  yaw: Math.atan2(4, 10),
-  siteOffset: 14,
+  road: scalePoint({ x: 70, y: 33 }),
+  yaw: 0,
+  deckHalf: 19.5,
+  mound: { gap: 4.5, flat: 2, bank: 14, height: 1.8 },
+  hoopAt: -44,
+  siteAt: 44,
+  siteSide: 14,
+  trench: { side: -22, half: 30, width: 3, bank: 6, depth: 2 },
 };
-export const BROKEN_WING_SITE: Vec = {
-  x: BROKEN_WING.road.x - Math.sin(BROKEN_WING.yaw) * BROKEN_WING.siteOffset,
-  y: BROKEN_WING.road.y + Math.cos(BROKEN_WING.yaw) * BROKEN_WING.siteOffset,
-};
+
+// A map point `along` the Broken Wing road from the deck's middle and `across` it toward +y, in tiles.
+export function BROKEN_WING_POINT(along: number, across: number): Vec {
+  const c = Math.cos(BROKEN_WING.yaw);
+  const s = Math.sin(BROKEN_WING.yaw);
+  return { x: BROKEN_WING.road.x + c * along - s * across, y: BROKEN_WING.road.y + s * along + c * across };
+}
+export const BROKEN_WING_SITE: Vec = BROKEN_WING_POINT(BROKEN_WING.siteAt, BROKEN_WING.siteSide);
 
 export const REGION = {
   name: "Icarus",
@@ -212,8 +231,8 @@ export const REGION = {
       pos: scalePoint({ x: 82, y: 52.2 }),
       radius: 6,
     },
-    // Broken Wing: a torn section of the crashed ship beside the road, south of it, with its wing over the road.
-    // The ship section is a baked prop, see TERRAIN.features.wing. The site sits behind its fuselage.
+    // Broken Wing: a crashed ship's wing the road runs under and along. The site stands past the tip ramp, beside
+    // the road, so the deck and the hoop stay clear. See BROKEN_WING.
     {
       id: "broken-wing",
       edge: "wrecks",
@@ -280,13 +299,19 @@ export const REGION = {
       { x: 43, y: 54 },
       { x: 50, y: 49 },
       { x: 51, y: 38 },
-      { x: 62, y: 34 },
-      { x: 67, y: 36 },
-      { x: 72, y: 38 },
-      { x: 82, y: 49 },
-      { x: 78, y: 36 },
+      { x: 60, y: 33 },
+      { x: 70, y: 33 },
+      { x: 82, y: 33 },
+    ], [5, 6]), // the stretch under the Broken Wing hoop and along its deck stays straight
+    // At the Broken Wing road's east end, roads leave north to Podfield and south to Salvage Yard.
+    scaleRoad([
+      { x: 82, y: 33 },
       { x: 77, y: 24 },
-    ], [5, 6]), // the stretch under the Broken Wing wing stays straight
+    ]),
+    scaleRoad([
+      { x: 82, y: 33 },
+      { x: 82, y: 49 },
+    ]),
     scaleRoad([
       { x: 50, y: 36 },
       { x: 47, y: 44 },
@@ -307,7 +332,7 @@ export const REGION = {
     ]),
     // Short straight spurs lead from a road point to each location beside it, so through traffic passes by.
     scaleRoad([{ x: 28, y: 64 }, { x: 23.2, y: 62 }], [0]),
-    [BROKEN_WING.road, BROKEN_WING_SITE],
+    [BROKEN_WING_POINT(BROKEN_WING.siteAt, 0), BROKEN_WING_SITE],
     scaleRoad([{ x: 37, y: 32 }, { x: 33.8, y: 32 }], [0]),
     scaleRoad([{ x: 50, y: 36 }, { x: 50, y: 32.8 }], [0]),
     scaleRoad([{ x: 63, y: 20 }, { x: 60, y: 18.8 }], [0]),

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { scalePoint } from '../data/region';
+import { BROKEN_WING, BROKEN_WING_POINT, scalePoint } from '../data/region';
 import { START_KITS } from '../data/start';
-import { crossesRail, deckAt, deckById, DECKS, nearRail } from './bridge';
+import { bridgeCut, crossesRail, deckAt, deckById, DECKS, nearRail } from './bridge';
 import { route, routeLength } from './path';
 import { segmentDist } from './vec';
 import { deckEnds, groundAt, heightAt, isCliff, markHeightAt, tileAt } from './terrain';
@@ -15,14 +15,14 @@ const at = (along: number, across: number) => ({
 });
 
 describe('the deck list', () => {
-  it('holds Canyon Bridge as its only deck, with the geometry it had as the one bridge', () => {
+  it('holds Canyon Bridge first, with the geometry it had as the one bridge, then the Broken Wing deck', () => {
     const from = scalePoint({ x: 97.9, y: 75.1 });
     const to = scalePoint({ x: 101.5, y: 71.5 });
     const length = Math.hypot(to.x - from.x, to.y - from.y);
     const axis = { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
     const off = { x: -axis.y * 4, y: axis.x * 4 };
 
-    expect(DECKS.map((d) => d.id)).toEqual(['canyon-bridge']);
+    expect(DECKS.map((d) => d.id)).toEqual(['canyon-bridge', 'broken-wing']);
     expect(DECKS[0]).toEqual({
       id: 'canyon-bridge',
       from,
@@ -41,6 +41,43 @@ describe('the deck list', () => {
 
   it('fails loudly on an unknown deck id', () => {
     expect(() => deckById('no-such-deck')).toThrow('Unknown deck no-such-deck');
+  });
+});
+
+describe('the Broken Wing deck', () => {
+  const W = deckById('broken-wing');
+  const on = (along: number, across: number) => ({
+    x: W.from.x + W.axis.x * along - W.axis.y * across,
+    y: W.from.y + W.axis.y * along + W.axis.x * across,
+  });
+
+  it('lies along the Broken Wing road between the deck ends BROKEN_WING places, with a skirt and no cut', () => {
+    expect(W.from).toEqual(BROKEN_WING_POINT(-BROKEN_WING.deckHalf, 0));
+    expect(W.to).toEqual(BROKEN_WING_POINT(BROKEN_WING.deckHalf, 0));
+    expect(W.width).toBe(6);
+    expect(W.cut).toBeNull();
+    expect(W.skirt).toBe(true);
+  });
+
+  it('is the deck under every point of its outline, and no deck holds a point beside or past it', () => {
+    for (let along = 0.25; along < W.length; along += 0.5)
+      for (let across = -W.width / 2 + 0.25; across < W.width / 2; across += 0.5) {
+        const p = on(along, across);
+        expect(deckAt(p.x, p.y)?.deck.id).toBe('broken-wing');
+        expect(deckAt(p.x, p.y)?.along).toBeCloseTo(along, 9);
+      }
+    for (const [along, across] of [[W.length / 2, W.width / 2 + 0.5], [W.length / 2, -W.width / 2 - 0.5], [-0.5, 0], [W.length + 0.5, 0]]) {
+      const p = on(along, across);
+      expect(deckAt(p.x, p.y)).toBeNull();
+    }
+  });
+
+  it('keeps the road flattening under and beside it, unlike Canyon Bridge', () => {
+    for (let along = -2; along <= W.length + 2; along += 0.5)
+      for (let across = -W.width; across <= W.width; across += 0.5) {
+        const p = on(along, across);
+        expect(bridgeCut(p.x, p.y)).toBe(0);
+      }
   });
 });
 

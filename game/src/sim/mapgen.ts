@@ -4,6 +4,7 @@ import { PHYSICS } from '../data/physics';
 import SHAPES from '../data/prop-shapes.json';
 import { REGION } from '../data/region';
 import { BREAKABLE } from '../data/rules';
+import { TERRAIN } from '../data/terrain';
 import { PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
 import { randInt, randRange } from './rng';
 import { DECKS } from './bridge';
@@ -90,8 +91,8 @@ function placeRoadWrecks(world: World, out: Obstacle[]): void {
   }
 }
 
-// A random spot on a road shoulder, clear of sites, the decks, the given obstacles, and any spot `allowed`
-// rejects. The world RNG picks it.
+// A random spot on a road shoulder, clear of sites, the decks and their ramps, the given obstacles, and any spot
+// `allowed` rejects. The world RNG picks it.
 export function findRoadWreckSpot(world: World, obstacles: Obstacle[], allowed: (pos: Vec, r: number) => boolean): { pos: Vec; r: number } {
   for (let tries = 1; tries <= O.maxTries; tries++) {
     const road = REGION.roads[randInt(world, 0, REGION.roads.length - 1)];
@@ -104,7 +105,7 @@ export function findRoadWreckSpot(world: World, obstacles: Obstacle[], allowed: 
     const len = dist(a, b);
     const pos = { x: a.x + (b.x - a.x) * t - ((b.y - a.y) / len) * side, y: a.y + (b.y - a.y) * t + ((b.x - a.x) / len) * side };
     const r = randRange(world, 0.55, 0.8);
-    if (clearOfSites(pos, r) && !overlapsAny(obstacles, pos, r) && !onDeck(pos, r) && allowed(pos, r)) return { pos, r };
+    if (clearOfSites(pos, r) && !overlapsAny(obstacles, pos, r) && clearOfDecks(pos, r) && allowed(pos, r)) return { pos, r };
   }
   throw new Error('Road wreck placement ran out of tries');
 }
@@ -126,6 +127,12 @@ export function isBreakable(o: Obstacle): boolean {
 // A prop on a narrow deck would close the crossing. True when a circle reaches onto any deck.
 export function onDeck(pos: Vec, r: number): boolean {
   return DECKS.some((deck) => segmentDist(pos, deck.from, deck.to) < deck.width / 2 + r);
+}
+
+// A wreck on a deck or its ramp would block the way over the deck. True when a circle keeps off every deck and every
+// ramp mound.
+function clearOfDecks(pos: Vec, r: number): boolean {
+  return !onDeck(pos, r) && TERRAIN.features.mounds.every((m) => dist(pos, m.center) >= m.radius + m.bank + r);
 }
 
 // Whether a prop keeps the extra site clearance from every town and location.
@@ -168,7 +175,7 @@ const LANDMARK_MODELS: Record<LandmarkLook, PropModel> = {
 // Footprint radius in meters each model is built at, for models that scale evenly to their obstacle radius. A
 // fence segment is 4 m long, so its radius is half that. The building model stretches to its footprint instead.
 // The pole, billboard and tank stand at their real size.
-const MODEL_RADIUS: Partial<Record<PropModel, number>> = { crag: 1, silo: 2.5, water_tower: 2, ruin_house: 4.8, gas_station: 7.2, bridge_broken: 6, wreck: 0.7 * M, shack: 3.6, junk: 2.4, fence: 2, ship_wing: 66 };
+const MODEL_RADIUS: Partial<Record<PropModel, number>> = { crag: 1, silo: 2.5, water_tower: 2, ruin_house: 4.8, gas_station: 7.2, bridge_broken: 6, wreck: 0.7 * M, shack: 3.6, junk: 2.4, fence: 2, ship_wing: 26.5 };
 const WRECK_RADIUS = 0.7; // tiles, the reference size of the wreck model
 const BUILDING_FILL = 0.78; // share of the obstacle radius a building's footprint fills
 const SHAPE_BOXES = new Map<string, readonly ShapeBox[]>(Object.entries(SHAPES).map(([name, shape]) => [name, shape.boxes]));
