@@ -3,12 +3,11 @@
 
 import * as THREE from 'three';
 import { REGION, type LocationDef, type SiteEdge, type TownDef } from '../../data/region';
-import { TERRAIN } from '../../data/terrain';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
 import { siteGates } from '../../sim/sites';
-import { deckById } from '../../sim/bridge';
+import { deckById, type Deck } from '../../sim/bridge';
 import { deckEnds, heightAt, type Terrain } from '../../sim/terrain';
 import { angleDiff, segmentDist } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
@@ -24,6 +23,9 @@ const NOSE_SCALE = 4;
 // deck before this height scale.
 const BRIDGE_RISE = 1.5;
 const BRIDGE_DECK_TOP = 0.8; // meters from the model origin up to its deck top, before scaling
+// The Broken Wing deck model's size in meters, between its rail lines (tools/blender/wing_deck.py).
+const WING_DECK_LENGTH = 156;
+const WING_DECK_WIDTH = 24;
 
 // Site props stay within the site's collision footprint. Every prop is grounded independently.
 class SiteBuilder {
@@ -384,20 +386,42 @@ function buildLock(b: SiteBuilder): void {
   b.addRuin(3.7, 0, 1.7, 2);
 }
 
-// The deck top follows the sim deck line from sim/terrain.ts, which the physics deck also follows.
-function buildBridge(b: SiteBuilder, terrain: Terrain): void {
-  const deck = deckById('canyon-bridge');
-  const { from, width, axis, length } = deck;
+// Poses a deck model on a sim deck: its middle on the deck's middle, pitched along the deck line from
+// sim/terrain.ts, which the physics deck also follows, and turned along the deck axis. `top` is meters from the model
+// origin up to its deck top, after scaling.
+function poseOnDeck(obj: THREE.Object3D, terrain: Terrain, deck: Deck, top: number): void {
+  const { from, axis, length } = deck;
   const [h0, h1] = deckEnds(terrain, deck);
   const pitch = Math.atan2((h1 - h0) * S, length * S);
-  const mid = { x: from.x + (axis.x * length) / 2, y: from.y + (axis.y * length) / 2 };
-  const bridge = b.addModel('bridge', mid.x - b.site.pos.x, mid.y - b.site.pos.y, 0, new THREE.Vector3((length * S) / 32, BRIDGE_RISE, (width * S) / 7));
+  obj.position.set((from.x + (axis.x * length) / 2) * S, ((h0 + h1) / 2) * S - top, (from.y + (axis.y * length) / 2) * S);
+  // YXZ applies the pitch about the model's own z first, then the yaw.
+  obj.rotation.set(0, -Math.atan2(axis.y, axis.x), pitch, 'YXZ');
+}
+
+function buildBridge(b: SiteBuilder, terrain: Terrain): void {
+  const deck = deckById('canyon-bridge');
+  const bridge = b.addModel('bridge', 0, 0, 0, new THREE.Vector3((deck.length * S) / 32, BRIDGE_RISE, (deck.width * S) / 7));
   // Trucks cross the bridge, which lies outside the site edge.
   bridge.userData.outsideEdge = true;
-  bridge.position.y = ((h0 + h1) / 2) * S - BRIDGE_DECK_TOP * BRIDGE_RISE;
-  // YXZ applies the pitch about the model's own z first, then the yaw.
-  bridge.rotation.set(0, -Math.atan2(axis.y, axis.x), pitch, 'YXZ');
+  poseOnDeck(bridge, terrain, deck, BRIDGE_DECK_TOP * BRIDGE_RISE);
   b.addRuin(0, 0, 3, 2);
+}
+
+// The Broken Wing deck model, 156 m by 24 m with its top at the origin, stretched to the sim deck. It stands on the
+// deck, not at the site, so addSites scopes it on its own.
+function buildWingDeck(t: Terrain): THREE.Group {
+  const deck = deckById('broken-wing');
+  const root = new THREE.Group();
+  root.name = 'landmark-wing-deck';
+  const obj = model('wing_deck');
+  obj.scale.set((deck.length * S) / WING_DECK_LENGTH, 1, (deck.width * S) / WING_DECK_WIDTH);
+  poseOnDeck(obj, t, deck, 0);
+  root.add(obj);
+  root.traverse((o) => {
+    o.updateMatrix();
+    o.matrixAutoUpdate = false;
+  });
+  return root;
 }
 
 function buildOasis(b: SiteBuilder, well: boolean): void {
@@ -446,15 +470,13 @@ function buildWrecks(b: SiteBuilder, id: string): void {
   }
 }
 
-// Salvage dressing on the far half of the circle, away from the ship section's fuselage that stands to the
-// north along the road. The ship section itself is the shipWing prop.
+// Torn plates and a crate beside the road past the wing's tip ramp. The deck and the hoop stand clear of the site.
 function buildWingSalvage(b: SiteBuilder): void {
-  const yaw = -TERRAIN.features.wing.yaw;
   b.addTank(2.5, 2.8, 0.6, 1.4, PAL.rust.top);
   b.addTank(3.8, 2.2, 0.45, 1.1, PAL.rust.dark);
-  b.addBox(3, 1.2, 3, 0.15, 1.2, PAL.metalLight, 0.2, yaw - 0.3);
-  b.addBox(-3, 3, 2.2, 0.9, 1.3, PAL.rust.dark, 0, yaw + 0.2);
-  b.addBox(-1, 4, 1.8, 0.12, 0.9, PAL.rust.side, 0.1, yaw + 0.6);
+  b.addBox(3, 1.2, 3, 0.15, 1.2, PAL.metalLight, 0.2, -0.3);
+  b.addBox(-3, 3, 2.2, 0.9, 1.3, PAL.rust.dark, 0, 0.2);
+  b.addBox(-1, 4, 1.8, 0.12, 0.9, PAL.rust.side, 0.1, 0.6);
   b.addModel('crates', -3.8, 2.6, 0.5);
 }
 
@@ -526,10 +548,13 @@ const UP = new THREE.Vector3(0, 1, 0);
 export function buildSites(t: Terrain): THREE.Group {
   const group = new THREE.Group();
   for (const site of [...REGION.towns, ...REGION.locations]) group.add(buildSite(t, site));
+  group.add(buildWingDeck(t));
   return group;
 }
 
 // Registers every site model with the scope at its site.
 export function addSites(t: Terrain, scope: RenderScope): void {
   for (const site of [...REGION.towns, ...REGION.locations]) scope.add(buildSite(t, site), site.pos, site.radius);
+  const deck = deckById('broken-wing');
+  scope.add(buildWingDeck(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
 }
