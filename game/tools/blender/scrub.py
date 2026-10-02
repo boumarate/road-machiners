@@ -1,8 +1,8 @@
 """Desert scrub: an upright clump of olive stems, taller in the middle, from the reference image of issue 129.
 Decoration without collision.
 
-Sized for a unit reference radius: the stems fit inside a 1 m footprint radius and stand about 0.6 m tall,
-so the clump is about 1.7 times as wide as it is tall, as in the reference.
+Sized for a unit reference radius: the stems fit inside a 1 m footprint radius and stand about 1.05 m tall,
+so the clump is about twice as wide as it is tall, as in the reference.
 The game scales it uniformly, turns it at random and tints it.
 Run: blender --background --python tools/blender/scrub.py -- public/models/scrub.glb [tmp/scrub.png]
 """
@@ -18,17 +18,17 @@ from kit import Kit, parse_args  # noqa: E402
 from shapes import strut  # noqa: E402
 
 COLORS = {
-    "core": 0x4D512B,  # PAL.brush[0], dark stems in the middle of the clump
-    "stem": 0x5F6634,  # PAL.brush[1], the olive body
-    "tip": 0x8A8A4A,  # PAL.brush[2], dry stems at the rim that catch the light
+    "core": 0x7C8452,  # PAL.brush[0], dark stems in the middle of the clump
+    "stem": 0x8C9864,  # PAL.brush[1], the olive body
+    "tip": 0xA4A264,  # PAL.brush[2], dry stems at the rim that catch the light
 }
 SEED = 29
 STEMS = 28
-SPREAD = 0.7  # m, the stem base spread before CORE; rim stems reach past it by their lean
-CORE = 0.3  # share of SPREAD that the stem bases fill, so the clump rises from a narrow dark core
-HEIGHT = 0.62  # m, tallest stem tip
-LEAN = (math.radians(4), math.radians(26))  # stem lean from upright, at the center and at the rim
-THICK = 0.075  # m, stem width
+SPREAD = 1.5  # m, the stem base spread before CORE; rim stems reach past it by their lean
+CORE = 0.4  # share of SPREAD that the stem bases fill, so the clump rises from a narrow dark core
+HEIGHT = 1.05  # m, tallest stem tip
+LEAN = (math.radians(4), math.radians(30))  # stem lean from upright, at the center and at the rim
+THICK = 0.15  # m, stem width
 
 
 def build(kit: Kit) -> None:
@@ -46,7 +46,7 @@ def build(kit: Kit) -> None:
             base[2] + math.cos(lean) * length,
         )
         mat = "core" if out < 0.45 else ("tip" if kit.rng.random() < 0.4 else "stem")
-        strut(kit, f"stem{i}", base, tip, THICK * kit.rng.uniform(0.8, 1.1), mat, sides=4, dent_by=0.015)
+        strut(kit, f"stem{i}", base, tip, THICK * kit.rng.uniform(0.8, 1.1), mat, sides=4, dent_by=0.03)
 
 
 def main() -> None:

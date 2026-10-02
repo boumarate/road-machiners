@@ -17,11 +17,11 @@ import { paintRoadDetail, paintRoadMask, paintRoadTone, ROAD_DETAIL_SIDE, ROAD_T
 const S = PHYSICS.metersPerTile;
 const PIXEL_SPLIT = 3; // road pixels across one ground paint pixel
 const PAD_BORDER = 2; // road pixels across the pad outline
-const SHOULDER_FROM = 0.2; // road mask cover where the shoulder starts, out past the road edge near 0.5
-const ROAD_FRAY = 0.45; // share of shoulder pixels that take the road color at the road edge
-const RIM_SHARE = 0.4; // share of shoulder pixels that take the rim sand at the road edge, stones included
-const RIM_INSIDE = 0.25; // share of road pixels that take the rim sand at the road edge
-const SHOULDER_STONES = 0.12; // share of shoulder pixels that are grey stones at the road edge
+const SHOULDER_FROM = 0.42; // road mask cover where the shoulder starts, out past the road edge near 0.5
+const ROAD_FRAY = 0.35; // share of shoulder pixels that take the road color at the road edge
+const RIM_SHARE = 0.3; // share of shoulder pixels that take the rim sand at the road edge, stones included
+const RIM_INSIDE = 0.15; // share of road pixels that take the rim sand at the road edge
+const SHOULDER_STONES = 0.05; // share of shoulder pixels that are grey stones at the road edge
 
 // Paints the road mask on `mask`, which must map the map like the ground canvas, and draws roads and
 // pads on the ground material.

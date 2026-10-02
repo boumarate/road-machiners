@@ -51,7 +51,11 @@ export function addScatter(t: Terrain, obstacles: Obstacle[], scope: RenderScope
       if (list.length === 0) continue;
       const group = instancedModel(name, list.map((p) => p.matrix), list.map((p) => p.tint));
       // Scrub and cacti cast shadows so they stand on the ground. Pebbles are too small to need it, and many.
-      for (const mesh of group.children) mesh.castShadow = name !== 'pebbles';
+      // Scrub stems are too thin to shadow each other without turning the clump into a dark blot.
+      for (const mesh of group.children) {
+        mesh.castShadow = name !== 'pebbles';
+        mesh.receiveShadow = name !== 'scrub';
+      }
       scope.add(group, chunk.center, reach);
     }
   }

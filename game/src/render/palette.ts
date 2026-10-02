@@ -6,20 +6,20 @@ export const PAL = {
   bg: 0x1a1410,
   sand: [0xc9a878, 0xc2a070, 0xbb9868, 0xd0b080],
   sandFar: 0x8a7050,
-  desertSand: 0xd9a064, // warm ochre base that open desert ground mixes toward
-  sandLight: 0xe7a566, // the light end of the slow sand patches on open desert
-  sandShade: 0xcd8954, // the deep end of the slow sand patches on open desert
-  road: 0xa8744c, // rust-brown packed dirt of the road surface
-  roadCrack: 0x8e6040, // faint cracks and potholes in the road texture
-  roadRim: 0xd4975b, // light sand the road edge frays into
-  stoneGrey: 0x7a7470, // cool grey stones on road shoulders and in pebble clusters
+  desertSand: 0xffaf6f, // warm ochre base that open desert ground mixes toward
+  sandLight: 0xffbf86, // the light end of the slow sand patches on open desert
+  sandShade: 0xe8955c, // the deep end of the slow sand patches on open desert
+  road: 0xb6835e, // rust-brown packed dirt of the road surface
+  roadCrack: 0x9c6c4c, // faint cracks and potholes in the road texture
+  roadRim: 0xf8a667, // light sand the road edge frays into
+  stoneGrey: 0x8a847d, // cool grey stones on road shoulders and in pebble clusters
   padMark: 0xd86a2a, // worn orange paint around site pads, where trucks stop to use a site
   pebble: 0x9c7c54,
   scrub: [0x6f6a3a, 0x5d5a32, 0x7c7442],
-  brush: [0x4d512b, 0x5f6634, 0x8a8a4a], // desert scrub stems: dark core, olive body, dry lit tips
-  cactus: { body: 0x6b7a3a, shade: 0x4e5a2c }, // short columnar cacti: lit column, shaded column
+  brush: [0x7c8452, 0x8c9864, 0xa4a264], // desert scrub stems: dark core, olive body, dry lit tips
+  cactus: { body: 0x8a9450, shade: 0x6e7840 }, // short columnar cacti: lit column, shaded column
   rock: { top: 0x9a8a78, side: 0x6e6254, dark: 0x4e453c },
-  stone: { top: 0xc27f58, side: 0x9a6448, dark: 0x6a4436 }, // terracotta of loose boulders, crags and pebbles
+  stone: { top: 0xc98e68, side: 0xb47f5d, dark: 0x8a5e44 }, // terracotta of loose boulders, crags and pebbles
   rust: { top: 0x8a4a2a, side: 0x5e3420, dark: 0x3a2418 },
   wall: { top: 0xb89a74, side: 0x8e7454, dark: 0x6a5840 },
   roof: [0x7a5a3a, 0x5e6a5a, 0x8a3a2a],
@@ -28,6 +28,7 @@ export const PAL = {
   palm: 0x4a6a2a,
   trunk: 0x6a4a2a,
   shadow: 0x2a1a10,
+  shadeTint: 0x3c3046, // mauve-brown that darkens shaded ground, as the reference's shadows of issue 129
   outline: 0x1a1410,
   wheel: 0x2a2420,
   metal: 0x5a5a58,

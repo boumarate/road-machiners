@@ -17,8 +17,8 @@ from shapes import taper  # noqa: E402
 
 COLORS = {
     "pebble": 0x9C7C54,  # PAL.pebble
-    "pebble_pale": 0x7A7470,  # PAL.stoneGrey, a cool grey stone beside the tan ones
-    "pebble_dark": 0x9A6448,  # PAL.stone.side
+    "pebble_pale": 0x8A847D,  # PAL.stoneGrey, a cool grey stone beside the tan ones
+    "pebble_dark": 0xB47F5D,  # PAL.stone.side
 }
 SEED = 17
 

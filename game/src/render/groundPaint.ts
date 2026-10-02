@@ -14,7 +14,7 @@ const TYPE_JITTER = 0.6; // tiles; jittered sampling frays the blend between til
 const JITTER_GRID = 6; // samples per tile for the type-jitter hash, independent of paint resolution
 const PATCH_TILES = 24; // tiles per cell of the slow noise that lays sand patches over open desert
 const PATCH_MIX = 0.15; // strongest mix toward a patch color, at full desert weight
-const SAND_WARM = 0.6; // mix toward PAL.desertSand at full desert weight
+const SAND_WARM = 0.85; // mix toward PAL.desertSand at full desert weight
 const DESERT_CALM = 0.85; // share of the speckle and fine noise that full desert weight removes
 const PATCH_OFFSET = 41.5; // lattice cells; keeps the patch noise from sharing corners with the other ground noise
 
