@@ -10,7 +10,7 @@ import { propPose, propShape } from '../sim/mapgen';
 import { emptyWorld } from '../sim/testkit';
 import type { LandmarkLook, Obstacle, World } from '../sim/types';
 import { endTurn, setMoveOrder } from '../sim/world';
-import { buildDrive, captureDrive, freeDrive, initPhysics, restoreDrive, syncDrive, toTilesPerTurn, type Break, type Crash, type Drive, type TurnResult } from './drive';
+import { buildDrive, captureDrive, freeDrive, initPhysics, restoreDrive, syncDrive, toTilesPerTurn, TURN_STEPS, type Break, type Crash, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
 
 beforeAll(async () => {
@@ -229,6 +229,9 @@ describe('breakable props', () => {
 
     expect(breaks).toEqual([]);
     expect(crashes.map((c) => c.b)).toContain('shack1');
+    const hit = crashes.find((c) => c.b === 'shack1')!;
+    expect(hit.step).toBeGreaterThan(0);
+    expect(hit.step).toBeLessThan(TURN_STEPS);
     expect(me(w).pos.x).toBeLessThan(40);
   });
 
