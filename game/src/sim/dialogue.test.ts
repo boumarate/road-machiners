@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { PERK_NUMBERS, XP_SOURCES } from '../data/skills';
 import { SHOPS } from '../data/market';
 import { buyPrice, sellPrice } from './economy';
-import { vehicleValue } from './market';
+import { goodBasePrice, goodValue, vehicleValue } from './market';
 import { BUSY_LINE, TRAIT_TALK, END, HONK_RANGE, HUB, REFUSED, TOPICS, type Topic } from '../data/dialogue';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
@@ -649,6 +649,100 @@ describe('market ears', () => {
     const { w, npc } = withNpc('trader', 'traders');
     w.player.perks = ['marketEars'];
     remember(w, npc, { kind: 'prices', shop: 'granary', pressure: { ...w.shops.granary.pressure } });
+    expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).not.toContain(askText);
+  });
+});
+
+describe('trading tips', () => {
+  const askText = TOPICS.tips.ask!.text;
+
+  function visit(w: World, npc: Vehicle, shop: string): void {
+    remember(w, npc, { kind: 'prices', shop, pressure: { ...w.shops[shop].pressure } });
+  }
+
+  function tipOf(w: World, npc: Vehicle): unknown {
+    return PREPARES.tradeTip(w, npc).tip;
+  }
+
+  // Pressure that puts the good's standing price at `ratio` of its value.
+  function pressureFor(shop: string, good: string, ratio: number): number {
+    return (ratio * goodValue(good)) / goodBasePrice(shop, good) - 1;
+  }
+
+  it('tells of a good it saw far over its value', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    visit(w, npc, 'bowl');
+    expect(tipOf(w, npc)).toEqual({ kind: 'tip', tip: { shop: 'bowl', good: 'salt', dear: true } });
+  });
+
+  it('tells of a good it saw far under its value', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    visit(w, npc, 'salvage-yard');
+    expect(tipOf(w, npc)).toEqual({ kind: 'tip', tip: { shop: 'salvage-yard', good: 'parts', dear: false } });
+  });
+
+  it('tells nothing when every price sits within a fifth of its value', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    const goods = SHOPS.bowl.goods;
+    const pressure = Object.fromEntries(goods.map((good, i) => [good, pressureFor('bowl', good, i % 2 ? 1.1 : 0.9)]));
+    remember(w, npc, { kind: 'prices', shop: 'bowl', pressure });
+    expect(tipOf(w, npc)).toEqual({ kind: 'tip', tip: null });
+  });
+
+  it('tells of the price furthest off its value', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    remember(w, npc, { kind: 'prices', shop: 'salvage-yard', pressure: { scrap: -0.3, parts: 0, tools: 0 } });
+    expect(tipOf(w, npc)).toEqual({ kind: 'tip', tip: { shop: 'salvage-yard', good: 'scrap', dear: false } });
+  });
+
+  it('breaks a tie by the newer memory, then by the good', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    visit(w, npc, 'bowl');
+    w.turn += 1;
+    visit(w, npc, 'nose');
+    expect(tipOf(w, npc)).toEqual({ kind: 'tip', tip: { shop: 'nose', good: 'electronics', dear: true } });
+    w.turn += 1;
+    visit(w, npc, 'bowl');
+    expect(tipOf(w, npc)).toEqual({ kind: 'tip', tip: { shop: 'bowl', good: 'salt', dear: true } });
+  });
+
+  it('tells nothing once the memory has faded', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    visit(w, npc, 'bowl');
+    w.turn += MEMORY.turns.prices;
+    forgetOld(w);
+    expect(tipOf(w, npc)).toEqual({ kind: 'tip', tip: null });
+  });
+
+  it('tells what it saw, whatever the live prices did since, and rolls nothing', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    visit(w, npc, 'bowl');
+    for (const good of SHOPS.bowl.goods) w.shops.bowl.pressure[good] = 0;
+    w.shops.bowl.pressure.salt = -0.5;
+    const rng = w.rngState;
+    expect(tipOf(w, npc)).toEqual({ kind: 'tip', tip: { shop: 'bowl', good: 'salt', dear: true } });
+    expect(w.rngState).toBe(rng);
+  });
+
+  it('is asked from the hub and answered with the tip', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    visit(w, npc, 'bowl');
+    const open = callVehicle(w, npc.id);
+    const asked = chooseOption(open, optionIndex(open, askText));
+    expect(asked.player.call?.vars.tip).toEqual({ kind: 'tip', tip: { shop: 'bowl', good: 'salt', dear: true } });
+    expect(currentOptions(asked).map((o) => o.text)).toEqual(expect.arrayContaining(['Thanks. Something else.', 'Over and out.']));
+  });
+
+  it('is answered with no tip by a driver that remembers nothing', () => {
+    const { w, npc } = withNpc('scavenger', 'scavengers');
+    const open = callVehicle(w, npc.id);
+    const asked = chooseOption(open, optionIndex(open, askText));
+    expect(asked.player.call?.vars.tip).toEqual({ kind: 'tip', tip: null });
+  });
+
+  it('is not offered by raiders', () => {
+    const { w, npc } = withNpc('buggy', 'raiders');
+    visit(w, npc, 'bowl');
     expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).not.toContain(askText);
   });
 });
