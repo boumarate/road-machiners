@@ -17,6 +17,7 @@ const PROP_MODELS = [
   'gas_station',
   'hull_chunk',
   'hull_rib',
+  'hull_wall',
   'junk',
   'power_pole',
   'reactor',
