@@ -19,6 +19,7 @@ import { angleDiff, DEG } from '../../sim/vec';
 import { model, outlineOf, socket, TRUCK_BIT, type ModelName } from './models';
 import { hashStr } from '../../render/noise';
 import { TruckMotion, WHIPS } from './truckMotion';
+import { weaponHead } from './weaponHead';
 
 const T = PHYSICS.truck;
 const CELL = PHYSICS.cell;
@@ -421,7 +422,6 @@ export class VehicleView {
   }
 
   // The mount fills the footprint. The head keeps its authored size, sits at the mount's head socket and turns with aim.
-  // The receiver is the head's origin, the barrel joins at its muzzle socket and the extra at its extra socket.
   private buildWeapon(v: Vehicle, item: PartItem, active: boolean, still: THREE.Group, paint: number, at: Placement): void {
     const look = weaponLook(item.part.id, item.part.defId);
     const wear = lookOf(item);
@@ -430,18 +430,7 @@ export class VehicleView {
     tint(mount, paint, wear);
     still.add(mount);
 
-    const parts = new THREE.Group();
-    const receiver = model(look.receiver);
-    parts.add(receiver);
-    const barrel = model(look.barrel);
-    barrel.position.copy(socket(look.receiver, 'muzzle'));
-    const tip = socket(look.barrel, 'tip').add(barrel.position);
-    parts.add(barrel);
-    if (look.extra) {
-      const extra = model(look.extra);
-      extra.position.copy(socket(look.receiver, 'extra'));
-      parts.add(extra);
-    }
+    const { head: parts, tip } = weaponHead(look);
     for (const p of parts.children) tint(p, paint, wear);
     const head = mergeStatic(parts);
     mount.updateMatrix();
