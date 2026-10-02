@@ -43,7 +43,7 @@ import type {
 } from "../sim/types";
 import { el, isBrowserChord, panel } from "./dom";
 import type { UiHost } from "./host";
-import { baselinePart, conditionMeter, createIcon, diffStats, footprint as footprintEl, partIcon, partStats, statGrid } from "./cards";
+import { baselinePart, conditionMeter, conditionRow, conditionTag, createIcon, diffStats, footprint as footprintEl, partIcon, partStats, statGrid } from "./cards";
 import { vehicleMass } from "../sim/mass";
 import {
   blockerIds,
@@ -535,6 +535,7 @@ export class InventoryView {
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
         createIcon(partIcon(p)),
         el("span", {}, d.name),
+        conditionTag(p),
         footprintEl(d.w, d.h),
         conditionMeter(p),
       );
@@ -564,6 +565,7 @@ export class InventoryView {
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
         createIcon(partIcon(p)),
         el("span", {}, d.name),
+        conditionTag(p),
         footprintEl(d.w, d.h),
         conditionMeter(p),
       );
@@ -1016,8 +1018,9 @@ function partDetails(me: Vehicle, part: PartInstance, mounted: boolean): HTMLEle
   const kind = partDef(part.defId).kind;
   const base = mounted ? null : baselinePart(me, kind);
   return [
+    conditionRow(part),
     conditionMeter(part),
     statGrid(diffStats(partStats(part), base ? partStats(base) : null)),
-    base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name}`) : el("span"),
+    base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name} `, conditionTag(base)) : el("span"),
   ];
 }

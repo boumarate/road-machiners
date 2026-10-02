@@ -61,6 +61,12 @@ export function cellEl(c: Cell, x: number, y: number, cell: number): HTMLElement
   return el("div", { class: `inv-cell c-${c === "." ? "plain" : c}`, style: pos(x, y, 1, 1, cell), title: CELL_TITLE[c] }, c === "." || c === "X" ? "" : c);
 }
 
+// What a part's grid box adds to the icon and name: its condition bar and, when pristine, a corner star.
+function partBoxExtras(part: PartInstance): HTMLElement[] {
+  const star = part.wear === 0 ? [el("span", { class: "inv-item-star", "aria-hidden": "true" }, createIcon("star"))] : [];
+  return [conditionBar(part), ...star];
+}
+
 // The box an item draws on a grid: its kind color, icon, name and condition bar.
 export function itemBox(it: GridItem, mounted: boolean, cell: number): HTMLElement {
   const cells = itemCells(it);
@@ -76,7 +82,7 @@ export function itemBox(it: GridItem, mounted: boolean, cell: number): HTMLEleme
     createIcon(getItemIcon(it)),
     el("span", { class: "inv-item-name" }, itemLabel(it).short),
   );
-  if (it.kind === "part") node.append(conditionBar(it.part));
+  if (it.kind === "part") node.append(...partBoxExtras(it.part));
   return node;
 }
 
@@ -155,8 +161,8 @@ export function itemName(it: GridItem): string {
 
 export function itemState(it: GridItem, mounted: boolean): string {
   if (it.kind === "good") return `Cargo, ${kg(GOODS[it.good].mass)}`;
-  if (partDef(it.part.defId).kind === "core") return `Built in, ${wearLabel(it.part)}`;
-  return `${mounted ? "Mounted" : "Spare"}, ${wearLabel(it.part)}`;
+  if (partDef(it.part.defId).kind === "core") return "Built in";
+  return mounted ? "Mounted" : "Spare";
 }
 
 export function getItemIcon(item: GridItem): IconName {
