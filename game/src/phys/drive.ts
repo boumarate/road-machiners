@@ -9,7 +9,7 @@ import { PERF } from '../data/perf';
 import { PHYSICS } from '../data/physics';
 import { BREAKABLE, RULES } from '../data/rules';
 import { fuelLimited, isNear } from '../sim/far';
-import { isBreakable, isDriveObstacle, obstacleReach, propBoxes } from '../sim/mapgen';
+import { blockingBoxes, isBreakable, isDriveObstacle, obstacleReach } from '../sim/mapgen';
 import { playerVehicle } from '../sim/damage';
 import { vehicleMass } from '../sim/mass';
 import { groundSpeed, vehicleStats, type VehicleStats } from '../sim/stats';
@@ -161,7 +161,7 @@ export function obstacleColliders(t: Terrain, o: Obstacle): RAPIER.ColliderDesc[
     const half = PHYSICS.rockHeight / 2;
     return [RAPIER.ColliderDesc.cylinder(half, o.r * S).setTranslation(o.pos.x * S, ground + half - PHYSICS.rockSink, o.pos.y * S)];
   }
-  return propBoxes(o).filter((b) => b.z0 < PHYSICS.truckClearance).map((b) => {
+  return blockingBoxes(o).map((b) => {
     const bottom = b.z0 < PHYSICS.rockSink ? Math.min(b.z0, -PHYSICS.rockSink) : b.z0;
     const desc = RAPIER.ColliderDesc.cuboid(b.half.x * S, (b.z1 - bottom) / 2, b.half.y * S);
     desc.setTranslation(b.center.x * S, ground + (b.z1 + bottom) / 2, b.center.y * S);

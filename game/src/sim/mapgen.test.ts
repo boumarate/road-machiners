@@ -5,10 +5,10 @@ import { PHYSICS } from '../data/physics';
 import { boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propPose, propReach, propShape, segmentCrossesBox } from './mapgen';
 import { ROAD_INDEX } from './road-index';
 import type { Obstacle } from './types';
-import { dist } from './vec';
+import { dist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
-import { PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
+import { groundAt, PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
@@ -100,7 +100,8 @@ describe('world from the baked map', () => {
 
   it('keeps every baked landmark off every road surface and out of every site', () => {
     const sites = [...REGION.towns, ...REGION.locations];
-    const landmarks = baked.filter((o): o is Landmark => o.kind === 'landmark');
+    // The ship wing is the exception: it hangs over its road and reaches the Broken Wing hull by design.
+    const landmarks = baked.filter((o): o is Landmark => o.kind === 'landmark' && o.look !== 'shipWing');
     expect(landmarks.length).toBeGreaterThan(0);
     for (const o of landmarks) {
       const reach = REGION.roadWidth / 2 + o.r;
@@ -241,5 +242,49 @@ describe('prop poses', () => {
 
   it('refuses a model with no shape', () => {
     expect(() => propShape('nothing')).toThrow(/nothing/);
+  });
+});
+
+describe('Broken Wing on the baked map', () => {
+  const M = PHYSICS.metersPerTile;
+  const HALF = REGION.roadWidth / 2;
+  const wing = mapObstacles(TEST_MAP).find((o) => o.kind === 'landmark' && o.look === 'shipWing');
+  if (wing === undefined) throw new Error('The baked map has no ship wing');
+  const boxes = propBoxes(wing);
+  const centerGround = groundAt(TEST_MAP.terrain, wing.pos.x, wing.pos.y) * M;
+  // Road points under the covered stretch: along the wing's x axis within its 22 m half chord, across the full road.
+  const along = { x: Math.cos(wing.kind === 'landmark' ? wing.yaw : 0), y: Math.sin(wing.kind === 'landmark' ? wing.yaw : 0) };
+  const samples: Vec[] = [];
+  for (let a = -22; a <= 22; a += 2) {
+    for (let s = -HALF; s <= HALF; s += 1.5) {
+      samples.push({ x: wing.pos.x + (along.x * a - along.y * s * 1) / M, y: wing.pos.y + (along.y * a + along.x * s * 1) / M });
+    }
+  }
+
+  it('lies over the road: the wing covers road samples', () => {
+    const under = samples.filter((p) => boxes.some((b) => boxDistance(b, p) === 0));
+    expect(under.length).toBeGreaterThan(samples.length / 2);
+  });
+
+  it('leaves every road point under the wing a truck height and a metre clear of the ground', () => {
+    for (const p of samples) {
+      const ground = groundAt(TEST_MAP.terrain, p.x, p.y) * M;
+      for (const b of boxes.filter((box) => boxDistance(box, p) === 0)) {
+        expect(centerGround + b.z0 - ground).toBeGreaterThanOrEqual(PHYSICS.truckClearance + 1);
+      }
+    }
+  });
+
+  it('puts no low wing box on the road surface', () => {
+    for (const b of boxes.filter((box) => box.z0 < PHYSICS.truckClearance)) {
+      for (const p of samples) expect(boxDistance(b, p)).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps every other prop and site off the covered road stretch', () => {
+    for (const o of mapObstacles(TEST_MAP)) {
+      if (o.id === wing.id || o.kind === 'water') continue;
+      for (const p of samples) expect(dist(o.pos, p), o.id).toBeGreaterThan(o.r);
+    }
   });
 });

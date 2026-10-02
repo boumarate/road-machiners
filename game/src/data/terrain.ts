@@ -93,6 +93,14 @@ export const TERRAIN = {
       abutment: 1, // tiles of causeway left under each deck end
       ramp: 1.5, // tiles over which the cut ground falls to the canyon
     },
+    // Broken Wing: the crashed ship's wing, a baked prop 7 m over a straight stretch of road. Its high boxes leave
+    // the road open to trucks. pos is the road's center line at the middle of the covered stretch, r is the
+    // wing's bake circle in tiles, and yaw puts the model's long x axis along that road.
+    wing: {
+      pos: scalePoint({ x: 67, y: 36 }),
+      r: 9,
+      yaw: Math.atan2(4, 10),
+    },
     dryRiver: {
       path: [
         scalePoint({ x: 7, y: 75 }),

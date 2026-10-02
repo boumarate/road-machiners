@@ -89,10 +89,10 @@ describe("terrain grid", () => {
     expect(REGION.locations.map((site) => site.name)).toEqual([
       'Old Orchard', 'Dustwell', 'The Granary', 'Burnt Convoy', 'Podfield',
       'Canyon Bridge', 'Glass Flats', 'Green Pit', 'South Lock', 'Ridge Wrecks',
-      'Pump Station', 'Fallen Sun', 'Salvage Yard', 'Scrapjaw Camp', 'Kiln Camp',
+      'Pump Station', 'Fallen Sun', 'Salvage Yard', 'Broken Wing', 'Scrapjaw Camp', 'Kiln Camp',
     ]);
     const sites = [...REGION.towns, ...REGION.locations];
-    expect(new Set(sites.map((site) => site.id)).size).toBe(17);
+    expect(new Set(sites.map((site) => site.id)).size).toBe(18);
     for (const site of sites) {
       expect(site.pos.x).toBeGreaterThan(site.radius);
       expect(site.pos.y).toBeGreaterThan(site.radius);

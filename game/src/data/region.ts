@@ -198,6 +198,16 @@ export const REGION = {
       pos: scalePoint({ x: 82, y: 52.2 }),
       radius: 6,
     },
+    // Broken Wing: a hull section of the crashed ship beside the road, south of it, with a wing over the road.
+    // The wing is a baked prop, see TERRAIN.features.wing.
+    {
+      id: "broken-wing",
+      edge: "fence",
+      name: "Broken Wing",
+      kind: "landmark",
+      pos: scalePoint({ x: 66.11, y: 38.23 }),
+      radius: 6,
+    },
     // Raider camps. Raiders spawn at their gates and service there. Their gate guns shoot every outsider in range.
     {
       id: "scrapjaw",
@@ -257,11 +267,12 @@ export const REGION = {
       { x: 50, y: 49 },
       { x: 51, y: 38 },
       { x: 62, y: 34 },
+      { x: 67, y: 36 },
       { x: 72, y: 38 },
       { x: 82, y: 49 },
       { x: 78, y: 36 },
       { x: 77, y: 24 },
-    ]),
+    ], [5, 6]), // the stretch under the Broken Wing wing stays straight
     scaleRoad([
       { x: 50, y: 36 },
       { x: 47, y: 44 },
@@ -282,6 +293,7 @@ export const REGION = {
     ]),
     // Short straight spurs lead from a road point to each location beside it, so through traffic passes by.
     scaleRoad([{ x: 28, y: 64 }, { x: 23.2, y: 62 }], [0]),
+    scaleRoad([{ x: 67, y: 36 }, { x: 66.11, y: 38.23 }], [0]),
     scaleRoad([{ x: 37, y: 32 }, { x: 33.8, y: 32 }], [0]),
     scaleRoad([{ x: 50, y: 36 }, { x: 50, y: 32.8 }], [0]),
     scaleRoad([{ x: 63, y: 20 }, { x: 60, y: 18.8 }], [0]),

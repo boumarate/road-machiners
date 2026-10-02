@@ -38,6 +38,7 @@ export type OldRoad = { line: RoadLine; width: number; bridges: [Vec, Vec][] };
 
 export function oldWorldLayer(seed: number, d: MapDraft): MapDraft {
   const W = OLD_WORLD;
+  shipWing(d);
   const towns = settlements(seed, d, W.settlements);
   overlooks(seed, d, W.overlooks);
   bendBuildings(seed, d, W.bends);
@@ -94,6 +95,13 @@ const CANYON = TERRAIN.features.canyon;
 const TURN = Math.PI * 2;
 
 type Scored = { pos: Vec; score: number };
+
+// The ship's wing over the road at Broken Wing. It goes down first and straight into the draft, since place() would
+// reject a prop on a road. Every later rule keeps away through the prop's circle.
+export function shipWing(d: MapDraft): void {
+  const W = TERRAIN.features.wing;
+  d.props.push(prop('shipWing', W.pos, W.r, W.yaw));
+}
 
 export function prop(kind: PropKind, pos: Vec, r: number, yaw: number, group = 0, step = 0): BakedProp {
   return { kind, pos, r, yaw, group, step };
