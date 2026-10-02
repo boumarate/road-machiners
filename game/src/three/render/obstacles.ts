@@ -14,7 +14,7 @@ import type { BrokenProp, Obstacle, SalvageStock, World } from '../../sim/types'
 import { dist } from '../../sim/vec';
 import type { V3, VehicleFrame } from '../../phys/frames';
 import type { TurnResult } from '../../phys/drive';
-import { DebrisSim, FLY_REACH, truckBoxes } from './debris';
+import { DebrisSim, disposeTree, FLY_REACH, truckBoxes } from './debris';
 import { instancedModel, model, socket } from './models';
 import { PartDebris } from './partDebris';
 import type { RenderScope } from './scope';
@@ -190,16 +190,6 @@ function velocityAt(frames: VehicleFrame[] | undefined, step: number): V3 {
   const b = frames[Math.min(frames.length - 1, step + 1)].pos;
   const k = PHYSICS.stepsPerSecond / (Math.min(frames.length - 1, step + 1) - Math.max(0, step - 1));
   return { x: (b.x - a.x) * k, y: (b.y - a.y) * k, z: (b.z - a.z) * k };
-}
-
-export function disposeTree(obj: THREE.Object3D): void {
-  obj.traverse((o) => {
-    if (o instanceof THREE.Mesh) {
-      o.geometry.dispose();
-      const mats = Array.isArray(o.material) ? o.material : [o.material];
-      for (const m of mats) m.dispose();
-    }
-  });
 }
 
 function buildObstacle(t: Terrain, o: Obstacle): THREE.Object3D {

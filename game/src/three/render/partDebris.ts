@@ -11,9 +11,8 @@ import { breakSignature, type BreakSignature } from '../../render/partLooks';
 import type { Terrain } from '../../sim/terrain';
 import { dist } from '../../sim/vec';
 import type { Obstacle, PartInstance, World } from '../../sim/types';
-import { DebrisSim, FLY_REACH, piecesOf, type TruckBox } from './debris';
+import { DebrisSim, disposeTree, FLY_REACH, piecesOf, type TruckBox } from './debris';
 import type { Fx3D } from './fx';
-import { disposeTree } from './obstacles';
 import type { RenderScope } from './scope';
 import type { VehicleView } from './vehicle';
 

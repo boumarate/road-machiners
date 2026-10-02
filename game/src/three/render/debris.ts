@@ -40,6 +40,17 @@ type Flying = { body: RAPIER.RigidBody; mesh: THREE.Object3D; still: number; age
 type Burst = { group: THREE.Group; pieces: Flying[]; fixed: RAPIER.Collider[] };
 export type TruckBox = { id: string; chassisId: string; pos: V3; rot: Quat };
 
+// Frees the geometry and materials under obj.
+export function disposeTree(obj: THREE.Object3D): void {
+  obj.traverse((o) => {
+    if (o instanceof THREE.Mesh) {
+      o.geometry.dispose();
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) m.dispose();
+    }
+  });
+}
+
 // The vehicles at their drawn poses, as the kinematic boxes pieces fly against.
 export function truckBoxes(vehicles: readonly Pick<Vehicle, 'id' | 'chassisId'>[], frames: Record<string, VehicleFrame>): TruckBox[] {
   return vehicles.filter((v) => frames[v.id]).map((v) => ({ id: v.id, chassisId: v.chassisId, ...frames[v.id] }));
