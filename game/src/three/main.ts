@@ -114,13 +114,13 @@ const slots = await SaveSlots.open(await idbBackend(SAVE_KEY), window.localStora
 persistSaves().catch(reportError);
 // The world and its ground build while physics, models and sounds load, since those wait mostly on the network and decoders.
 const { world, runId, loadedFrom } = await bootWorld();
-const log = await RunLog.open(slots.backend, runId, (err) => slots.onError(err));
+const log = new RunLog(slots.backend, runId, (err) => slots.onError(err));
 log.begin(world, loadedFrom);
 groundTexture(world);
 const [, , bank] = await loading;
 const soundSettings = new SoundSettings(mixer, window.localStorage);
 const overlay = element('overlay');
-const game = new Game(world, { slots, runId, log },element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute());
+const game = new Game(world, { slots, runId, log }, element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute());
 const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game.follow.keyPan.setSpeed(factor) };
 const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
 keepRunningOnErrors((text) => debugConsole.error(text));

@@ -4,17 +4,20 @@
 import { reportError } from './crash';
 import { slotKey, type SlotId } from './save-slots';
 
-// One line of a run's log. seq rises by one per record within a run.
-export type LogRecord = { runId: string; seq: number; kind: string } & Record<string, unknown>;
+// A run log entry before it is stored. turn and day place it in the run.
+export type LogEntry = { kind: string; turn: number; day: number } & Record<string, unknown>;
+
+// A stored run log entry. seq rises by one per record within a run.
+export type LogRecord = LogEntry & { runId: string; seq: number };
 
 export type SaveBackend = {
   readAll(): Promise<Map<SlotId, unknown>>;
   put(slot: SlotId, envelope: unknown): Promise<void>;
   remove(slot: SlotId): Promise<void>;
-  appendLog(records: readonly LogRecord[]): Promise<void>;
+  // Numbers the entries on from the run's last stored record, in the same transaction, so two tabs on one run never
+  // take the same number.
+  appendLog(runId: string, entries: readonly LogEntry[]): Promise<void>;
   readLog(runId: string): Promise<LogRecord[]>;
-  // The seq of the run's last record, -1 for a run with none.
-  lastSeq(runId: string): Promise<number>;
 };
 
 const SAVES = 'saves';
@@ -31,12 +34,14 @@ export async function idbBackend(name: string): Promise<SaveBackend> {
     },
     put: (slot, envelope) => written(db, SAVES, (store) => store.put(envelope, slot)),
     remove: (slot) => written(db, SAVES, (store) => store.delete(slot)),
-    appendLog: (records) => written(db, LOG, (store) => records.forEach((r) => store.add(r))),
+    appendLog: (runId, entries) => written(db, LOG, (store) => {
+      const last = store.openCursor(runRange(runId), 'prev');
+      last.onsuccess = () => {
+        const next = last.result ? (last.result.value as LogRecord).seq + 1 : 0;
+        entries.forEach((entry, i) => store.add({ ...entry, runId, seq: next + i }));
+      };
+    }),
     readLog: (runId) => request(db.transaction(LOG, 'readonly').objectStore(LOG).getAll(runRange(runId))),
-    lastSeq: async (runId) => {
-      const cursor = await request(db.transaction(LOG, 'readonly').objectStore(LOG).openCursor(runRange(runId), 'prev'));
-      return cursor ? (cursor.value as LogRecord).seq : -1;
-    },
   };
 }
 
@@ -44,13 +49,17 @@ function runRange(runId: string): IDBKeyRange {
   return IDBKeyRange.bound([runId, -Infinity], [runId, Infinity]);
 }
 
-function opened(name: string): Promise<IDBDatabase> {
+async function opened(name: string): Promise<IDBDatabase> {
   const open = indexedDB.open(name, 1);
   open.onupgradeneeded = () => {
     open.result.createObjectStore(SAVES);
     open.result.createObjectStore(LOG, { keyPath: ['runId', 'seq'] });
   };
-  return request(open);
+  try {
+    return await request(open);
+  } catch (err) {
+    throw new Error(`The game keeps saves in IndexedDB, and this browser refused it: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 function request<T>(req: IDBRequest<T>): Promise<T> {
@@ -78,28 +87,34 @@ export function memoryBackend(): SaveBackend {
     readAll: async () => new Map([...saves].map(([slot, envelope]) => [slot, structuredClone(envelope)])),
     put: async (slot, envelope) => { saves.set(slot, structuredClone(envelope)); },
     remove: async (slot) => { saves.delete(slot); },
-    appendLog: async (records) => { log.push(...records.map((r) => structuredClone(r))); },
+    appendLog: async (runId, entries) => {
+      const next = Math.max(-1, ...log.filter((r) => r.runId === runId).map((r) => r.seq)) + 1;
+      log.push(...entries.map((entry, i) => structuredClone({ ...entry, runId, seq: next + i })));
+    },
     readLog: async (runId) => log.filter((r) => r.runId === runId),
-    lastSeq: async (runId) => Math.max(-1, ...log.filter((r) => r.runId === runId).map((r) => r.seq)),
   };
 }
 
 // The save slots, mirrored in memory so the game reads and writes them at once. A write goes on to the backend in the
-// background, and a failed one goes to onError.
+// background, and a failed one goes to onError. flush() waits for the writes, so a reload never cuts one off.
 export class SaveSlots {
   onError: (err: unknown) => void = reportError;
+  private pending = new Set<Promise<void>>();
 
   // envelopes must be what the backend holds.
   constructor(readonly backend: SaveBackend, private envelopes: Map<SlotId, unknown>) {}
 
-  // Opens the slots and moves every save left in local storage by older builds into the backend. A save that does
-  // not parse moves as its raw text, so load reports it like any other unreadable save.
+  // Opens the slots and moves every save left in local storage by older builds into the backend. A local storage save
+  // replaces a slot only when it is newer, since a tab of an old build may still write there. A save that does not
+  // parse moves as its raw text into an empty slot, so load reports it like any other unreadable save.
   static async open(backend: SaveBackend, legacy: Storage, base: string, slots: readonly SlotId[]): Promise<SaveSlots> {
+    const stored = await backend.readAll();
     for (const slot of slots) {
       const key = slotKey(base, slot);
       const raw = legacy.getItem(key);
       if (raw === null) continue;
-      await backend.put(slot, parsedOrRaw(raw));
+      const envelope = parsedOrRaw(raw);
+      if (!stored.has(slot) || savedAtOf(envelope) > savedAtOf(stored.get(slot))) await backend.put(slot, envelope);
       legacy.removeItem(key);
     }
     return new SaveSlots(backend, await backend.readAll());
@@ -118,13 +133,29 @@ export class SaveSlots {
   put(slot: SlotId, envelope: unknown): void {
     const copy = structuredClone(envelope);
     this.envelopes.set(slot, copy);
-    this.backend.put(slot, copy).catch((err) => this.onError(err));
+    this.track(this.backend.put(slot, copy));
   }
 
   remove(slot: SlotId): void {
     this.envelopes.delete(slot);
-    this.backend.remove(slot).catch((err) => this.onError(err));
+    this.track(this.backend.remove(slot));
   }
+
+  // Resolves once every write made so far has landed or failed.
+  async flush(): Promise<void> {
+    await Promise.all(this.pending);
+  }
+
+  private track(write: Promise<void>): void {
+    const done = write.catch((err) => this.onError(err)).finally(() => this.pending.delete(done));
+    this.pending.add(done);
+  }
+}
+
+// When a save was written, 0 for a save from before slots or one that does not parse.
+function savedAtOf(envelope: unknown): number {
+  const savedAt = (envelope as { savedAt?: unknown } | null)?.savedAt;
+  return typeof savedAt === 'number' ? savedAt : 0;
 }
 
 function parsedOrRaw(raw: string): unknown {

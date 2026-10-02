@@ -11,7 +11,8 @@ export type SavePanelActions = {
   list: () => SlotInfo[];
   manualSlots: () => SlotId[];
   save: (slot: SlotId) => void;
-  requestBoot: (slot: SlotId) => void;
+  // Leaves a boot request and reloads the page.
+  reboot: (slot: SlotId) => void;
   exportSave: () => void;
   exportLog: () => void;
 };
@@ -74,8 +75,7 @@ export class SavePanel {
 
   private loadFrom(slot: SlotId): void {
     if (!window.confirm("Load this save? Progress since your last save is lost.")) return;
-    this.actions.requestBoot(slot);
-    window.location.reload();
+    this.actions.reboot(slot);
   }
 
   private row(slot: SlotId, info: SlotInfo | null, onclick: () => void): HTMLElement {

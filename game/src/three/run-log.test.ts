@@ -34,7 +34,7 @@ describe('logEntries', () => {
       );
     });
 
-    const events = logEntries(prev, next).filter((e) => e.kind === 'event');
+    const events = logEntries(prev, next, true).filter((e) => e.kind === 'event');
 
     expect(events.map((e) => e.event)).toEqual(['destroyed', 'skillUp']);
     expect(events[0]).toMatchObject({ turn: 400, vehicle: foe.id, by: me, trucks: { [foe.id]: { name: foe.name, faction: foe.faction, chassis: foe.chassisId } } });
@@ -48,56 +48,73 @@ describe('logEntries', () => {
       w.player.storage = [...w.player.storage.filter((p) => p !== w.player.storage[0]), makePart(w, 'mg', 0)];
     });
 
-    const change = logEntries(prev, next).find((e) => e.kind === 'change');
+    const change = logEntries(prev, next, true).find((e) => e.kind === 'change');
 
     expect(change).toMatchObject({ money: -150, gained: ['mg'], lost: sold ? [sold.defId] : [] });
   });
 
   it('adds nothing when nothing the log keeps changed', () => {
     const prev = start();
-    expect(logEntries(prev, after(prev, () => {}))).toEqual([]);
+    expect(logEntries(prev, after(prev, () => {}), true)).toEqual([]);
   });
 
   it('snapshots the player on the first world of a session and of each game day', () => {
     const prev = start();
-    const first = logEntries(null, prev).find((e) => e.kind === 'day');
+    const first = logEntries(null, prev, true).find((e) => e.kind === 'day');
     expect(first).toMatchObject({ money: prev.player.money, chassis: expect.any(String), mountedValue: expect.any(Number) });
     const sameDay = after(prev, (w) => { w.turn += 1; });
-    expect(logEntries(prev, sameDay).some((e) => e.kind === 'day')).toBe(false);
+    expect(logEntries(prev, sameDay, true).some((e) => e.kind === 'day')).toBe(false);
     let dayStart = prev.turn + 1;
     while (clockOf(dayStart).day === clockOf(prev.turn).day) dayStart++;
     const nextDay = after(prev, (w) => { w.turn = dayStart; });
-    expect(logEntries(prev, nextDay).filter((e) => e.kind === 'day')).toHaveLength(1);
+    expect(logEntries(prev, nextDay, true).filter((e) => e.kind === 'day')).toHaveLength(1);
   });
 });
 
 describe('RunLog', () => {
-  it('numbers records on across sessions, notes a load, and writes a world once', async () => {
+  it('numbers records on across sessions and tabs, notes a load, and writes a world once', async () => {
     const backend = memoryBackend();
     const errors: unknown[] = [];
     const world = start();
-    const first = await RunLog.open(backend, 'run', (e) => errors.push(e));
+    const first = new RunLog(backend, 'run', (e) => errors.push(e));
+    const otherTab = new RunLog(backend, 'run', (e) => errors.push(e));
     first.begin(world, null);
+    otherTab.begin(world, 'auto');
     const next = after(world, (w) => { w.player.money += 10; });
     first.note(next);
     first.note(next);
-    await new Promise((resolve) => setTimeout(resolve));
-    const second = await RunLog.open(backend, 'run', (e) => errors.push(e));
+    await Promise.all([first.flush(), otherTab.flush()]);
+    const second = new RunLog(backend, 'run', (e) => errors.push(e));
     second.begin(world, 'slot1');
-    await new Promise((resolve) => setTimeout(resolve));
+    await second.flush();
 
     const records = await backend.readLog('run');
 
     expect(records.map((r) => r.seq)).toEqual(records.map((_, i) => i));
-    expect(records.map((r) => r.kind)).toEqual(['start', 'day', 'change', 'loaded', 'day']);
-    expect(records[3]).toMatchObject({ slot: 'slot1', turn: 400 });
+    expect(records.map((r) => r.kind)).toEqual(['start', 'day', 'loaded', 'day', 'change', 'loaded', 'day']);
+    expect(records[5]).toMatchObject({ slot: 'slot1', turn: 400 });
     expect(errors).toEqual([]);
   });
 
+  it('logs the change of a world that shares the events of the last one, without its events again', async () => {
+    const backend = memoryBackend();
+    const world = start();
+    const log = new RunLog(backend, 'run', () => {});
+    log.begin(world, null);
+    const turn = after(world, (w) => { w.events.push({ t: 'skillUp', skill: 'driving', level: 2 }); });
+    log.note(turn);
+    log.note({ ...turn, player: { ...turn.player, money: turn.player.money + 25 } });
+    await log.flush();
+
+    const kinds = (await backend.readLog('run')).map((r) => r.event ?? r.kind);
+
+    expect(kinds).toEqual(['start', 'day', 'skillUp', 'change']);
+  });
+
   it('exports JSON Lines with the header first', async () => {
-    const log = await RunLog.open(memoryBackend(), 'run', () => {});
+    const log = new RunLog(memoryBackend(), 'run', () => {});
     log.begin(start(), null);
-    await new Promise((resolve) => setTimeout(resolve));
+    await log.flush();
 
     const lines = (await log.lines({ kind: 'header', runId: 'run' })).trim().split('\n').map((l) => JSON.parse(l));
 
@@ -107,9 +124,9 @@ describe('RunLog', () => {
   it('sends a refused write to onError', async () => {
     const errors: unknown[] = [];
     const refusing = { ...memoryBackend(), appendLog: () => Promise.reject(new Error('Quota exceeded')) };
-    const log = await RunLog.open(refusing, 'run', (e) => errors.push(e));
+    const log = new RunLog(refusing, 'run', (e) => errors.push(e));
     log.begin(start(), null);
-    await new Promise((resolve) => setTimeout(resolve));
+    await log.flush();
     expect(errors.map((e) => (e as Error).message)).toEqual(['Quota exceeded']);
   });
 });

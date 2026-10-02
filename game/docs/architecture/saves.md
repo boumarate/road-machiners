@@ -4,9 +4,9 @@
 
 - Saves and run logs live in IndexedDB, in one database per save scope named like the old save key. The `saves` store holds one save envelope per slot. The `log` store holds run log records by run id and sequence number. `src/three/save-db.ts` owns both.
 - IndexedDB stores objects as they are, so a save is a plain object, not a JSON string. Each write is one transaction with strict durability, so it lands whole or not at all. Its quota is a share of the disk, not the 5 MB of local storage.
-- `SaveSlots` mirrors every save in memory, so the game reads and writes slots at once. A write goes on to the database in the background. A failed write shows a note in the HUD and goes to the crash handling.
+- `SaveSlots` mirrors every save in memory, so the game reads and writes slots at once. A write goes on to the database in the background. A failed write shows a note in the HUD and goes to the crash handling. Load and New game wait for every pending save and log write before they reload the page.
 - Boot asks the browser for persistent storage, so it does not evict saves under disk pressure. A refusal leaves saves best-effort, as local storage was.
-- Older builds kept saves in local storage. Boot moves each of them into the database and then deletes its local storage key. A save that did not parse moves as its text, and load reports it as unreadable.
+- Older builds kept saves in local storage. Boot moves each of them into the database and then deletes its local storage key. A local storage save replaces a database slot only when its `savedAt` is newer, since a tab of an old build may still write there. A save that did not parse moves as its text, and load reports it as unreadable.
 
 ## Slots and boot
 
@@ -24,7 +24,7 @@
 
 - `src/three/run-log.ts` records what happened to the player over a run, for analysis after the fact. It does not replay the game and never feeds the sim.
 - A run gets a random run id at New game. The save envelope carries it, and a rescue keeps it. A save from before run ids belongs to the run `legacy-<seed>`.
-- The game hands the log every world it takes: after each command, at the start of each turn's playback and after a talk. The log skips a world whose events it has already seen.
+- The game hands the log every world it takes: after each command, at the start of each turn's playback and after a talk. The log writes each world once and each events array once, since a world built by spreading another shares its events. The database numbers records inside the write, so two tabs on one run never take the same number.
 - It keeps the player's outcomes: deaths, knockouts, money, contracts, discoveries, skill-ups, kills and knockouts the player was part of, tows, escorts, aid and jobs. Each truck an event names comes with its name, faction and chassis. Shots, spawns, NPC moves, talk, weather and XP practice stay out.
 - A `change` record follows every world where the player's money, parts or goods changed, with the money delta and the parts gained and lost. Buys, sales, loot and refits have no event, so they show here.
 - A `day` snapshot follows the first world of each session and of each game day: money, skill levels, XP by source, perks, chassis, mounted and stored part value, health, fuel, supplies and knockouts.

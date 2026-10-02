@@ -37,6 +37,21 @@ describe('SaveSlots.open', () => {
     expect([...(await backend.readAll()).keys()].sort()).toEqual(['auto', 'slot2']);
   });
 
+  it('keeps a newer database save over an older local storage one, and deletes the local storage key', async () => {
+    const backend = memoryBackend();
+    await backend.put('auto', { savedAt: 50, world: { turn: 9 } });
+    const legacy = makeStorage();
+    legacy.setItem('roam.save', JSON.stringify({ savedAt: 10, world: { turn: 3 } }));
+    legacy.setItem('roam.save:day', JSON.stringify({ savedAt: 90, world: { turn: 4 } }));
+    await backend.put('day', { savedAt: 60, world: { turn: 2 } });
+
+    const slots = await SaveSlots.open(backend, legacy, 'roam.save', SLOTS);
+
+    expect(slots.get('auto')).toEqual({ savedAt: 50, world: { turn: 9 } });
+    expect(slots.get('day')).toEqual({ savedAt: 90, world: { turn: 4 } });
+    expect([legacy.getItem('roam.save'), legacy.getItem('roam.save:day')]).toEqual([null, null]);
+  });
+
   it('moves a local storage save that does not parse as its text', async () => {
     const legacy = makeStorage();
     legacy.setItem('roam.save:day', '{"format":');
@@ -47,8 +62,9 @@ describe('SaveSlots.open', () => {
   it('opens what an earlier session saved', async () => {
     const backend = memoryBackend();
     const world = newWorld(1337, startKit('standard'), TEST_MAP);
-    writeSave(await SaveSlots.open(backend, makeStorage(), 'roam.save', SLOTS), 'slot1', world, 'r', 1);
-    await new Promise((resolve) => setTimeout(resolve));
+    const first = await SaveSlots.open(backend, makeStorage(), 'roam.save', SLOTS);
+    writeSave(first, 'slot1', world, 'r', 1);
+    await first.flush();
 
     const reopened = await SaveSlots.open(backend, makeStorage(), 'roam.save', SLOTS);
 
@@ -62,6 +78,21 @@ describe('SaveSlots', () => {
     slots.put('auto', { world: { turn: 3 } });
     (slots.get('auto') as { world: { turn: number } }).world.turn = 99;
     expect(slots.get('auto')).toEqual({ world: { turn: 3 } });
+  });
+
+  it('flushes only once every write has landed', async () => {
+    const backend = memoryBackend();
+    let land = () => {};
+    const slow: SaveBackend = { ...backend, put: (slot, envelope) => new Promise((resolve) => { land = () => resolve(backend.put(slot, envelope)); }) };
+    const slots = new SaveSlots(slow, new Map());
+    slots.put('auto', { world: { turn: 3 } });
+    let flushed = false;
+    const flush = slots.flush().then(() => { flushed = true; });
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(flushed).toBe(false);
+    land();
+    await flush;
+    expect((await backend.readAll()).get('auto')).toEqual({ world: { turn: 3 } });
   });
 
   it('sends a refused write to onError and keeps the backend as it was', async () => {

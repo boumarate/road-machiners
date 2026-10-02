@@ -7,11 +7,8 @@ import { levelOf } from '../sim/progress';
 import { clockOf } from '../sim/sun';
 import type { GameEvent, GridItem, Vehicle, World } from '../sim/types';
 import { partValue } from '../sim/wear';
-import type { LogRecord, SaveBackend } from './save-db';
+import type { LogEntry, SaveBackend } from './save-db';
 import type { SlotId } from './save-slots';
-
-// An entry before the log numbers it.
-export type LogEntry = Body & { turn: number; day: number };
 
 // An entry before it gets its turn and day.
 type Body = { kind: string } & Record<string, unknown>;
@@ -32,12 +29,16 @@ const PLAYER_KINDS = new Set<GameEvent['t']>(['death', 'knockout', 'wake', 'mone
 
 // The entries a new world adds to the log: the kept events of the player, what the player gained and lost since the
 // last world, and a snapshot on the first world of each game day. prev is null for the first world of a session.
-export function logEntries(prev: World | null, next: World): LogEntry[] {
+// withEvents is false when the log has seen next's events already, in an earlier world that shared them.
+export function logEntries(prev: World | null, next: World, withEvents: boolean): LogEntry[] {
   const at = { turn: next.turn, day: clockOf(next.turn).day };
-  const events = next.events.filter((e) => keeps(next, e)).map((e) => ({ ...at, ...eventEntry(prev, next, e) }));
-  const change = prev ? changeEntry(prev, next) : null;
-  const day = !prev || clockOf(prev.turn).day !== at.day ? snapshot(next) : null;
-  return [...events, ...(change ? [{ ...at, ...change }] : []), ...(day ? [{ ...at, ...day }] : [])];
+  const events = withEvents ? next.events.filter((e) => keeps(next, e)).map((e) => eventEntry(prev, next, e)) : [];
+  const bodies = [...events, changeEntry(prev, next), dayEntry(prev, next)];
+  return bodies.flatMap((body) => body ? [{ ...at, ...body }] : []);
+}
+
+function dayEntry(prev: World | null, next: World): Body | null {
+  return !prev || clockOf(prev.turn).day !== clockOf(next.turn).day ? snapshot(next) : null;
 }
 
 function keeps(world: World, e: GameEvent): boolean {
@@ -64,7 +65,8 @@ function truckOf(v: Vehicle | undefined): { name: string; faction: string; chass
 
 // Money and the things the player holds, as they changed between two worlds. Buys, sales, loot and refits have no
 // event, so this is where they show. Null when nothing changed.
-function changeEntry(prev: World, next: World): Body | null {
+function changeEntry(prev: World | null, next: World): Body | null {
+  if (!prev) return null;
   const before = holdings(prev);
   const after = holdings(next);
   const money = next.player.money - prev.player.money;
@@ -115,17 +117,16 @@ function snapshot(world: World): Body {
   };
 }
 
-// The log of one run in one session. It numbers entries on from the last one stored and writes them in the
-// background. A world whose events it has seen adds nothing, since one turn can reach the game twice.
+// The log of one run in one session. It writes entries in the background, and the backend numbers them. One turn can
+// reach the game in more than one world, and a world built by spreading another shares its events array, so the log
+// writes a world once and an events array once. It still compares every new world with the last one.
 export class RunLog {
-  private seen = new WeakSet<GameEvent[]>();
+  private seenWorlds = new WeakSet<World>();
+  private seenEvents = new WeakSet<GameEvent[]>();
   private last: World | null = null;
+  private pending = new Set<Promise<void>>();
 
-  private constructor(private backend: SaveBackend, readonly runId: string, private seq: number, private onError: (err: unknown) => void) {}
-
-  static async open(backend: SaveBackend, runId: string, onError: (err: unknown) => void): Promise<RunLog> {
-    return new RunLog(backend, runId, (await backend.lastSeq(runId)) + 1, onError);
-  }
+  constructor(private backend: SaveBackend, readonly runId: string, private onError: (err: unknown) => void) {}
 
   // The first world of the session. A load notes the slot and turn, so analysis can cut the abandoned future.
   begin(world: World, loadedFrom: SlotId | null): void {
@@ -135,12 +136,19 @@ export class RunLog {
   }
 
   note(world: World): void {
-    if (!this.seen.has(world.events)) this.write(this.entriesOf(world));
+    if (!this.seenWorlds.has(world)) this.write(this.entriesOf(world));
+  }
+
+  // Resolves once every write made so far has landed or failed.
+  async flush(): Promise<void> {
+    await Promise.all(this.pending);
   }
 
   private entriesOf(world: World): LogEntry[] {
-    this.seen.add(world.events);
-    const entries = logEntries(this.last, world);
+    const withEvents = !this.seenEvents.has(world.events);
+    this.seenWorlds.add(world);
+    this.seenEvents.add(world.events);
+    const entries = logEntries(this.last, world, withEvents);
     this.last = world;
     return entries;
   }
@@ -153,7 +161,7 @@ export class RunLog {
 
   private write(entries: LogEntry[]): void {
     if (entries.length === 0) return;
-    const records: LogRecord[] = entries.map((e) => ({ ...e, runId: this.runId, seq: this.seq++ }));
-    this.backend.appendLog(records).catch(this.onError);
+    const done = this.backend.appendLog(this.runId, entries).catch(this.onError).finally(() => this.pending.delete(done));
+    this.pending.add(done);
   }
 }

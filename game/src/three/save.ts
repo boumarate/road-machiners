@@ -232,14 +232,18 @@ export function unpackExplored(packed: unknown, tiles: number): Uint8Array {
 }
 
 // What the menus do with the saves: the game's world in, the slots out. Loading and starting a new game reload the
-// page, so they leave a boot request in session storage.
-export function saveStore(slots: SaveSlots, session: Storage, world: () => World, runId: string, slotCount: number) {
+// page, so they leave a boot request in session storage. The reload waits for every save and log write, so it never
+// cuts one off.
+export function saveStore(slots: SaveSlots, log: RunLog, session: Storage, world: () => World, runId: string, slotCount: number) {
   return {
     list: () => listSaves(slots, slotCount),
     manualSlots: () => manualSlots(slotCount),
     hasSave: () => hasSave(slots, allSlots(slotCount)),
     save: (slot: SlotId) => writeSave(slots, slot, world(), runId, Date.now()),
-    requestBoot: (request: BootRequest) => requestBoot(session, SAVE_KEY, request),
+    reboot: (request: BootRequest) => {
+      requestBoot(session, SAVE_KEY, request);
+      Promise.all([slots.flush(), log.flush()]).then(() => window.location.reload(), reportError);
+    },
   };
 }
 
@@ -293,7 +297,7 @@ export class GameSaves {
 
   // What the menus do with the saves. A save by hand waits while an error holds saving.
   menuActions(world: () => World) {
-    const saves = saveStore(this.run.slots, window.sessionStorage, world, this.run.runId, CONFIG.saveSlots);
+    const saves = saveStore(this.run.slots, this.run.log, window.sessionStorage, world, this.run.runId, CONFIG.saveSlots);
     return {
       ...saves,
       save: (slot: SlotId) => this.hold.held ? this.note(SAVE_HELD_NOTE) : saves.save(slot),
