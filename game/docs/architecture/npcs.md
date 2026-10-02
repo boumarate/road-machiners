@@ -10,7 +10,7 @@ NPC behavior has three layers. Traits in `brain.traits` are permanent and replac
 - `src/data/npcs.ts` holds traits, decision weights, state durations, thresholds and weighted spawn equipment tables.
 - `src/sim/npc-loadout.ts` rolls each NPC a gear level from `GEAR_LEVELS`, from poor to loaded, and fills the truck within its budget and rated mass, using world RNG. Each free deck spot rolls that level's fill chance times the template's `gunFill` for one more gun, and armor targets that level's share of edge cells. Armor fills whole sides, the cab lanes first, and extra guns go where they cover sides the others miss. Equipment budgets do not spend driver wallets.
 - NPCs know fixed places but perceive current vehicles only through their own sight and detection. `src/sim/detect.ts` gives player and NPCs the same sound, dust and scanner contacts.
-- A driver never waits without an end. `watchStalls()` gives up the top goal of a driver with no new tile, job turn or goal for `NPC_BEHAVIOR.stallTurns` turns, and sends an idle one to explore. Each give-up logs a `stall` event, which is always a bug, and `npm run stuck` fails on it.
+- A driver never waits without an end. `watchStalls()` gives up the top goal of a driver with no new tile, job turn or goal for `NPC_BEHAVIOR.stallTurns` turns, and sends an idle one to explore. Each give-up logs a `stall` event, which is always a bug, and `npm run stuck` and every recording fail on it.
 
 ## States and hostility
 

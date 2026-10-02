@@ -995,7 +995,7 @@ export function noteHurt(world: World): void {
 // ---- Watchdog: no driver stays stuck for good, whatever bug stranded it.
 
 // Runs each turn. A driver with no progress for NPC_BEHAVIOR.stallTurns turns gives up its top goal, or with no goal
-// drives off to explore. Each give-up logs a stall event, and the stuck soak test fails on any.
+// drives off to explore. Each give-up logs a stall event, and the progression recorder fails on any.
 export function watchStalls(world: World): void {
   for (const v of world.vehicles) {
     if (!v.brain) continue;
