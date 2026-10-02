@@ -242,6 +242,7 @@ function rockPlacement(t: Terrain, o: Obstacle): { matrix: THREE.Matrix4; tint: 
 // Wrecks, settlement buildings and baked landmarks. A building gets a roof color from its id.
 function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   const pose = propPose(o);
+  if (pose.model === 'hulk') throw new Error(`Hulk ${o.id} has no view yet`);
   const g = posed(t, pose);
   const obj = model(pose.model);
   if (pose.model === 'building') paintRoof(obj, o.id);
