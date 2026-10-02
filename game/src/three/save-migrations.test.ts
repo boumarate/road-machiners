@@ -10,6 +10,8 @@ import FORMAT_2_4 from './save-fixtures/format-2-4.json';
 import FORMAT_2_5 from './save-fixtures/format-2-5.json';
 import FORMAT_2_6 from './save-fixtures/format-2-6.json';
 import FORMAT_2_7 from './save-fixtures/format-2-7.json';
+import FORMAT_2_8 from './save-fixtures/format-2-8.json';
+import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS } from './save-migrations';
@@ -173,13 +175,41 @@ describe('save migration 6 to 7', () => {
 });
 
 describe('save migration 7 to 8', () => {
-  const next = MIGRATIONS[7](FORMAT_2_7) as Record<string, unknown> & { vehicles: object[]; player: object; broken: object[] };
+  const next = MIGRATIONS[7](FORMAT_2_7) as { salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
+
+  it('drops the Fallen Sun stock and its searched mark, and keeps every other stock', () => {
+    expect(next.salvage.map((stock) => stock.id)).toEqual(['wreck3']);
+    expect(next.player.scavenged).toEqual(['wreck3']);
+  });
+
+  it('ends a search of the old stock and keeps other searches', () => {
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[1]).toEqual(FORMAT_2_7.vehicles[1]);
+  });
+});
+
+describe('save migration 8 to 9', () => {
+  const next = MIGRATIONS[8](FORMAT_2_8) as { salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
+
+  it('drops the Old Orchard stock and its searched mark, and keeps every other stock', () => {
+    expect(next.salvage.map((stock) => stock.id)).toEqual(['wreck3']);
+    expect(next.player.scavenged).toEqual(['wreck3']);
+  });
+
+  it('ends a search of the old stock and keeps other searches', () => {
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[1]).toEqual(FORMAT_2_8.vehicles[1]);
+  });
+});
+
+describe('save migration 9 to 10', () => {
+  const next = MIGRATIONS[9](FORMAT_2_9) as Record<string, unknown> & { vehicles: object[]; player: object; broken: object[] };
 
   it('drops trails, the visible tiles, the last turn events and removed vehicles', () => {
-    expect(next.vehicles).toEqual(FORMAT_2_7.vehicles.map(({ trail: _t, ...rest }) => rest));
+    expect(next.vehicles).toEqual(FORMAT_2_9.vehicles.map(({ trail: _t, ...rest }) => rest));
     expect('events' in next).toBe(false);
     expect('removed' in next).toBe(false);
-    const { visible: _v, ...player } = FORMAT_2_7.player;
+    const { visible: _v, ...player } = FORMAT_2_9.player;
     expect(next.player).toEqual(player);
   });
 
@@ -188,7 +218,7 @@ describe('save migration 7 to 8', () => {
   });
 
   it('keeps dust clouds, contacts and clouds', () => {
-    expect(next.dustClouds).toEqual(FORMAT_2_7.dustClouds);
-    expect(next.turn).toBe(FORMAT_2_7.turn);
+    expect(next.dustClouds).toEqual(FORMAT_2_9.dustClouds);
+    expect(next.turn).toBe(FORMAT_2_9.turn);
   });
 });

@@ -14,7 +14,7 @@ export async function release(ctx: Ctx): Promise<void> {
   const now = ctx.now();
   // Recorded first, so a failed cut waits a full interval instead of cutting again on the next tick.
   updateState(ctx.statePath, (state) => ({ ...state, lastRelease: now.toISOString() }));
-  await ctx.repo.sync();
+  await ctx.repo.fetch();
   await bringMainIntoDev(ctx);
   const features = featureMerges(await ctx.repo.mergeLog('dev', 'main'));
   if (features.length === 0) {
@@ -24,7 +24,6 @@ export async function release(ctx: Ctx): Promise<void> {
   const day = now.toISOString().slice(0, 10);
   const branch = `release/${day}`;
   await ctx.repo.createBranch(branch, 'dev');
-  await ctx.repo.push(branch);
   const body = `The factory cut branch ${branch} from dev.\n\nFeatures:\n${features.map((feature) => `- ${featureLine(feature)}`).join('\n')}\n\nThe candidate post in the committee chat comes when the cleanup tasks are done.`;
   const tracking = await ctx.github.createIssue(`Release ${day}`, body, [RELEASE_LABEL]);
   // Set at once, so a failure below still names this issue and the tick sees an open release.
@@ -41,7 +40,6 @@ export async function release(ctx: Ctx): Promise<void> {
 // must hold main already. Otherwise the committee plays a candidate without that work. A conflict fails the cut before any branch exists.
 async function bringMainIntoDev(ctx: Ctx): Promise<void> {
   if (await ctx.repo.isMerged('main', 'dev')) return;
-  await ctx.repo.merge('main', 'dev', 'Merge main into dev before the release cut');
-  await ctx.repo.push('dev');
+  await ctx.repo.merge([{ branch: 'main', into: 'dev', message: 'Merge main into dev before the release cut' }]);
   ctx.log('release', null, 'merged main into dev before the cut');
 }

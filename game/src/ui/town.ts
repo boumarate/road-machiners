@@ -113,7 +113,7 @@ export class TownScreen {
     const truck = el(
       "div",
       { class: "town-truck" },
-      ...(def.kind === "garage" ? [this.repairBar(w)] : []),
+      this.repairBar(w),
       this.inventory.render(),
     );
     this.root.replaceChildren(
@@ -313,7 +313,7 @@ export class TownScreen {
     );
   }
 
-  // Garage repairs beside the truck: the built-in parts alone, or every part.
+  // Shop repairs beside the truck: the built-in parts alone, or every part.
   private repairBar(w: World): HTMLElement {
     const broken = mountedParts(playerVehicle(w)).filter((p) => p.hp === 0).length;
     const basics = basicsRepairCost(w);

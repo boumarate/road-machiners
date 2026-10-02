@@ -171,6 +171,36 @@ function withGaveUp_6_7(vehicle: SavedJson): SavedJson {
   return { ...vehicle, defeat: { ...defeat, gaveUp: defeat.phase === 'out' && ((cab?.part?.hp as number | undefined) ?? 0) > 0 } };
 }
 
+// The Fallen Sun became a territory with no stock of its own: its loot lies in baked spots. A search of the old stock
+// ends with it.
+const RETIRED_STOCK_7_8 = 'fallen-sun';
+
+function withoutRetiredStock_7_8(world: SavedJson): SavedJson {
+  const idle = (v: SavedJson): SavedJson => ((v.job as SavedJson | null | undefined)?.stockId === RETIRED_STOCK_7_8 ? { ...v, job: null } : v);
+  const player = world.player as SavedJson;
+  return {
+    ...world,
+    salvage: (world.salvage as SavedJson[]).filter((stock) => stock.id !== RETIRED_STOCK_7_8),
+    player: { ...player, scavenged: (player.scavenged as string[]).filter((id) => id !== RETIRED_STOCK_7_8) },
+    vehicles: (world.vehicles as SavedJson[]).map(idle),
+  };
+}
+
+// Old Orchard became a territory with no stock of its own: its loot lies in baked spots. A search of the old stock
+// ends with it. The step repeats the 7 to 8 one, since a committed step is never edited.
+const RETIRED_STOCK_8_9 = 'orchard';
+
+function withoutRetiredStock_8_9(world: SavedJson): SavedJson {
+  const idle = (v: SavedJson): SavedJson => ((v.job as SavedJson | null | undefined)?.stockId === RETIRED_STOCK_8_9 ? { ...v, job: null } : v);
+  const player = world.player as SavedJson;
+  return {
+    ...world,
+    salvage: (world.salvage as SavedJson[]).filter((stock) => stock.id !== RETIRED_STOCK_8_9),
+    player: { ...player, scavenged: (player.scavenged as string[]).filter((id) => id !== RETIRED_STOCK_8_9) },
+    vehicles: (world.vehicles as SavedJson[]).map(idle),
+  };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -221,7 +251,11 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     vehicles: (world.vehicles as SavedJson[]).map(withGaveUp_6_7),
     removed: (world.removed as SavedJson[]).map(withGaveUp_6_7),
   }),
-  // 7 to 8: a save keeps only what load cannot rebuild. Trails, visible tiles, the last turn's events and removed
+  // 7 to 8: the Fallen Sun is a territory, so its site stock goes.
+  withoutRetiredStock_7_8,
+  // 8 to 9: Old Orchard is a territory, so its site stock goes.
+  withoutRetiredStock_8_9,
+  // 9 to 10: a save keeps only what load cannot rebuild. Trails, visible tiles, the last turn's events and removed
   // vehicles go, and a broken prop keeps its id and turn, since the map file holds the prop.
   (world) => {
     const { events: _events, removed: _removed, ...rest } = world;

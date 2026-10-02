@@ -5,6 +5,7 @@ import type { Vehicle, World } from "../sim/types";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
 import { el, isBrowserChord, panel, topLeft, topRight } from "./dom";
+import { LogPanel } from "./log";
 import {
   contractDue,
   contractSummary,
@@ -74,7 +75,6 @@ type HudActions = {
 // Centered keeps the truck in the middle of the screen. Auto shifts the view ahead of it.
 export type CameraMode = "centered" | "auto";
 
-const LOG_LINES = 14;
 const TOAST_MS = 3500;
 
 const WEATHER_NAMES: Record<World["weather"][number]["kind"], string> = {
@@ -88,18 +88,12 @@ function weatherLabel(w: World): string {
   return [...new Set(w.weather.map((e) => WEATHER_NAMES[e.kind]))].join(", ");
 }
 
-// A log line led by the turn it happened on.
-function turnStamped(turn: number, line: LogLine): LogLine {
-  const stamp = `T${turn} `;
-  return { ...line, text: stamp + line.text, spans: line.spans && [{ text: stamp, cls: "" }, ...line.spans] };
-}
-
 export class Hud {
   private top = panel("instruments");
   private condition = new TruckConditionView();
   private inspected = new TruckConditionView();
   private contracts = panel("contracts");
-  private log = panel("log");
+  private log = new LogPanel();
   private info = panel("info");
   private infoBody = el("div");
   private help = panel("help", topLeft());
@@ -115,7 +109,6 @@ export class Hud {
   private tips = new Tips(window.localStorage);
   cameraMode: CameraMode = "auto";
   private toastTimer: number | null = null;
-  private lines: LogLine[] = [];
 
   private readonly dialogue: DialoguePanel;
 
@@ -133,10 +126,6 @@ export class Hud {
     window.addEventListener("keydown", (e) => {
       if (e.code === "KeyV" && !isBrowserChord(e) && !document.activeElement?.matches("input, select, textarea")) this.toggleCameraMode();
     });
-    this.log.replaceChildren(
-      el("h3", {}, "Log"),
-    );
-    this.log.setAttribute("aria-label", "Event log");
     const guide = el(
       "details",
       {},
@@ -359,6 +348,7 @@ export class Hud {
     const douse = el(
       "button",
       {
+        class: "instrument-button",
         disabled: busy || !canDouse(w),
         onclick: () => this.actions.douseEngine(),
         title: `Pour ${ENGINE_HEAT.douseSupplies} supplies of water over the engine to cool it [G]`,
@@ -373,6 +363,7 @@ export class Hud {
     return el(
       "button",
       {
+        class: "instrument-button",
         disabled: busy,
         onclick: () => this.actions.openCharacter(),
         title: perkOpen ? "Driver and skills: a perk is ready to pick [C]" : "Driver and skills [C]",
@@ -384,6 +375,7 @@ export class Hud {
 
   renderTop(w: World): void {
     const readout = getHudReadout(w);
+    const timeStart = readout.clock.lastIndexOf(" ");
     const busy = this.actions.isBusy();
     this.condition.render(playerVehicle(w));
     this.renderContracts(w);
@@ -391,18 +383,33 @@ export class Hud {
     this.top.replaceChildren(
       this.condition.root,
       el(
-        "button",
+        "div",
         {
-          class: "truck-instrument",
-          title: "Truck inventory [I]",
-          "aria-label": "Open truck inventory",
-          disabled: busy,
-          onclick: () => this.actions.openInventory(),
+          class: "instrument-clock",
+          role: "timer",
+          title: "Day and time",
+          "aria-label": `Time: ${readout.clock}`,
         },
-        createSpeedDial(Number(readout.speed), Number(readout.maxSpeed)),
-        el("span", { class: "speed-value" }, readout.speed),
-        el("span", { class: "speed-unit" }, `km/h · max ${readout.maxSpeed}`),
-        createIcon("truck"),
+        el("span", { class: "clock-day" }, readout.clock.slice(0, timeStart)),
+        el("span", { class: "clock-time" }, readout.clock.slice(timeStart + 1)),
+      ),
+      el(
+        "div",
+        { class: "speedometer" },
+        el(
+          "button",
+          {
+            class: "truck-instrument",
+            title: "Truck inventory [I]",
+            "aria-label": "Open truck inventory",
+            disabled: busy,
+            onclick: () => this.actions.openInventory(),
+          },
+          createSpeedDial(Number(readout.speed), Number(readout.maxSpeed)),
+          el("span", { class: "speed-value" }, readout.speed),
+          createIcon("truck"),
+        ),
+        el("span", { class: "speed-max", title: "Max speed" }, `max ${readout.maxSpeed}`),
       ),
       el(
         "div",
@@ -467,15 +474,6 @@ export class Hud {
         }),
         ...this.engineButtons(w, busy),
         this.characterButton(w, busy),
-        ...(readout.broken
-          ? [
-              el(
-                "span",
-                { class: "bad", role: "status" },
-                `! ${readout.broken} broken`,
-              ),
-            ]
-          : []),
       ),
     );
   }
@@ -486,36 +484,19 @@ export class Hud {
   }
 
   pushEvents(w: World): void {
+    const lines: LogLine[] = [];
     for (const e of w.events) {
       const line = eventText(w, e);
-      if (line)
-        this.lines.unshift(turnStamped(w.turn, line));
-      if (
-        line &&
-        (e.t === "knockout" || e.t === "skillUp" || e.t === "discover")
-      )
-        this.toast(line.text);
+      if (!line) continue;
+      lines.push(line);
+      if (e.t === "knockout" || e.t === "skillUp" || e.t === "discover") this.toast(line.text);
     }
-    this.renderLog();
+    this.log.add(w.turn, lines);
   }
 
   // A log line from the UI itself, not from a sim event.
   note(w: World, text: string, cls: string): void {
-    this.lines.unshift({ text: `T${w.turn} ${text}`, cls });
-    this.renderLog();
-  }
-
-  private renderLog(): void {
-    this.lines = this.lines.slice(0, LOG_LINES);
-    if (this.lines.length === 0) return;
-    this.log.replaceChildren(
-      el("h3", {}, "Log"),
-      el(
-        "div",
-        { class: "log-lines", tabindex: 0 },
-        ...this.lines.map((l) => el("div", { class: l.cls }, ...(l.spans ? l.spans.map((sp) => el("span", { class: sp.cls }, sp.text)) : [l.text]))),
-      ),
-    );
+    this.log.add(w.turn, [{ text, cls }]);
   }
 
   // Parts of another truck take clicks that aim the guns.

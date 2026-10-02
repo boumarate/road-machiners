@@ -2,7 +2,7 @@ import { rmSync } from 'node:fs';
 import { deployDev } from '../deploy';
 import { readState, updateState } from '../state';
 import { BRANCH, FEEDBACK_HEADING, MergeConflictError, RELEASE_CANDIDATE_LABEL, WONT_DO_LABEL, type Ctx } from '../types';
-import { BASE_BRANCH, HOTFIX_BASE, agentLog, baseBranchFor, syncBase, workDir } from './common';
+import { BASE_BRANCH, HOTFIX_BASE, agentLog, baseBranchFor, workDir } from './common';
 import { shipHotfix } from './hotfix';
 
 async function requireApproval(ctx: Ctx, issue: number): Promise<void> {
@@ -55,9 +55,8 @@ async function mergeOrResolve(ctx: Ctx, issue: number, title: string, by: string
 // A hotfix ships at once. Other work stays open with the label until its release ships to main. Ship closes it and drops the label.
 async function mergeApproved(ctx: Ctx, issue: number, title: string, by: string, base: string): Promise<string> {
   if (base === HOTFIX_BASE) return shipHotfix(ctx, issue, title, by);
-  await syncBase(ctx, base);
-  await ctx.repo.merge(BRANCH(issue), base, `Merge issue #${issue}: ${title}`);
-  await ctx.repo.push(base);
+  await ctx.repo.fetch();
+  await ctx.repo.merge([{ branch: BRANCH(issue), into: base, message: `Merge issue #${issue}: ${title}` }]);
   const message = base === BASE_BRANCH ? await mergedIntoDev(ctx, issue, title, by) : await mergedIntoRelease(ctx, issue, title, by, base);
   await ctx.github.addLabel(issue, RELEASE_CANDIDATE_LABEL);
   return message;

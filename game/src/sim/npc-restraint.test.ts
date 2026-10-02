@@ -285,7 +285,7 @@ describe('NPC field repairs', () => {
     const { world, npc } = createNpc();
     addGoods(world, npc, 'parts', 2);
     // A dry tank strands the truck, and a stranded driver at a town gets a fresh loadout. A low tank only needs a visit.
-    npc.resources!.fuel = 0.5;
+    npc.resources!.fuel = 0.3;
     npc.resources!.money = 500;
     npc.pos = { ...sitePads(REGION.towns[0])[0] };
     planNpcOrders(world);

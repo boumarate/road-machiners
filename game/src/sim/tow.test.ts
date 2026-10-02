@@ -8,15 +8,15 @@ import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
 import { canUseSite, nearestPad, siteGates, sitePads, type Site } from './sites';
 import { getResources } from './resources';
-import { isStranded, vehicleStats } from './stats';
+import { fuelCap, isStranded, vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere, testDrive , startCombat } from './testkit';
 import { hasLoot, mountedParts } from './grid';
 import { CONDITION } from '../data/wear';
-import { thinkNpc, topGoal } from './npc-activities';
+import { startTow, thinkNpc, topGoal } from './npc-activities';
 import { optionChances, optionWeights } from './npc-decisions';
 import { addState, endState, stateOf, towData } from './states';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp } from './dialogue';
-import { dropTow, isOnRope, isTowed, playerTow, playerTowing, setBeacon, towOf, unhitch } from './tow';
+import { dropTow, isOnRope, runTow, isTowed, playerTow, playerTowing, setBeacon, towOf, unhitch } from './tow';
 import { sunAt } from './sun';
 import { canVehicleSee, refreshVision } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
@@ -32,6 +32,10 @@ function withTower(w: World, templateId: string, faction: Vehicle['faction'], ch
 }
 
 // A player with an empty tank and a trader in sight.
+const FAR: Vec = { x: 80, y: 200 };
+const MID_NEAR: Vec = { x: 80, y: 420 };
+const MID_FAR: Vec = { x: 80, y: 330 };
+
 function stranded(playerPos: Vec = { x: 30, y: 30 }, traderPos: Vec = { x: 40, y: 30 }): Setup {
   const w = emptyWorld(playerPos);
   w.player.fuel = 0;
@@ -55,10 +59,10 @@ const find = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
 const feeOf = (w: World) => towData(playerTow(w)!).fee;
 
 // Runs turns until the tower makes its offer, which it then calls in by radio.
-function offered(s: Setup): World {
+function offered(s: Setup, topic: 'tow' | 'towFree' = 'tow'): World {
   const r = runUntil(s.w, 30, (w) => playerTow(w) !== null);
   expect(playerTow(r.w)).not.toBeNull();
-  expect(r.w.player.call).toMatchObject({ with: playerTow(r.w)!.holder, topic: 'tow' });
+  expect(r.w.player.call).toMatchObject({ with: playerTow(r.w)!.holder, topic });
   return r.w;
 }
 
@@ -102,7 +106,19 @@ describe('tow offer', () => {
     const town = REGION.towns.find((t) => t.id === 'bowl')!;
     const pad = sitePads(town).reduce((a, b) => (dist(me.pos, a) <= dist(me.pos, b) ? a : b));
     const length = routeLength(me.pos, route(w, me.pos, pad, vehicleStats(w, find(w, s.trader.id)).radius, []));
-    expect(feeOf(w)).toBe(Math.round(TOW.base + TOW.perTile * length));
+    expect(feeOf(w)).toBe(Math.round(Math.min(TOW.maxFee, TOW.base + TOW.perTile * length)));
+  });
+
+  it('caps a long tow at TOW.maxFee', () => {
+    const w = offered(stranded(FAR, { x: FAR.x + 10, y: FAR.y }));
+    expect(feeOf(w)).toBe(Math.round(TOW.maxFee));
+  });
+
+  it('a longer tow costs more below the cap', () => {
+    const near = feeOf(offered(stranded(MID_NEAR, { x: MID_NEAR.x + 10, y: MID_NEAR.y })));
+    const mid = feeOf(offered(stranded(MID_FAR, { x: MID_FAR.x + 10, y: MID_FAR.y })));
+    expect(near).toBeLessThan(mid);
+    expect(mid).toBeLessThan(Math.round(TOW.maxFee));
   });
 
   it('refusing stops that NPC from offering again while the player stays in sight', () => {
@@ -429,6 +445,101 @@ describe('answering a stranded truck', () => {
     expect(topGoal(find(next, again.holder))?.kind).toBe('tow');
   });
 
+  // A tower in sight that startTow sends over. pin() holds it in place each turn, as a wall of trucks would.
+  function blocked(): { w: World; tower: Vehicle } {
+    const { w, trader } = stranded();
+    const client = find(w, w.player.vehicleId);
+    startTow(w, trader, client, { ...client.pos });
+    return { w, tower: trader };
+  }
+  const pin = (w: World, at: Vec, id: string): World => {
+    const next = endTurn(w, testDrive);
+    find(next, id).pos = { ...at };
+    find(next, id).speed = 0;
+    return next;
+  };
+  const claimOf = (w: World, holder: string) => w.states.find((st) => st.kind === 'answering' && st.holder === holder);
+
+  it('a tower that cannot get through gives up 20 turns after it has its client in sight, and drops its goal', () => {
+    const { tower, w: start } = blocked();
+    let w = start;
+    const at = { ...find(w, tower.id).pos };
+    const events: GameEvent[] = [];
+    for (let i = 1; i <= 19; i++) w = pin(w, at, tower.id);
+    expect(claimOf(w, tower.id)).toBeDefined();
+    for (let i = 0; i < 3; i++) {
+      w = pin(w, at, tower.id);
+      events.push(...w.events);
+    }
+    expect(claimOf(w, tower.id)).toBeUndefined();
+    expect(events.find((e) => e.t === 'towDropped')).toMatchObject({ by: tower.id, reason: 'blocked' });
+    expect(find(w, tower.id).brain!.goals.some((g) => g.kind === 'tow')).toBe(false);
+  });
+
+  it('after the claim lapses, another tower can claim the client and the lapsed one does not at once', () => {
+    const { w: start, tower } = blocked();
+    let w = start;
+    const at = { ...find(w, tower.id).pos };
+    const other = withTower(w, 'trader', 'traders', 'hauler', { x: 30, y: 42 });
+    for (let i = 0; i < 30 && claimOf(w, tower.id); i++) w = pin(w, at, tower.id);
+    expect(claimOf(w, tower.id)).toBeUndefined();
+    // The other tower drove off to its own work, so it comes back into sight.
+    find(w, other.id).pos = { x: 30, y: 42 };
+    refreshVision(w);
+    forceOption('strandedSeen', 'tow');
+    w.turn++;
+    thinkNpc(w, find(w, other.id));
+    expect(claimOf(w, other.id)).toBeDefined();
+    // The lapsed tower keeps the client noticed while it sees it, so it does not claim again.
+    forceOption('strandedSeen', 'tow');
+    w.turn++;
+    thinkNpc(w, find(w, tower.id));
+    expect(claimOf(w, tower.id)).toBeUndefined();
+  });
+
+  it('the claim clock holds while the client is in combat or out of sight', () => {
+    const { w: start, tower } = blocked();
+    let w = start;
+    const at = { ...find(w, tower.id).pos };
+    const foe = withTower(w, 'scavenger', 'scavengers', 'hauler', { x: 30, y: 12 });
+    const me = w.player.vehicleId;
+    for (let i = 0; i < 30; i++) {
+      w = pin(w, at, tower.id);
+      // Hold the fight, as shots would.
+      if (!stateOf(w, 'feud', foe.id, me)) addState(w, 'feud', foe.id, me, { kind: 'feud', robbery: false });
+      if (!stateOf(w, 'combat', foe.id, me)) startCombat(w, foe, find(w, me));
+    }
+    expect(claimOf(w, tower.id)).toBeDefined();
+  });
+
+  it('the claim clock holds while the tower cannot see its client, as on a beacon answer', () => {
+    const { w: start, tower } = blocked();
+    let w = start;
+    w.player.beacon = true;
+    const me = find(w, w.player.vehicleId).pos;
+    const far = { x: me.x + 40, y: me.y };
+    for (let i = 0; i < 30; i++) w = pin(w, far, tower.id);
+    expect(claimOf(w, tower.id)).toBeDefined();
+  });
+
+  it('a tower that reaches its client on the turn its claim lapses ends the job without hitching', () => {
+    const s = stranded();
+    const client = find(s.w, s.w.player.vehicleId);
+    startTow(s.w, s.trader, client, { ...client.pos });
+    endState(s.w, claimOf(s.w, s.trader.id)!, 'expired');
+    s.trader.pos = { x: client.pos.x + 4, y: client.pos.y };
+    const goal = topGoal(s.trader)!;
+    expect(runTow(s.w, s.trader, goal)).toBe('could not get through to the truck');
+    expect(playerTow(s.w)).toBeNull();
+  });
+
+  it('a hitched tow never lapses on a timer', () => {
+    const s = stranded();
+    const w = acceptTow(offered(s));
+    const r = runUntil(w, 30, (x) => playerTow(x) === null);
+    expect(r.events.some((e) => e.t === 'towDropped' && e.reason === 'blocked')).toBe(false);
+  });
+
   it('a truck at a town gate gets the tow chosen far less often than 40 tiles out, and still above 0', () => {
     const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
     const gate = siteGates(bowl)[0];
@@ -473,6 +584,69 @@ describe('tow deals', () => {
     expect(again.holder).toBe(deal.holder);
     expect(towData(again)).toEqual({ kind: 'tow', site: deal.site, fee: deal.fee, waived: 0, hitched: false });
     expect(stateOf(r.w, 'towPromise', deal.holder, r.w.player.vehicleId)).toBeNull();
+  });
+});
+
+describe('free tow for a broke player', () => {
+  const broke = (money: number): Setup => {
+    const s = stranded();
+    s.w.player.money = money;
+    forceOption('strandedSeen', 'tow');
+    return s;
+  };
+
+  it('offers a free tow to a player with no money, and arrival takes nothing', () => {
+    const s = broke(0);
+    let w = offered(s, 'towFree');
+    expect(feeOf(w)).toBe(0);
+    expect(w.events).toContainEqual(expect.objectContaining({ t: 'towOffer', fee: 0 }));
+    expect(w.events.some((e) => e.t === 'say' && /No charge/.test(e.text))).toBe(true);
+    const traderMoney = getResources(w, find(w, s.trader.id)).money;
+    w = acceptTow(w);
+    const r = runUntil(w, 150, (x) => playerTow(x) === null);
+    expect(r.events.filter((e) => e.t === 'towDone')).toEqual([{ t: 'towDone', by: s.trader.id, client: r.w.player.vehicleId, fee: 0 }]);
+    expect(r.w.player.money).toBe(0);
+    expect(getResources(r.w, find(r.w, s.trader.id)).money).toBe(traderMoney);
+  });
+
+  it('offers a player in debt a free tow', () => {
+    const w = offered(broke(-50), 'towFree');
+    expect(feeOf(w)).toBe(0);
+    expect(w.player.money).toBe(-50);
+  });
+
+  it('charges a funded player the route fee under the tow topic', () => {
+    const w = offered(broke(500));
+    expect(feeOf(w)).toBeGreaterThan(0);
+  });
+
+  it('keeps a free tow free when it is dropped for danger and offered again', () => {
+    const s = broke(0);
+    let w = acceptTow(offered(s, 'towFree'));
+    for (let i = 0; i < 3; i++) w = endTurn(w, testDrive);
+    dropTow(w, playerTow(w)!, 'danger');
+    w.player.money = 500;
+    w.rngState = rngStateWhere((roll) => roll > 0.4 && roll < 0.6);
+    thinkNpc(w, find(w, s.trader.id));
+    const r = runUntil(w, 30, (x) => playerTow(x) !== null);
+    expect(towData(playerTow(r.w)!).fee).toBe(0);
+  });
+
+  it('gives a paid promise free to a player who is broke when it is offered again', () => {
+    const s = broke(500);
+    let w = acceptTow(offered(s));
+    for (let i = 0; i < 3; i++) w = endTurn(w, testDrive);
+    dropTow(w, playerTow(w)!, 'danger');
+    expect(stateOf(w, 'towPromise', s.trader.id, w.player.vehicleId)).not.toBeNull();
+    w.player.money = 0;
+    w.rngState = rngStateWhere((roll) => roll > 0.4 && roll < 0.6);
+    thinkNpc(w, find(w, s.trader.id));
+    const r = runUntil(w, 30, (x) => playerTow(x) !== null);
+    expect(towData(playerTow(r.w)!).fee).toBe(0);
+  });
+
+  it('never names a paid fee of 0, even at the top social level', () => {
+    expect(TOW.base * (1 - SKILL_EFFECTS.social.towFee * (XP_TO_REACH.length - 1))).toBeGreaterThan(1);
   });
 });
 
@@ -615,7 +789,13 @@ describe('social on tow fees', () => {
     const pad = sitePads(town).reduce((a, b) => (dist(me.pos, a) <= dist(me.pos, b) ? a : b));
     const length = routeLength(me.pos, route(w, me.pos, pad, vehicleStats(w, find(w, s.trader.id)).radius, []));
     const cut = 1 - 5 * SKILL_EFFECTS.social.towFee;
-    expect(feeOf(w)).toBe(Math.round((TOW.base + TOW.perTile * length) * cut));
+    expect(feeOf(w)).toBe(Math.round(Math.min(TOW.maxFee, TOW.base + TOW.perTile * length) * cut));
+  });
+
+  it('cuts a capped fee too', () => {
+    const s = stranded(FAR, { x: FAR.x + 10, y: FAR.y });
+    s.w.player.skills.social = XP_TO_REACH[5];
+    expect(feeOf(offered(s))).toBe(Math.round(TOW.maxFee * (1 - 5 * SKILL_EFFECTS.social.towFee)));
   });
 });
 
@@ -991,7 +1171,45 @@ describe('a broke driver', () => {
     expect(thinkNpc(w, npc).kind).not.toBe('wait');
   });
 
-  it('stranded on a town pad gets a fresh loadout and can drive', () => {
+  it('low on fuel heads for a town, not a fuel stall, while it can still drive', () => {
+    const pump = REGION.locations.find((l) => l.id === 'pump-station')!;
+    const { w, npc } = broke({ x: pump.pos.x + pump.radius + 4, y: pump.pos.y });
+    getResources(w, npc).fuel = 1;
+    const goal = thinkNpc(w, npc);
+    expect(goal).toMatchObject({ kind: 'resupply' });
+    expect(REGION.towns.map((t) => t.id)).toContain(goal.targetId);
+  });
+
+  it('with a full tank keeps working', () => {
+    const { w, npc } = broke({ x: far.x + 3, y: far.y });
+    getResources(w, npc).fuel = fuelCap(npc);
+    expect(thinkNpc(w, npc).kind).not.toBe('resupply');
+  });
+
+  it('dry on a town pad with working parts gets scrap fuel and keeps its loadout', () => {
+    const { w, npc } = broke(nearestPad(bowl, far));
+    const engine = mountedParts(npc, 'engine')[0];
+    getResources(w, npc).fuel = 0;
+    thinkNpc(w, npc);
+    expect(getResources(w, npc).fuel).toBeGreaterThan(0);
+    expect(mountedParts(npc, 'engine')[0].id).toBe(engine.id);
+    expect(isStranded(w, npc)).toBe(false);
+  });
+
+  it('a broke raider on a town pad gets no scrap fuel', () => {
+    const pad = nearestPad(bowl, far);
+    const w = emptyWorld(far);
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    const npc = addVehicle(w, 'raiders', 'scout', ['stockEngine'], { ...pad }, Math.PI);
+    npc.brain = npcBrain('buggy', pad, ['raider']);
+    getResources(w, npc).money = 0;
+    getResources(w, npc).fuel = 0;
+    thinkNpc(w, npc);
+    expect(getResources(w, npc).fuel).toBe(0);
+  });
+
+  // Scrap fuel does not fix an engine for an NPC, so a broken engine still gets the refit.
+  it('stranded on a town pad by a broken engine gets a fresh loadout and can drive', () => {
     const { w, npc } = broke(nearestPad(bowl, far));
     mountedParts(npc, 'engine')[0].hp = 0;
     getResources(w, npc).fuel = 0;

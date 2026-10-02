@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { REGION } from "../data/region";
 import { CONDITION } from "../data/wear";
 import type { Contract } from "../sim/market";
-import { partDef } from "../data/parts";
+import { partDef, PARTS } from "../data/parts";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import type { GameEvent, Job, PartInstance } from "../sim/types";
 import { maxHp } from "../sim/wear";
 import { workOf, addState } from "../sim/states";
 import { startAid } from "../sim/aid";
-import { contractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel } from "./format";
+import { contractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel, conditionTier, conditionStatus, showsCondition } from "./format";
 import { mountedParts } from "../sim/grid";
 
 function part(wear: number): PartInstance {
@@ -27,6 +27,41 @@ describe("wearLabel", () => {
 
   it("reads a part past the last wear step as junk", () => {
     expect(wearLabel(part(CONDITION.maxWear + 1))).toBe("junk");
+  });
+});
+
+describe("conditionTier", () => {
+  it("gives one tier per wear step and junk past the last", () => {
+    expect(conditionTier(part(0))).toBe("pristine");
+    expect(conditionTier(part(1))).toBe("w1");
+    expect(conditionTier(part(CONDITION.maxWear))).toBe(`w${CONDITION.maxWear}`);
+    expect(conditionTier(part(CONDITION.maxWear + 1))).toBe("junk");
+  });
+});
+
+describe("showsCondition", () => {
+  it("is false for built-in core parts and true for every other part", () => {
+    for (const def of Object.values(PARTS)) {
+      expect(showsCondition({ ...part(0), defId: def.id })).toBe(def.kind !== "core");
+    }
+    expect(showsCondition({ ...part(0), defId: "cab" })).toBe(false);
+  });
+});
+
+describe("conditionStatus", () => {
+  it("shows HP for a working part", () => {
+    const s = conditionStatus(part(1));
+    expect(s.tone).toBe("dim");
+    expect(s.text).toMatch(/HP$/);
+  });
+
+  it("reads a broken rebuildable part as broken, never junk", () => {
+    expect(conditionStatus({ ...part(2), hp: 0 })).toEqual({ text: "broken", tone: "bad" });
+    expect(conditionStatus({ ...part(CONDITION.maxWear), hp: 0 }).text).toBe("broken");
+  });
+
+  it("reads junk as scrap only", () => {
+    expect(conditionStatus({ ...part(CONDITION.maxWear + 1), hp: 0 })).toEqual({ text: "scrap only", tone: "dim" });
   });
 });
 
@@ -206,6 +241,20 @@ describe("NPC names in the log", () => {
     w.removed.push(npc);
     expect(eventText(w, offer)?.text).toMatch(/^Roamer Silas Kane offers/);
     expect(vehicleName(w, w.player.vehicleId)).toBe("You");
+  });
+});
+
+describe("tow text", () => {
+  it("says free for a fee of 0 and keeps the price otherwise", () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = addVehicle(w, "traders", "scout", ["stockEngine"], { x: 34, y: 30 });
+    const town = REGION.towns[0].id;
+    expect(eventText(w, { t: "towOffer", by: npc.id, town, fee: 0 })?.text).toMatch(/ for free\.$/);
+    expect(eventText(w, { t: "towOffer", by: npc.id, town, fee: 40 })?.text).toMatch(/ for 40\.$/);
+    expect(eventText(w, { t: "towDone", by: npc.id, client: w.player.vehicleId, fee: 0 })).toMatchObject({ text: expect.stringMatching(/tows you into town for free\.$/), cls: "" });
+    expect(eventText(w, { t: "towDone", by: npc.id, client: w.player.vehicleId, fee: 40 })).toMatchObject({ text: expect.stringMatching(/takes 40\.$/), cls: "bad" });
+    const other = addVehicle(w, "roamers", "buggy", ["stockEngine"], { x: 50, y: 30 });
+    expect(eventText(w, { t: "towDone", by: npc.id, client: other.id, fee: 0 })?.text).toMatch(/ in for free\.$/);
   });
 });
 
