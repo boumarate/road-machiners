@@ -12,7 +12,7 @@ describe('runJob', () => {
     rmSync(ROOT, { recursive: true, force: true });
     mkdirSync(ROOT, { recursive: true });
     const statePath = join(ROOT, 'state.json');
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), jobs: [{ id: 'a', stage: 'design', issue: 4, pid: 1, startedAt: '', log: 'l' }, { id: 'b', stage: 'change', issue: 9, pid: 1, startedAt: '', log: 'l' }], pendingChanges: [{ id: 9, text: 't', by: 'b' }] });
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), jobs: [{ id: 'a', stage: 'design', issue: 4, pid: 1, startedAt: '', log: 'l' }, { id: 'b', stage: 'change', issue: 9, pid: 1, startedAt: '', log: 'l' }], pendingChanges: [{ id: 9, text: 't', by: 'b' }], interrupted: [9] });
     const posts: string[] = [];
     const ctx = {
       cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c' } as FactoryConfig, statePath, now: () => new Date(), log: () => undefined,
@@ -24,6 +24,8 @@ describe('runJob', () => {
     const state = readState(statePath);
     expect(state.jobs.map((job) => job.id)).toEqual(['a']);
     expect(state.pendingChanges).toEqual([]);
+    // Change 9 is no issue 9, so the mark of issue 9 stays.
+    expect(state.interrupted).toEqual([9]);
     expect(posts).toEqual([]);
     expect(state.failures).toMatchObject([{ stage: 'change', issue: null, error: 'offline' }]);
   });
@@ -50,7 +52,7 @@ describe('runJob', () => {
     rmSync(ROOT, { recursive: true, force: true });
     mkdirSync(ROOT, { recursive: true });
     const statePath = join(ROOT, 'state.json');
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), jobs: [{ id: 'a', stage: 'design', issue: 7, pid: 1, startedAt: '2026-01-10T11:50:00Z', log: 'l' }] });
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), jobs: [{ id: 'a', stage: 'design', issue: 7, pid: 1, startedAt: '2026-01-10T11:50:00Z', log: 'l' }], interrupted: [3, 7] });
     const events: string[] = [];
     const fail = async () => { throw new Error('offline'); };
     const ctx = {
@@ -61,6 +63,7 @@ describe('runJob', () => {
     } as unknown as Ctx;
     await runJob(ctx, 'design', 7);
     expect(events).toEqual(['label', 'comment 7 Design failed after 10 min. Hermes is looking into it.']);
+    expect(readState(statePath).interrupted).toEqual([3]);
   });
 
   it('writes a finished note with the stage time', () => {

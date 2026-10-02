@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { AgentRun, Ctx } from '../types';
 import { EMPTY_STATE, writeState } from '../state';
 import { solidPng } from '../media-fixtures';
-import { agentHome, baseBranchFor, baseBranchOf, factoryPaths, fillPrompt, modelFor, runAgent } from './common';
+import { INTERRUPTED_NOTE, agentHome, baseBranchFor, baseBranchOf, factoryPaths, fillPrompt, modelFor, runAgent } from './common';
 
 function agentCtx(labels: string[], body = '', comments: { login: string; body: string }[] = [], fetchFn?: typeof fetch): { ctx: Ctx; runs: AgentRun[]; logs: string[] } {
   const runs: AgentRun[] = [];
@@ -32,6 +32,20 @@ describe('runAgent network', () => {
     await runAgent(ctx, 7, 'design', 'p');
     expect(runs[0].openNetwork).toBe(true);
     expect(logs[1]).toContain('open network');
+  });
+});
+
+describe('runAgent after an update stopped the job', () => {
+  it('tells the agent to continue from the work clone only for a marked issue', async () => {
+    mkdirSync('tmp/factory-common-test', { recursive: true });
+    const statePath = 'tmp/factory-common-test/state.json';
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), interrupted: [7] });
+    const { ctx, runs } = agentCtx(['bug']);
+    const marked = { ...ctx, statePath } as Ctx;
+    await runAgent(marked, 7, 'implement', 'p');
+    await runAgent(marked, 8, 'implement', 'p');
+    expect(runs[0].prompt.endsWith(`\n\n${INTERRUPTED_NOTE}`)).toBe(true);
+    expect(runs[1].prompt).not.toContain(INTERRUPTED_NOTE);
   });
 });
 

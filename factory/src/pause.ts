@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 
 // Hermes pauses the factory with this file while it repairs state by hand. Its text says why.
 export const pauseFile = (home: string): string => `${home}/paused`;
@@ -18,4 +18,9 @@ export const updateFailedFile = (home: string): string => `${home}/update-failed
 export function isDrainingUpdatePause(home: string): boolean {
   const reason = pausedReason(home);
   return reason !== null && reason.startsWith(UPDATE_PAUSE_PREFIX) && !existsSync(updateFailedFile(home));
+}
+
+// When the pause began. The update script keeps the file's time when it rewrites the reason.
+export function pausedSince(home: string): Date {
+  return statSync(pauseFile(home)).mtime;
 }

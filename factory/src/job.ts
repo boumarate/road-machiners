@@ -12,7 +12,7 @@ import { ship } from './stages/ship';
 import { runStage as testing } from './stages/testing';
 import { runStage as triage } from './stages/triage';
 import { readState, updateState } from './state';
-import type { Ctx, Job, JobStage } from './types';
+import { QUEUE_OF, type Ctx, type Job, type JobStage } from './types';
 
 type Handler = (ctx: Ctx, issue: number) => Promise<void>;
 
@@ -43,7 +43,7 @@ function ownJob(ctx: Ctx, stage: JobStage, issue: number | null): Job | null {
   return readState(ctx.statePath).jobs.find((job) => job.stage === stage && job.issue === issue) ?? null;
 }
 
-// Runs one job to its end. Success or failure, the job's record and its queued command are cleared, so nothing retries.
+// Runs one job to its end. Success or failure, the job's record, its queued command and its issue's interrupted mark are cleared, so nothing retries.
 export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null): Promise<void> {
   const job = ownJob(ctx, stage, issue);
   try {
@@ -75,6 +75,8 @@ function clearJob(ctx: Ctx, stage: JobStage, issue: number | null): void {
     const first = stage === 'remove' ? state.pendingRemovals.findIndex((item) => item.issue === issue) : -1;
     const pendingRemovals = state.pendingRemovals.filter((_, index) => index !== first);
     const jobs = state.jobs.filter((job) => job.stage !== stage || job.issue !== issue);
-    return { ...state, jobs, pendingApprovals, pendingChanges, pendingShip, pendingRemovals };
+    // Only agent and test jobs get stopped. A change job's id is no issue number, so it never clears a mark.
+    const interrupted = QUEUE_OF[stage] === 'branch' ? state.interrupted : state.interrupted.filter((item) => item !== issue);
+    return { ...state, jobs, pendingApprovals, pendingChanges, pendingShip, pendingRemovals, interrupted };
   });
 }

@@ -3,7 +3,7 @@ import { removeStaleBuilds } from './deploy';
 import { failureIssue, pruneFailures, reportFailure } from './fail';
 import { intake } from './intake';
 import { pruneCaptions } from './post-status';
-import { isAlive, killJob, spawnJob } from './jobs';
+import { inContainer, isAlive, killJob, spawnJob } from './jobs';
 import { readState, updateState } from './state';
 import { isAnswered } from './questions';
 import { ADHOC_LABEL, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
@@ -126,24 +126,57 @@ export function chooseJobs(state: FactoryState, cards: Card[], now: Date, cfg: D
 // Process control the tick uses. The CLI uses the real ones, and tests pass fakes.
 export type TickDeps = {
   isAlive: (pid: number) => boolean;
+  inContainer: (run: Run, id: string) => Promise<boolean>;
   kill: (run: Run, pid: number, id: string) => Promise<void>;
   spawn: (args: string[], cwd: string, log: string, id: string) => number;
 };
-export const REAL_DEPS: TickDeps = { isAlive, kill: killJob, spawn: spawnJob };
+export const REAL_DEPS: TickDeps = { isAlive, inContainer, kill: killJob, spawn: spawnJob };
 
 function dropJob(ctx: Ctx, id: string): void {
   updateState(ctx.statePath, (state) => ({ ...state, jobs: state.jobs.filter((job) => job.id !== id) }));
 }
 
 // A dead or timed-out job leaves the list and reports. A job in time stays.
+function minutesSince(ctx: Ctx, iso: string): number {
+  return (ctx.now().getTime() - new Date(iso).getTime()) / MINUTE_MS;
+}
+
 async function checkJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<void> {
-  const minutes = (ctx.now().getTime() - new Date(job.startedAt).getTime()) / MINUTE_MS;
+  const minutes = minutesSince(ctx, job.startedAt);
   const alive = deps.isAlive(job.pid);
   if (alive && minutes <= ctx.cfg.stageTimeoutMinutes) return ctx.log('tick', job.issue, `${job.stage} still running`);
   if (alive) await deps.kill(ctx.run, job.pid, job.id);
   dropJob(ctx, job.id);
   const reason = alive ? `timed out after ${ctx.cfg.stageTimeoutMinutes} minutes` : 'job process died without finishing';
   await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), reason, job.log);
+}
+
+// While an update waits, a job past the timeout still fails. After the grace time, an agent or test job in time stops while it works in a container.
+// Its card stays where it is, so the first tick after the update starts it again, and it does not count twice against the daily cap.
+// A branch job moves branches and posts between its containers, so the update always waits for it.
+export async function drainJobs(ctx: Ctx, pausedAt: Date, deps: TickDeps = REAL_DEPS): Promise<void> {
+  const graceOver = minutesSince(ctx, pausedAt.toISOString()) > ctx.cfg.updateGraceMinutes;
+  for (const job of readState(ctx.statePath).jobs) {
+    if (graceOver && (await stoppable(ctx, job, deps))) await interruptJob(ctx, job, deps);
+    else await checkJob(ctx, job, deps);
+  }
+}
+
+async function stoppable(ctx: Ctx, job: Job, deps: TickDeps): Promise<boolean> {
+  const inTime = minutesSince(ctx, job.startedAt) <= ctx.cfg.stageTimeoutMinutes;
+  return inTime && QUEUE_OF[job.stage] !== 'branch' && deps.isAlive(job.pid) && deps.inContainer(ctx.run, job.id);
+}
+
+async function interruptJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<void> {
+  await deps.kill(ctx.run, job.pid, job.id);
+  updateState(ctx.statePath, (state) => {
+    // Jobs started by one tick share a start time, so only one of them goes.
+    const start = state.jobStarts.indexOf(job.startedAt);
+    const jobStarts = state.jobStarts.filter((_, index) => index !== start);
+    const interrupted = job.issue === null || state.interrupted.includes(job.issue) ? state.interrupted : [...state.interrupted, job.issue];
+    return { ...state, jobs: state.jobs.filter((other) => other.id !== job.id), jobStarts, interrupted };
+  });
+  ctx.log('tick', job.issue, `stopped ${job.stage} for the update, it starts again after it`);
 }
 
 function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): void {
