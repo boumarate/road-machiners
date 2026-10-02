@@ -123,7 +123,7 @@ server.user(
 # The factory user owns the clone. Git refuses it for root without this entry, and that breaks admin commands run over ssh as root.
 server.shell(
     name="git trusts the factory clone for every user",
-    commands=[f"git config --system --get-all safe.directory | grep -qxF {CODE_DIR} || git config --system --add safe.directory {CODE_DIR}"],
+    commands=[f"git config --system --get-all safe.directory | grep -qxF {REPO_DIR} || git config --system --add safe.directory {REPO_DIR}"],
     _sudo=True,
 )
 
