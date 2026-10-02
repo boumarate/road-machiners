@@ -9,11 +9,10 @@ export const PAL = {
   desertSand: 0xd9a064, // warm ochre base that open desert ground mixes toward
   sandLight: 0xe7a566, // the light end of the slow sand patches on open desert
   sandShade: 0xcd8954, // the deep end of the slow sand patches on open desert
-  road: 0x966e4e, // rust-brown packed dirt of the road surface
-  roadRut: 0x86603e,
-  roadCrack: 0x7a5638, // cracks and potholes in the road texture
-  roadShoulder: 0x8a6442, // gravel berm dirt fraying out from the road edge
-  roadStone: 0x7a5c42, // loose stones on the road shoulder
+  road: 0xa8744c, // rust-brown packed dirt of the road surface
+  roadCrack: 0x8e6040, // faint cracks and potholes in the road texture
+  roadRim: 0xd4975b, // light sand the road edge frays into
+  stoneGrey: 0x7a7470, // cool grey stones on road shoulders and in pebble clusters
   padMark: 0xd86a2a, // worn orange paint around site pads, where trucks stop to use a site
   pebble: 0x9c7c54,
   scrub: [0x6f6a3a, 0x5d5a32, 0x7c7442],

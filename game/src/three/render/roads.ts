@@ -1,8 +1,9 @@
 // Roads and site pads are drawn by the ground shader, so they lie exactly on the ground that wheels touch.
 // The shader splits the ground into road pixels a third the size of the ground paint pixels. A road pixel
 // takes the road look where the road mask covers its center, and the slow tone and a per-pixel dither fray
-// the edge. Past the edge, where the blurred mask is still above SHOULDER_FROM, a gravel shoulder frays
-// into the ground: the dither keeps more shoulder pixels and more stones the closer they lie to the road.
+// the edge. Past the edge, where the blurred mask is still above SHOULDER_FROM, the edge frays both ways:
+// the dither keeps road pixels out on the sand and light rim sand pixels with a few grey stones, more of
+// each the closer they lie to the road. Just inside the edge, a few road pixels take the rim sand too.
 // A pad is a paler floor of the same dirt inside a worn orange outline, where the road ends.
 
 import * as THREE from "three";
@@ -17,8 +18,10 @@ const S = PHYSICS.metersPerTile;
 const PIXEL_SPLIT = 3; // road pixels across one ground paint pixel
 const PAD_BORDER = 2; // road pixels across the pad outline
 const SHOULDER_FROM = 0.2; // road mask cover where the shoulder starts, out past the road edge near 0.5
-const SHOULDER_MIX = 0.6; // strongest mix toward the shoulder color, at the road edge
-const SHOULDER_STONES = 0.25; // share of shoulder pixels that are stones at the road edge, per unit of mix
+const ROAD_FRAY = 0.45; // share of shoulder pixels that take the road color at the road edge
+const RIM_SHARE = 0.4; // share of shoulder pixels that take the rim sand at the road edge, stones included
+const RIM_INSIDE = 0.25; // share of road pixels that take the rim sand at the road edge
+const SHOULDER_STONES = 0.12; // share of shoulder pixels that are grey stones at the road edge
 
 // Paints the road mask on `mask`, which must map the map like the ground canvas, and draws roads and
 // pads on the ground material.
@@ -36,10 +39,12 @@ export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas
     roadToneMeters: { value: ROAD_TONE_SIDE * ROAD_TONE_PIXELS * pixel },
     roadGroundLuma: { value: luma(new THREE.Color(ROAD_GROUND)) },
     shoulderFrom: { value: SHOULDER_FROM },
-    shoulderMix: { value: SHOULDER_MIX },
+    roadFray: { value: ROAD_FRAY },
+    rimShare: { value: RIM_SHARE },
+    rimInside: { value: RIM_INSIDE },
     shoulderStones: { value: SHOULDER_STONES },
-    shoulderColor: { value: new THREE.Color(PAL.roadShoulder) },
-    shoulderStone: { value: new THREE.Color(PAL.roadStone) },
+    rimColor: { value: new THREE.Color(PAL.roadRim) },
+    stoneColor: { value: new THREE.Color(PAL.stoneGrey) },
     ...padUniforms(pixel),
   };
   const before = material.onBeforeCompile.bind(material);
@@ -69,10 +74,12 @@ uniform float roadDetailMeters;
 uniform float roadToneMeters;
 uniform float roadGroundLuma;
 uniform float shoulderFrom;
-uniform float shoulderMix;
+uniform float roadFray;
+uniform float rimShare;
+uniform float rimInside;
 uniform float shoulderStones;
-uniform vec3 shoulderColor;
-uniform vec3 shoulderStone;
+uniform vec3 rimColor;
+uniform vec3 stoneColor;
 uniform vec2 padCenters[PAD_COUNT];
 uniform vec2 padAxes[PAD_COUNT];
 uniform vec2 padHalf;
@@ -82,8 +89,9 @@ uniform vec3 padMark;`;
 
 // Samples everything at the road pixel center, so edges step in whole road pixels like the ground
 // paint. Under 0.5 the mask is off the road. The tone moves that line by meters and the dither frays it.
-// Between shoulderFrom and the road edge the shoulder takes the ground pixel by the same dither, so it
-// thins out away from the road. The top of the dither range draws stones, the rest gravel dirt.
+// Between shoulderFrom and the road edge the same dither picks shoulder pixels, fewer away from the road:
+// the bottom of its range takes the road color, the top grey stones, and the band below the stones rim
+// sand. Within 0.1 of mask cover inside the edge, the top of the range takes rim sand.
 // A pad covers the road under it. Its outline skips a few pixels, like worn paint.
 const ROAD_FRAGMENT = `{
   vec2 roadAt = roadOrigin + (floor((vRoadXZ - roadOrigin) / roadPixel) + 0.5) * roadPixel;
@@ -93,11 +101,15 @@ const ROAD_FRAGMENT = `{
   float groundShade = clamp(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)) / roadGroundLuma, 0.7, 1.2);
   vec3 roadColor = roadLook.rgb * (0.94 + 0.12 * roadWander) * groundShade;
   float roadEdge = 0.5 + (roadWander - 0.5) * 0.4 + (roadLook.a - 0.5) * 0.1;
-  if (roadCover > roadEdge) diffuseColor.rgb = roadColor * (roadCover < roadEdge + 0.1 ? 0.92 : 1.0);
-  else if (roadCover > shoulderFrom) {
-    float k = smoothstep(shoulderFrom, roadEdge, roadCover) * shoulderMix;
-    if (roadLook.a > 1.0 - k * shoulderStones) diffuseColor.rgb = shoulderStone * (0.8 + 0.4 * fract(roadLook.a * 13.0)) * groundShade;
-    else if (roadLook.a < k * 2.0) diffuseColor.rgb = mix(diffuseColor.rgb, shoulderColor * groundShade, k);
+  vec3 rimSand = rimColor * groundShade;
+  if (roadCover > roadEdge) {
+    float inner = 1.0 - smoothstep(roadEdge, roadEdge + 0.1, roadCover);
+    diffuseColor.rgb = roadLook.a > 1.0 - inner * rimInside ? rimSand : roadColor;
+  } else if (roadCover > shoulderFrom) {
+    float k = smoothstep(shoulderFrom, roadEdge, roadCover);
+    if (roadLook.a < k * roadFray) diffuseColor.rgb = roadColor;
+    else if (roadLook.a > 1.0 - k * shoulderStones) diffuseColor.rgb = stoneColor * (0.8 + 0.4 * fract(roadLook.a * 13.0)) * groundShade;
+    else if (roadLook.a > 1.0 - k * rimShare) diffuseColor.rgb = rimSand;
   }
   for (int i = 0; i < PAD_COUNT; i++) {
     vec2 padOff = roadAt - padCenters[i];
