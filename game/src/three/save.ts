@@ -9,7 +9,9 @@ import { clockOf } from '../sim/sun';
 import { allSlots, listSaves, manualSlots, requestBoot, type BootRequest, type SlotId } from './save-slots';
 import type { SaveSlots } from './save-db';
 import { reportError } from './crash';
-import { CONFIG } from '../config';
+import { CONFIG, GAME_VERSION } from '../config';
+import { download } from '../ui/dom';
+import type { RunLog } from './run-log';
 import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR, type SavedJson } from './save-migrations';
 
 declare const __SAVE_SCOPE__: string;
@@ -277,9 +279,10 @@ export function turnFailedNote(err: unknown): string {
   return `The turn failed and did not play: ${err instanceof Error ? err.message : String(err)}. The game was not saved.`;
 }
 
-export type Run = { slots: SaveSlots; runId: string };
+export type Run = { slots: SaveSlots; runId: string; log: RunLog };
 
-// The game's saves: when the world goes into a slot, and when an error holds saving. The slots belong to one run.
+// The game's saves and run log: when the world goes into a slot or the log, and when an error holds saving. The
+// slots and the log belong to one run.
 export class GameSaves {
   private readonly hold = new SaveHold();
 
@@ -291,7 +294,27 @@ export class GameSaves {
   // What the menus do with the saves. A save by hand waits while an error holds saving.
   menuActions(world: () => World) {
     const saves = saveStore(this.run.slots, window.sessionStorage, world, this.run.runId, CONFIG.saveSlots);
-    return { ...saves, save: (slot: SlotId) => this.hold.held ? this.note(SAVE_HELD_NOTE) : saves.save(slot) };
+    return {
+      ...saves,
+      save: (slot: SlotId) => this.hold.held ? this.note(SAVE_HELD_NOTE) : saves.save(slot),
+      exportSave: () => this.exportSave(world()),
+      exportLog: () => this.exportLog(world()).catch((err) => this.failed(err)),
+    };
+  }
+
+  // Every world the game takes goes to the log, which keeps what is new in it.
+  logWorld(world: World): void {
+    this.run.log.note(world);
+  }
+
+  private exportSave(world: World): void {
+    const envelope: SaveEnvelope = { ...saveOf(world), savedAt: Date.now(), runId: this.run.runId };
+    download(`roam-save-turn-${world.turn}.json`, JSON.stringify(envelope), 'application/json');
+  }
+
+  private async exportLog(world: World): Promise<void> {
+    const header = { kind: 'header', runId: this.run.runId, version: GAME_VERSION, seed: world.seed, mapHash: world.mapHash, exportedAt: Date.now() };
+    download(`roam-run-${this.run.runId}.jsonl`, await this.run.log.lines(header), 'application/x-ndjson');
   }
 
   noteError(): void {

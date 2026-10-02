@@ -13,6 +13,8 @@ export type SaveBackend = {
   remove(slot: SlotId): Promise<void>;
   appendLog(records: readonly LogRecord[]): Promise<void>;
   readLog(runId: string): Promise<LogRecord[]>;
+  // The seq of the run's last record, -1 for a run with none.
+  lastSeq(runId: string): Promise<number>;
 };
 
 const SAVES = 'saves';
@@ -30,8 +32,16 @@ export async function idbBackend(name: string): Promise<SaveBackend> {
     put: (slot, envelope) => written(db, SAVES, (store) => store.put(envelope, slot)),
     remove: (slot) => written(db, SAVES, (store) => store.delete(slot)),
     appendLog: (records) => written(db, LOG, (store) => records.forEach((r) => store.add(r))),
-    readLog: (runId) => request(db.transaction(LOG, 'readonly').objectStore(LOG).getAll(IDBKeyRange.bound([runId, -Infinity], [runId, Infinity]))),
+    readLog: (runId) => request(db.transaction(LOG, 'readonly').objectStore(LOG).getAll(runRange(runId))),
+    lastSeq: async (runId) => {
+      const cursor = await request(db.transaction(LOG, 'readonly').objectStore(LOG).openCursor(runRange(runId), 'prev'));
+      return cursor ? (cursor.value as LogRecord).seq : -1;
+    },
   };
+}
+
+function runRange(runId: string): IDBKeyRange {
+  return IDBKeyRange.bound([runId, -Infinity], [runId, Infinity]);
 }
 
 function opened(name: string): Promise<IDBDatabase> {
@@ -70,6 +80,7 @@ export function memoryBackend(): SaveBackend {
     remove: async (slot) => { saves.delete(slot); },
     appendLog: async (records) => { log.push(...records.map((r) => structuredClone(r))); },
     readLog: async (runId) => log.filter((r) => r.runId === runId),
+    lastSeq: async (runId) => Math.max(-1, ...log.filter((r) => r.runId === runId).map((r) => r.seq)),
   };
 }
 

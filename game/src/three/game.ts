@@ -288,7 +288,7 @@ export class Game {
         ),
       isBusy: () => this.anim !== null,
       autoTravel: () => this.travel.isAuto(this.world),
-      dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
+      dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.saves.logWorld(next); this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.runKey("KeyF"),
       aimPart: (vehicleId, partId) => this.anim === null && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
     });
@@ -342,6 +342,7 @@ export class Game {
   apply(next: World): void {
     this.travel.pause();
     this.world = next;
+    this.saves.logWorld(next);
     syncDrive(this.drive, this.world);
     this.refreshUi();
   }
@@ -634,6 +635,7 @@ export class Game {
   private beginTurn(prepared: PreparedTurn, now: number, elapsed: number): void {
     const { world, playback, towed } = this.travel.beginPlayback(this.world, prepared, now, elapsed);
     this.world = world;
+    this.saves.logWorld(world);
     // The score must follow this turn's combat before its crash accents arrive.
     this.updateLoops();
     this.anim = playback;

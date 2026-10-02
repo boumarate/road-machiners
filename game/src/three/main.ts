@@ -26,6 +26,7 @@ import { installCrashScreen, keepRunningOnErrors, onEveryError, reportError } fr
 import { Game } from './game';
 import { clearGame, loadWorld, SAVE_KEY, SaveError, savedRunId, storedSave, writeSave } from './save';
 import { idbBackend, SaveSlots } from './save-db';
+import { RunLog } from './run-log';
 import { allSlots, newestSlot, takeBootRequest, type SlotId } from './save-slots';
 import { rescueSave } from './save-rescue';
 import { loadModels } from './render/models';
@@ -110,12 +111,14 @@ const map = await fetchMap();
 const slots = await SaveSlots.open(await idbBackend(SAVE_KEY), window.localStorage, SAVE_KEY, allSlots(CONFIG.saveSlots));
 persistSaves().catch(reportError);
 // The world and its ground build while physics, models and sounds load, since those wait mostly on the network and decoders.
-const { world, runId } = await bootWorld();
+const { world, runId, loadedFrom } = await bootWorld();
+const log = await RunLog.open(slots.backend, runId, (err) => slots.onError(err));
+log.begin(world, loadedFrom);
 groundTexture(world);
 const [, , bank] = await loading;
 const soundSettings = new SoundSettings(mixer, window.localStorage);
 const overlay = element('overlay');
-const game = new Game(world, { slots, runId }, element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute());
+const game = new Game(world, { slots, runId, log },element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute());
 const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game.follow.keyPan.setSpeed(factor) };
 const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
 keepRunningOnErrors((text) => debugConsole.error(text));
