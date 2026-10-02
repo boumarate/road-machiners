@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import SHAPES from './prop-shapes.json';
+import TRUCKS from './truck-shapes.json';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?url&inline', import: 'default' });
 const DATA_URL = 'data:model/gltf-binary;base64,';
@@ -60,5 +61,14 @@ describe('prop shapes', () => {
     expect(sign.x0).toBeGreaterThan(4.5);
     expect(sign.y0).toBeGreaterThan(2.5);
     expect(boxes.some((b) => b.x0 < -6 && b.x1 < -2 && b.z1 > 2.5)).toBe(true);
+  });
+
+  it('stands every fortress piece at least 3x the tallest truck (IV4)', () => {
+    const tallest = Math.max(...Object.values(TRUCKS).flatMap((t) => t.boxes.map((b) => b.z1)));
+    const forts = names.filter((n) => n.startsWith('fort_'));
+    expect(forts).toHaveLength(15);
+    for (const name of forts) {
+      expect(Math.max(...SHAPES[name].boxes.map((b) => b.z1)), name).toBeGreaterThanOrEqual(tallest * 3);
+    }
   });
 });
