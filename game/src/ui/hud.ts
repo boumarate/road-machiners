@@ -29,6 +29,7 @@ import { playerVehicle } from "../sim/damage";
 import { pendingPerkPairs } from "../sim/progress";
 import { canDouse } from "../sim/engine-heat";
 import { ENGINE_HEAT } from "../data/wear";
+import type { RadioPanel } from "./radio";
 import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
 
 // The E key action. ready is false while the truck must stop first.
@@ -112,7 +113,7 @@ export class Hud {
 
   private readonly dialogue: DialoguePanel;
 
-  constructor(private actions: HudActions) {
+  constructor(private actions: HudActions, private radio: RadioPanel) {
     this.dialogue = new DialoguePanel(actions.dialogue);
     this.info.style.display = "none";
     this.info.append(this.infoBody);
@@ -492,6 +493,7 @@ export class Hud {
       if (e.t === "knockout" || e.t === "skillUp" || e.t === "discover") this.toast(line.text);
     }
     this.log.add(w.turn, lines);
+    this.radio.hear(w);
   }
 
   // A log line from the UI itself, not from a sim event.
