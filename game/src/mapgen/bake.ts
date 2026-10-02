@@ -11,6 +11,7 @@ import { ROAD_INDEX } from '../sim/road-index';
 import { chance, randRange, type Rng } from '../sim/rng';
 import { heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
 import { clearOfSites, onBridge } from '../sim/mapgen';
+import { siteGap } from '../sim/sites';
 import { dist, polylineDist, type Vec } from '../sim/vec';
 import { BUILT_DIRTY_WATER, BUILT_HULL, BUILT_SCRUB, BUILT_TOXIC, BUILT_TRACK, newWorldLayer } from './newworld';
 import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer } from './oldworld';
@@ -170,15 +171,7 @@ function drainChannels(pond: Float32Array, size: number): Float32Array {
 function builtType(c: Vec): TerrainTypeId | null {
   if (deckAlong(c.x, c.y) !== null) return 'road';
   if (ROAD_INDEX.nearestWithin(c.x, c.y, REGION.roadWidth / 2) < REGION.roadWidth / 2) return 'road';
-  return SITES.some((s) => nearSite(s.pos, s.radius, c)) ? 'hardpan' : null;
-}
-
-function nearSite(pos: Vec, radius: number, c: Vec): boolean {
-  const dx = pos.x - c.x;
-  const dy = pos.y - c.y;
-  // One tile past the margin keeps this cheap skip clear of rounding.
-  if (dx * dx + dy * dy > (radius + T.siteMargin + 1) ** 2) return false;
-  return Math.hypot(dx, dy) < radius + T.siteMargin;
+  return SITES.some((s) => siteGap(s, c) < T.siteMargin) ? 'hardpan' : null;
 }
 
 // Steep ground and ground where soil slumped are scree.

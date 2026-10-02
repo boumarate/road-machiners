@@ -22,6 +22,7 @@ import { clearOfSites, onBridge } from '../sim/mapgen';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, hashRandom, randInt, randRange, type Rng } from '../sim/rng';
 import type { BakedProp, PropKind } from '../sim/terrain';
+import { siteGap } from '../sim/sites';
 import { angleDiff, bearing, clamp, DEG, dist, polylineDist, segmentDist, type Vec } from '../sim/vec';
 import { tileSteepness, type MapDraft } from './bake';
 
@@ -206,7 +207,8 @@ export function range(rng: Rng, [lo, hi]: readonly [number, number]): number {
 // closest to a site or junction score highest, with seeded noise. Each keeps a cluster of houses, most of
 // them ruined, and a farm keeps a silo or a water tower.
 
-type Anchor = { pos: Vec; radius: number };
+// Tiles from a point to a site's edge or a junction.
+type Anchor = (pos: Vec) => number;
 
 export function settlements(seed: number, d: MapDraft, rules: SettlementRules): OldSettlement[] {
   const rng = ruleRng(seed, rules.seedOffset);
@@ -228,7 +230,7 @@ function settlementSpots(seed: number, d: MapDraft, rules: SettlementRules): Sco
 
 function settlementScore(seed: number, d: MapDraft, rules: SettlementRules, anchors: Anchor[], pos: Vec): number | null {
   const [near, far] = rules.anchorGap;
-  const gap = Math.min(...anchors.map((a) => dist(pos, a.pos) - a.radius));
+  const gap = Math.min(...anchors.map((a) => a(pos)));
   if (gap < near || gap > far) return null;
   if (!clearGround(d.size, pos, rules.radius, rules.roadGap) || !flatAndDry(d, pos, rules)) return null;
   const closeness = 1 - (gap - near) / (far - near);
@@ -237,7 +239,7 @@ function settlementScore(seed: number, d: MapDraft, rules: SettlementRules, anch
 
 // Today's sites, and the road junctions.
 function siteAnchors(): Anchor[] {
-  return [...SITES.map((s) => ({ pos: s.pos, radius: s.radius })), ...roadJunctions().map((pos) => ({ pos, radius: 0 }))];
+  return [...SITES.map((s): Anchor => (pos) => siteGap(s, pos)), ...roadJunctions().map((j): Anchor => (pos) => dist(pos, j))];
 }
 
 // The road ends that meet another road, once per road that ends there.
@@ -479,7 +481,7 @@ class RouteGrid {
       const p = this.posOf(node);
       this.heights[node] = d.heights[p.y * (d.size + 1) + p.x];
       this.cut[node] = isCutTile(d, tileOf(d.size, p)) ? 1 : 0;
-      this.closed[node] = SITES.some((s) => dist(p, s.pos) < s.radius) ? 1 : 0;
+      this.closed[node] = SITES.some((s) => siteGap(s, p) < 0) ? 1 : 0;
     }
   }
 

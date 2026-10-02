@@ -8,6 +8,7 @@ import { PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
 import { randInt, randRange } from './rng';
 import { TERRAIN } from '../data/terrain';
 import type { LandmarkLook, Obstacle, World } from './types';
+import { siteGap } from './sites';
 import { angleDiff, bearing, dist, segmentDist, type Vec } from './vec';
 
 const O = REGION.obstacles;
@@ -131,7 +132,7 @@ export function onBridge(pos: Vec, r: number): boolean {
 
 // Whether a prop keeps the extra site clearance from every town and location.
 export function clearOfSites(pos: Vec, r: number): boolean {
-  return [...REGION.towns, ...REGION.locations].every((s) => dist(pos, s.pos) > s.radius + O.siteClearance + r);
+  return [...REGION.towns, ...REGION.locations].every((s) => siteGap(s, pos) > O.siteClearance + r);
 }
 
 // Prop poses: the model each obstacle shows, and its place, turn and scale. The views draw from the pose, and

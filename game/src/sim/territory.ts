@@ -5,7 +5,7 @@
 import { REGION, type TerritoryDef } from '../data/region';
 import { SALVAGE, type LootTable } from '../data/salvage';
 import { TERRITORIES, type Hazard, type HullRules, type HullSection, type SpotTable, type TerritoryRules } from '../data/territory';
-import { edgeCrossings, isTerritory } from './sites';
+import { isTerritory, siteEdgeCrossings, siteGap } from './sites';
 import { randInt } from './rng';
 import type { PropKind } from './terrain';
 import type { NpcActivity, Obstacle, SalvageStock, Vehicle, World } from './types';
@@ -20,7 +20,7 @@ export type HazardZone = Hazard & { id: string; pos: Vec };
 const TERRITORY_DEFS: readonly TerritoryDef[] = REGION.locations.filter(isTerritory);
 
 export function territoryAt(pos: Vec): TerritoryDef | null {
-  return TERRITORY_DEFS.find((t) => dist(pos, t.pos) < t.radius) ?? null;
+  return TERRITORY_DEFS.find((t) => siteGap(t, pos) < 0) ?? null;
 }
 
 // The prop kind of a loot spot in a deck bay. Field spots and farm buildings take their kinds from TERRITORIES.
@@ -66,7 +66,7 @@ export function territorySpots(world: World, id: string): SalvageStock[] {
 
 // Where roads meet the territory's edge: the ends of its approach roads, in road order.
 export function territoryEntries(t: TerritoryDef): Vec[] {
-  const crossings = REGION.roads.flatMap((road) => road.slice(1).flatMap((b, i) => edgeCrossings(road[i], b, t.pos, t.radius)));
+  const crossings = REGION.roads.flatMap((road) => road.slice(1).flatMap((b, i) => siteEdgeCrossings(t, road[i], b)));
   return crossings.filter((p, i) => !crossings.slice(0, i).some((q) => dist(q, p) < REGION.sites.gateSpacing));
 }
 

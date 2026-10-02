@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { clickOrder } from './steering';
-import { canUseSite, nearestPad, siteGates, sitePads, siteUnder } from './sites';
+import { canUseSite, edgeCrossings, nearestPad, siteEdgeCrossings, siteGap, siteGates, sitePads, siteUnder } from './sites';
 import { dist } from './vec';
 
 // A territory is open ground: it has no gates or pads.
@@ -116,5 +116,30 @@ describe('territories', () => {
     expect(sitePads(fallenSun)).toEqual([]);
     expect(canUseSite(rim, fallenSun)).toBe(false);
     expect(canUseSite(fallenSun.pos, fallenSun)).toBe(false);
+  });
+});
+
+describe('site edges', () => {
+  const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
+  const orchard = REGION.locations.find((l) => l.id === 'orchard')!;
+
+  it('measures a circle site from its circle, negative inside', () => {
+    expect(siteGap(sun, sun.pos)).toBeCloseTo(-sun.radius, 9);
+    expect(siteGap(sun, { x: sun.pos.x + sun.radius + 2, y: sun.pos.y })).toBeCloseTo(2, 9);
+    const [a, b] = [{ x: sun.pos.x - 100, y: sun.pos.y + 3 }, { x: sun.pos.x + 100, y: sun.pos.y + 3 }];
+    expect(siteEdgeCrossings(sun, a, b)).toEqual(edgeCrossings(a, b, sun.pos, sun.radius));
+  });
+
+  it('measures an outlined site from its outline', () => {
+    if (orchard.kind !== 'territory' || !orchard.outline) throw new Error('The orchard has no outline');
+    const corner = { x: orchard.pos.x + orchard.outline[0].x, y: orchard.pos.y + orchard.outline[0].y };
+    expect(siteGap(orchard, orchard.pos)).toBeLessThan(0);
+    expect(Math.abs(siteGap(orchard, corner))).toBeLessThan(1e-9);
+    // Straight across the orchard from far west to far east, the line crosses the outline twice, west first.
+    const [a, b] = [{ x: orchard.pos.x - 80, y: orchard.pos.y }, { x: orchard.pos.x + 80, y: orchard.pos.y }];
+    const crossings = siteEdgeCrossings(orchard, a, b);
+    expect(crossings).toHaveLength(2);
+    expect(crossings[0].x).toBeLessThan(crossings[1].x);
+    for (const p of crossings) expect(Math.abs(siteGap(orchard, p))).toBeLessThan(1e-9);
   });
 });

@@ -4,7 +4,7 @@ import { REGION, type LocationDef, type TerritoryDef, type TownDef } from '../da
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
 import type { World } from './types';
-import { dist, type Vec } from './vec';
+import { dist, pointInPolygon, polygonEdgeDist, type Vec } from './vec';
 
 export type Site = TownDef | LocationDef;
 
@@ -18,7 +18,7 @@ export function siteGates(site: Site): Vec[] {
   if (isTerritory(site)) return [];
   let gates = GATES.get(site.id);
   if (!gates) {
-    const crossings = REGION.roads.flatMap((road) => road.slice(1).flatMap((b, i) => edgeCrossings(road[i], b, site.pos, site.radius)));
+    const crossings = REGION.roads.flatMap((road) => road.slice(1).flatMap((b, i) => siteEdgeCrossings(site, road[i], b)));
     // Roads that cross the edge close together share one gate.
     const all = crossings.filter((p, i) => !crossings.slice(0, i).some((q) => dist(q, p) < REGION.sites.gateSpacing));
     if (all.length === 0) throw new Error(`Site ${site.id} has no road into it`);
@@ -74,7 +74,7 @@ function onPad(pos: Vec, pad: Vec, center: Vec): boolean {
 
 // The site whose edge encloses a point, or null.
 export function siteUnder(pos: Vec): Site | null {
-  return SITES.find((s) => dist(pos, s.pos) < s.radius) ?? null;
+  return SITES.find((s) => siteGap(s, pos) < 0) ?? null;
 }
 
 // The town the parked player truck can use, or null.
@@ -102,6 +102,46 @@ export function requireTown(world: World): TownDef {
 export function nearestTown(world: World): TownDef {
   const pos = playerVehicle(world).pos;
   return [...REGION.towns].sort((a, b) => dist(pos, a.pos) - dist(pos, b.pos))[0];
+}
+
+// ---- The edge of a town or location. Every inside or outside test of a site goes through siteGap.
+
+// A site's outline on the map, or null when its edge is its circle.
+const OUTLINES = new Map<string, Vec[] | null>();
+function outlineOf(site: Site): Vec[] | null {
+  if (!('outline' in site) || !site.outline) return null;
+  let poly = OUTLINES.get(site.id);
+  if (!poly) {
+    poly = site.outline.map((p) => ({ x: site.pos.x + p.x, y: site.pos.y + p.y }));
+    OUTLINES.set(site.id, poly);
+  }
+  return poly;
+}
+
+// Tiles from pos to the site's edge, negative inside: the outline when it has one, else its circle.
+export function siteGap(site: Site, pos: Vec): number {
+  const poly = outlineOf(site);
+  if (!poly) return dist(pos, site.pos) - site.radius;
+  const edge = polygonEdgeDist(pos, poly);
+  // Past the bounding radius a point is outside, so the polygon test is skipped.
+  return dist(pos, site.pos) <= site.radius && pointInPolygon(pos, poly) ? -edge : edge;
+}
+
+// Points where segment a-b crosses the site's edge, ordered from a to b.
+export function siteEdgeCrossings(site: Site, a: Vec, b: Vec): Vec[] {
+  const poly = outlineOf(site);
+  if (!poly) return edgeCrossings(a, b, site.pos, site.radius);
+  const d = { x: b.x - a.x, y: b.y - a.y };
+  const ts = poly.flatMap((p, i) => {
+    const q = poly[(i + 1) % poly.length];
+    const e = { x: q.x - p.x, y: q.y - p.y };
+    const den = d.x * e.y - d.y * e.x;
+    if (den === 0) return [];
+    const t = ((p.x - a.x) * e.y - (p.y - a.y) * e.x) / den;
+    const u = ((p.x - a.x) * d.y - (p.y - a.y) * d.x) / den;
+    return t >= 0 && t <= 1 && u >= 0 && u < 1 ? [t] : [];
+  });
+  return ts.sort((x, y) => x - y).map((t) => ({ x: a.x + d.x * t, y: a.y + d.y * t }));
 }
 
 // Points where segment a-b crosses the circle, ordered from a to b.

@@ -3,7 +3,9 @@
 
 import type { PropKind } from '../sim/terrain';
 import type { Vec } from '../sim/vec';
-import { ORCHARD_HEADING } from './region';
+import { onOrchardRoad } from './region';
+
+export { onOrchardRoad };
 
 export type SpotTable = 'landmark' | 'hullScrap' | 'roadWreck' | 'farmStores' | 'armyStores';
 export type DebrisRule = { look: PropKind; count: number; radius: [number, number] };
@@ -100,13 +102,6 @@ function onSunLine(s: number, c: number): Vec {
   return { x: s * cos - c * sin, y: s * sin + c * cos };
 }
 
-// A point s tiles along the Old Orchard's road from the centre (toward its north end) and c tiles across it (toward
-// screen up, the map's west side), in tiles from the centre. Positions are measured from the concept image,
-// docs/concepts/old-orchard-issue-111.jpg, at about 0.27 m per image pixel in the road's frame.
-export function onOrchardRoad(s: number, c: number): Vec {
-  const [cos, sin] = [Math.cos(ORCHARD_HEADING), Math.sin(ORCHARD_HEADING)];
-  return { x: s * cos + c * sin, y: s * sin - c * cos };
-}
 const ALONG = 0; // a turn that keeps a building's front along the road, toward its north end
 const ACROSS = Math.PI / 2; // a turn that sets a building's front across the road, toward map east: the road for a building on its west side
 const AT = onOrchardRoad; // short for the many authored points below

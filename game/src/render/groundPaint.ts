@@ -29,6 +29,21 @@ export type PaintOptions = {
 
 const DEFAULT_OPTIONS: PaintOptions = { hillshade: 1 };
 
+// Discs of worn ground painted under locations, in paint order. A location with an outline gets none: its edge is
+// not a circle, and its own marks show its ground.
+export function groundDiscs(): { id: string; pos: Vec; radius: number; style: string }[] {
+  return REGION.locations
+    .filter((l) => !("outline" in l && l.outline))
+    .flatMap((l) => {
+      const farm = l.id === "granary";
+      const wear = css(l.kind === "oasis" || farm ? shade(PAL.scrub[0], 1.1) : shade(PAL.rust.dark, 1.6), 0.45);
+      return [
+        ...(farm ? [{ id: l.id, pos: l.pos, radius: l.radius + 3, style: css(PAL.scrub[0], 0.2) }] : []),
+        { id: l.id, pos: l.pos, radius: l.radius + 0.5, style: wear },
+      ];
+    });
+}
+
 // Paints ground, oasis/convoy discs and terrain features onto the canvas. The caller uploads the texture.
 export function paintGroundCanvas(
   c: PaintCanvas,
@@ -36,21 +51,7 @@ export function paintGroundCanvas(
   opts: PaintOptions = DEFAULT_OPTIONS,
 ): void {
   paintGround(c, t, opts.hillshade);
-  for (const l of REGION.locations) {
-    const farm = l.id === "granary";
-    if (farm) disc(c, l.pos, l.radius + 3, css(PAL.scrub[0], 0.2));
-    disc(
-      c,
-      l.pos,
-      l.radius + 0.5,
-      css(
-        l.kind === "oasis" || farm
-          ? shade(PAL.scrub[0], 1.1)
-          : shade(PAL.rust.dark, 1.6),
-        0.45,
-      ),
-    );
-  }
+  for (const d of groundDiscs()) disc(c, d.pos, d.radius, d.style);
   const { canyon, dryRiver } = TERRAIN.features;
   stroke(
     c,

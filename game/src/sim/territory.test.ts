@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { REGION } from '../data/region';
+import { onOrchardRoad, REGION } from '../data/region';
 import { ECONOMY, GOODS } from '../data/goods';
 import { SALVAGE, type LootTable } from '../data/salvage';
 import { TERRITORIES } from '../data/territory';
 import { ROAD_INDEX } from './road-index';
+import { siteGap } from './sites';
 import { bayPoints, deckAlongAt, deckGap, deckPlane, hazardZones, hullDecks, isLootSpot, ribPoses, spotTable, territoryAt, territoryEntries, territoryGrounds, type HullDeck } from './territory';
 import type { PropKind } from './terrain';
 import type { LandmarkLook, Obstacle } from './types';
@@ -128,13 +129,76 @@ describe('the Old Orchard', () => {
     }
   });
 
-  it('is entered by one road, at the south end of its spine', () => {
+  it('is entered by one New World road, the spur, at the south end of its old road', () => {
     const entries = territoryEntries(orchard as never);
-    const south = { x: orchard.pos.x + TERRITORIES.orchard.spine.from.x, y: orchard.pos.y + TERRITORIES.orchard.spine.from.y };
     expect(entries).toHaveLength(1);
-    expect(dist(entries[0], south)).toBeLessThan(1);
+    expect(dist(entries[0], at(-32, 0))).toBeLessThan(1);
   });
 });
+
+// A point s tiles along the orchard's road and c across it, on the map.
+function at(s: number, c: number): Vec {
+  const p = onOrchardRoad(s, c);
+  return { x: orchard.pos.x + p.x, y: orchard.pos.y + p.y };
+}
+
+describe("the Old Orchard's outline", () => {
+  const poly = orchard.kind === 'territory' && orchard.outline ? orchard.outline.map((p) => ({ x: orchard.pos.x + p.x, y: orchard.pos.y + p.y })) : [];
+  const edges = poly.map((a, i) => [a, poly[(i + 1) % poly.length]] as const);
+  const spurEnd = REGION.roads.find((road) => dist(road[road.length - 1], at(-32, 0)) < 1)!.at(-1)!;
+  // Points every half tile along the outline.
+  const rim = edges.flatMap(([a, b]) => Array.from({ length: Math.ceil(dist(a, b) * 2) }, (_, k) => ({ x: lerp(a.x, b.x, k / Math.ceil(dist(a, b) * 2)), y: lerp(a.y, b.y, k / Math.ceil(dist(a, b) * 2)) })));
+  // Every tile centre over the outline's bounding box that lies inside it.
+  const inside: Vec[] = [];
+  for (let y = Math.floor(orchard.pos.y - orchard.radius) + 0.5; y <= orchard.pos.y + orchard.radius; y++) for (let x = Math.floor(orchard.pos.x - orchard.radius) + 0.5; x <= orchard.pos.x + orchard.radius; x++) if (siteGap(orchard, { x, y }) < 0) inside.push({ x, y });
+
+  it('is a simple polygon whose radius is its bounding radius', () => {
+    expect(poly.length).toBeGreaterThan(3);
+    expect(orchard.radius).toBeCloseTo(Math.max(...poly.map((p) => dist(p, orchard.pos))), 9);
+    for (let i = 0; i < edges.length; i++) for (let j = i + 2; j < edges.length; j++) {
+      if (i === 0 && j === edges.length - 1) continue;
+      expect(crosses(edges[i][0], edges[i][1], edges[j][0], edges[j][1]), `edges ${i} and ${j}`).toBe(false);
+    }
+  });
+
+  it('keeps clear of New World roads except where the spur ends, and outside every other site', () => {
+    const others = [...REGION.towns, ...REGION.locations].filter((s) => s.id !== 'orchard');
+    for (const p of rim) {
+      if (dist(p, spurEnd) > 6) expect(ROAD_INDEX.nearestWithin(p.x, p.y, REGION.roadWidth), `${p.x}, ${p.y}`).toBeGreaterThan(REGION.roadWidth / 2 + 1);
+      for (const o of others) expect(siteGap(o, p), o.id).toBeGreaterThan(0);
+    }
+  });
+
+  it('encloses at least 5000 tiles, no more than 60% of them in a circle of the old radius', () => {
+    const area = inside.length;
+    expect(area).toBeGreaterThanOrEqual(5000);
+    let best = 0;
+    for (let y = orchard.pos.y - orchard.radius; y <= orchard.pos.y + orchard.radius; y += 2) for (let x = orchard.pos.x - orchard.radius; x <= orchard.pos.x + orchard.radius; x += 2) {
+      best = Math.max(best, inside.filter((p) => Math.hypot(p.x - x, p.y - y) < 32).length);
+    }
+    expect(best / area).toBeLessThanOrEqual(0.6);
+  });
+
+  it('holds the north-west pocket, and not ground inside its bounding radius past the outline', () => {
+    const pocket = at(60, 30);
+    expect(territoryAt(pocket)?.id).toBe('orchard');
+    // Past the south-west corner, on the far side of the west ridge.
+    const beyond = at(-30, 44);
+    expect(dist(beyond, orchard.pos)).toBeLessThan(orchard.radius);
+    expect(territoryAt(beyond)).toBeNull();
+  });
+
+  it('lets the spur road end just inside it after one crossing', () => {
+    expect(siteGap(orchard, spurEnd)).toBeLessThan(0);
+    expect(siteGap(orchard, spurEnd)).toBeGreaterThan(-0.1);
+  });
+});
+
+// Whether segments ab and cd cross.
+function crosses(a: Vec, b: Vec, c: Vec, d: Vec): boolean {
+  const side = (p: Vec, q: Vec, r: Vec) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+  return side(a, b, c) !== side(a, b, d) && side(c, d, a) !== side(c, d, b);
+}
 
 describe('hull decks', () => {
   const decks = hullDecks();
