@@ -11,10 +11,10 @@ export const cfg = { home: ROOT, buildModel: 'sonnet', publicChannel: 'public', 
 
 export type Photo = { chat: string; path: string; caption: string; buttons?: InlineButton[][] };
 export type Album = { chat: string; paths: string[]; captions: string[]; replyTo?: number };
-export type Fake = { ctx: Ctx; calls: string[]; agentWrites: Record<string, string>; changelog: string[]; diff: string; cards: Card[]; photos: Photo[]; albums: Album[]; albumFails: boolean; created: { title: string; body: string; labels: string[] }[] };
+export type Fake = { ctx: Ctx; calls: string[]; agentWrites: Record<string, string>; changelog: string[]; diff: string; cards: Card[]; photos: Photo[]; albums: Album[]; albumFails: boolean; prBodies: string[]; created: { title: string; body: string; labels: string[] }[] };
 
 export function fake(): Fake {
-  const f: Fake = { ctx: null as unknown as Ctx, calls: [], agentWrites: {}, changelog: [], diff: '', cards: [], photos: [], albums: [], albumFails: false, created: [] };
+  const f: Fake = { ctx: null as unknown as Ctx, calls: [], agentWrites: {}, changelog: [], diff: '', cards: [], photos: [], albums: [], albumFails: false, prBodies: [], created: [] };
   const note = (text: string) => { f.calls.push(text); };
   f.ctx = {
     cfg,
@@ -35,7 +35,7 @@ export function fake(): Fake {
       removeLabel: async (n: number, label: string) => note(`removeLabel ${n} ${label}`),
       createRelease: async (tag: string, target: string, title: string, notes: string) => note(`release ${tag} ${target} ${title}\n${notes}`),
       addCard: async (_n: number, column: string) => note(`addCard ${column}`),
-      openPullRequest: async (branch: string, base: string, title: string) => { note(`pr ${branch} ${base} ${title}`); return 'http://pr'; },
+      openPullRequest: async (branch: string, base: string, title: string, body: string) => { f.prBodies.push(body); note(`pr ${branch} ${base} ${title}`); return 'http://pr'; },
     },
     telegram: {
       sendMessage: async (chat: string, text: string, replyTo?: number) => { note(`message ${chat} ${replyTo ?? '-'} ${text}`); return 1; },
