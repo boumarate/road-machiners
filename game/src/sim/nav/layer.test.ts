@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
+import { TERRAIN } from '../../data/terrain';
 import { BREAKABLE } from '../../data/rules';
 import { boxDistance, boxSegmentDistance, propBoxes } from '../mapgen';
 import { route } from '../path';
@@ -88,21 +89,23 @@ describe('prop footprints', () => {
     expect(stamped).toBeGreaterThan(0);
   });
 
-  it('leaves the road under the ship wing open and blocks its tip strut', () => {
+  it('leaves the road under the ship wing open and blocks its fuselage and buried tip', () => {
     const w = emptyWorld();
-    const wing: Obstacle = { id: 'shipWing-0', pos: { x: 40, y: 40 }, r: 9, kind: 'landmark', look: 'shipWing', yaw: 0 };
+    const wing: Obstacle = { id: 'shipWing-0', pos: { x: 40, y: 40 }, r: TERRAIN.features.wing.r, kind: 'landmark', look: 'shipWing', yaw: 0 };
     w.obstacles = [wing];
     const layer = navLayer(w.terrain, w.obstacles, radius);
     const roof = propBoxes(wing).filter((b) => b.z0 >= PHYSICS.truckClearance);
-    // Model y runs toward map -y. The road band is model y -12 to 12, and the strut stands at model y 16.
-    for (const at of [-8, 0, 8]) {
+    // Model y runs toward map -y. The road band is model y -12 to 12. The tip mound is at model y 34 and the
+    // fuselage at model y -40.
+    for (const at of [-12, -6, 0]) {
       for (const across of [-10, 0, 10]) {
         const spot = { x: 40 + at / S, y: 40 - across / S };
         expect(roof.some((b) => boxDistance(b, spot) === 0)).toBe(true);
         expect(layer.blocked[cellAt(layer.n, spot)]).toBe(0);
       }
     }
-    expect(layer.blocked[cellAt(layer.n, { x: 40, y: 40 - 16.5 / S })]).toBe(1);
+    expect(layer.blocked[cellAt(layer.n, { x: 40 - 10 / S, y: 40 - 34 / S })]).toBe(1);
+    expect(layer.blocked[cellAt(layer.n, { x: 40, y: 40 + 40 / S })]).toBe(1);
   });
 
   // The gas station at scale 3. Model point (-3.1, -4.8) m lies under the canopy, 3.1 m from the nearest box

@@ -129,9 +129,9 @@ describe('prop colliders follow the model shape', () => {
   });
 
   it('a truck drives along the road under the ship wing', () => {
-    // At its bake size the wing's underside is 7 m up and its slab reaches across 12 m either side of the road line.
-    const wing = landmark('wing1', 'shipWing', { x: 40, y: 30 }, 9, 0);
-    const { w, hits } = play(straight({ x: 33, y: 30 }, 0, { x: 47, y: 30 }, [wing]), 5);
+    // At its bake size the wing's underside is over 4 m up across the 12 m either side of the road line.
+    const wing = landmark('wing1', 'shipWing', { x: 40, y: 30 }, TERRAIN.features.wing.r, 0);
+    const { w, hits } = play(straight({ x: 30, y: 30 }, 0, { x: 50, y: 30 }, [wing]), 6);
     expect(hits).toEqual([]);
     expect(me(w).pos.x).toBeGreaterThan(42);
   });

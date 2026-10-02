@@ -1,6 +1,6 @@
 """Broken Wing landmark: a torn section of the crashed ship with its swept wing reaching over a road.
 
-Sized for the 15-tile reference radius, 60 m: every part stays within 60 m of the origin. The origin is the ground
+Sized for the 16.5-tile reference radius, 66 m: every part stays within 66 m of the origin. The origin is the ground
 point on the road's center line under the wing's middle. The model's X runs along the road and Y across it, with the
 hull on the -Y side.
 - The fuselage is a 10-sided tube 54 m long and 16 m across, axis at Y -40, half buried. Its road-side flank is at Y -32.

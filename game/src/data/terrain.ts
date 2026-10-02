@@ -1,7 +1,7 @@
 // Terrain: corner heights, tile types, driving costs and fog of war.
 // Heights are in height units; one unit rises reliefPx screen pixels. Slopes are height units per tile.
 
-import { MAP_SCALE, REGION, scalePoint } from "./region";
+import { BROKEN_WING, MAP_SCALE, REGION, scalePoint } from "./region";
 import type { Vec } from "../sim/vec";
 
 export type TerrainTypeId =
@@ -93,13 +93,12 @@ export const TERRAIN = {
       abutment: 1, // tiles of causeway left under each deck end
       ramp: 1.5, // tiles over which the cut ground falls to the canyon
     },
-    // Broken Wing: the crashed ship's wing, a baked prop 7 m over a straight stretch of road. Its high boxes leave
-    // the road open to trucks. pos is the road's center line at the middle of the covered stretch, r is the
-    // wing's bake circle in tiles, and yaw puts the model's long x axis along that road.
+    // Broken Wing: the crashed ship section, a baked prop. Its fuselage lies beside the road and its high wing boxes
+    // leave the road open to trucks. pos and yaw come from BROKEN_WING, and r is the model's bake circle in tiles.
     wing: {
-      pos: scalePoint({ x: 67, y: 36 }),
-      r: 9,
-      yaw: Math.atan2(4, 10),
+      pos: BROKEN_WING.road,
+      r: 16.5,
+      yaw: BROKEN_WING.yaw,
     },
     dryRiver: {
       path: [

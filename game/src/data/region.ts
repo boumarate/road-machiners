@@ -57,6 +57,20 @@ function bend(a: Vec, b: Vec): Vec[] {
 const FALLEN_SUN_POS = scalePoint({ x: 64, y: 54 });
 const FALLEN_SUN_RADIUS = 44;
 
+// Broken Wing, a ship section beside the road with a wing over it. One pose places both the baked ship_wing prop
+// (TERRAIN.features.wing) and the site behind its fuselage. road is the road's center line at the middle of the
+// covered stretch, yaw lays the model's x axis along that road, and siteOffset is the distance in tiles from the
+// road across it toward the hull side.
+export const BROKEN_WING = {
+  road: scalePoint({ x: 67, y: 36 }),
+  yaw: Math.atan2(4, 10),
+  siteOffset: 14,
+};
+export const BROKEN_WING_SITE: Vec = {
+  x: BROKEN_WING.road.x - Math.sin(BROKEN_WING.yaw) * BROKEN_WING.siteOffset,
+  y: BROKEN_WING.road.y + Math.cos(BROKEN_WING.yaw) * BROKEN_WING.siteOffset,
+};
+
 export const REGION = {
   name: "Icarus",
   size: 120 * MAP_SCALE,
@@ -198,14 +212,14 @@ export const REGION = {
       pos: scalePoint({ x: 82, y: 52.2 }),
       radius: 6,
     },
-    // Broken Wing: a hull section of the crashed ship beside the road, south of it, with a wing over the road.
-    // The wing is a baked prop, see TERRAIN.features.wing.
+    // Broken Wing: a torn section of the crashed ship beside the road, south of it, with its wing over the road.
+    // The ship section is a baked prop, see TERRAIN.features.wing. The site sits behind its fuselage.
     {
       id: "broken-wing",
-      edge: "fence",
+      edge: "wrecks",
       name: "Broken Wing",
       kind: "landmark",
-      pos: scalePoint({ x: 66.11, y: 38.23 }),
+      pos: BROKEN_WING_SITE,
       radius: 6,
     },
     // Raider camps. Raiders spawn at their gates and service there. Their gate guns shoot every outsider in range.
@@ -293,7 +307,7 @@ export const REGION = {
     ]),
     // Short straight spurs lead from a road point to each location beside it, so through traffic passes by.
     scaleRoad([{ x: 28, y: 64 }, { x: 23.2, y: 62 }], [0]),
-    scaleRoad([{ x: 67, y: 36 }, { x: 66.11, y: 38.23 }], [0]),
+    [BROKEN_WING.road, BROKEN_WING_SITE],
     scaleRoad([{ x: 37, y: 32 }, { x: 33.8, y: 32 }], [0]),
     scaleRoad([{ x: 50, y: 36 }, { x: 50, y: 32.8 }], [0]),
     scaleRoad([{ x: 63, y: 20 }, { x: 60, y: 18.8 }], [0]),

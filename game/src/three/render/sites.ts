@@ -445,16 +445,15 @@ function buildWrecks(b: SiteBuilder, id: string): void {
   }
 }
 
-// A hull section of the crashed ship lies along the road to the north, which runs at the wing's yaw. The
-// hull top stands higher than the wing, which reaches over the road from its north side.
-function buildWingHull(b: SiteBuilder): void {
+// Salvage dressing on the far half of the circle, away from the ship section's fuselage that stands to the
+// north along the road. The ship section itself is the shipWing prop.
+function buildWingSalvage(b: SiteBuilder): void {
   const yaw = -TERRAIN.features.wing.yaw;
-  b.addHull(0, -0.8, 7.5, 3.2, yaw);
-  b.addHull(-1.2, 1.7, 3.6, 1.8, yaw + 0.5);
-  b.addBox(3, 1.2, 3, 0.15, 1.2, PAL.metalLight, 0.2, yaw - 0.3);
-  b.addBox(-3, -3, 2.2, 0.9, 1.3, PAL.rust.dark, 0, yaw + 0.2);
   b.addTank(2.5, 2.8, 0.6, 1.4, PAL.rust.top);
   b.addTank(3.8, 2.2, 0.45, 1.1, PAL.rust.dark);
+  b.addBox(3, 1.2, 3, 0.15, 1.2, PAL.metalLight, 0.2, yaw - 0.3);
+  b.addBox(-3, 3, 2.2, 0.9, 1.3, PAL.rust.dark, 0, yaw + 0.2);
+  b.addBox(-1, 4, 1.8, 0.12, 0.9, PAL.rust.side, 0.1, yaw + 0.6);
   b.addModel('crates', -3.8, 2.6, 0.5);
 }
 
@@ -494,7 +493,7 @@ const SITE_DECOR: Record<string, SiteDecor> = {
     b.addBox(-10, 16, 25, 0.3, 15, PAL.metalLight, 0.6, 0.3);
     for (const z of [-8, 8]) b.addTank(-33, z, 3, 5, PAL.rust.dark);
   },
-  'broken-wing': (b) => buildWingHull(b),
+  'broken-wing': (b) => buildWingSalvage(b),
   'glass-flats': (b) => b.addModel('glass_flats', 0, 0),
   nose: settlement,
   bowl: settlement,
