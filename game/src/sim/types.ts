@@ -204,7 +204,14 @@ export type NpcBrain = {
     whim?: { kind: 'keep' | 'rush' | 'halt' | 'veer'; until: number; angle: number };
     farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
     lastTown?: string; // id of the last town where this driver finished a service or trade
+    // Hidden facts the driver saw, oldest first, at most one per subject. Only src/sim/memory.ts writes them.
+    memories: Memory[];
 };
+
+// A fact a driver saw. Each kind has a subject rule and a lifetime in src/sim/memory.ts.
+// prices: a shop's standing pressure for each good it trades, when the driver did business there.
+export type MemoryFact = { kind: 'prices'; shop: string; pressure: Record<string, number> };
+export type Memory = { turn: number; fact: MemoryFact }; // turn: when the driver saw the fact
 
 export type Vehicle = {
   id: string;
