@@ -18,7 +18,8 @@ export type TerrainTypeId =
   | "field"
   | "dirtyWater"
   | "toxic"
-  | "hull";
+  | "hull"
+  | "track";
 
 export type TerrainType = {
   id: TerrainTypeId;
@@ -52,6 +53,10 @@ export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   // than asphalt for its seams and torn edges, and holds only the thin dust blown onto it. Gray of PAL.metal.
   // Last, so earlier type codes keep their values.
   hull: { id: "hull", name: "Hull plating", speed: 1, wear: 0.7, dust: 0.2, color: 0x5a5a58 },
+  // Dirt tracks: hardpan packed pale by wheels, the farm tracks of the Old Orchard. It drives like hardpan and only
+  // looks paler than both hardpan and sand, so the tracks read from the camera. Last, so earlier type codes keep
+  // their values.
+  track: { id: "track", name: "Dirt track", speed: 0.9, wear: 1, dust: 1, color: 0xa88458 },
 };
 
 export const TERRAIN = {

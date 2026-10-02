@@ -134,7 +134,7 @@ const MARKED_TYPES: Record<number, TerrainTypeId> = {
   [BUILT_DIRTY_WATER]: 'dirtyWater',
   [BUILT_TOXIC]: 'toxic',
   [BUILT_HULL]: 'hull',
-  [BUILT_TRACK]: 'hardpan',
+  [BUILT_TRACK]: 'track',
 };
 
 function pickType(g: GroundInput, x: number, y: number): TerrainTypeId {

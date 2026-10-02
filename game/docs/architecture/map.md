@@ -12,7 +12,7 @@
   - `src/three/render/hull-decks.ts` lays a plate mesh on each deck from the same geometry and the baked heights. It is decoration only.
 - `fillFarm()` in `src/mapgen/farm.ts` lays out a territory's `FarmRules`. Every position is authored in the road's frame: `onOrchardRoad(s, c)` in `src/data/territory.ts` turns tiles `s` along the road toward its north end and `c` across it toward map west into an offset from the centre. `ORCHARD_HEADING` in `src/data/region.ts` sets the road's heading so it shows at the concept image's 25° screen angle from the fixed camera. Building turns are relative to that heading. The steps run in order, and each mark takes only a tile no earlier mark took:
   - The old road is marked as asphalt along the spine, rim to rim. The spur road in `REGION` ends at its south end.
-  - Pads are marked as asphalt, tracks as `BUILT_TRACK` (hardpan) and ditches as `BUILT_DIRTY_WATER`.
+  - Pads are marked as asphalt, tracks as `BUILT_TRACK` (the `track` ground: hardpan to drive, painted darker so the tracks show) and ditches as `BUILT_DIRTY_WATER`.
   - Each building pose becomes a loot spot. `spotTableAt()` in `src/sim/territory.ts` finds its table by its look, so one look has one table.
   - Runs of segment props (fences, barriers, sandbags) go along their polylines, skipping `gaps`.
   - Each grove block becomes field and gets trees on a grid in its row direction, with jitter, missing points and random turns from the territory rng, up to `groves.maxTrees`. Trees keep off the road, marks, runs and every building's parking gap.

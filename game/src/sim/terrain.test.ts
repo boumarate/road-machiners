@@ -16,6 +16,7 @@ import { dist, polylineDist, segmentDist } from "./vec";
 import { newWorld } from "./world";
 import type { World } from "./types";
 import { TEST_MAP } from "../test/map";
+import { TERRITORIES } from "../data/territory";
 
 // Several tests below read the start world without changing it (destinations, canyon shape,
 // cliff checks), so they share one.
@@ -153,6 +154,21 @@ describe("terrain grid", () => {
     for (const road of REGION.roads.filter((r) => r !== spur)) {
       for (let i = 1; i < road.length; i++) expect(segmentDist(orchard.pos, road[i - 1], road[i])).toBeGreaterThanOrEqual(orchard.radius);
     }
+  });
+
+  it('paints the Old Orchard tracks as dirt track, which drives like hardpan but shows apart from it', () => {
+    const orchard = REGION.locations.find((site) => site.id === 'orchard')!;
+    for (const track of TERRITORIES.orchard.farm!.tracks) {
+      for (let i = 1; i < track.points.length; i++) {
+        const [a, b] = [track.points[i - 1], track.points[i]];
+        const mid = { x: orchard.pos.x + (a.x + b.x) / 2, y: orchard.pos.y + (a.y + b.y) / 2 };
+        expect(TEST_MAP.terrain.types[tileAt(TEST_MAP.terrain, mid)], `track at ${mid.x},${mid.y}`).toBe('track');
+      }
+    }
+    const { track, hardpan, sand } = TERRAIN_TYPES;
+    expect([track.speed, track.wear, track.dust]).toEqual([hardpan.speed, hardpan.wear, hardpan.dust]);
+    expect(track.color).not.toBe(hardpan.color);
+    expect(track.color).not.toBe(sand.color);
   });
 
   it('carves a canyon and a dry river below the surrounding hills', () => {
