@@ -1,6 +1,6 @@
 # Art pipeline
 
-Static props, obstacles, landmarks and truck parts are low-poly Blender models. Settlement houses, ruins, water and some hull sections are built from Three.js shapes in code. Models placed many times, like rocks and orchard trees, are drawn as instanced meshes. The ground is one painted canvas texture over the whole map, and a shader draws roads and pads on it. Pebbles and scrub are instanced 3D models from `src/three/render/scatter.ts`.
+Static props, obstacles, landmarks and truck parts are low-poly Blender models. Settlement houses, ruins, water and some hull sections are built from Three.js shapes in code. Models placed many times, like rocks, are drawn as instanced meshes. The ground is one painted canvas texture over the whole map, and a shader draws roads and pads on it. Pebbles and scrub are instanced 3D models from `src/three/render/scatter.ts`.
 
 Some models come from Blender scripts in `tools/blender/`. Blender is installed with `brew install --cask blender`. Each script writes a `.glb` into `public/models/`, and both are committed. Rebuild one with `blender --background --python tools/blender/<name>.py -- public/models/<name>.glb tmp/<name>.png`. The second path is an optional preview render from the game camera angle.
 
