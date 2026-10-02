@@ -1,6 +1,6 @@
 # Deploys never cost job progress
 
-**Status:** executing
+**Status:** validating
 **Branch:** deploy-job-continuity
 **Worktree:** .worktrees/deploy-job-continuity
 **Goal:** A factory deploy never stops or waits for a running job, and a job whose process dies restarts once with its agents' conversations intact. Confirming it needs a live deploy on the server while jobs run, and one job killed by hand that resumes.
@@ -170,3 +170,31 @@ Interfaces:
 
 Smoke: `tmp/smoke/run.sh` in Debian ran the layout migration and three deploys. Factory 456 tests, infra 22, Hermes 106, quality gate passed.
 Goal: proxy only. The live rollout must show a deploy while jobs run, with no pause and no stop, and one job killed by hand that resumes its conversation.
+
+## Conclusion
+
+Outcome: code verified and reviewed at the head of `deploy-job-continuity`. The Goal waits for the live rollout.
+
+Invariants:
+- IV1, IV2, IV3 — Linux smoke and `test_update_scripts.py`: no pause, busy releases kept, the link swapped by `mv -T`.
+- IV4 to IV7 — `tick.test.ts`, `job.test.ts`, `sessions.test.ts` and `common.test.ts`.
+
+### Assumptions check
+- AS1 — unverifiable locally. Print-mode resume by id held on the Mac. The cross-container case is checked in the rollout.
+- AS2 — unverifiable before the rollout. An image rebuild only changes later containers.
+- AS3 — held as a design choice: the tick removes a dead job's containers by label in every case.
+- AS4 — held in the Debian smoke as root. On the server the update runs as the factory user, which owns every job.
+
+### Unknowns outcome
+- UK1 — resolved: a release that cannot be removed is logged and retried on the next deploy, and never fails the update.
+
+Plan adherence:
+- PH1 and PH2 landed as one commit, `c63aa555`, since the hook type-checks each commit and neither phase compiles alone.
+- The previous release survives one deploy, so a tick that read the link just before the swap still finds it.
+- The tick writes the dead stage into the sessions folder, so a card that moved on starts fresh. The plan had only the `interrupted` mark.
+- A dead job loses only its containers. Its pid is never signaled, since another process may own it by now.
+
+Review findings:
+- Important: the migration left the old update's `update to` pause, which the new code reads as Hermes's. Fixed: the layout script stops the update service and lifts that pause, with a test.
+
+Rollout order: stop the update timer on the server, merge, then run `deploy.py` once. Otherwise the old update script deploys the merge in place first.

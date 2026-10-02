@@ -5,6 +5,7 @@ Process working folders come from the file FACTORY_CWD_LIST, since macOS has no 
 """
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -173,6 +174,21 @@ def test_layout_moves_a_real_code_folder_to_repo_and_keeps_the_timers_off_meanwh
     npm = next(i for i, call in enumerate(calls) if call.startswith("npm "))
     start = next(i for i, call in enumerate(calls) if call.startswith("systemctl start") and "roam-factory-tick.timer" in call)
     assert stop < npm < start
+
+
+def test_layout_lifts_the_pause_of_the_old_update_and_stops_its_service_but_keeps_a_hermes_pause(factory):
+    for reason, kept in [("update to 1086eba, waiting for the running jobs\n", False), ("Hermes repairs #4\n", True)]:
+        shutil.rmtree(factory.root / "repo", ignore_errors=True)
+        shutil.rmtree(factory.root / "releases", ignore_errors=True)
+        (factory.root / "code").unlink(missing_ok=True)
+        (factory.root / "factory.env").unlink(missing_ok=True)
+        factory.git("clone", "-q", str(factory.origin), str(factory.root / "code"), cwd=factory.root)
+        (factory.root / "home" / "deployed").write_text(factory.git("rev-parse", "HEAD") + "\n")
+        (factory.root / "home" / "paused").write_text(reason)
+        done = factory.layout()
+        assert done.returncode == 0, done.stdout + done.stderr
+        assert (factory.root / "home" / "paused").exists() == kept
+        assert any(call.startswith("systemctl stop") and "roam-factory-update.service" in call for call in factory.shim_calls())
 
 
 def test_layout_refuses_a_second_env_file_during_the_move(factory):

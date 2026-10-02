@@ -21,7 +21,12 @@ if [ -d "$code" ] && [ ! -L "$code" ]; then
   # No tick or update starts while the folder moves. The trap starts the tick timer again, also when a step fails.
   # The installed update script is the old one and would break the links, so deploy.py starts the update timer after it pushes the new script.
   trap 'systemctl start roam-factory-tick.timer' EXIT
-  systemctl stop roam-factory-tick.timer roam-factory-update.timer
+  systemctl stop roam-factory-tick.timer roam-factory-update.timer roam-factory-update.service
+  # The old update script pauses the factory while it waits for jobs. The new code never pauses for an update, and it would read that pause as Hermes's.
+  if [ -f "$home/paused" ] && grep -q '^update to' "$home/paused"; then
+    log "lift the pause of the old update: $(cat "$home/paused")"
+    rm "$home/paused"
+  fi
   log "move the code folder to $repo"
   [ ! -d "$repo" ] || rmdir "$repo"
   mv "$code" "$repo"
