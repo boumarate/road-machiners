@@ -4,7 +4,11 @@ import { mountedParts } from "../sim/grid";
 import { playerVehicle } from "../sim/damage";
 import { newWorld } from "../sim/world";
 import type { PartInstance } from "../sim/types";
-import { baselinePart, chassisStats, compareBase, diffStats, partStats } from "./cards";
+import { baselinePart, chassisPortraitCell, chassisStats, compareBase, diffStats, itemIconCell, partStats } from "./cards";
+import { CHASSIS } from "../data/chassis";
+import { GOODS } from "../data/goods";
+import { PARTS } from "../data/parts";
+import { BODY_PARTS } from "../render/partLooks";
 import { TEST_MAP } from "../test/map";
 
 const part = (defId: string, wear = 0): PartInstance => ({ id: defId, defId, hp: 1, wear });
@@ -58,5 +62,41 @@ describe("the part a shop card compares with", () => {
 
   it("is nothing for the selected part's own card", () => {
     expect(compareBase(part("turbine"), part("turbine"))).toBeNull();
+  });
+});
+
+describe("item icons", () => {
+  const items = [...Object.keys(PARTS).filter((id) => !BODY_PARTS.has(id)), ...Object.keys(GOODS)];
+
+  it.each(items)("names the %s icon after its def", (id) => {
+    expect(itemIconCell(id).label).toBe(id in GOODS ? GOODS[id].name : PARTS[id].name);
+  });
+
+  it("gives every item its own cell on the sheet", () => {
+    const cells = items.map((id) => {
+      const c = itemIconCell(id);
+      return `${c.col},${c.row}`;
+    });
+    expect(new Set(cells).size).toBe(items.length);
+  });
+
+  it("keeps every cell on the sheet", () => {
+    for (const id of items) {
+      const c = itemIconCell(id);
+      expect(c.col).toBeLessThan(c.cols);
+      expect(c.row).toBeLessThan(c.rows);
+    }
+  });
+
+  it("fails on an id with no icon", () => {
+    expect(() => itemIconCell("hoverPad")).toThrow(/hoverPad/);
+  });
+
+  it("has no model icon for a cab, which keeps its glyph", () => {
+    expect(() => itemIconCell("cabPickup")).toThrow(/npm run icons/);
+  });
+
+  it.each(Object.keys(CHASSIS))("names the %s portrait after its chassis", (id) => {
+    expect(chassisPortraitCell(id).label).toBe(CHASSIS[id].name);
   });
 });

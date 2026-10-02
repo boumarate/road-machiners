@@ -1841,6 +1841,21 @@ canvas.view {
   flex-direction: column;
   gap: 6px;
 }
+/* The truck's portrait beside its grid, as tall as the grid, so nose and tail line up. */
+.truck-pics {
+  display: flex;
+  gap: 6px;
+  align-self: flex-start;
+}
+.chassis-portrait {
+  display: block;
+  flex: none;
+}
+.chassis-portrait svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 .chassis-map {
   display: grid;
   gap: 1px;

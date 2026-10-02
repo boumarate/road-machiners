@@ -9,7 +9,7 @@ import type { GridItem, PartInstance, RefitJob, RefitMove, Vehicle, World } from
 import { playerVehicle } from "../sim/damage";
 import { el } from "./dom";
 import { wearLabel } from "./format";
-import { createIcon, goodIcon, partIcon, type IconName } from "./cards";
+import { itemIconEl } from "./cards";
 import { hp, kg } from "./units";
 
 const CELL_TITLE: Record<Cell, string> = {
@@ -73,7 +73,7 @@ export function itemBox(it: GridItem, mounted: boolean, cell: number): HTMLEleme
   const node = el(
     "div",
     { class: `inv-item ${cls}`, "data-item-id": it.id, style: pos(x, y, size.w, size.h, cell), title: itemTitle(it, mounted), tabindex: 0, role: "button", "aria-label": itemTitle(it, mounted) },
-    createIcon(getItemIcon(it)),
+    itemIconEl(it),
     el("span", { class: "inv-item-name" }, itemLabel(it).short),
   );
   if (it.kind === "part") node.append(conditionBar(it.part));
@@ -157,10 +157,6 @@ export function itemState(it: GridItem, mounted: boolean): string {
   if (it.kind === "good") return `Cargo, ${kg(GOODS[it.good].mass)}`;
   if (partDef(it.part.defId).kind === "core") return `Built in, ${wearLabel(it.part)}`;
   return `${mounted ? "Mounted" : "Spare"}, ${wearLabel(it.part)}`;
-}
-
-export function getItemIcon(item: GridItem): IconName {
-  return item.kind === "good" ? goodIcon(item.good) : partIcon(item.part);
 }
 
 // Fire view: where a mounted gun can fire, shown on the grid as a fan from the gun, the same shape as its range

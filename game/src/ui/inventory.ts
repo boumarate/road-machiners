@@ -43,14 +43,13 @@ import type {
 } from "../sim/types";
 import { el, isBrowserChord, panel } from "./dom";
 import type { UiHost } from "./host";
-import { baselinePart, conditionMeter, createIcon, diffStats, footprint as footprintEl, partIcon, partStats, statGrid } from "./cards";
+import { baselinePart, conditionMeter, createIcon, diffStats, footprint as footprintEl, itemIconEl, partIconEl, partStats, statGrid } from "./cards";
 import { vehicleMass } from "../sim/mass";
 import {
   blockerIds,
   clearFan,
   fanSvg,
   weaponDefOf,
-  getItemIcon,
   gridEl,
   itemBox,
   itemLabel,
@@ -395,7 +394,7 @@ export class InventoryView {
 
   private showItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
-      el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
+      el("div", { class: "card-head" }, itemIconEl(item), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
       ...(item.kind === "part" && !townAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
       el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
@@ -533,7 +532,7 @@ export class InventoryView {
       const chip = el(
         "div",
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        createIcon(partIcon(p)),
+        partIconEl(p),
         el("span", {}, d.name),
         footprintEl(d.w, d.h),
         conditionMeter(p),
@@ -562,7 +561,7 @@ export class InventoryView {
       const chip = el(
         "div",
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        createIcon(partIcon(p)),
+        partIconEl(p),
         el("span", {}, d.name),
         footprintEl(d.w, d.h),
         conditionMeter(p),
@@ -585,7 +584,7 @@ export class InventoryView {
       const chip = el(
         "div",
         { class: "inv-chip k-good" },
-        createIcon(getItemIcon(item)),
+        itemIconEl(item),
         `${GOODS[good].name} x${count}`,
       );
       this.markSelected(chip, item);
@@ -682,7 +681,7 @@ export class InventoryView {
 
   private showTruckItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
-      el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
+      el("div", { class: "card-head" }, itemIconEl(item), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, false) : []),
     );
   }
