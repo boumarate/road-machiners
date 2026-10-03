@@ -3,7 +3,7 @@ import { FIRST_NAMES, NPCS, SPAWN, SURNAMES } from '../data/npcs';
 import { REGION } from '../data/region';
 import { START_KITS } from '../data/start';
 import { playerVehicle } from './damage';
-import { siteGates, sitePads } from './sites';
+import { siteGap, siteGates, sitePads } from './sites';
 import { isFree, npcName, spawnNpcs } from './spawn';
 import { territoryPieces } from './territory';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
@@ -13,7 +13,7 @@ import { TEST_MAP } from '../test/map';
 
 const NEUTRAL_SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'camp')];
 const nearestSite = (pos: { x: number; y: number }) =>
-  NEUTRAL_SITES.reduce((best, site) => (dist(pos, site.pos) - site.radius < dist(pos, best.pos) - best.radius ? site : best));
+  NEUTRAL_SITES.reduce((best, site) => (siteGap(site, pos) < siteGap(best, pos) ? site : best));
 
 describe('NPC spawns', () => {
   it('names each driver from the pools and keeps the name through turns', () => {
