@@ -585,6 +585,21 @@ describe('tow deals', () => {
     expect(towData(again)).toEqual({ kind: 'tow', site: deal.site, fee: deal.fee, waived: 0, hitched: false });
     expect(stateOf(r.w, 'towPromise', deal.holder, r.w.player.vehicleId)).toBeNull();
   });
+
+  // A promise kept for a later breakdown charged the old fee for a far shorter tow.
+  it('a tower forgets its promise once the player drives again', () => {
+    const s = stranded();
+    forceOption('strandedSeen', 'tow');
+    let w = acceptTow(offered(s));
+    const tower = playerTow(w)!.holder;
+    dropTow(w, playerTow(w)!, 'danger');
+    w.player.fuel = 30;
+
+    w = endTurn(w, testDrive);
+
+    expect(isStranded(w, playerVehicle(w))).toBe(false);
+    expect(stateOf(w, 'towPromise', tower, w.player.vehicleId)).toBeNull();
+  });
 });
 
 describe('free tow for a broke player', () => {

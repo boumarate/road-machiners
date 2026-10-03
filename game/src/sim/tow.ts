@@ -207,6 +207,13 @@ export function releaseNpc(world: World, npc: Vehicle): void {
   endState(world, tow, 'broken');
 }
 
+// A tow promise covers one breakdown. It breaks once the client drives again, so its next breakdown gets terms for
+// where it stands then, not the old fee.
+export function checkTowPromise(world: World, s: NpcState): StateEnding | null {
+  const client = world.vehicles.find((v) => v.id === s.other);
+  return client && !isStranded(world, client) ? 'broken' : null;
+}
+
 // The player's tow ends at the NPC's destination, and breaks when the two turn hostile.
 export function checkPlayerTow(world: World, s: NpcState): StateEnding | null {
   const me = world.vehicles.find((v) => v.id === s.holder);
