@@ -7,9 +7,10 @@ import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
 import { siteGates } from '../../sim/sites';
-import { deckById, type Deck } from '../../sim/bridge';
-import { deckEnds, heightAt, type Terrain } from '../../sim/terrain';
+import { deckById } from '../../sim/bridge';
+import { heightAt, type Terrain } from '../../sim/terrain';
 import { angleDiff, segmentDist } from '../../sim/vec';
+import { poseOnDeck } from './deck-pose';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
 
@@ -353,18 +354,6 @@ function buildLock(b: SiteBuilder): void {
   // The gate wall runs along the model's Y, so a quarter turn sets it across the channel.
   b.addModel('lock_gate', 0, 0, Math.PI / 2);
   b.addRuin(3.7, 0, 1.7, 2);
-}
-
-// Poses a deck model on a sim deck: its middle on the deck's middle, pitched along the deck line from
-// sim/terrain.ts, which the physics deck also follows, and turned along the deck axis. `top` is meters from the model
-// origin up to its deck top, after scaling.
-function poseOnDeck(obj: THREE.Object3D, terrain: Terrain, deck: Deck, top: number): void {
-  const { from, axis, length } = deck;
-  const [h0, h1] = deckEnds(terrain, deck);
-  const pitch = Math.atan2((h1 - h0) * S, length * S);
-  obj.position.set((from.x + (axis.x * length) / 2) * S, ((h0 + h1) / 2) * S - top, (from.y + (axis.y * length) / 2) * S);
-  // YXZ applies the pitch about the model's own z first, then the yaw.
-  obj.rotation.set(0, -Math.atan2(axis.y, axis.x), pitch, 'YXZ');
 }
 
 function buildBridge(b: SiteBuilder, terrain: Terrain): void {

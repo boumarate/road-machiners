@@ -1,7 +1,8 @@
 // Roads and site pads are drawn by the ground shader, so they lie exactly on the ground that wheels touch.
 // The shader splits the ground into road pixels a third the size of the ground paint pixels. A road pixel
 // takes the road look where the road mask covers its center, and the slow tone and a per-pixel dither fray
-// the edge. A pad is a paler floor of the same dirt inside a worn orange outline, where the road ends.
+// the edge. A pad is a paler floor of the same dirt inside a worn orange outline, where the road ends. A territory's
+// dirt roads, the mask's green channel, take the same detail tinted grey-brown, with a darker soft shoulder.
 
 import * as THREE from "three";
 import { PHYSICS } from "../../data/physics";
@@ -17,6 +18,12 @@ const PIXEL_SPLIT = 3; // road pixels across one ground paint pixel
 // The ground paint under a road, before hillshade. The road takes the ground's shade relative to it.
 const GROUND_UNDER = mix(TERRAIN_TYPES.hardpan.color, PAL.sand[3], 0.1);
 const PAD_BORDER = 2; // road pixels across the pad outline
+// Where the dirt road's edge lies in the blurred green channel: at half strength, so the road shows as wide as it is
+// stroked. A 2.5-tile road peaks at about 0.84 under its 0.8-tile blur.
+const DIRT_EDGE = 0.5;
+const DIRT_WANDER = 0.2; // how far the slow tone moves the dirt road's edge, half as far as a region road's
+const DIRT_SOFT = 0.15; // mask span over which the shoulder fades in outside the edge and lightens inside it
+const DIRT_SHOULDER = 0.8; // shade of the darkest shoulder, at the edge
 
 // Paints the road mask on `mask`, which must map the map like the ground canvas, and draws roads and
 // pads on the ground material.
@@ -33,6 +40,7 @@ export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas
     roadDetailMeters: { value: ROAD_DETAIL_SIDE * pixel },
     roadToneMeters: { value: ROAD_TONE_SIDE * ROAD_TONE_PIXELS * pixel },
     roadGroundLuma: { value: luma(new THREE.Color(GROUND_UNDER)) },
+    dirtTint: { value: dirtTint() },
     ...padUniforms(pixel),
   };
   const before = material.onBeforeCompile.bind(material);
@@ -61,6 +69,7 @@ uniform float roadMaskMeters;
 uniform float roadDetailMeters;
 uniform float roadToneMeters;
 uniform float roadGroundLuma;
+uniform vec3 dirtTint;
 uniform vec2 padCenters[PAD_COUNT];
 uniform vec2 padAxes[PAD_COUNT];
 uniform vec2 padHalf;
@@ -70,16 +79,25 @@ uniform vec3 padMark;`;
 
 // Samples everything at the road pixel center, so edges step in whole road pixels like the ground
 // paint. Under 0.5 the mask is off the road. The tone moves that line by meters and the dither frays it.
-// A pad covers the road under it. Its outline skips a few pixels, like worn paint.
+// Off a region road, a dirt road fades in over its shoulder and is darkest at its edge. A region road keeps priority
+// where the two meet. A pad covers the road under it. Its outline skips a few pixels, like worn paint.
 const ROAD_FRAGMENT = `{
   vec2 roadAt = roadOrigin + (floor((vRoadXZ - roadOrigin) / roadPixel) + 0.5) * roadPixel;
-  float roadCover = texture2D(roadMask, (roadAt - roadOrigin) / roadMaskMeters).r;
+  vec2 roadMaskAt = texture2D(roadMask, (roadAt - roadOrigin) / roadMaskMeters).rg;
+  float roadCover = roadMaskAt.r;
+  float dirtCover = roadMaskAt.g;
   vec4 roadLook = texture2D(roadDetail, (roadAt - roadOrigin) / roadDetailMeters);
   float roadWander = texture2D(roadTone, (roadAt - roadOrigin) / roadToneMeters).r;
   float groundShade = clamp(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)) / roadGroundLuma, 0.7, 1.2);
   vec3 roadColor = roadLook.rgb * (0.94 + 0.12 * roadWander) * groundShade;
   float roadEdge = 0.5 + (roadWander - 0.5) * 0.4 + (roadLook.a - 0.5) * 0.1;
+  float dirtEdge = ${DIRT_EDGE} + (roadWander - 0.5) * ${DIRT_WANDER} + (roadLook.a - 0.5) * 0.02;
   if (roadCover > roadEdge) diffuseColor.rgb = roadColor * (roadCover < roadEdge + 0.1 ? 0.92 : 1.0);
+  else if (dirtCover > dirtEdge - ${DIRT_SOFT}) {
+    float dirtIn = smoothstep(dirtEdge - ${DIRT_SOFT}, dirtEdge, dirtCover);
+    float dirtShade = mix(${DIRT_SHOULDER}, 1.0, smoothstep(dirtEdge, dirtEdge + ${DIRT_SOFT}, dirtCover));
+    diffuseColor.rgb = mix(diffuseColor.rgb, roadColor * dirtTint * dirtShade, dirtIn);
+  }
   for (int i = 0; i < PAD_COUNT; i++) {
     vec2 padOff = roadAt - padCenters[i];
     vec2 padIn = padHalf - abs(vec2(dot(padOff, padAxes[i]), dot(padOff, vec2(-padAxes[i].y, padAxes[i].x))));
@@ -110,11 +128,15 @@ function padUniforms(pixel: number) {
   };
 }
 
+// The mask's red (region roads) and green (dirt roads) channels.
 function maskTexture(c: PaintCanvas): THREE.DataTexture {
   const rgba = c.ctx.getImageData(0, 0, c.size, c.size).data;
-  const cover = new Uint8Array(c.size * c.size);
-  for (let i = 0; i < cover.length; i++) cover[i] = rgba[i * 4];
-  const texture = new THREE.DataTexture(cover, c.size, c.size, THREE.RedFormat);
+  const cover = new Uint8Array(c.size * c.size * 2);
+  for (let i = 0; i < c.size * c.size; i++) {
+    cover[i * 2] = rgba[i * 4];
+    cover[i * 2 + 1] = rgba[i * 4 + 1];
+  }
+  const texture = new THREE.DataTexture(cover, c.size, c.size, THREE.RGFormat);
   texture.magFilter = THREE.LinearFilter;
   texture.minFilter = THREE.LinearFilter;
   texture.needsUpdate = true;
@@ -130,6 +152,13 @@ function imageTexture(image: RoadImage, filter: THREE.MagnificationTextureFilter
   texture.colorSpace = colorSpace;
   texture.needsUpdate = true;
   return texture;
+}
+
+// Turns the road detail, whose mean color is PAL.road, toward PAL.dirtRoad, channel by channel.
+function dirtTint(): THREE.Vector3 {
+  const road = new THREE.Color(PAL.road);
+  const dirt = new THREE.Color(PAL.dirtRoad);
+  return new THREE.Vector3(dirt.r / road.r, dirt.g / road.g, dirt.b / road.b);
 }
 
 function luma(c: THREE.Color): number {
