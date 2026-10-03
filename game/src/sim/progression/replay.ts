@@ -118,7 +118,7 @@ function isDayRow(value: unknown): boolean {
   return typeof value === 'object' && value !== null && 'day' in value;
 }
 
-const ROW_NUMBERS = ['day', 'turns', 'money', 'netWorth', 'tier', 'fightsWon', 'knockouts', 'gearLost', 'deaths'] as const;
+const ROW_NUMBERS = ['day', 'turns', 'money', 'netWorth', 'tier', 'fightsWon', 'knockouts', 'gearLost', 'deaths', 'stalls'] as const;
 
 // An economy row read from a trace file. Throws on anything that is not a valid row.
 export function parseDayRow(value: unknown): DayRow {

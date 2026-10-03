@@ -63,11 +63,11 @@ function printEconomy(group) {
   for (const tier of TIERS) rows.push([`tier ${tier}`, spreadOrNone(wages.map((w) => w[tier]), (n) => n.toFixed(2)), spreadOrNone(days.map((d) => d[tier]), String)]);
   console.log('');
   printTable(rows);
-  const ends = [['seed', 'chassis', 'net worth', 'won', 'knockouts', 'gear lost', 'deaths']];
+  const ends = [['seed', 'chassis', 'net worth', 'won', 'knockouts', 'gear lost', 'deaths', 'stalls']];
   for (const r of withRows) {
     const last = r.rows[r.rows.length - 1];
     const totals = fightTotals(r.rows);
-    ends.push([String(r.seed), last.chassis, last.netWorth.toFixed(0), ...[totals.fightsWon, totals.knockouts, totals.gearLost, totals.deaths].map(String)]);
+    ends.push([String(r.seed), last.chassis, last.netWorth.toFixed(0), ...[totals.fightsWon, totals.knockouts, totals.gearLost, totals.deaths, totals.stalls].map(String)]);
   }
   console.log('');
   printTable(ends);

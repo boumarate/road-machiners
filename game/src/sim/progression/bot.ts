@@ -52,7 +52,8 @@ const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
 };
 
 // markovTurns is how many turns the markov bot keeps one goal. It is required for that bot and ignored by the others.
-export type BotOptions = { markovTurns?: number };
+// tolerateStalls is for the recorder: NPC stalls count in the rows instead of failing the run.
+export type BotOptions = { markovTurns?: number; tolerateStalls?: boolean };
 
 // The markov draws come from their own hash of the run seed, so they never shift the world's randomness.
 const MARKOV_SALT = 0x6d61726b;
@@ -361,11 +362,16 @@ function nextLoot(me: Vehicle, target: Vehicle): { item: GridItem; spot: Spot } 
   return null;
 }
 
+// A refit job cannot start in combat, and one truck loots a wreck at a time.
+function canStripNow(o: Orders, target: Vehicle): boolean {
+  return !inCombat(o.world, o.me) && !lootBlocker(o.world, o.me, target.id);
+}
+
 // Takes one item from the knocked-out truck beside it, or drives beside the nearest one in sight that has loot to take.
 // True when this turn's command went to the strip.
 function stripDowned(o: Orders): boolean {
   const here = downedHere(o.world);
-  const pick = here && !lootBlocker(o.world, o.me, here.id) ? nextLoot(o.me, here) : null;
+  const pick = here && canStripNow(o, here) ? nextLoot(o.me, here) : null;
   if (here && pick) {
     o.run((w) => takeFromTruck(w, here.id, pick.item.id, pick.spot));
     return true;

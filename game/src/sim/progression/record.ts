@@ -127,7 +127,7 @@ function playTurn(world: World, archetype: Archetype, options: BotOptions): Play
   const orders = botOrders(world, archetype, options);
   const goals = topGoals(orders.world);
   const next = endTurn(orders.world, moveAllFar);
-  failOnStall(next, goals);
+  failOnStall(next, goals, options.tolerateStalls === true);
   failOnDryMajority(next);
   const events = [...orders.events, ...next.events];
   const lines = [...traceOf(orders.events, orders.world.turn), ...traceOf(next.events, next.turn)];
@@ -187,9 +187,10 @@ function topGoals(w: World): Map<string, NpcActivity> {
   return tops;
 }
 
-function failOnStall(w: World, goals: Map<string, NpcActivity>): void {
+// A run that tolerates stalls only counts them in its rows, for runs that must reach the end whatever NPCs do.
+function failOnStall(w: World, goals: Map<string, NpcActivity>, tolerate: boolean): void {
   const stalls = w.events.flatMap((e) => (e.t === 'stall' ? [describeStall(w, e, goals.get(e.vehicle))] : []));
-  if (stalls.length > 0) throw new Error(`${stalls.length} stall${stalls.length > 1 ? 's' : ''}:\n${stalls.join('\n')}`);
+  if (stalls.length > 0 && !tolerate) throw new Error(`${stalls.length} stall${stalls.length > 1 ? 's' : ''}:\n${stalls.join('\n')}`);
 }
 
 // Fails when more than half the NPCs hold an empty tank at once, which means fuel supply or fuel buying is broken.
@@ -270,12 +271,13 @@ export type DayRow = {
   knockouts: number;
   gearLost: number;
   deaths: number;
+  stalls: number; // NPC stall events, only nonzero in a run that tolerates them
   ledger: Ledger; // money moved that day by key: negative is spent, positive earned
 };
 
-type Counts = Pick<DayRow, 'fightsWon' | 'knockouts' | 'gearLost' | 'deaths' | 'ledger'>;
+type Counts = Pick<DayRow, 'fightsWon' | 'knockouts' | 'gearLost' | 'deaths' | 'stalls' | 'ledger'>;
 
-const noCounts = (): Counts => ({ fightsWon: 0, knockouts: 0, gearLost: 0, deaths: 0, ledger: emptyLedger() });
+const noCounts = (): Counts => ({ fightsWon: 0, knockouts: 0, gearLost: 0, deaths: 0, stalls: 0, ledger: emptyLedger() });
 
 // Mounted parts the player does not carry from the factory: the gear a robber strips.
 function gearIds(world: World): Set<string> {
@@ -301,6 +303,7 @@ export class DayTally {
     if (e.t === 'npcKnockout' && e.by === me) this.counts.fightsWon++;
     if (e.t === 'knockout') this.counts.knockouts++;
     if (e.t === 'death') this.counts.deaths++;
+    if (e.t === 'stall') this.counts.stalls++;
   }
 
   // The row for the day that just ended, and a fresh count for the next day.
@@ -340,7 +343,7 @@ export function tierDays(rows: readonly DayRow[]): Record<Tier, number | null> {
   return { 1: first(1), 2: first(2), 3: first(3) };
 }
 
-export type FightTotals = Pick<Counts, 'fightsWon' | 'knockouts' | 'gearLost' | 'deaths'>;
+export type FightTotals = Pick<Counts, 'fightsWon' | 'knockouts' | 'gearLost' | 'deaths' | 'stalls'>;
 
 // The money each ledger key moved over the whole run: negative is spent, positive earned.
 export function ledgerTotals(rows: readonly DayRow[]): Ledger {
@@ -351,5 +354,5 @@ export function ledgerTotals(rows: readonly DayRow[]): Ledger {
 
 export function fightTotals(rows: readonly DayRow[]): FightTotals {
   const sum = (pick: (r: DayRow) => number) => rows.reduce((total, r) => total + pick(r), 0);
-  return { fightsWon: sum((r) => r.fightsWon), knockouts: sum((r) => r.knockouts), gearLost: sum((r) => r.gearLost), deaths: sum((r) => r.deaths) };
+  return { fightsWon: sum((r) => r.fightsWon), knockouts: sum((r) => r.knockouts), gearLost: sum((r) => r.gearLost), deaths: sum((r) => r.deaths), stalls: sum((r) => r.stalls) };
 }

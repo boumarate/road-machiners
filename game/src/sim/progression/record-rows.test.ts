@@ -3,7 +3,7 @@ import { emptyLedger } from './orders';
 import { fightTotals, ledgerTotals, tierDays, wageByTier, type DayRow } from './record';
 
 const row = (day: number, netWorth: number, tier: DayRow['tier'], extra: Partial<DayRow> = {}): DayRow => ({
-  day, turns: day === 0 ? 0 : 450, money: 0, netWorth, tier, chassis: 'scout', fightsWon: 0, knockouts: 0, gearLost: 0, deaths: 0, ledger: emptyLedger(), ...extra,
+  day, turns: day === 0 ? 0 : 450, money: 0, netWorth, tier, chassis: 'scout', fightsWon: 0, knockouts: 0, gearLost: 0, deaths: 0, stalls: 0, ledger: emptyLedger(), ...extra,
 });
 
 describe('wageByTier', () => {
@@ -39,7 +39,7 @@ describe('fightTotals', () => {
   it('sums the counts over every row', () => {
     const rows = [row(1, 0, 1, { fightsWon: 2, knockouts: 1 }), row(2, 0, 1, { fightsWon: 1, gearLost: 3, deaths: 1 })];
 
-    expect(fightTotals(rows)).toEqual({ fightsWon: 3, knockouts: 1, gearLost: 3, deaths: 1 });
+    expect(fightTotals(rows)).toEqual({ fightsWon: 3, knockouts: 1, gearLost: 3, deaths: 1, stalls: 0 });
   });
 });
 

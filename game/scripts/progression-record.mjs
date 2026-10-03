@@ -13,7 +13,7 @@ import { isArchetype } from '../src/sim/progression/bot.ts';
 import { recordTurns } from '../src/sim/progression/record.ts';
 
 const OUT_DIR = 'tmp/progression';
-const USAGE = 'Usage: npm run progression:record -- --archetypes <a,b> --seeds <1,2> --turns <n> [--markov-turns <k>]';
+const USAGE = 'Usage: npm run progression:record -- --archetypes <a,b> --seeds <1,2> --turns <n> [--markov-turns <k>] [--tolerate-stalls true]';
 
 const args = parseArgs(process.argv.slice(2).filter((a) => a !== '--'));
 if (args.job) recordOne(args.job, args.turns, args.options);
@@ -31,10 +31,21 @@ function parseArgs(argv) {
 
 // The markov bot keeps a goal for --markov-turns turns. Every other bot ignores it.
 function parseOptions(flags) {
+  return { ...parseMarkov(flags), ...parseTolerance(flags) };
+}
+
+function parseMarkov(flags) {
   if (flags['markov-turns'] === undefined) return {};
   const markovTurns = Number(flags['markov-turns']);
   if (!Number.isInteger(markovTurns) || markovTurns <= 0) throw new Error(`--markov-turns must be a positive whole number. ${USAGE}`);
   return { markovTurns };
+}
+
+// --tolerate-stalls true counts NPC stalls in the economy rows instead of failing the run.
+function parseTolerance(flags) {
+  if (flags['tolerate-stalls'] === undefined) return {};
+  if (flags['tolerate-stalls'] !== 'true') throw new Error(`--tolerate-stalls takes the value true. ${USAGE}`);
+  return { tolerateStalls: true };
 }
 
 function requireMarkov(archetypes, options) {
@@ -93,7 +104,8 @@ function runChild({ archetype, seed }, turns, options) {
   const viteNode = fileURLToPath(new URL('../node_modules/.bin/vite-node', import.meta.url));
   const script = fileURLToPath(import.meta.url);
   const markov = options.markovTurns === undefined ? [] : ['--markov-turns', String(options.markovTurns)];
-  const child = spawn(viteNode, [script, '--', '--job', `${archetype}:${seed}`, '--turns', String(turns), ...markov], { stdio: 'inherit' });
+  const tolerate = options.tolerateStalls ? ['--tolerate-stalls', 'true'] : [];
+  const child = spawn(viteNode, [script, '--', '--job', `${archetype}:${seed}`, '--turns', String(turns), ...markov, ...tolerate], { stdio: 'inherit' });
   return new Promise((resolve, reject) => {
     child.on('error', reject);
     child.on('exit', (code) => resolve(code));
