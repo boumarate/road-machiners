@@ -142,6 +142,7 @@ export const NPC_BEHAVIOR = {
 };
 
 export const NPC_UPKEEP = {
+  businessTurns: 3, // the turns an NPC stays parked on a pad for one resupply, sale, purchase or load
   repairParts: 2, // two field patches, kept out of sale cargo
   shadeSearchRadius: 6, // a short local detour, rather than a journey while damaged
   // A driver heads for fuel once its tank holds less than this many times the fuel it thinks the way to its

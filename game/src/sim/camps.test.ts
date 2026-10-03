@@ -10,11 +10,11 @@ import { profileOf } from './npc-decisions';
 import { corePart, goodsCount } from './grid';
 import { fireGuards } from './guards';
 import { addGoods } from './inventory';
-import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { thinkNpc, topGoal } from './npc-activities';
 import { getResources } from './resources';
 import { canUseSite, siteGates, sitePads } from './sites';
 import { spawnInitial } from './spawn';
-import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, finishBusiness, npcBrain } from './testkit';
 import type { Faction, World } from './types';
 import { dist, type Vec } from './vec';
 
@@ -69,7 +69,7 @@ describe('raider camps', () => {
     expect(topGoal(raider)).toMatchObject({ kind: 'resupply', targetId: 'kiln' });
     raider.pos = outside(1);
     raider.speed = 0;
-    resolveNpcActivities(w);
+    finishBusiness(w, raider);
     expect(corePart(raider, 'cab').hp).toBeGreaterThan(1);
     expect(goodsCount(raider).scrap).toBeUndefined();
     expect(topGoal(raider)).toBeNull();
@@ -157,7 +157,7 @@ describe('raider camps', () => {
     expect(topGoal(raider)).toMatchObject({ kind: 'sell', targetId: 'salvage-yard' });
     addGoods(w, raider, 'salt', 1);
     raider.speed = 0;
-    resolveNpcActivities(w);
+    finishBusiness(w, raider);
     expect(goodsCount(raider).salt).toBe(1);
     planNpcOrders(w);
     expect(['scrapjaw', 'kiln']).toContain(topGoal(raider)?.targetId);

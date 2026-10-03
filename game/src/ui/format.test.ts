@@ -93,6 +93,30 @@ describe("contract text", () => {
   });
 });
 
+describe("jobLabel of site business", () => {
+  const town = REGION.towns[0];
+  const label = (deal: "resupply" | "sell" | "trade" | "haul", siteId = town.id) => {
+    const w = emptyWorld();
+    return jobLabel(w, w.vehicles[0], { kind: "business", siteId, deal, turnsLeft: 2, total: 3 });
+  };
+
+  it("names each deal and the site", () => {
+    expect(label("resupply")).toBe(`Refuel and repair at ${town.name}`);
+    expect(label("sell")).toBe(`Sell cargo at ${town.name}`);
+    expect(label("trade")).toBe(`Buy cargo at ${town.name}`);
+    expect(label("haul")).toBe(`Load cargo at ${town.name}`);
+  });
+
+  it("reads an oasis resupply as filling water", () => {
+    const oasis = REGION.locations.find((l) => l.kind === "oasis")!;
+    expect(label("resupply", oasis.id)).toBe(`Fill water at ${oasis.name}`);
+  });
+
+  it("throws on an unknown deal", () => {
+    expect(() => label("raid" as "sell")).toThrow();
+  });
+});
+
 describe("jobLabel", () => {
   function downedBuggy() {
     const w = emptyWorld();

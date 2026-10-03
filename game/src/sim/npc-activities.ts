@@ -13,6 +13,7 @@ import { isJunk, maxHp } from './wear';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods, cargoRoom } from './inventory';
 import { cancelJob } from './jobs';
+import { awaitBusiness, businessBelongs, reachSite } from './npc-business';
 import { isFree } from './spawn';
 import { bodyStop } from './meeting-stop';
 import { route } from './path';
@@ -66,6 +67,7 @@ export function topGoal(v: Vehicle): NpcActivity | null {
 function jobBelongs(job: Job, v: Vehicle): boolean {
   if (job.kind === 'repair') return goalsOf(v).some((g) => g.kind === 'repair');
   if (job.kind === 'refit') return refitBelongs(job, topGoal(v));
+  if (job.kind === 'business') return businessBelongs(job, topGoal(v));
   return searchBelongs(job, topGoal(v));
 }
 
@@ -1198,21 +1200,13 @@ function resolveInvestigate(world: World, vehicle: Vehicle, activity: NpcActivit
   if (reachedDestination(world, vehicle, activity)) finishGoal(world, vehicle, 'found nothing at the contact');
 }
 
-// The site of a site goal once the NPC can use it, which starts the act phase. Null while it cannot.
-function reachSite(vehicle: Vehicle, activity: NpcActivity): ReturnType<typeof getKnownSite> | null {
-  const site = getKnownSite(activity.targetId!);
-  if (!canUseSite(vehicle.pos, site)) return null;
-  activity.phase = 'act';
-  return site;
-}
-
 // A driver remembers the last town it did business in, and tells its prices on the radio.
 function noteTown(vehicle: Vehicle, siteId: string): void {
   if (REGION.towns.some((t) => t.id === siteId)) vehicle.brain!.lastTown = siteId;
 }
 
 function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  const site = reachSite(vehicle, activity);
+  const site = awaitBusiness(world, vehicle, activity);
   if (!site) return;
   noteTown(vehicle, site.id);
   serviceAt(world, vehicle, site);
@@ -1230,7 +1224,7 @@ function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
 }
 
 function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  const site = reachSite(vehicle, activity);
+  const site = awaitBusiness(world, vehicle, activity);
   if (!site) return;
   if ('kind' in site && site.kind === 'camp') sellAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else sellVehicleCargo(world, vehicle, site.id, NPC_UPKEEP.repairParts);
@@ -1240,7 +1234,7 @@ function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): voi
 
 // Buys what the wallet above the upkeep reserve and the free cells allow, then delivers it as the long-term goal.
 function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  const site = reachSite(vehicle, activity);
+  const site = awaitBusiness(world, vehicle, activity);
   if (!site) return;
   if (!activity.purchase) throw new Error('Trade activity missing purchase');
   noteTown(vehicle, site.id);
@@ -1257,7 +1251,7 @@ function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): vo
 
 // Loads free cargo up to the free cells, then delivers it as the long-term goal.
 function resolveHaul(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  const site = reachSite(vehicle, activity);
+  const site = awaitBusiness(world, vehicle, activity);
   if (!site) return;
   if (!activity.load) throw new Error('Haul activity missing load');
   if (addGoods(world, vehicle, activity.load.good, cargoRoom(vehicle, activity.load.good)) === 0) {

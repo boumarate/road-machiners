@@ -10,8 +10,10 @@ import { vehicleStats } from './stats';
 import type { Terrain } from './terrain';
 import { TEST_MAP } from '../test/map';
 import { onTestFinished } from 'vitest';
-import { DECISIONS, STATE_WEIGHTS, TRAITS, type DecisionId, type DecisionOptions, type TraitId } from '../data/npcs';
+import { DECISIONS, NPC_UPKEEP, STATE_WEIGHTS, TRAITS, type DecisionId, type DecisionOptions, type TraitId } from '../data/npcs';
 import { addState } from './states';
+import { advanceJobs } from './jobs';
+import { resolveNpcActivities } from './npc-activities';
 import type { Faction, GameEvent, NpcBrain, Vehicle, World, XpSource } from './types';
 import { dist, type Vec } from './vec';
 import { refreshVision } from './vision';
@@ -158,4 +160,17 @@ function driveOne(world: World, v: Vehicle): void {
 // Puts `aggressor` in combat with `target`, as a shot would.
 export function startCombat(w: World, aggressor: Vehicle, target: Vehicle): void {
   addState(w, 'combat', aggressor.id, target.id, { kind: 'none' });
+}
+
+// Runs the turns of an NPC's site business: starts the business job when none runs, then plays advanceJobs and the
+// activity resolvers, as endTurn does, until the job is done and the deal has run. Clears the events each turn.
+export function finishBusiness(w: World, npc: Vehicle): void {
+  w.events = [];
+  if (npc.job?.kind !== 'business') resolveNpcActivities(w);
+  for (let turn = 0; npc.job?.kind === 'business'; turn++) {
+    if (turn > NPC_UPKEEP.businessTurns) throw new Error(`${npc.id} business never finished`);
+    w.events = [];
+    advanceJobs(w);
+    resolveNpcActivities(w);
+  }
 }

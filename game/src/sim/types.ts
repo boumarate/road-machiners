@@ -118,7 +118,11 @@ export type Job =
   | { kind: "search"; stockId: string; turnsLeft: number; total: number }
   | { kind: "strip"; partId: string; turnsLeft: number; total: number }
   | { kind: "weld"; turnsLeft: number; total: number } // the welder perk: scrap metal into a scrap armor part
+  | { kind: "business"; siteId: string; deal: BusinessDeal; turnsLeft: number; total: number } // an NPC's time at a site deal
   | RefitJob;
+
+// The NPC goal kind a business job serves. The deal runs when the job is done.
+export type BusinessDeal = "resupply" | "sell" | "trade" | "haul";
 
 // A vehicle detected beyond sight. The circle always holds the true position, which it never reveals.
 // The circle always holds the vehicle's true position. loudness is how far the engine carries, in tiles,

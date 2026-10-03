@@ -29,11 +29,26 @@ import { fillLine } from './dialogue';
 
 // What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
 export function jobLabel(world: World, v: Vehicle, job: Job): string {
+  if (job.kind === 'refit') return refitLabel(world, v, job);
+  if (job.kind === 'business') return businessLabel(job);
   if (job.kind === 'search') return 'Search';
   if (job.kind === 'weld') return 'Weld scrap armor';
-  if (job.kind === 'refit') return refitLabel(world, v, job);
+  return partJobLabel(v, job);
+}
+
+function partJobLabel(v: Vehicle, job: Extract<Job, { kind: 'repair' | 'strip' }>): string {
   const part = v.items.find((it) => it.kind === 'part' && it.part.id === job.partId);
   return `${job.kind === 'repair' ? 'Repair' : 'Strip'} ${part ? itemName(part) : 'part'}`;
+}
+
+const BUSINESS_VERBS = { resupply: 'Refuel and repair', sell: 'Sell cargo', trade: 'Buy cargo', haul: 'Load cargo' };
+
+// A business job names its deal and site: "Sell cargo at Dustwell". An oasis only fills water.
+function businessLabel(job: Extract<Job, { kind: 'business' }>): string {
+  const verb: string | undefined = BUSINESS_VERBS[job.deal];
+  if (!verb) throw new Error(`No business label for ${job.deal}`);
+  const oasis = job.deal === 'resupply' && REGION.locations.some((l) => l.id === job.siteId && l.kind === 'oasis');
+  return `${oasis ? 'Fill water' : verb} at ${siteName(job.siteId)}`;
 }
 
 // A refit names its part while it runs and after it is done, so the part is looked up where it lies now.

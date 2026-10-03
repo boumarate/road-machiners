@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { corePart } from './grid';
-import { noteHurt, popGoal, pushGoal, replaceBase, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { noteHurt, popGoal, pushGoal, replaceBase, thinkNpc, topGoal } from './npc-activities';
 import { sitePads } from './sites';
-import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls } from './testkit';
+import { addVehicle, emptyWorld, finishBusiness, forceOption, npcBrain, rngStateForForcedRolls } from './testkit';
 import type { NpcActivity, World } from './types';
 
 function scavengerWorld() {
@@ -72,7 +72,7 @@ describe('goal stack', () => {
     const stop = [...REGION.towns, ...REGION.locations].find((s) => s.id === topGoal(npc)!.targetId)!;
     npc.pos = { ...sitePads(stop)[0] };
     npc.speed = 0;
-    resolveNpcActivities(w);
+    finishBusiness(w, npc);
     expect(corePart(npc, 'cab').hp).toBeGreaterThan(1);
     expect(topGoal(npc)).toMatchObject({ kind: 'scavenge', targetId: site.id });
     expect(npc.brain!.goals).toHaveLength(1);
