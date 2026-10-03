@@ -1,10 +1,11 @@
 // Replays every trace in tmp/progression/ through the current XP rules and prints, per archetype, the in-game day
-// each skill reaches each level, its XP per day, and each miss against the targets in src/data/skills.ts.
-// Days show the median over seeds and the min-max range. A level some seeds never reach shows how many seeds reached it.
+// each activity family's earned XP covers the cumulative cost of each rank, its XP per day, and each miss against the
+// targets in src/data/skills.ts. Days show the median over seeds and the min-max range. A rank some seeds never reach
+// shows how many seeds reached it.
 // Usage: npm run progression:report
 import { createReadStream, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { MAX_SKILL_LEVEL, SKILL_IDS } from '../src/data/skills.ts';
+import { MAX_RANK, SKILL_IDS } from '../src/data/skills.ts';
 import { TIME } from '../src/data/time.ts';
 import { parseRun, replay, targetMisses } from '../src/sim/progression/replay.ts';
 
@@ -37,7 +38,7 @@ function printArchetype(archetype, group) {
   console.log(`\n${archetype}: ${group.length} seeds (${seeds}), ${Math.min(...days)} to ${Math.max(...days)} days`);
   const deaths = group.map((r) => r.death).filter((turn) => turn !== null);
   console.log(deaths.length === 0 ? 'No deaths' : `Died in ${deaths.length} of ${group.length} seeds, on turn ${spread(deaths, String)}`);
-  const levels = Array.from({ length: MAX_SKILL_LEVEL }, (_, i) => `L${i + 1}`);
+  const levels = Array.from({ length: MAX_RANK }, (_, i) => `R${i + 1}`);
   const rows = [['skill', ...levels.map((l) => `${l} day`), 'XP/day']];
   for (const skill of SKILL_IDS) {
     const curves = group.map((r) => r.curve[skill]);
@@ -49,7 +50,7 @@ function printArchetype(archetype, group) {
   if (group.every((run) => run.misses.length === 0)) console.log('  all targets met');
 }
 
-// The turns to a level over seeds. Seeds that never reach it are counted, not averaged in.
+// The turns to a rank over seeds. Seeds that never reach it are counted, not averaged in.
 function levelCell(turns, seeds) {
   const reached = turns.filter((t) => t !== null);
   if (reached.length === 0) return 'never';

@@ -8,7 +8,7 @@ import { getLotTradePrice, partRepairCost, enterTown, scrapPatch } from './econo
 import { corePart, coreParts, mountedParts } from './grid';
 import { makePart } from './factory';
 import { addGoods, stowPart } from './inventory';
-import { acceptContract, shopState } from './market';
+import { acceptContract, shopState, type Contract } from './market';
 import { sitePads } from './sites';
 import { fuelCap, isStranded } from './stats';
 import { emptyWorld } from './testkit';
@@ -222,8 +222,9 @@ describe('scrap fuel for a low tank', () => {
 
     expect(isStranded(next, next.vehicles[0])).toBe(false);
     expect(next.player.fuel).toBeGreaterThan(0);
-    const haul = shopState(next, 'bowl').contracts.find((c) => c.kind === 'haul')!;
-    expect(haul).toBeDefined();
+    // The board's own roll depends on the world newWorld() spawns, so the test offers a small haul of its own.
+    const haul: Contract = { id: 'haul-test', shop: 'bowl', kind: 'haul', good: 'scrap', units: 1, to: 'nose', reward: 100, deadline: next.turn + 50, window: 50, rush: false, tier: 1 };
+    shopState(next, 'bowl').contracts.push(haul);
     expect(acceptContract(next, haul.id).player.contracts.map((c) => c.id)).toContain(haul.id);
   });
 });

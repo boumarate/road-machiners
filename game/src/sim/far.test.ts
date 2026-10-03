@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { heatAt } from './sun';
 import { PERF } from '../data/perf';
 import { RULES } from '../data/rules';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { SKILL_EFFECTS } from '../data/skills';
 import { TERRAIN } from '../data/terrain';
 import { buildDrive, bodyState, freeDrive, initPhysics, syncDrive, TURN_STEPS, type Drive, type TurnResult } from '../phys/drive';
 import { PHYSICS } from '../data/physics';
@@ -133,13 +133,13 @@ describe('far NPC travel', () => {
     expect(far.resources!.fuel).toBe(0);
   });
 
-  it('lets a player with an empty tank crawl faster at driving level 5', () => {
+  it('lets a player with an empty tank crawl faster at driving rank 5', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     w.player.fuel = 0;
     const order = { kind: 'through', dest: { x: 200, y: 30 } } as const;
     expect(fuelLimited(w, me, vehicleStats(w, me), 0, order).maxSpeed).toBeCloseTo(RULES.limpSpeed);
-    w.player.skills.driving = XP_TO_REACH[5];
+    w.player.ranks.driving = 5;
     const crawl = RULES.limpSpeed * (1 + 5 * SKILL_EFFECTS.driving.crawl);
     expect(fuelLimited(w, me, vehicleStats(w, me), 0, order).maxSpeed).toBeCloseTo(crawl);
   });

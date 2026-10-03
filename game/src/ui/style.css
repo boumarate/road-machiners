@@ -18,6 +18,7 @@ body {
 }
 #ui {
   --ink: #e0d8ca;
+  --cond-pristine: #fff4d6;
   --muted: #aaa69e;
   --edge: #747777;
   --metal: #33383b;
@@ -1353,6 +1354,10 @@ body {
 .inv-chip > span {
   flex: 1;
 }
+.inv-chip > .cond {
+  flex: none;
+  font-size: 11px;
+}
 .inv-chip > .icon {
   width: 22px;
   height: 22px;
@@ -1699,6 +1704,49 @@ canvas.view {
 .card-name .dim {
   font-size: 12px;
 }
+.card-cond {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 4px;
+  font-size: 12px;
+}
+.cond {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.cond .icon {
+  width: 12px;
+  height: 12px;
+}
+.cond .icon svg {
+  width: 12px;
+  height: 12px;
+}
+.cond-pristine {
+  color: var(--cond-pristine);
+}
+.cond-pristine .icon svg {
+  fill: var(--cond-pristine);
+  stroke: var(--cond-pristine);
+}
+.cond-w1 {
+  color: #e0d8ca;
+}
+.cond-w2 {
+  color: #cdbfa4;
+}
+.cond-w3 {
+  color: #b9a888;
+}
+.cond-w4 {
+  color: #a8997f;
+}
+.cond-junk {
+  color: #909395;
+}
 .card-compare {
   margin: 4px 0 6px;
   font-size: 12px;
@@ -1720,7 +1768,7 @@ canvas.view {
   padding: 3px 12px;
   font-size: 13px;
 }
-/* Character screen: one card per skill with its level pips, XP bars and perks. */
+/* Character screen: one card per skill with its rank pips, buy button, today's XP bar and perks. */
 .skill-level {
   display: flex;
   gap: 3px;
@@ -1764,6 +1812,18 @@ canvas.view {
 }
 #ui button.perk {
   padding: 5px 8px;
+}
+#ui button.buy-rank {
+  padding: 2px 8px;
+  font: 12px var(--font-mono);
+}
+.perk.locked {
+  margin-top: 4px;
+  padding: 5px 8px;
+  border-left: 2px solid #3a4246;
+}
+.chip.xp-pool {
+  color: #e0c070;
 }
 .footprint {
   display: grid;

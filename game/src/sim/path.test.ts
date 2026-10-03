@@ -11,11 +11,12 @@ import { continueRoute, keepRoute, route, routeLength, straightClear, type Block
 import { nextRandom } from './rng';
 import { isCliff, tileAt, tileSlope, type Terrain } from './terrain';
 import type { Obstacle, World } from './types';
-import { siteGates } from './sites';
+import { siteGap, siteGates } from './sites';
 import { editableTerrain, emptyWorld, npcBrain } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 // Shared read-only across every test below that needs a real generated map on this seed: newWorld
 // repeats obstacle generation, NPC spawns and vision on top of the terrain build, so building it once
@@ -164,9 +165,13 @@ describe("route", () => {
 
 describe('driver taste', () => {
   const brain = npcBrain('trader', { x: 0, y: 0 }, ['trader']);
-  const [bowl, nose] = REGION.towns;
-  const from = siteGates(nose)[0];
-  const to = siteGates(bowl)[0];
+  const site = (id: string) => {
+    const found = [...REGION.towns, ...REGION.locations].find((s) => s.id === id);
+    if (found === undefined) throw new Error(`No site ${id}`);
+    return found;
+  };
+  const from = siteGates(site('nose'))[0];
+  const to = siteGates(site('dustwell'))[0];
   const w = w1337;
   // Largest distance of either route's corners from the other route.
   const apart = (p: Vec[], q: Vec[]) => Math.max(...p.map((x) => polylineDist(x, q)), ...q.map((x) => polylineDist(x, p)));
@@ -174,7 +179,8 @@ describe('driver taste', () => {
   it('sends drivers between the same towns along different ways', () => {
     const routes = Array.from({ length: 10 }, (_, i) => [from, ...route(w, from, to, 0.8, [], { id: `v${100 + i}`, brain })]);
     const ways = routes.filter((r, i) => routes.slice(0, i).every((q) => apart(r, q) > 10));
-    // Bowl and Nose have two roads of close length, the north trunk and the middle road past Pump Station.
+    // Nose and Dustwell have two roads of close length, the north trunk past Burnt Convoy and the middle road over
+    // Broken Wing.
     expect(ways.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -296,7 +302,7 @@ describe('routes prefer roads', () => {
     const w = emptyWorld();
     editableTerrain(w).types.fill('hardpan');
     const nav = terrainNav(w.terrain);
-    const site = REGION.locations[0];
+    const site = REGION.locations.find((l) => l.kind !== 'territory')!; // a territory has no pads or edge to price
     const at = (d: number) => nav.tileCost[tileIndex(nav.size, site.pos.x + d, site.pos.y)];
     expect(at(site.radius + REGION.roadWidth - 1)).toBeCloseTo(1 / TERRAIN_TYPES.hardpan.speed, 9);
     expect(at(site.radius + REGION.roadWidth + 1)).toBeCloseTo(REGION.navigation.offRoadCost / TERRAIN_TYPES.hardpan.speed, 9);
@@ -352,7 +358,8 @@ namespace Ref {
     const tile = tileAt(t, p);
     const type = t.types[tile];
     const c = { x: Math.floor(p.x) + 0.5, y: Math.floor(p.y) + 0.5 };
-    const bySite = [...REGION.towns, ...REGION.locations].some((s) => dist(c, s.pos) < s.radius + REGION.roadWidth);
+    // A territory has no edge to keep near.
+    const bySite = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')].some((s) => siteGap(s, c) < REGION.roadWidth);
     const s = tileSlope(t, tile);
     const slope = flat ? 1 : 1 + REGION.navigation.slopeCost * (Math.hypot(s.x, s.y) / TERRAIN.drive.maxSlope) ** 2;
     return ((type === 'road' || bySite ? 1 : REGION.navigation.offRoadCost) / TERRAIN_TYPES[type].speed) * slope;
@@ -685,7 +692,7 @@ describe('nav layers match the old grid rules', () => {
     }
     // Random points often land in closed cliff basins; some pairs still need a real search.
     expect(searched).toBeGreaterThanOrEqual(4);
-  }, 60_000);
+  }, budget(60_000));
 
   it('straightClear equals the reference line check', () => {
     let clear = 0;
@@ -721,7 +728,7 @@ describe('nav layers match the old grid rules', () => {
       expect(routeLength(from, again)).toBeLessThanOrEqual(1.1 * routeLength(from, ref));
     }
     expect(perfSnapshot()['route-cache-hit'].calls).toBeGreaterThan(0);
-  }, 60_000);
+  }, budget(60_000));
 
   it('a new kill wreck changes the route without rebuilding the static layer', () => {
     const a = { x: 30, y: 30 };
@@ -831,7 +838,7 @@ describe('long routes search a coarse corridor', () => {
     const ms = performance.now() - t;
     expect(got).toBeNull();
     expect(ms).toBeLessThan(5);
-  }, 60_000);
+  }, budget(60_000));
 
   it('a corridor cut by a kill wreck wall falls back to the full search', () => {
     const w = emptyWorld();
@@ -871,5 +878,5 @@ describe('long routes search a coarse corridor', () => {
     expect(found).toBeGreaterThanOrEqual(5);
     // Without kill wrecks or parked vehicles a chain of linked regions always holds a fine path.
     expect(perfSnapshot()['route-corridor-miss']).toBeUndefined();
-  }, 60_000);
+  }, budget(60_000));
 });

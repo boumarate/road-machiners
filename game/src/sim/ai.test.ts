@@ -179,6 +179,32 @@ describe('oncoming NPCs', () => {
     expect(second.order?.kind).toBe('stopAt');
   });
 
+  // Two scouts nose to nose and slightly askew, each bound past the other, at the poses of a crash found in
+  // physics traffic. The first stands still and has the lower id. The second routes around it like any parked
+  // truck, so if the first set off around the second's path, both would swerve the same way.
+  it('a lower id at rest waits for the higher id closing on it, which goes around', () => {
+    const w = emptyWorld({ x: 270, y: 190 });
+    const first = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 268.77, y: 160.4 }, (-40.78 * Math.PI) / 180);
+    first.brain = npcBrain('scavenger', first.pos, ['scavenger']);
+    first.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 317, y: 102.75 }, phase: 'travel', reason: 'test trip northeast' });
+    const second = addVehicle(w, 'roamers', 'scout', ['mg', 'stockEngine'], { x: 270.6, y: 156.71 }, (141.44 * Math.PI) / 180);
+    second.brain = npcBrain('roamer', second.pos, ['roamer']);
+    second.speed = 3.22;
+    second.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 223.7, y: 194.2 }, phase: 'travel', reason: 'test trip southwest' });
+    expect(first.id < second.id).toBe(true);
+    planNpcOrders(w);
+    expect(first.order?.kind).toBe('brake');
+    expect(second.order?.kind).toBe('stopAt');
+  });
+
+  it('a lower id at rest sets off when the higher id passes in the next lane', () => {
+    const { w, first, second } = headOn();
+    first.speed = 0;
+    second.pos = { x: 107, y: 104 };
+    planNpcOrders(w);
+    expect(first.order?.kind).toBe('stopAt');
+  });
+
   it.each(['first', 'second'] as const)('a fleeing truck is not yielded to and does not yield: %s flees', (who) => {
     const { w, first, second } = headOn();
     const fleer = who === 'first' ? first : second;
