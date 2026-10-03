@@ -202,14 +202,14 @@ function withoutRetiredStock_8_9(world: SavedJson): SavedJson {
 }
 
 // Old saves hold a circle for each of these sites and a ring of buildings for Bowl and Nose. The sites are fortresses now:
-// their walls come from the map file, and the town houses from the render.
+// their walls come from the map file, and the town houses from the render. The salvage yard's wrecks are gone too.
 const FORTRESS_OBSTACLES_9_10 = new Set(
   ['bowl', 'nose', 'dustwell', 'green-pit', 'pump-station', 'granary', 'salvage-yard', 'south-lock', 'scrapjaw', 'kiln'].map((id) => `site-${id}`),
 );
 
 function isGoneObstacle_9_10(o: SavedJson): boolean {
   const id = o.id as string;
-  return FORTRESS_OBSTACLES_9_10.has(id) || id.startsWith('bld-bowl-') || id.startsWith('bld-nose-');
+  return FORTRESS_OBSTACLES_9_10.has(id) || id.startsWith('bld-bowl-') || id.startsWith('bld-nose-') || id.startsWith('cw-salvage-yard-');
 }
 
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim

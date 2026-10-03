@@ -209,4 +209,11 @@ describe('save migration 9 to 10', () => {
     expect(next.obstacles.map((o) => o.id)).toEqual(['site-old-mill', 'bld-dustwell-1', 'pond-dustwell', 'cw-convoy-0', 'wreck4']);
     expect(next.obstacles[0]).toEqual(FORMAT_2_9.obstacles[5]);
   });
+
+  it('drops the old salvage yard wrecks, which a fortress yard no longer has', () => {
+    const world = { ...FORMAT_2_9, obstacles: [{ id: 'cw-salvage-yard-0' }, { id: 'cw-convoy-0' }] };
+    const next = MIGRATIONS[9](world) as { obstacles: { id: string }[] };
+
+    expect(next.obstacles.map((o) => o.id)).toEqual(['cw-convoy-0']);
+  });
 });

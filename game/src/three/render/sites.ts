@@ -503,17 +503,17 @@ function insideSiteCurtain(site: Site, obj: THREE.Object3D): boolean {
   return inside;
 }
 
-// A fortress interior was laid out for the whole circle. Each piece moves toward the center, by the least step that
-// puts it inside the curtain, so the arrangement stays and no piece touches a wall.
+// A fortress interior was laid out for the whole circle. Every piece moves toward the center by one shared factor, the
+// largest one that puts all of them inside the curtain, so the arrangement stays and no piece touches a wall.
 function pullInside(site: Site, root: THREE.Group): void {
-  for (const child of root.children) {
-    const home = child.position.clone();
-    const cx = site.pos.x * S;
-    const cz = site.pos.y * S;
-    for (let k = 1; k >= 0 && !insideSiteCurtain(site, child); k -= 0.05) {
-      child.position.set(cx + (home.x - cx) * k, home.y, cz + (home.z - cz) * k);
-    }
+  const cx = site.pos.x * S;
+  const cz = site.pos.y * S;
+  const homes = root.children.map((child) => child.position.clone());
+  for (let k = 1; k >= 0; k -= 0.05) {
+    root.children.forEach((child, i) => child.position.set(cx + (homes[i].x - cx) * k, homes[i].y, cz + (homes[i].z - cz) * k));
+    if (root.children.every((child) => insideSiteCurtain(site, child))) return;
   }
+  throw new Error(`The interior of ${site.id} does not fit inside its curtain`);
 }
 
 type SiteDecor = (b: SiteBuilder, site: Site, t: Terrain) => void;
