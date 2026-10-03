@@ -75,7 +75,7 @@ export class CharacterScreen {
       class: 'buy-rank',
       disabled: blocked !== null,
       title: blocked ?? `Spend ${rankCost(rank + 1)} XP on ${SKILL_INFO[skill].name} rank ${rank + 1}`,
-      onclick: () => this.host.apply(buyRank(this.host.world(), skill)),
+      onclick: () => this.host.announce(buyRank(this.host.world(), skill)),
     }, `Buy rank ${rank + 1} — ${rankCost(rank + 1)} XP`);
   }
 

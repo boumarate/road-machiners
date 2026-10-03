@@ -307,7 +307,13 @@ export class Game {
   private uiHost(): UiHost {
     return {
       world: () => this.displayWorld(),
-      apply: (next) => { this.apply(next); if (!this.saves.held) saveInTown(window.localStorage, next, Date.now()); },
+      apply: (next) => this.applyCommand(next),
+      announce: (next) => {
+        this.applyCommand(next);
+        this.hud.pushEvents(next);
+        const sting = stingOf(next.events, playerVehicle(next).id);
+        if (sting) this.sound.ui(sting);
+      },
       selectedWeapon: () => this.selected,
       selectWeapon: (id) => { if (this.anim || this.modalOpen()) return; this.selected = id; this.refreshUi(); },
       pressTurn: () => this.pressTurn(),
@@ -337,6 +343,12 @@ export class Game {
 
   // Whether a turn is playing, so the debug console waits instead of changing the world under it.
   get busy(): boolean { return this.anim !== null; }
+
+  // A command from a panel: apply it, and save at once on a town pad.
+  private applyCommand(next: World): void {
+    this.apply(next);
+    if (!this.saves.held) saveInTown(window.localStorage, next, Date.now());
+  }
 
   apply(next: World): void {
     this.travel.pause();
