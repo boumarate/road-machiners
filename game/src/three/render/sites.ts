@@ -3,19 +3,20 @@
 
 import * as THREE from 'three';
 import { REGION, type SiteLocationDef, type SiteEdge, type TownDef } from '../../data/region';
-import { FORTRESS } from '../../data/fortress';
-import { insideCurtain } from '../../sim/fortress';
+import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES } from '../../data/fortress';
+import { fortressGates, insideCurtain, type FortGate } from '../../sim/fortress';
 import { guardedSites } from '../../sim/guards';
 import { groundPoint, type V3 } from '../../phys/frames';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
-import { isFortress, siteGates } from '../../sim/sites';
+import { isFortress, siteGates, type Site as RegionSite } from '../../sim/sites';
 import { deckById, type Deck } from '../../sim/bridge';
 import { deckEnds, heightAt, type Terrain } from '../../sim/terrain';
 import { angleDiff, segmentDist, type Vec } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
+import type { Motion, SiteMotion } from './site-motion';
 
 const S = PHYSICS.metersPerTile;
 type Site = TownDef | SiteLocationDef;
@@ -29,9 +30,15 @@ const BRIDGE_DECK_TOP = 0.8; // meters from the model origin up to its deck top,
 const WING_DECK_LENGTH = 156;
 const WING_DECK_WIDTH = 24;
 
+// A moving part of a site and its motion, before its site's phase is applied.
+export type Mover = { node: THREE.Object3D; motion: Motion };
+// Seconds over which each site's movers are offset in time, so the same machines at two sites do not move in step.
+const MOTION_PHASE_SPAN = 60;
+
 // Site props stay within the site's collision footprint. Every prop is grounded independently.
 class SiteBuilder {
   readonly root = new THREE.Group();
+  readonly movers: Mover[] = [];
   private readonly materials = new Map<number, THREE.MeshLambertMaterial>();
   constructor(private readonly terrain: Terrain, readonly site: Site) {
     this.root.name = `landmark-${site.id}`;
@@ -43,6 +50,8 @@ class SiteBuilder {
     let material = this.materials.get(color);
     if (!material) {
       material = new THREE.MeshLambertMaterial({ color, flatShading: true });
+      // A lit lamp glows in its own color, so it shows at night.
+      if (color === PAL.lamp.on) material.emissive.setHex(color);
       this.materials.set(color, material);
     }
     return material;
@@ -80,6 +89,11 @@ class SiteBuilder {
   }
   addTank(x: number, z: number, radius: number, height: number, color: number, lift = 0): void {
     this.addShape(new THREE.CylinderGeometry(radius * S, radius * S, height * S, 10), color, x, z, lift + height / 2);
+  }
+  // A part that moves by motion once the site is added. Its node's origin is its pivot.
+  addMover(node: THREE.Object3D, motion: Motion): void {
+    if (this.movers.some((m) => m.node === node)) throw new Error(`Moving part ${node.name || node.uuid} of ${this.site.id} was added twice`);
+    this.movers.push({ node, motion });
   }
   // A Blender model standing on the ground at site offset (x, z), turned by yaw radians.
   addModel(name: ModelName, x: number, z: number, yaw = 0, scale: number | THREE.Vector3 = 1, lift = 0): THREE.Object3D {
@@ -322,46 +336,50 @@ function addLampHead(b: SiteBuilder, x: number, z: number, top: number, yaw: num
   b.addBox(x, z, 0.24, 0.22, 0.45, PAL.lamp.on, top + 0.06, yaw);
 }
 
-// Where a fortress gate's gun sights from, in meters: over the gate point at the gatehouse parapet.
-export function gateGunPoint(t: Terrain, gate: Vec): V3 {
-  const g = groundPoint(t, gate);
-  return { x: g.x, y: g.y + (FORTRESS.gate.height + FORTRESS.gunLift) * S, z: g.z };
+// Where a fortress gate's gun sights from, in meters: over the gatehouse's outer face at its parapet. gate is the road
+// gate point of one of the site's gates.
+export function gateGunPoint(t: Terrain, site: RegionSite, gate: Vec): V3 {
+  const fort = fortressGates(site).find((g) => g.gate.x === gate.x && g.gate.y === gate.y);
+  if (fort === undefined) throw new Error(`Site ${site.id} has no gate at ${gate.x},${gate.y}`);
+  const g = groundPoint(t, fort.face);
+  return { x: g.x, y: g.y + (fort.height + FORTRESS.gunLift) * S, z: g.z };
 }
 
 // The gatehouse models carry no furniture. Each gate gets two lamps on brackets either side of the arch, below the
-// parapet, and at guarded sites a gun on the parapet with a banner pole behind it. Offsets are from the gate point.
+// parapet, and at guarded sites a gun on the parapet with a banner pole behind it. Offsets are from the gatehouse's
+// outer face, along the gate's bearing. A flush gate's face can lie a few degrees off that bearing (6 at Granary), and
+// the furniture keeps the bearing.
 function dressGates(b: SiteBuilder, site: Site): void {
   const guarded = guardedSites().includes(site);
   const first = b.root.children.length;
-  const at = (gate: Vec, out: number, side: number) => {
-    const a = Math.atan2(gate.y - site.pos.y, gate.x - site.pos.x);
-    return { a, x: gate.x - site.pos.x + Math.cos(a) * out - Math.sin(a) * side, z: gate.y - site.pos.y + Math.sin(a) * out + Math.cos(a) * side };
-  };
-  for (const gate of siteGates(site)) {
-    for (const side of [-1, 1]) {
-      const p = at(gate, LAMP_REACH, (side * FORTRESS.gate.width) / 4);
-      const bracket = at(gate, LAMP_REACH / 2, (side * FORTRESS.gate.width) / 4);
-      b.addBox(bracket.x, bracket.z, LAMP_REACH, 0.12, 0.12, PAL.metal, SET.lampHeight - 0.12, -p.a);
-      addLampHead(b, p.x, p.z, SET.lampHeight, -p.a);
-    }
-    if (!guarded) continue;
-    // The barrel ends at the gun point, and its mount stands behind it.
-    const parapet = FORTRESS.gate.height;
-    const lift = (x: number, z: number) => b.groundAt(gate.x - site.pos.x, gate.y - site.pos.y) - b.groundAt(x, z);
-    const barrel = at(gate, -GUN_LENGTH / 2, 0);
-    b.addBox(barrel.x, barrel.z, GUN_LENGTH, 0.14, 0.14, PAL.metal, parapet + FORTRESS.gunLift - 0.07 + lift(barrel.x, barrel.z), -barrel.a);
-    const mount = at(gate, -GUN_LENGTH, 0);
-    b.addBox(mount.x, mount.z, 0.5, FORTRESS.gunLift, 0.5, PAL.metal, parapet + lift(mount.x, mount.z), -mount.a);
-    const pole = at(gate, -FORTRESS.gate.depth / 2, FORTRESS.gate.width / 2 - 0.6);
-    const base = parapet + lift(pole.x, pole.z);
-    b.addBox(pole.x, pole.z, 0.12, SET.gatePoleHeight - parapet, 0.12, PAL.trunk, base, -pole.a);
-    const flag = at(gate, -FORTRESS.gate.depth / 2 + 0.5, FORTRESS.gate.width / 2 - 0.6);
-    b.addBox(flag.x, flag.z, 0.05, 1, 0.8, PAL.rust.top, SET.gatePoleHeight - 1.1 + lift(flag.x, flag.z), -flag.a);
-  }
+  for (const fort of fortressGates(site)) dressGate(b, site, fort, guarded);
   // Furniture stands on the gatehouses, which are part of the curtain, so it is no interior piece.
   for (const piece of b.root.children.slice(first)) piece.userData.gateFurniture = true;
 }
 
+function dressGate(b: SiteBuilder, site: Site, fort: FortGate, guarded: boolean): void {
+  const { face, out, width, height } = fort;
+  const a = Math.atan2(out.y, out.x);
+  const at = (reach: number, side: number) => ({ x: face.x - site.pos.x + out.x * reach - out.y * side, z: face.y - site.pos.y + out.y * reach + out.x * side });
+  for (const side of [-1, 1]) {
+    const p = at(LAMP_REACH, (side * width) / 4);
+    const bracket = at(LAMP_REACH / 2, (side * width) / 4);
+    b.addBox(bracket.x, bracket.z, LAMP_REACH, 0.12, 0.12, PAL.metal, SET.lampHeight - 0.12, -a);
+    addLampHead(b, p.x, p.z, SET.lampHeight, -a);
+  }
+  if (!guarded) return;
+  // The barrel ends at the gun point, and its mount stands behind it. Heights are from the ground at the face.
+  const lift = (x: number, z: number) => b.groundAt(face.x - site.pos.x, face.y - site.pos.y) - b.groundAt(x, z);
+  const barrel = at(-GUN_LENGTH / 2, 0);
+  b.addBox(barrel.x, barrel.z, GUN_LENGTH, 0.14, 0.14, PAL.metal, height + FORTRESS.gunLift - 0.07 + lift(barrel.x, barrel.z), -a);
+  const mount = at(-GUN_LENGTH, 0);
+  b.addBox(mount.x, mount.z, 0.5, FORTRESS.gunLift, 0.5, PAL.metal, height + lift(mount.x, mount.z), -a);
+  const depth = FORTRESS_STYLES[FORTRESS_SITES[site.id].style].gate.depth;
+  const pole = at(-depth / 2, width / 2 - 0.6);
+  b.addBox(pole.x, pole.z, 0.12, SET.gatePoleHeight - height, 0.12, PAL.trunk, height + lift(pole.x, pole.z), -a);
+  const flag = at(-depth / 2 + 0.5, width / 2 - 0.6);
+  b.addBox(flag.x, flag.z, 0.05, 1, 0.8, PAL.rust.top, SET.gatePoleHeight - 1.1 + lift(flag.x, flag.z), -a);
+}
 
 function buildGranary(b: SiteBuilder): void {
   // Silos at the 1.1-tile radius of the old tanks. Their sheds face the loading ruin.
@@ -566,35 +584,48 @@ const SITE_DECOR: Record<string, SiteDecor> = {
   kiln: camp,
 };
 
-function buildSite(t: Terrain, site: Site): THREE.Group {
+type BuiltSite = { root: THREE.Group; movers: Mover[] };
+
+function buildSite(t: Terrain, site: Site): BuiltSite {
   const b = new SiteBuilder(t, site);
   const decor = SITE_DECOR[site.id];
   if (decor === undefined) throw new Error(`Missing landmark model for ${site.id}`);
   decor(b, site, t);
   closeSite(b, site, t);
-  // Site models never move after they are built.
+  // Site models stay where they are built. Only the movers' matrices are set again, by SiteMotion.
   b.root.traverse((o) => {
     o.updateMatrix();
     o.matrixAutoUpdate = false;
   });
-  return b.root;
+  return { root: b.root, movers: b.movers };
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
 // A territory has no edge, gates or models of its own: its props are baked.
 const SITES = [...REGION.towns, ...REGION.locations.filter((l): l is SiteLocationDef => l.kind !== 'territory')];
 
-// Every site model under one group, for inspection.
-export function buildSites(t: Terrain): THREE.Group {
-  const group = new THREE.Group();
-  for (const site of SITES) group.add(buildSite(t, site));
-  group.add(buildWingDeck(t));
-  return group;
+// Every site model under one group, and every moving part, for inspection.
+export function buildSites(t: Terrain): BuiltSite {
+  const root = new THREE.Group();
+  const movers: Mover[] = [];
+  for (const site of SITES) {
+    const built = buildSite(t, site);
+    root.add(built.root);
+    movers.push(...built.movers);
+  }
+  root.add(buildWingDeck(t));
+  return { root, movers };
 }
 
-// Registers every site model with the scope at its site.
-export function addSites(t: Terrain, scope: RenderScope): void {
-  for (const site of SITES) scope.add(buildSite(t, site), site.pos, site.radius);
+// Registers every site model with the scope at its site, and its moving parts with motion. Each site's parts run at
+// their own time offset.
+export function addSites(t: Terrain, scope: RenderScope, motion: SiteMotion): void {
+  for (const site of SITES) {
+    const built = buildSite(t, site);
+    scope.add(built.root, site.pos, site.radius);
+    const phase = hash2(site.pos.x, site.pos.y) * MOTION_PHASE_SPAN;
+    for (const mover of built.movers) motion.add(mover.node, (seconds, node, rest) => mover.motion(seconds + phase, node, rest));
+  }
   const deck = deckById('broken-wing');
   scope.add(buildWingDeck(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
 }

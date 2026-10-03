@@ -288,6 +288,9 @@ export function instancedModel(name: ModelName, placements: THREE.Matrix4[], tin
   return group;
 }
 
+// A model material with this name is a lit lamp or window. It glows in its own color, so it shows at night.
+const GLOW_MATERIAL = 'glow';
+
 // glTF brings PBR materials. The rest of the scene is flat-shaded Lambert, so models match it.
 function toLambert(root: THREE.Object3D): THREE.Object3D {
   root.traverse((o) => {
@@ -296,6 +299,7 @@ function toLambert(root: THREE.Object3D): THREE.Object3D {
     const lambert = mats.map((m) => {
       if (!(m instanceof THREE.MeshStandardMaterial)) throw new Error(`Model mesh ${o.name} has unexpected material ${m.type}`);
       const l = new THREE.MeshLambertMaterial({ color: m.color, flatShading: true, name: m.name });
+      if (m.name === GLOW_MATERIAL) l.emissive.copy(m.color);
       m.dispose();
       return l;
     });

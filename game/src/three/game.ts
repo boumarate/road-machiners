@@ -57,6 +57,7 @@ import { BreakCues, shownItems, type PartBreak } from "./breakCues";
 import { PathView } from "./render/path";
 import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
+import { SiteMotion } from "./render/site-motion";
 import { addHullDecks } from "./render/hull-decks";
 import { terrainMesh } from "./render/terrain";
 import { VehicleView } from "./render/vehicle";
@@ -122,6 +123,7 @@ export class Game {
   // A turn step changed what the UI shows. advanceTurn refreshes it once at its end.
   private uiStale = false;
   private readonly weather: WeatherView;
+  private readonly siteMotion = new SiteMotion();
   private readonly labels: Labels;
   private readonly zones = new ZonesView();
   private readonly contacts = new ContactsView();
@@ -215,7 +217,7 @@ export class Game {
     const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true, true);
     this.scopes = [groundScope, propScope, addHullDecks(this.world.terrain, this.props, this.sightLimit)];
     const groundChunks = terrainMesh(this.world, groundScope);
-    addSites(this.world.terrain, propScope);
+    addSites(this.world.terrain, propScope, this.siteMotion);
     this.obstacles = new ObstacleViews(propScope, this.world.terrain);
     this.obstacles.sync(this.world.obstacles, this.world.salvage, this.world.broken);
     addScatter(this.world.terrain, this.world.obstacles, propScope);
@@ -961,6 +963,8 @@ export class Game {
     this.playPanelSounds();
     this.updateLoops();
     this.weather.advance(dt);
+    // Scenery moves on real time, like the weather.
+    this.siteMotion.tick(Math.max(0, dt) / 1000);
     this.weather.sync(this.world);
     this.labels.update(this.world, this.rig, this.sightLimit);
     for (const scope of this.scopes) scope.update(this.rig.camera);

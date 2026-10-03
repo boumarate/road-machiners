@@ -7,7 +7,7 @@ import { PAL } from '../../render/palette';
 import { guardedSites } from '../../sim/guards';
 import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
-import { insideCurtain } from '../../sim/fortress';
+import { fortressGates, insideCurtain } from '../../sim/fortress';
 import { isFortress, siteGates } from '../../sim/sites';
 import { heightAt, type Terrain } from '../../sim/terrain';
 
@@ -18,7 +18,7 @@ await loadModels(async (name) => {
   if (!url) throw new Error(`Missing model file for ${name}`);
   return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0)).buffer;
 });
-const sites = buildSites({ size: 1, heights: [0, 0, 0, 0], types: ['hardpan'] });
+const { root: sites, movers } = buildSites({ size: 1, heights: [0, 0, 0, 0], types: ['hardpan'] });
 
 const ALL = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 const ABANDONED = ALL.filter((s) => !isFortress(s));
@@ -80,7 +80,7 @@ describe('landmark scale', () => {
     const size = 800;
     const heights = Array.from({ length: (size + 1) ** 2 }, (_, k) => 0.004 * (k % (size + 1)) + 0.003 * Math.floor(k / (size + 1)));
     const slope: Terrain = { size, heights, types: Array.from({ length: size * size }, () => 'hardpan' as const) };
-    const sloped = buildSites(slope);
+    const sloped = buildSites(slope).root;
     for (const site of ALL.filter(isFortress)) {
       const flat = sites.getObjectByName(`landmark-${site.id}`)!.children;
       const hill = sloped.getObjectByName(`landmark-${site.id}`)!.children;
@@ -119,25 +119,50 @@ describe('landmark scale', () => {
     }
   });
 
-  it('hangs two lit lamps within one gate width of every gate (IV11, IV7)', () => {
+  it('hangs two lit lamps within one gate width of every gate face (IV11, IV7)', () => {
     const S = PHYSICS.metersPerTile;
     for (const site of ALL) {
       const lit: Vector3[] = [];
       sites.getObjectByName(`landmark-${site.id}`)!.traverse((o) => {
         if (o instanceof Mesh && (o.material as MeshLambertMaterial).color.getHex() === PAL.lamp.on) lit.push(o.position.clone());
       });
-      for (const gate of siteGates(site)) {
-        const near = lit.filter((p) => Math.hypot(p.x / S - gate.x, p.z / S - gate.y) <= FORTRESS.gate.width);
-        expect(near.length, `${site.id} gate at ${gate.x.toFixed(0)},${gate.y.toFixed(0)}`).toBeGreaterThanOrEqual(2);
+      const faces = isFortress(site) ? fortressGates(site).map((g) => ({ at: g.face, width: g.width })) : siteGates(site).map((g) => ({ at: g, width: REGION.settlement.gateWidth }));
+      for (const face of faces) {
+        const near = lit.filter((p) => Math.hypot(p.x / S - face.at.x, p.z / S - face.at.y) <= face.width);
+        expect(near.length, `${site.id} gate at ${face.at.x.toFixed(0)},${face.at.y.toFixed(0)}`).toBeGreaterThanOrEqual(2);
       }
     }
   });
 
-  it('sights the gate gun over the gate point at the gatehouse top (IV12)', () => {
+  it('lights every lit lamp box with its own color (IV21)', () => {
+    let lamps = 0;
+    sites.traverse((o) => {
+      if (!(o instanceof Mesh)) return;
+      const material = o.material as MeshLambertMaterial;
+      if (material.color.getHex() !== PAL.lamp.on) return;
+      expect(material.emissive.getHex(), o.parent?.name).toBe(PAL.lamp.on);
+      lamps++;
+    });
+    expect(lamps).toBeGreaterThan(0);
+  });
+
+  it('sights the gate gun over the gate face at the gatehouse top (IV12)', () => {
+    const S = PHYSICS.metersPerTile;
     const flat = { size: 1, heights: [0, 0, 0, 0], types: ['hardpan'] } as Terrain;
-    const p = gateGunPoint(flat, { x: 0.5, y: 0.5 });
-    expect(p.y).toBeCloseTo((FORTRESS.gate.height + FORTRESS.gunLift) * PHYSICS.metersPerTile, 5);
-    expect(p.x).toBeCloseTo(0.5 * PHYSICS.metersPerTile, 5);
+    for (const site of guardedSites().filter(isFortress)) {
+      for (const g of fortressGates(site)) {
+        const p = gateGunPoint(flat, site, g.gate);
+        expect(p.y, site.id).toBeCloseTo((g.height + FORTRESS.gunLift) * S, 5);
+        expect(p.x, site.id).toBeCloseTo(g.face.x * S, 5);
+        expect(p.z, site.id).toBeCloseTo(g.face.y * S, 5);
+      }
+    }
+  });
+
+  it('throws for a gun point at no gate of the site', () => {
+    const flat = { size: 1, heights: [0, 0, 0, 0], types: ['hardpan'] } as Terrain;
+    const bowl = ALL.find((s) => s.id === 'bowl')!;
+    expect(() => gateGunPoint(flat, bowl, { x: bowl.pos.x, y: bowl.pos.y })).toThrow(/no gate/);
   });
 
   it('puts the gate gun of each guarded gate at the gun point, and no gun at the other sites (IV12)', () => {
@@ -155,7 +180,7 @@ describe('landmark scale', () => {
       }
       expect(metal, site.id).toHaveLength(siteGates(site).length);
       for (const gate of siteGates(site)) {
-        const muzzle = gateGunPoint(flat, gate);
+        const muzzle = gateGunPoint(flat, site, gate);
         const gun = metal.find((o) => Math.hypot(o.position.x - muzzle.x, o.position.z - muzzle.z) <= 0.8 * S)!;
         const half = new Vector3(0.4 * S, 0, 0).applyQuaternion(gun.quaternion);
         const ends = [gun.position.clone().add(half), gun.position.clone().sub(half)];
@@ -163,6 +188,16 @@ describe('landmark scale', () => {
         expect(far, `${site.id} muzzle`).toBeLessThanOrEqual(0.3);
         expect(gun.position.y - muzzle.y, `${site.id} height`).toBeLessThanOrEqual(0.3);
       }
+    }
+  });
+
+  it('hands out each moving part once, from inside its site (IV20)', () => {
+    const nodes = movers.map((m) => m.node);
+    expect(new Set(nodes).size).toBe(nodes.length);
+    for (const { node } of movers) {
+      let site: Object3D | null = node;
+      while (site !== null && !site.name.startsWith('landmark-')) site = site.parent;
+      expect(site, node.name).not.toBeNull();
     }
   });
 

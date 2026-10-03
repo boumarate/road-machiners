@@ -9,6 +9,7 @@ import { groundPoint, toMap, type V3 } from "../phys/frames";
 import type { Fx3D } from "./render/fx";
 import { blastRadiusOf, planVolley, projectileOf, roundAims, towardFrom, type Muzzle } from "./render/projectiles";
 import { gateGunPoint } from "./render/sites";
+import { siteOf } from "../sim/market";
 import { viewOf, type VehicleView } from "./render/vehicle";
 import type { SoundDirector } from "./sound";
 
@@ -126,7 +127,7 @@ function playTruckShot(host: CombatHost, e: Extract<GameEvent, { t: "shot" }>, r
 function playGuardShot(host: CombatHost, e: Extract<GameEvent, { t: "guardShot" }>, rows: Map<string, number>, breaks: BreakCues): number | null {
   const b = host.eventPoint(e.target);
   if (!b) return null;
-  const a = gateGunPoint(host.world.terrain, e.from);
+  const a = gateGunPoint(host.world.terrain, siteOf(e.site), e.from);
   return playVolley(host, a, () => towardFrom(a, b), b, e, breaks, "guard", e.target, rows, false);
 }
 
