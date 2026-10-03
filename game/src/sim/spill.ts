@@ -1,7 +1,8 @@
 // Broken cargo parts drop what lies on their rows. The sweep runs after each turn step that can break a part,
-// so every way a cargo part breaks spills the same way.
+// so every way a cargo part breaks spills the same way. A robber in the fight claims the spill.
 
 import { gridOf, mountedParts, onDeadRow } from './grid';
+import { claimSpill } from './parley';
 import { spillOnPile } from './salvage';
 import type { Vehicle, World } from './types';
 
@@ -18,4 +19,5 @@ function spillVehicle(world: World, v: Vehicle): void {
   if (!broken) throw new Error(`${v.id} has dead rows but no broken cargo part`);
   const stock = spillOnPile(world, v, items);
   world.events.push({ t: 'cargoSpilled', vehicle: v.id, part: broken.id, pile: stock.id, units: items.length });
+  claimSpill(world, v, stock);
 }

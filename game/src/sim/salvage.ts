@@ -300,10 +300,16 @@ export function claimPile(world: World, stock: SalvageStock, claimant: Vehicle, 
   stock.pile.claim = { by: claimant.id, until: world.turn + SALVAGE.claimTurns, warned };
 }
 
+// A claim holds while its claimant goes to take the pile. A claimant in combat holds no loot goal, so its claim holds
+// through the fight, as a robber's claim on cargo spilled mid-fight does.
 function claimHolds(world: World, stock: SalvageStock, claimant: Vehicle | undefined): claimant is Vehicle {
   const claim = stock.pile?.claim;
   if (!claim || !claimant || world.turn >= claim.until) return false;
-  return !isKnockedOut(claimant) && wantsLoot(claimant, stock.id);
+  return !isKnockedOut(claimant) && goesFor(world, claimant, stock);
+}
+
+function goesFor(world: World, claimant: Vehicle, stock: SalvageStock): boolean {
+  return wantsLoot(claimant, stock.id) || inCombat(world, claimant);
 }
 
 function wantsLoot(vehicle: Vehicle, stockId: string): boolean {
