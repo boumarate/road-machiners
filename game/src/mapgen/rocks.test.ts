@@ -7,6 +7,7 @@ import { decodeMap, isCliff, tileAt, type BakedMap, type BakedProp } from '../si
 import { siteGap } from '../sim/sites';
 import { dist, segmentDist } from '../sim/vec';
 import { newDraft, rockLayer, type MapDraft } from './bake';
+import { budget } from '../test/budget';
 
 const SIZE = REGION.size;
 const O = REGION.obstacles;
@@ -146,7 +147,7 @@ describe('boulders on the baked map', () => {
 
   it('keeps every boulder clear of roads, sites, the bridge, the margin and other rocks', () => {
     expectClear(boulders);
-  }, 120_000); // checks every boulder against every road and site, slow when the suite runs in parallel
+  }, budget(120_000)); // checks every boulder against every road and site, slow when the suite runs in parallel
 
   it('puts no boulder on a cliff tile', () => {
     const onCliff = boulders.filter((rock) => isCliff(map.terrain, tileAt(map.terrain, rock.pos)));

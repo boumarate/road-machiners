@@ -19,6 +19,7 @@ import { TEST_MAP } from '../test/map';
 import { buildDrive, captureDrive, freeDrive, GROUND, initPhysics, RAIL, restoreDrive, syncDrive, toTilesPerTurn, TURN_STEPS, type Break, type Crash, type Drive, type TurnResult } from './drive';
 import { toMap } from './frames';
 import { physicsMove } from './turn';
+import { budget } from '../test/budget';
 
 beforeAll(async () => {
   await initPhysics();
@@ -322,7 +323,7 @@ describe('Broken Wing', () => {
     const onDeck = frames.filter((f) => deckAt(f.at.x, f.at.y)?.deck.id === deck.id);
     expect(onDeck.length).toBeGreaterThan(0);
     for (const f of onDeck) expect(Math.abs(f.y - heightAt(w.terrain, f.at.x, f.at.y) * S - rest)).toBeLessThan(0.5);
-  }, 60_000);
+  }, budget(60_000));
 
   it('a truck on the ground driving at either side of the deck meets the skirt and never gets under the deck', () => {
     for (const side of [1, -1]) {
@@ -331,5 +332,5 @@ describe('Broken Wing', () => {
       for (const f of frames) expect(side * across(f.at)).toBeGreaterThan(deck.width / 2);
       expect(side * across(me(w).pos)).toBeGreaterThan(deck.width / 2);
     }
-  }, 60_000);
+  }, budget(60_000));
 });

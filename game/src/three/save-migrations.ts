@@ -201,15 +201,32 @@ function withoutRetiredStock_8_9(world: SavedJson): SavedJson {
   };
 }
 
+// Total XP a skill needed for each level at format 2.9; index is the level.
+const XP_TO_REACH_9_10 = [0, 200, 600, 1200, 2000, 3000];
+
+// Step 9 to 10: each skill's old level becomes the same rank, and the XP past it goes to the shared pool. A level cost
+// what its rank costs now, so no earned XP is lost. Also read by the rescue of saves from before format 2.10.
+export function pooledSkills_9_10(skills: Record<string, number>): { xp: number; ranks: Record<string, number> } {
+  let xp = 0;
+  const ranks: Record<string, number> = {};
+  for (const [skill, total] of Object.entries(skills)) {
+    let level = 0;
+    while (level < XP_TO_REACH_9_10.length - 1 && total >= XP_TO_REACH_9_10[level + 1]) level++;
+    ranks[skill] = level;
+    xp += total - XP_TO_REACH_9_10[level];
+  }
+  return { xp, ranks };
+}
+
 // Old saves hold a circle for each of these sites and a ring of buildings for Bowl and Nose. The sites are fortresses now:
 // their walls come from the map file, and the town houses from the render. The salvage yard's wrecks are gone too.
-const FORTRESS_OBSTACLES_9_10 = new Set(
+const FORTRESS_OBSTACLES_10_11 = new Set(
   ['bowl', 'nose', 'dustwell', 'green-pit', 'pump-station', 'granary', 'salvage-yard', 'south-lock', 'scrapjaw', 'kiln'].map((id) => `site-${id}`),
 );
 
-function isGoneObstacle_9_10(o: SavedJson): boolean {
+function isGoneObstacle_10_11(o: SavedJson): boolean {
   const id = o.id as string;
-  return FORTRESS_OBSTACLES_9_10.has(id) || id.startsWith('bld-bowl-') || id.startsWith('bld-nose-') || id.startsWith('cw-salvage-yard-');
+  return FORTRESS_OBSTACLES_10_11.has(id) || id.startsWith('bld-bowl-') || id.startsWith('bld-nose-') || id.startsWith('cw-salvage-yard-');
 }
 
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
@@ -266,8 +283,13 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withoutRetiredStock_7_8,
   // 8 to 9: Old Orchard is a territory, so its site stock goes.
   withoutRetiredStock_8_9,
-  // 9 to 10: the fortress sites lose their circle obstacle, and Bowl and Nose their building rings.
-  (world) => ({ ...world, obstacles: (world.obstacles as SavedJson[]).filter((o) => !isGoneObstacle_9_10(o)) }),
+  // 9 to 10: XP goes to one pool and levels become bought ranks.
+  (world) => {
+    const { skills, ...player } = world.player as SavedJson;
+    return { ...world, player: { ...player, ...pooledSkills_9_10(skills as Record<string, number>) } };
+  },
+  // 10 to 11: the fortress sites lose their circle obstacle, and Bowl and Nose their building rings.
+  (world) => ({ ...world, obstacles: (world.obstacles as SavedJson[]).filter((o) => !isGoneObstacle_10_11(o)) }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

@@ -5,7 +5,7 @@ import { CHASSIS } from '../data/chassis';
 import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
-import { PERKS, SKILL_IDS, XP_SOURCES } from '../data/skills';
+import { MAX_RANK, PERKS, SKILL_IDS, XP_SOURCES } from '../data/skills';
 import { CONDITION } from '../data/wear';
 import { RULES } from '../data/rules';
 import type { StartKit } from '../data/start';
@@ -75,7 +75,8 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     player: {
       vehicleId: "",
       money: kit.money,
-      skills: { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 },
+      xp: 0,
+      ranks: { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 },
       xpToday: { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 },
       xpDay: 1,
       repeats: {},
@@ -384,7 +385,8 @@ export type CarriedItem = ({ kind: 'part'; part: CarriedPart } | { kind: 'good';
 export type Carried = {
   seed: number | null;
   money: number | null;
-  skills: Partial<Record<string, number>>; // XP per skill id
+  xp: number | null; // unspent XP
+  ranks: Partial<Record<string, number>>; // bought ranks per skill id
   xpBySource: Partial<Record<string, number>>;
   perks: string[];
   discovered: string[];
@@ -448,12 +450,13 @@ function carryPlayer(world: World, c: Carried): void {
     supplies: pick(c.supplies, p.supplies),
     discovered: c.discovered.filter((id) => KNOWN_SITES.has(id)),
   });
-  for (const skill of SKILL_IDS) p.skills[skill] = pick(c.skills[skill], 0);
+  p.xp = Math.max(0, pick(c.xp, 0));
+  for (const skill of SKILL_IDS) p.ranks[skill] = Math.min(MAX_RANK, Math.max(0, Math.floor(pick(c.ranks[skill], 0))));
   for (const source of Object.keys(XP_SOURCES) as XpSource[]) p.xpBySource[source] = pick(c.xpBySource[source], 0);
   carryPerks(world, c.perks);
 }
 
-// A perk stays when its skill reached its level and no perk of its pair is picked yet.
+// A perk stays when its skill reached its rank and no perk of its pair is picked yet.
 function carryPerks(world: World, perks: string[]): void {
   for (const perk of perks.filter(isPerkId)) {
     const { skill, level } = PERKS[perk];
