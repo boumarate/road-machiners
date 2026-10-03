@@ -10,7 +10,7 @@ import { addGoods, removeAllGoods } from '../inventory';
 import { nearestPad, nearestTown } from '../sites';
 import { isStranded } from '../stats';
 import { addVehicle, emptyWorld, npcBrain, startCombat } from '../testkit';
-import { botOrders, raiderHuntGrounds } from './bot';
+import { botOrders } from './bot';
 
 function town(id: string) {
   const found = REGION.towns.find((t) => t.id === id);
@@ -145,17 +145,16 @@ describe('botOrders', () => {
     expect(playerVehicle(turn.world).order?.kind).toBe('stopAt');
   });
 
-  // A parked raider can hold the exact point of a ground, so the stop order ends a little short of it.
-  it('has a fighter whose stop ended near a hunting ground go on to the next one', () => {
-    const ground = raiderHuntGrounds()[1];
+  it('has a hunter with no foe in sight patrol on to a shop other than the one it stands at', () => {
     const w = parkedAt('bowl');
     const me = playerVehicle(w);
-    me.pos = { x: ground.x + 1.5, y: ground.y };
     me.order = null;
 
     const turn = botOrders(w, 'hunter');
 
-    expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: raiderHuntGrounds()[2] });
+    const order = playerVehicle(turn.world).order;
+    if (order?.kind !== 'stopAt') throw new Error('Expected a stop order');
+    expect(Math.hypot(order.dest.x - me.pos.x, order.dest.y - me.pos.y)).toBeGreaterThan(20);
   });
 });
 
