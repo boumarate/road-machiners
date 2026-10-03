@@ -57,6 +57,37 @@ describe('dockerContainer', () => {
     expect(runCall(calls).args.filter((a) => a === '-v')).toHaveLength(3);
   });
 
+  it('mounts the session folder under the agent projects folder and starts the session by id', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', session: { dir: '/h/sessions/issue-7', id: 'abc', resume: false } });
+    const { args } = runCall(calls);
+    expect(args).toContain('/h/sessions/issue-7:/home/pwuser/.claude/projects');
+    expect(args.filter((a) => a === '-v')).toHaveLength(3);
+    expect(args.slice(args.indexOf('--verbose'))).toEqual(['--verbose', '--session-id', 'abc']);
+    expect(args).not.toContain('--resume');
+  });
+
+  it('continues the session by id when it resumes', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', session: { dir: '/h/s', id: 'abc', resume: true } });
+    const { args } = runCall(calls);
+    expect(args.slice(args.indexOf('--verbose'))).toEqual(['--verbose', '--resume', 'abc']);
+    expect(args).not.toContain('--session-id');
+  });
+
+  it('passes a reasoning effort right after the model', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'sonnet', prompt: 'p', log: '/l.log', effort: 'low' });
+    const args = runCall(calls).args;
+    expect(args.slice(args.indexOf('--model'), args.indexOf('--model') + 4)).toEqual(['--model', 'sonnet', '--effort', 'low']);
+  });
+
+  it('puts a skill command on the first line, before the outputs note', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'do it', log: '/l.log', skill: '/code-review' });
+    expect(runCall(calls).opts?.input).toBe('/code-review\n\nYour folder is /work/game. Write every .factory/ and .factory-tasks/ file under /work/game, even after you change directory.\n\ndo it');
+  });
+
   it('puts a restricted agent on the internal network with the proxy env', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', openNetwork: false });

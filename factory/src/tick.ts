@@ -3,21 +3,22 @@ import { removeStaleBuilds } from './deploy';
 import { failureIssue, pruneFailures, reportFailure } from './fail';
 import { intake } from './intake';
 import { pruneCaptions } from './post-status';
-import { inContainer, isAlive, killJob, spawnJob } from './jobs';
+import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
+import { clearSessions, markResumed } from './sessions';
 import { readState, updateState } from './state';
 import { isAnswered } from './questions';
-import { ADHOC_LABEL, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
+import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
 import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Queue, Run } from './types';
 
 export type JobPick = { stage: JobStage; issue: number | null };
 // A candidate job and whether it may start at the daily cap.
 type Candidate = JobPick & { uncapped: boolean };
-type Due = Pick<FactoryConfig, 'releaseDays' | 'maxJobsPerDay' | 'agentWorkers' | 'testWorkers'>;
+type Due = Pick<FactoryConfig, 'releaseDays' | 'maxJobsPerDay' | 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'testWorkers'>;
 
 const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
 // Committee-driven jobs never count against the daily cap.
-const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'dev'];
+const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev'];
 const CARD_ORDER: [Card['column'], JobStage][] = [['Testing', 'testing'], ['Implementation', 'implement'], ['Design', 'design'], ['Triage', 'triage']];
 
 function isDue(last: string | null, now: Date, everyMs: number): boolean {
@@ -31,8 +32,15 @@ function queued(state: FactoryState): JobPick | null {
   const removal = state.pendingRemovals[0];
   if (removal) return { stage: 'remove', issue: removal.issue };
   if (state.pendingShip !== null && state.release) return { stage: 'ship', issue: state.release.issue };
+  return queuedLast(state);
+}
+
+// Factory changes, then incident entries. Neither waits on a release step.
+function queuedLast(state: FactoryState): JobPick | null {
   const change = state.pendingChanges[0];
-  return change ? { stage: 'change', issue: change.id } : null;
+  if (change) return { stage: 'change', issue: change.id };
+  const incident = state.pendingIncidents[0];
+  return incident === undefined ? null : { stage: 'incident', issue: incident };
 }
 
 function openCards(cards: Card[]): Card[] {
@@ -98,7 +106,7 @@ export function atCap(state: FactoryState, now: Date, cfg: Pick<FactoryConfig, '
 }
 
 function limits(cfg: Due): Record<Queue, number> {
-  return { branch: 1, agent: cfg.agentWorkers, test: cfg.testWorkers };
+  return { branch: 1, triage: cfg.triageWorkers, design: cfg.designWorkers, implement: cfg.implementWorkers, test: cfg.testWorkers };
 }
 
 // A job fits when its queue has a free worker and no other job works on its issue.
@@ -126,57 +134,68 @@ export function chooseJobs(state: FactoryState, cards: Card[], now: Date, cfg: D
 // Process control the tick uses. The CLI uses the real ones, and tests pass fakes.
 export type TickDeps = {
   isAlive: (pid: number) => boolean;
-  inContainer: (run: Run, id: string) => Promise<boolean>;
   kill: (run: Run, pid: number, id: string) => Promise<void>;
+  removeContainers: (run: Run, id: string) => Promise<void>;
   spawn: (args: string[], cwd: string, log: string, id: string) => number;
 };
-export const REAL_DEPS: TickDeps = { isAlive, inContainer, kill: killJob, spawn: spawnJob };
+export const REAL_DEPS: TickDeps = { isAlive, kill: killJob, removeContainers: removeJobContainers, spawn: spawnJob };
 
 function dropJob(ctx: Ctx, id: string): void {
   updateState(ctx.statePath, (state) => ({ ...state, jobs: state.jobs.filter((job) => job.id !== id) }));
 }
 
-// A dead or timed-out job leaves the list and reports. A job in time stays.
 function minutesSince(ctx: Ctx, iso: string): number {
   return (ctx.now().getTime() - new Date(iso).getTime()) / MINUTE_MS;
 }
 
+// A dead or timed-out job leaves the list. A dead agent or test job in time gets one resume, and every other one reports a failure. A job in time stays.
 async function checkJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<void> {
   const minutes = minutesSince(ctx, job.startedAt);
   const alive = deps.isAlive(job.pid);
-  if (alive && minutes <= ctx.cfg.stageTimeoutMinutes) return ctx.log('tick', job.issue, `${job.stage} still running`);
+  const inTime = minutes <= ctx.cfg.stageTimeoutMinutes;
+  if (alive && inTime) return ctx.log('tick', job.issue, `${job.stage} still running`);
+  if (!alive && inTime && canResume(ctx, job)) return resumeJob(ctx, job, deps);
+  await failJob(ctx, job, alive, deps);
+}
+
+async function failJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Promise<void> {
   if (alive) await deps.kill(ctx.run, job.pid, job.id);
   dropJob(ctx, job.id);
+  forgetResume(ctx, job);
   const reason = alive ? `timed out after ${ctx.cfg.stageTimeoutMinutes} minutes` : 'job process died without finishing';
   await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), reason, job.log);
 }
 
-// While an update waits, a job past the timeout still fails. After the grace time, an agent or test job in time stops while it works in a container.
-// Its card stays where it is, so the first tick after the update starts it again, and it does not count twice against the daily cap.
-// A branch job moves branches and posts between its containers, so the update always waits for it.
-export async function drainJobs(ctx: Ctx, pausedAt: Date, deps: TickDeps = REAL_DEPS): Promise<void> {
-  const graceOver = minutesSince(ctx, pausedAt.toISOString()) > ctx.cfg.updateGraceMinutes;
-  for (const job of readState(ctx.statePath).jobs) {
-    if (graceOver && (await stoppable(ctx, job, deps))) await interruptJob(ctx, job, deps);
-    else await checkJob(ctx, job, deps);
-  }
+// A branch job moves branches and posts between its containers, so a restart could repeat a half done step. Its issue field may be a change id too.
+function resumable(job: Job): job is Job & { issue: number } {
+  return QUEUE_OF[job.stage] !== 'branch' && job.issue !== null;
 }
 
-async function stoppable(ctx: Ctx, job: Job, deps: TickDeps): Promise<boolean> {
-  const inTime = minutesSince(ctx, job.startedAt) <= ctx.cfg.stageTimeoutMinutes;
-  return inTime && QUEUE_OF[job.stage] !== 'branch' && deps.isAlive(job.pid) && deps.inContainer(ctx.run, job.id);
+// The mark says the job already resumed once, so a second death fails.
+function canResume(ctx: Ctx, job: Job): job is Job & { issue: number } {
+  return resumable(job) && !readState(ctx.statePath).interrupted.includes(job.issue);
 }
 
-async function interruptJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<void> {
-  await deps.kill(ctx.run, job.pid, job.id);
+// A failed job ends here, so nothing of its resume stays for the next job on the issue. The job's own end does this for a job that finishes.
+function forgetResume(ctx: Ctx, job: Job): void {
+  if (!resumable(job)) return;
+  updateState(ctx.statePath, (state) => ({ ...state, interrupted: state.interrupted.filter((issue) => issue !== job.issue) }));
+  clearSessions(ctx.cfg.home, job.issue);
+}
+
+// The job's process is gone, and its containers may still run. They go before the next job starts, so two never work in one clone.
+// Its card stays where it is, so the next tick starts the stage again. The dead job's cap slot frees, since the restart takes a new one.
+async function resumeJob(ctx: Ctx, job: Job & { issue: number }, deps: TickDeps): Promise<void> {
+  await deps.removeContainers(ctx.run, job.id);
+  markResumed(ctx.cfg.home, job.issue, job.stage);
   updateState(ctx.statePath, (state) => {
     // Jobs started by one tick share a start time, so only one of them goes.
-    const start = state.jobStarts.indexOf(job.startedAt);
+    const start = countsAgainstCap(job.stage) ? state.jobStarts.indexOf(job.startedAt) : -1;
     const jobStarts = state.jobStarts.filter((_, index) => index !== start);
-    const interrupted = job.issue === null || state.interrupted.includes(job.issue) ? state.interrupted : [...state.interrupted, job.issue];
+    const interrupted = state.interrupted.includes(job.issue) ? state.interrupted : [...state.interrupted, job.issue];
     return { ...state, jobs: state.jobs.filter((other) => other.id !== job.id), jobStarts, interrupted };
   });
-  ctx.log('tick', job.issue, `stopped ${job.stage} for the update, it starts again after it`);
+  ctx.log('tick', job.issue, `${job.stage} process died, it resumes once on the next start`);
 }
 
 function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): void {
@@ -195,11 +214,10 @@ async function answeredWaiting(ctx: Ctx, card: Card): Promise<boolean> {
 }
 
 // A Triage card that waits for answers gets its label back off once someone replies. Returns the cards as they stand after that.
-// `mayRelease` runs before each label removal, so a caller can stop the pass when its permission lapses.
-export async function releaseAnswered(ctx: Ctx, cards: Card[], mayRelease: () => boolean = () => true): Promise<Card[]> {
+export async function releaseAnswered(ctx: Ctx, cards: Card[]): Promise<Card[]> {
   const released: Card[] = [];
   for (const card of cards) {
-    if (!(await answeredWaiting(ctx, card)) || !mayRelease()) {
+    if (!(await answeredWaiting(ctx, card))) {
       released.push(card);
       continue;
     }
@@ -214,7 +232,7 @@ export async function releaseAnswered(ctx: Ctx, cards: Card[], mayRelease: () =>
 // Testing and branch jobs deploy builds before they record them, so cleanup waits while one of them runs.
 function cleanBuilds(ctx: Ctx, cards: Card[]): void {
   const state = readState(ctx.statePath);
-  if (state.jobs.some((job) => QUEUE_OF[job.stage] !== 'agent')) return;
+  if (state.jobs.some((job) => !AGENT_QUEUES.includes(QUEUE_OF[job.stage]))) return;
   // The candidate's card is the tracking issue, so its 'rc' build stays while the card waits in Approval.
   const keep = cards.filter((card) => card.column === 'Approval').map((card) => state.builds[String(card.issue)]).filter((name) => name !== undefined);
   removeStaleBuilds(ctx.cfg.webRoot, new Set(keep), (msg) => ctx.log('tick', null, msg));

@@ -4,7 +4,7 @@ export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Appro
 
 export type CardStage = 'triage' | 'design' | 'implement' | 'testing';
 export type ReleaseStage = 'release' | 'candidate' | 'ship' | 'remove';
-export type Stage = CardStage | ReleaseStage | 'approve' | 'feedback' | 'change' | 'adhoc' | 'dev' | 'intake' | 'tick';
+export type Stage = CardStage | ReleaseStage | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'intake' | 'tick';
 
 export type FactoryConfig = {
   repo: string; // "owner/name" on GitHub
@@ -19,6 +19,7 @@ export type FactoryConfig = {
   sfxMaxGenerations: number; // most ElevenLabs generations one sfx:gen run may make
   designModel: string;
   buildModel: string;
+  triageEffort: string; // reasoning effort of the triage agent, passed to claude --effort
   minVotes: number;
   minAgeHours: number;
   committeeBootstrapTelegram: string; // sole member while committee.json is missing
@@ -27,12 +28,13 @@ export type FactoryConfig = {
   committeeChat: string;
   publicChannel: string;
   stageTimeoutMinutes: number;
-  updateGraceMinutes: number; // minutes a factory update waits for agent and test jobs before it stops them
   releaseDays: number;
   itchTarget: string | null; // itch.io page as "user/game". Null until set, and then a release fails loud.
   butlerKey: string | null; // BUTLER_API_KEY, only ever in the env of the butler call
   maxJobsPerDay: number; // public-driven agent jobs allowed in any 24 hours
-  agentWorkers: number; // jobs of the agent queue that run at once
+  triageWorkers: number; // jobs of the triage queue that run at once
+  designWorkers: number; // jobs of the design queue that run at once
+  implementWorkers: number; // jobs of the implement queue that run at once
   testWorkers: number; // jobs of the test queue that run at once
 };
 
@@ -59,18 +61,23 @@ export type Card = { itemId: string; issue: number; column: Column; labels: stri
 
 // A job is one detached `factory run` process. `issue` is null for the release cut and a change id for change.
 // Candidate and ship carry the tracking issue, remove the issue of the feature to take out. Dev rebuilds /dev/ and has no issue.
-export type JobStage = CardStage | ReleaseStage | 'approve' | 'change' | 'adhoc' | 'dev';
+// An incident job carries the issue of a shipped bug fix.
+export type JobStage = CardStage | ReleaseStage | 'approve' | 'change' | 'adhoc' | 'incident' | 'dev';
 // `id` names the job's containers, so a kill stops only its own.
 export type Job = { id: string; stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
 
 // Jobs run in parallel up to a limit per queue.
 // The branch queue moves dev, main and the release, or rebuilds a shared build, so it runs one job at a time.
-// The agent queue runs light agent jobs. The test queue builds the game and plays it in a browser, which is heavy.
-export type Queue = 'branch' | 'agent' | 'test';
+// Triage, design and implement each get their own queue, so a short triage never waits behind a long build.
+// The test queue builds the game and plays it in a browser, which is heavy.
+export type Queue = 'branch' | 'triage' | 'design' | 'implement' | 'test';
+// Queues whose jobs only run agents in work clones, with no deploy or branch move.
+export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement'];
 export const QUEUE_OF: Record<JobStage, Queue> = {
-  triage: 'agent', design: 'agent', implement: 'agent', adhoc: 'agent',
+  triage: 'triage', design: 'design', implement: 'implement', adhoc: 'implement',
   testing: 'test',
-  approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', change: 'branch',
+  // An incident job pushes dev, and two of them at once would pick the same log id.
+  approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', change: 'branch', incident: 'branch',
 };
 // `error` is the short summary. The full text is in `log`.
 export type Failure = { stage: Stage; issue: number | null; error: string; log: string | null; at: string };
@@ -96,6 +103,8 @@ export type FactoryState = {
   pendingApprovals: Record<string, string>; // issue number -> approving Telegram user, run by the next tick
   approvedResolving: Record<string, string>; // issue number -> approver, for an approved card back in Testing to resolve a conflict with its base. Testing then queues its merge with no new post.
   pendingChanges: ChangeRequest[]; // factory change requests, run by the next ticks in order
+  pendingIncidents: number[]; // shipped bug issues whose incident job has not run yet, run by the next ticks in order
+  bundles: Record<string, number[]>; // lead issue number -> the issues triage bundled into its card, which close when the lead ships
   lastTickError: string | null; // the last tick crash. Hermes's incident watch reports it.
   failures: Failure[]; // failed jobs of the last day. Hermes's incident watch reports each one, and the chat hears of it only from Hermes.
   adhocReplies: Record<string, { chat: string; messageId: number }>; // ad hoc issue number -> the chat message its report answers
@@ -105,7 +114,7 @@ export type FactoryState = {
   postCaptions: Record<string, string>; // Telegram message id -> caption of an open approval or candidate post. Telegram cannot read a caption back, and a status line edits it.
   devBuild: string | null; // short hash of dev that /dev/ serves
   devFailed: string | null; // short hash of dev whose build failed. The tick skips it until dev moves or Hermes clears it.
-  interrupted: number[]; // issues whose job a factory update stopped. The next job on the issue tells its agent to continue, and its end clears the issue.
+  interrupted: number[]; // issues whose job process died and got one resume. The next job on the issue continues its agents' sessions, and its end clears the issue.
 };
 
 export interface GitHub {
@@ -147,7 +156,11 @@ export interface Telegram {
 // `openNetwork` runs the container on the normal network with no proxy. Absent means the restricted network.
 // `mediaDir` is a host folder of reference images. The agent sees it read only at /work/.factory-media.
 // `readOnly` maps host folders to container paths, mounted read only.
-export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string> };
+// `session` names the agent's Claude Code session. The container mounts `dir` as the agent's session store and starts the session with `id`, or continues it when `resume` is set.
+// `skill` is a slash command like `/code-review`. Claude runs it only from the first line of the input, so it goes first.
+// `effort` is the reasoning effort passed to claude --effort. Absent means the model's default.
+export type AgentSession = { dir: string; id: string; resume: boolean };
+export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; session?: AgentSession; skill?: string; effort?: string };
 
 export interface Container {
   // Runs Claude Code headless in the clone. Throws on a nonzero exit.
@@ -181,6 +194,7 @@ export interface HostRepo {
   headHash(branch: string): Promise<string>; // short hash
   diff(base: string, branch: string): Promise<string>;
   changedFiles(base: string, branch: string): Promise<string[]>; // files `branch` changed since it split from `base`
+  readFile(branch: string, path: string): Promise<string>; // a file as `branch` holds it. Throws when it is missing.
   hasNewCommits(base: string, branch: string): Promise<boolean>;
   // Runs the steps in order and pushes every changed branch in one atomic push. A conflict throws MergeConflictError before the push.
   merge(steps: MergeStep[]): Promise<void>;
@@ -228,11 +242,18 @@ export const RELEASE_CANDIDATE_LABEL = 'release-candidate'; // approved and merg
 // A fix for a shipped bug. It branches from main, and its approval ships it to main and itch.io at once. Only collaborators set labels, so it needs no votes.
 export const HOTFIX_LABEL = 'hotfix';
 export const ADHOC_LABEL = 'adhoc';
-export const CANDIDATE_LABELS = ['feature-request', 'bug'];
+export const BUG_LABEL = 'bug';
+// An issue triage folded into another issue's card. Its card waits in Done, and the issue closes when the lead ships.
+export const BUNDLED_LABEL = 'bundled';
+export const CANDIDATE_LABELS = ['feature-request', BUG_LABEL];
+// The incident log lives at the repo root, outside the game folder the agent starts in.
+export const INCIDENT_LOG = 'docs/incident-log.md';
+export const INCIDENT_BRANCH = (issue: number): string => `factory/incident-${issue}`;
 export const NEEDS_INFO_LABEL = 'needs-info';
 export const FACTORY_MARK = '<!-- roam-factory -->'; // last line of every factory comment, so a factory comment differs from a member's
 export const QUESTIONS_HEADING = '## Questions from the factory';
 export const FEEDBACK_HEADING = '## Committee feedback';
+export const REVIEW_HEADING = '## Review findings';
 // Agent containers sit on an internal Docker network. The proxy container is their only way out.
 export const AGENT_NETWORK = 'roam-factory-agents';
 export const PROXY_NAME = 'roam-factory-proxy';

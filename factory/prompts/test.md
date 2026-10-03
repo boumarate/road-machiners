@@ -12,8 +12,8 @@ Keep what both sides meant, not just one side.
 Then commit the merge with `git commit --no-edit`.
 The factory fails the stage if the merge is left unfinished.
 
-Run up:uverify and then up:ureview on {{taskFile}}.
-Fix what they find.
+Run up:uverify on {{taskFile}}.
+Fix what it finds.
 Commit the fixes on the current branch.
 
 This machine has no GPU and is slow. Keep checks focused.

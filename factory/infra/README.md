@@ -25,9 +25,10 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 ## What each deploy does
 
 - Provision installs packages, Docker, Node 24, gh and butler. It opens ports 22, 80 and 443. It makes the `factory` user and the `/opt/factory` folders.
-- Deploy clones `main` into `/opt/factory/code` once. It never sends code after that.
-- Deploy pushes the server-only factory `.env` to `/opt/factory/code/factory/.env` with mode 600. It holds the secrets, the committee ids and the host paths. `FACTORY_ENV_FILE` in `prod.env` names its source on your machine. Every other setting is in the tracked `factory/settings.env`.
-- Deploy runs `npm ci` in `/opt/factory/code/factory`, sets git to use gh for credentials and builds the agent image and the egress proxy image `<FACTORY_IMAGE>-proxy`.
+- Deploy clones `main` into `/opt/factory/repo` once. It never sends code after that.
+- Deploy runs `factory-layout.sh`, which makes the first release, the links and runs its `npm ci`. On a server that still has a real `/opt/factory/code` folder, it stops the timers, moves that folder to `repo` and its `.env` to `factory.env`, then makes the layout. Running jobs keep working, since a moved folder stays their working folder.
+- Deploy pushes the server-only factory env to `/opt/factory/factory.env` with mode 600. Each release links `factory/.env` to it. It holds the secrets, the committee ids and the host paths. `FACTORY_ENV_FILE` in `prod.env` names its source on your machine. Every other setting is in the tracked `factory/settings.env`.
+- Deploy sets git to use gh for credentials and builds the agent image and the egress proxy image `<FACTORY_IMAGE>-proxy`.
 - Deploy installs the tick service and timer. The timer runs `factory tick` from `/opt/factory/code/factory` every `FACTORY_TICK_MINUTES`.
 - Deploy installs `factory-update` with its timer, which runs every 2 minutes. See below.
 - Deploy starts Hermes and Caddy with Docker Compose. Caddy serves `/opt/factory/www` with automatic TLS.
@@ -38,11 +39,11 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 `/opt/factory/factory-update.sh` runs as the factory user from `roam-factory-update.timer`. Its log is `/opt/factory/home/logs/update.log`.
 
 - It fetches `main`. When `main` is past the commit in `/opt/factory/home/deployed`, it deploys it.
-- It pauses the factory with a pause reason that starts with `update to`. It waits until no tick and no job runs. A busy run exits, and the next run checks again. While it waits for running jobs, a tick still releases answered `needs-info` issues and fails jobs past the timeout. After `FACTORY_UPDATE_GRACE_MINUTES` from the first pause, it stops agent and test jobs, which start again after the update. A rewrite of the pause reason keeps the file's time. The tick service stays active during it, so the update never checks out under it.
-- It checks out the new commit. It runs `npm ci` when the factory's package files changed, builds the images when `factory/docker/` changed, and rebuilds Hermes when `factory/hermes/` or `settings.env` changed.
-- It records the commit in `deployed` and lifts its pause.
-- A local edit in the code dir stops it before the pause. A failed rebuild leaves the factory paused, and the next run tries again. Both write the reason to `/opt/factory/home/update-failed`, which Hermes's incident watch prints.
-- The script lives outside the checkout, so a change to it needs a deploy.
+- It builds the new commit beside the running one in `/opt/factory/releases/<sha>`, a git worktree of `repo`, links its `.env` and runs `npm ci`. It builds the images when `factory/docker/` changed, and rebuilds Hermes when `factory/hermes/` or `settings.env` changed.
+- It then swaps the link `releases/current` in one step and records the commit in `deployed`. It never pauses the factory, never waits for a job and never stops one. A tick resolves the link when it starts, so a tick and the jobs it starts run on one release to their end.
+- It removes each old release that no process works in, read from `/proc/*/cwd`. The previous release stays one more deploy, for a tick that read the link just before the swap. A release it cannot remove stays for the next deploy.
+- A local edit in the current release stops it. A failed build removes the half-built release and leaves `current` as it was, and the next run tries again. Both write the reason to `/opt/factory/home/update-failed`, which Hermes's incident watch prints.
+- The script lives outside the releases, so a change to it needs a deploy.
 - Docker skips UFW for published ports. So `daemon.json` binds published ports to 127.0.0.1 unless a port names its address, and only Caddy names 0.0.0.0 for 80 and 443. Deploy ends with `check-ports.sh`, which fails on any other published port. Status lists the published ports.
 
 ## Agent network
@@ -54,7 +55,8 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 
 ## Folders on the server
 
-- `/opt/factory/code` is a clone of `main` at the deployed commit. The factory runs from `/opt/factory/code/factory`, where its `.env` lives. Never edit it by hand.
+- `/opt/factory/repo` is the git clone. `/opt/factory/releases/<sha>` holds one deployed commit each. `/opt/factory/code` links to `releases/current`, which links to the deployed release. The factory runs from `/opt/factory/code/factory`. Never edit a release by hand.
+- `/opt/factory/factory.env` is the server-only env.
 - `/opt/factory/home` is `FACTORY_HOME`. Set it in the factory `.env`.
 - `/opt/factory/www` is `FACTORY_WEB_ROOT`. Set it in the factory `.env`.
 - `/opt/factory/hermes` holds the Hermes state and login.

@@ -2,14 +2,15 @@ import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { resumedStage } from './sessions';
 import { chooseJobs, tick, type TickDeps } from './tick';
 import { EMPTY_STATE, readState, writeState } from './state';
 import { FACTORY_MARK, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type ReleaseState, type Ctx, type IssueComment, type FactoryState, type Job } from './types';
 
 const NOW = new Date('2026-01-10T12:00:00Z');
-const CFG = { releaseDays: 7, maxJobsPerDay: 3, agentWorkers: 3, testWorkers: 1 };
-// One agent worker, so a test sees which card the agent queue prefers.
-const ONE = { ...CFG, agentWorkers: 1 };
+const CFG = { releaseDays: 7, maxJobsPerDay: 3, triageWorkers: 3, designWorkers: 3, implementWorkers: 3, testWorkers: 1 };
+// One worker per agent queue, so a test sees which card each queue prefers.
+const ONE = { ...CFG, triageWorkers: 1, designWorkers: 1, implementWorkers: 1 };
 const DEV = 'dev0001';
 const FRESH = { lastRelease: '2026-01-09T12:00:00Z', devBuild: DEV };
 
@@ -31,6 +32,12 @@ describe('chooseJobs daily cap', () => {
     expect(chooseJobs({ ...capped, pendingApprovals: { '4': 'u' } }, [], NOW, CFG)).toEqual([{ stage: 'approve', issue: 4 }]);
     expect(chooseJobs({ ...capped, pendingChanges: [{ id: 2, text: 't', by: 'u' }] }, [], NOW, CFG)).toEqual([{ stage: 'change', issue: 2 }]);
     expect(chooseJobs(capped, [card(6, 'Implementation', ['adhoc'])], NOW, CFG)).toEqual([{ stage: 'adhoc', issue: 6 }]);
+  });
+
+  it('runs a queued incident job at the cap, after the other branch jobs', () => {
+    const queuedIncident = { ...capped, pendingIncidents: [7, 8] };
+    expect(chooseJobs(queuedIncident, [], NOW, CFG)).toEqual([{ stage: 'incident', issue: 7 }]);
+    expect(chooseJobs({ ...queuedIncident, pendingChanges: [{ id: 2, text: 't', by: 'u' }] }, [], NOW, CFG)).toEqual([{ stage: 'change', issue: 2 }]);
   });
 
   it('ignores starts older than 24 hours', () => {
@@ -71,7 +78,7 @@ describe('chooseJobs during a release', () => {
 
   it('runs release tasks before other cards, furthest along first', () => {
     const cards = [tracking(), card(30, 'Implementation'), card(21, 'Design', ['release-task']), card(22, 'Implementation', ['release-task'])];
-    expect(chooseJobs(open, cards, NOW, ONE)).toEqual([{ stage: 'implement', issue: 22 }]);
+    expect(chooseJobs(open, cards, NOW, ONE)).toEqual([{ stage: 'implement', issue: 22 }, { stage: 'design', issue: 21 }]);
     expect(chooseJobs(open, cards, NOW, CFG)).toEqual([{ stage: 'implement', issue: 22 }, { stage: 'design', issue: 21 }, { stage: 'implement', issue: 30 }]);
   });
 
@@ -105,7 +112,7 @@ describe('chooseJobs', () => {
 
   it('runs a hotfix card before ad hoc work and other cards, at the cap too', () => {
     const cards = [card(2, 'Implementation', ['adhoc']), card(3, 'Testing'), card(9, 'Design', ['bug', 'hotfix']), card(8, 'Design', ['hotfix', 'factory-stuck'])];
-    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'design', issue: 9 }, { stage: 'testing', issue: 3 }]);
+    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'design', issue: 9 }, { stage: 'adhoc', issue: 2 }, { stage: 'testing', issue: 3 }]);
     expect(chooseJobs(state({ jobStarts: starts(23, 5, 1) }), cards, NOW, CFG)).toEqual([{ stage: 'design', issue: 9 }, { stage: 'adhoc', issue: 2 }]);
   });
 
@@ -116,9 +123,9 @@ describe('chooseJobs', () => {
   it('fills each queue up to its limit beside running jobs, never twice on one issue', () => {
     const s = state({ jobs: [running('design', 1), running('testing', 7), running('approve', 9)], pendingChanges: [{ id: 3, text: 't', by: 'u' }] });
     const cards = [card(1, 'Design'), card(2, 'Design'), card(8, 'Testing'), card(4, 'Triage'), card(5, 'Triage')];
-    expect(chooseJobs(s, cards, NOW, { ...CFG, maxJobsPerDay: 10 })).toEqual([{ stage: 'design', issue: 2 }, { stage: 'triage', issue: 4 }]);
+    expect(chooseJobs(s, cards, NOW, { ...CFG, maxJobsPerDay: 10 })).toEqual([{ stage: 'design', issue: 2 }, { stage: 'triage', issue: 4 }, { stage: 'triage', issue: 5 }]);
     const idle = state({ jobs: [running('design', 1)] });
-    expect(chooseJobs(idle, cards, NOW, { ...CFG, maxJobsPerDay: 10, testWorkers: 2 })).toEqual([{ stage: 'testing', issue: 8 }, { stage: 'design', issue: 2 }, { stage: 'triage', issue: 4 }]);
+    expect(chooseJobs(idle, cards, NOW, { ...CFG, maxJobsPerDay: 10, testWorkers: 2, designWorkers: 1 })).toEqual([{ stage: 'testing', issue: 8 }, { stage: 'triage', issue: 4 }, { stage: 'triage', issue: 5 }]);
   });
 
   it('counts each counted pick against the cap slots left', () => {
@@ -147,13 +154,14 @@ describe('chooseJobs', () => {
 
   it('picks the card furthest along, lowest issue first, per queue', () => {
     const cards = [card(1, 'Design'), card(5, 'Implementation'), card(7, 'Testing'), card(6, 'Testing')];
-    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'testing', issue: 6 }, { stage: 'implement', issue: 5 }]);
+    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'testing', issue: 6 }, { stage: 'implement', issue: 5 }, { stage: 'design', issue: 1 }]);
     expect(chooseJobs(state(), cards.slice(0, 1), NOW, ONE)).toEqual([{ stage: 'design', issue: 1 }]);
   });
 
-  it('runs Triage cards last and skips needs-info and stuck ones', () => {
+  it('runs Triage cards in their own queue beside a long design, and skips needs-info and stuck ones', () => {
     const cards = [card(1, 'Triage'), card(2, 'Triage', [NEEDS_INFO_LABEL]), card(3, 'Design')];
-    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'design', issue: 3 }]);
+    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'design', issue: 3 }, { stage: 'triage', issue: 1 }]);
+    expect(chooseJobs(state({ jobs: [running('design', 5)] }), cards, NOW, ONE)).toEqual([{ stage: 'triage', issue: 1 }]);
     expect(chooseJobs(state(), cards.slice(0, 2), NOW, ONE)).toEqual([{ stage: 'triage', issue: 1 }]);
     expect(chooseJobs(state(), [card(2, 'Triage', [NEEDS_INFO_LABEL]), card(4, 'Triage', [STUCK_LABEL])], NOW, CFG)).toEqual([]);
   });
@@ -195,7 +203,7 @@ function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: 
   const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', stageTimeoutMinutes: 30, ...CFG };
   const repo = { fetch: async () => {},headHash: async (branch: string) => { if (branch !== 'dev') throw new Error(`unexpected branch ${branch}`); return devHead; } };
   const ctx = { cfg, github, telegram, repo, statePath, now: () => NOW, log: () => undefined } as unknown as Ctx;
-  const deps: TickDeps = { isAlive: () => alive, inContainer: async () => true, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, spawn: (args, _cwd, _log, id) => { spawned.push([...args, id]); return 77; } };
+  const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, removeContainers: async (_run, id) => { killed.push(`containers ${id}`); }, spawn: (args, _cwd, _log, id) => { spawned.push([...args, id]); return 77; } };
   return { ctx, sent, labels, removed, deps, killed, spawned };
 }
 
@@ -344,6 +352,91 @@ describe('tick', () => {
     const h = harness(job('2026-01-10T11:50:00Z', 'remove', 8), false);
     await tick(h.ctx, '/code', h.deps);
     expect(h.labels).toEqual([`8:${STUCK_LABEL}`]);
+  });
+
+  describe('a job whose process died', () => {
+    const IN_TIME = '2026-01-10T11:50:00Z';
+    const sessions = (h: Harness): string => join(h.ctx.cfg.home, 'sessions', 'issue-5');
+
+    it('resumes an agent job once: removes its containers, marks the issue, reports nothing and starts it again', async () => {
+      const h = harness(job(IN_TIME), false, [card(5, 'Design')]);
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME)], jobStarts: [IN_TIME] }));
+      await tick(h.ctx, '/code', h.deps);
+      expect(h.killed).toEqual(['containers design-job']);
+      expect(args(h)).toEqual([['design', '5']]);
+      expect(resumedStage(h.ctx.cfg.home, 5)).toBe('design');
+      const after = readState(h.ctx.statePath);
+      expect(after.interrupted).toEqual([5]);
+      expect(after.failures).toEqual([]);
+      expect(h.labels).toEqual([]);
+      expect(after.jobs.map((j) => j.pid)).toEqual([77]);
+    });
+
+    it('resumes a test job too', async () => {
+      const h = harness(job(IN_TIME, 'testing', 5), false);
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME, 'testing', 5)] }));
+      await tick(h.ctx, '/code', h.deps);
+      expect(readState(h.ctx.statePath)).toMatchObject({ interrupted: [5], failures: [], jobs: [] });
+    });
+
+    it('frees the cap slot of the dead job, so the restart does not count twice', async () => {
+      const h = harness(job(IN_TIME), false, [card(5, 'Design')]);
+      const other = starts(20, 1);
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME)], jobStarts: [other[0], IN_TIME, other[1]] }));
+      await tick(h.ctx, '/code', h.deps);
+      expect(readState(h.ctx.statePath).jobStarts).toEqual([other[0], other[1], NOW.toISOString()]);
+    });
+
+    it('takes no cap slot from an uncapped job that resumes', async () => {
+      const h = harness(job(IN_TIME, 'adhoc', 5), false);
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME, 'adhoc', 5)], jobStarts: [IN_TIME] }));
+      await tick(h.ctx, '/code', h.deps);
+      expect(readState(h.ctx.statePath).jobStarts).toEqual([IN_TIME]);
+      expect(readState(h.ctx.statePath).interrupted).toEqual([5]);
+    });
+
+    it('fails a second death, clears the mark and the sessions, and reports', async () => {
+      const h = harness(job(IN_TIME), false);
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME)], interrupted: [5, 6] }));
+      mkdirSync(sessions(h), { recursive: true });
+      await tick(h.ctx, '/code', h.deps);
+      expect(h.killed).toEqual([]);
+      expect(h.labels).toEqual([`5:${STUCK_LABEL}`]);
+      const after = readState(h.ctx.statePath);
+      expect(after.failures).toMatchObject([{ stage: 'design', issue: 5, error: 'job process died without finishing' }]);
+      expect(after.interrupted).toEqual([6]);
+      expect(after.jobs).toEqual([]);
+      expect(existsSync(sessions(h))).toBe(false);
+    });
+
+    it('fails a job past the timeout and never resumes it, dead or alive', async () => {
+      const late = '2026-01-10T11:00:00Z';
+      const alive = harness(job(late), true);
+      await tick(alive.ctx, '/code', alive.deps);
+      expect(readState(alive.ctx.statePath)).toMatchObject({ interrupted: [], failures: [{ error: 'timed out after 30 minutes' }] });
+      const dead = harness(job(late), false);
+      await tick(dead.ctx, '/code', dead.deps);
+      expect(readState(dead.ctx.statePath)).toMatchObject({ interrupted: [], failures: [{ error: 'job process died without finishing' }] });
+    });
+
+    it('clears a lingering mark and the sessions of a timed out job', async () => {
+      const h = harness(job('2026-01-10T11:00:00Z'), true);
+      writeState(h.ctx.statePath, state({ jobs: [job('2026-01-10T11:00:00Z')], interrupted: [5] }));
+      mkdirSync(sessions(h), { recursive: true });
+      await tick(h.ctx, '/code', h.deps);
+      expect(readState(h.ctx.statePath).interrupted).toEqual([]);
+      expect(existsSync(sessions(h))).toBe(false);
+    });
+
+    it('fails a dead branch job, and touches no mark or sessions of the issue that shares its number', async () => {
+      const h = harness(job(IN_TIME, 'change', 5), false);
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME, 'change', 5)], interrupted: [5] }));
+      mkdirSync(sessions(h), { recursive: true });
+      await tick(h.ctx, '/code', h.deps);
+      expect(h.killed).toEqual([]);
+      expect(readState(h.ctx.statePath)).toMatchObject({ interrupted: [5], failures: [{ stage: 'change' }], jobs: [] });
+      expect(existsSync(sessions(h))).toBe(true);
+    });
   });
 
   it('starts a queued ship without counting it against the cap', async () => {

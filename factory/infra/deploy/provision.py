@@ -6,7 +6,7 @@ Packages, Docker, Node 24, gh, butler, the firewall, the factory user and the /o
 # pyright: reportMissingImports=false
 from pyinfra.operations import apt, files, server, systemd
 
-from factory_infra import CODE_DIR, FACTORY_ROOT, FACTORY_UID, FACTORY_USER, HERMES_DIR, HOME_DIR, INFRA_DIR, WWW_DIR
+from factory_infra import FACTORY_ROOT, FACTORY_UID, FACTORY_USER, HERMES_DIR, HOME_DIR, INFRA_DIR, REPO_DIR, WWW_DIR
 
 FILES = INFRA_DIR / "files"
 
@@ -123,12 +123,12 @@ server.user(
 # The factory user owns the clone. Git refuses it for root without this entry, and that breaks admin commands run over ssh as root.
 server.shell(
     name="git trusts the factory clone for every user",
-    commands=[f"git config --system --get-all safe.directory | grep -qxF {CODE_DIR} || git config --system --add safe.directory {CODE_DIR}"],
+    commands=[f"git config --system --get-all safe.directory | grep -qxF {REPO_DIR} || git config --system --add safe.directory {REPO_DIR}"],
     _sudo=True,
 )
 
 files.directory(name=f"dir {FACTORY_ROOT}", path=FACTORY_ROOT, mode="755", present=True, _sudo=True)
-for path in [CODE_DIR, HOME_DIR, WWW_DIR, f"{HOME_DIR}/logs", f"{HOME_DIR}/state"]:
+for path in [REPO_DIR, HOME_DIR, WWW_DIR, f"{HOME_DIR}/logs", f"{HOME_DIR}/state"]:
     files.directory(name=f"dir {path}", path=path, user=FACTORY_USER, group=FACTORY_USER, mode="755", present=True, _sudo=True)
 
 # Hermes runs as the factory user, so the factory user owns its state and every folder it writes.

@@ -40,9 +40,11 @@ A hotfix fixes a bug in the shipped game, like broken saves. It is a release of 
 
 When a member asks for a hotfix, open the issue with both labels. Describe the broken behavior, how to see it, and the smallest fix. Ask for no other change in it.
 
-Jobs run in parallel, in three queues, each with its own worker limit.
+Jobs run in parallel, in five queues, each with its own worker limit.
 
-- The agent queue runs triage, design, implementation and ad hoc tasks. `FACTORY_AGENT_WORKERS` sets its limit.
+- The triage queue runs triage. `FACTORY_TRIAGE_WORKERS` sets its limit.
+- The design queue runs design. `FACTORY_DESIGN_WORKERS` sets its limit.
+- The implement queue runs implementation and ad hoc tasks. `FACTORY_IMPLEMENT_WORKERS` sets its limit.
 - The test queue runs testing. `FACTORY_TEST_WORKERS` sets its limit.
 - The branch queue runs approve, remove, ship, the release cut, the candidate, `/dev/` rebuilds and `/change`. It runs one job at a time, since these move `dev`, `main` or the release.
 
@@ -85,12 +87,13 @@ Common fixes:
 - Move a card: `gh project item-edit` on Project 2 of owner `btseytlin`. Find ids with `gh project item-list` and `gh project field-list`.
 - Drop a queued action: edit `/factory/home/state/state.json` with `jq`, while the factory is paused and `jobs` is empty. The tick drops a dead or timed-out job from `jobs` by itself.
 - Reset an issue branch: change it on GitHub from a clone of your own under `/factory/home/work/`. Delete the issue work clone in `/factory/home/work/issue-N`, so the next stage starts clean.
-- A failed update: read `/factory/home/logs/update.log`. A local edit in `/opt/factory/code` blocks every update. Tell the committee what the edit is, and ask whether to drop it or to bring it to `main` with `/change`. A failed rebuild leaves the factory paused, and each update run tries again. Post when the same failure stays.
+- A failed update: read `/factory/home/logs/update.log`. A local edit in `/opt/factory/code` blocks every update. Tell the committee what the edit is, and ask whether to drop it or to bring it to `main` with `/change`. A failed build leaves the running release in place, and each update run tries again. Post when the same failure stays.
 
 ## Changing factory state
 
 - Pause the factory before you edit the state file or the work clones. Write the reason into `/factory/home/paused`. Every tick skips while that file exists. Delete it when you are done.
-- A pause reason that starts with `update to` belongs to the factory update. Leave it. The update lifts it when it is done. After the grace time in `settings.env` the tick stops agent and test jobs for it. They start again after the update and continue from their work clones, so a stopped job is no incident.
+- A factory update never pauses the factory or stops jobs. Each deployed commit has its own folder under `/opt/factory/releases`, and running jobs finish on the code they started with.
+- A job whose process died resumes once by itself, with its agents' conversations. The tick log says so, and it is no incident. A second death fails the job like any other failure.
 - The pause does not stop running jobs. The list `jobs` in the state file holds them. Wait for them or let them fail.
 - Run a factory step yourself only while the factory is paused and `jobs` is empty. A step you run by hand does not appear in `jobs`, so the tick could start a clashing one.
 - Edit the state file only while `jobs` is empty. Jobs write it too, and your edit would undo theirs.
@@ -111,7 +114,7 @@ The server runs the factory from GitHub's `main`. A timer checks `main` every 2 
 - Your `config.yaml` comes from `factory/hermes/` in the repo. A setting you change in your home config survives restarts and deploys. The one exception is a setting the repo changes later, since then the repo value wins.
 - Your `SOUL.md` and plugins also come from the repo, and every restart copies them over the ones in your home. So an edit to them in your home is lost. When a member asks to change your instructions or a plugin, queue the change with the tool.
 - After `factory_queue_change` succeeds on a member's message, answer with one short sentence, like "Queued for a PR." Never answer a member's message with [SILENT]. The gateway shows members a warning for it. The factory still posts its own confirmation and the pull request link later. Only the incident watch may end with [SILENT].
-- Never edit `/opt/factory/code`. An edit there blocks every update until someone removes it.
+- Never edit `/opt/factory/code` or any release folder. An edit in the current release blocks every update until someone removes it.
 - Never edit `factory/.env` on the server. It holds the secrets, and only the owner's deploy writes it. When a secret must change, tell the committee that the owner must deploy it.
 
 ## Ad hoc tasks
@@ -128,7 +131,7 @@ Write the request so a coding agent can act on it alone. The agent sees nothing 
 
 Tell the member it is queued. Say the report arrives later as a reply to their message. Any files come under it.
 
-Queue one request per task. Tasks run in the agent queue, oldest first, before other agent work.
+Queue one request per task. Tasks run in the implement queue, oldest first, before other implementation work.
 
 ## Bigger jobs
 
@@ -169,7 +172,7 @@ For approvals, denials, feedback, releases and factory changes, use the messages
   - `repo/` is the factory's own clone. `work/issue-N/` is the work clone of issue N.
   - `committee/committee.json` lists the committee.
   - `inbox/` holds committee commands the factory has not run yet.
-- `/factory/code/` is the factory's code, read-only. `factory/README.md` explains the factory, `factory/src/` holds its code, and `factory/prompts/` holds each agent stage's prompt.
+- `/opt/factory/code/` is the deployed factory code, read-only. It links to the current folder in `/opt/factory/releases/`. On the Mac the code is at `/factory/code/`. `factory/README.md` explains the factory, `factory/src/` holds its code, and `factory/prompts/` holds each agent stage's prompt.
 - `factory-host` gives you a shell on the factory server as the factory user. `factory-host '<command>'` runs one command there. It has everything the factory has: Docker, the factory's env and the web root.
   - The server paths are `/opt/factory/home`, the same files as `/factory/home`, and `/opt/factory/code` for the code.
   - `/opt/factory/www` is the web root. Each folder in it serves at the play URL, like `/opt/factory/www/dev` at `/dev/`.

@@ -3,6 +3,7 @@ import { deployDev } from '../deploy';
 import { readState, updateState } from '../state';
 import { BRANCH, FEEDBACK_HEADING, MergeConflictError, RELEASE_CANDIDATE_LABEL, WONT_DO_LABEL, type Ctx } from '../types';
 import { BASE_BRANCH, HOTFIX_BASE, agentLog, baseBranchFor, workDir } from './common';
+import { releaseBundle } from './bundle';
 import { shipHotfix } from './hotfix';
 
 async function requireApproval(ctx: Ctx, issue: number): Promise<void> {
@@ -96,4 +97,5 @@ export async function deny(ctx: Ctx, issue: number, by: string): Promise<void> {
   await ctx.github.close(issue, 'not planned');
   await ctx.github.move(issue, 'Done');
   forgetPosts(ctx, issue, true);
+  await releaseBundle(ctx, issue, 'was denied');
 }

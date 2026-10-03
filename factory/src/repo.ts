@@ -165,6 +165,9 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
       return (await git(['rev-parse', '--short', await ref(branch)])).trim();
     },
     diff: async (base, branch) => git(['diff', `${await ref(base)}...${await ref(branch)}`]),
+    async readFile(branch, path) {
+      return git(['show', `${await ref(branch)}:${path}`]);
+    },
     async changedFiles(base, branch) {
       return lines(await git(['diff', '--name-only', `${await ref(base)}...${await ref(branch)}`]));
     },

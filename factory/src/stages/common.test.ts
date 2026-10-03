@@ -1,9 +1,10 @@
-import { mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { AgentRun, Ctx } from '../types';
+import { markResumed } from '../sessions';
 import { EMPTY_STATE, writeState } from '../state';
 import { solidPng } from '../media-fixtures';
-import { INTERRUPTED_NOTE, agentHome, baseBranchFor, baseBranchOf, factoryPaths, fillPrompt, modelFor, runAgent } from './common';
+import { RESUME_NOTE, agentHome, baseBranchFor, baseBranchOf, factoryPaths, fillPrompt, modelFor, prepareOutputs, runAgent } from './common';
 
 function agentCtx(labels: string[], body = '', comments: { login: string; body: string }[] = [], fetchFn?: typeof fetch): { ctx: Ctx; runs: AgentRun[]; logs: string[] } {
   const runs: AgentRun[] = [];
@@ -22,30 +23,115 @@ function agentCtx(labels: string[], body = '', comments: { login: string; body: 
 describe('runAgent network', () => {
   it('uses the restricted network without the open-network label', async () => {
     const { ctx, runs, logs } = agentCtx(['bug']);
-    await runAgent(ctx, 7, 'design', 'p');
+    await runAgent(ctx, 7, 'design', 'design', 'p');
     expect(runs[0].openNetwork).toBe(false);
     expect(logs).toEqual(['agent model opus-id', 'agent runs on the restricted network']);
   });
 
   it('uses the open network with the open-network label', async () => {
     const { ctx, runs, logs } = agentCtx(['bug', 'open-network']);
-    await runAgent(ctx, 7, 'design', 'p');
+    await runAgent(ctx, 7, 'design', 'design', 'p');
     expect(runs[0].openNetwork).toBe(true);
     expect(logs[1]).toContain('open network');
   });
 });
 
-describe('runAgent after an update stopped the job', () => {
-  it('tells the agent to continue from the work clone only for a marked issue', async () => {
-    mkdirSync('tmp/factory-common-test', { recursive: true });
-    const statePath = 'tmp/factory-common-test/state.json';
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), interrupted: [7] });
-    const { ctx, runs } = agentCtx(['bug']);
-    const marked = { ...ctx, statePath } as Ctx;
-    await runAgent(marked, 7, 'implement', 'p');
-    await runAgent(marked, 8, 'implement', 'p');
-    expect(runs[0].prompt.endsWith(`\n\n${INTERRUPTED_NOTE}`)).toBe(true);
-    expect(runs[1].prompt).not.toContain(INTERRUPTED_NOTE);
+describe('runAgent sessions', () => {
+  const HOME = 'tmp/factory-common-test';
+  // The tick marks the sessions of a job whose process died.
+  const markedCtx = (issues: number[]) => {
+    for (const issue of issues) markResumed(HOME, issue, 'testing');
+    return agentCtx(['bug']);
+  };
+  beforeEach(() => { rmSync(`${HOME}/sessions`, { recursive: true, force: true }); });
+  // What Claude Code writes in the container once the run starts.
+  const saved = (run: AgentRun) => {
+    if (!run.session) throw new Error('the run had no session');
+    mkdirSync(`${run.session.dir}/-work-game`, { recursive: true });
+    writeFileSync(`${run.session.dir}/-work-game/${run.session.id}.jsonl`, '{}\n');
+  };
+
+  it('starts a fresh session with the full prompt when the issue has no mark', async () => {
+    const { ctx, runs, logs } = markedCtx([]);
+    await runAgent(ctx, 7, 'implement', 'implement', 'p');
+    expect(runs[0].prompt).toMatch(/^p\n\n/);
+    expect(runs[0].session).toMatchObject({ dir: `${HOME}/sessions/issue-7`, resume: false });
+    expect(logs.some((line) => line.includes('resuming'))).toBe(false);
+  });
+
+  it('resumes the stored session of the round with the resume note alone, and logs it', async () => {
+    const { ctx, runs, logs } = markedCtx([]);
+    await runAgent(ctx, 7, 'implement', 'implement', 'p');
+    saved(runs[0]);
+    const marked = markedCtx([7]);
+    await runAgent(marked.ctx, 7, 'implement', 'implement', 'p');
+    expect(marked.runs[0].prompt).toBe(RESUME_NOTE);
+    expect(marked.runs[0].session).toEqual({ dir: `${HOME}/sessions/issue-7`, id: runs[0].session?.id, resume: true });
+    expect(marked.logs).toContain(`resuming round implement, session ${runs[0].session?.id}`);
+    expect(logs).toHaveLength(2);
+  });
+
+  it('gives a round with no stored session the full prompt, so a later round of a resumed job starts fresh', async () => {
+    const first = markedCtx([]);
+    await runAgent(first.ctx, 7, 'testing', 'test', 'p');
+    saved(first.runs[0]);
+    const marked = markedCtx([7]);
+    await runAgent(marked.ctx, 7, 'testing', 'test', 'p');
+    await runAgent(marked.ctx, 7, 'testing', 'test-fix', 'fix');
+    expect(marked.runs.map((run) => [run.session?.resume, run.prompt === RESUME_NOTE])).toEqual([[true, true], [false, false]]);
+    expect(marked.runs[1].prompt).toMatch(/^fix\n\n/);
+  });
+
+  it('starts a fresh round with the full prompt and its skill when the round asks for it, even in a resumed job', async () => {
+    const first = markedCtx([]);
+    await runAgent(first.ctx, 7, 'testing', 'review', 'review it', { skill: '/code-review' });
+    saved(first.runs[0]);
+    const marked = markedCtx([7]);
+    await runAgent(marked.ctx, 7, 'testing', 'review', 'review it', { skill: '/code-review', fresh: true });
+    expect(marked.runs[0].session?.resume).toBe(false);
+    expect(marked.runs[0].session?.id).not.toBe(first.runs[0].session?.id);
+    expect(marked.runs[0].skill).toBe('/code-review');
+    expect(marked.runs[0].prompt).toMatch(/^review it\n\n/);
+  });
+
+  it('never resumes the session of an unmarked issue', async () => {
+    const first = markedCtx([]);
+    await runAgent(first.ctx, 8, 'design', 'design', 'p');
+    saved(first.runs[0]);
+    const other = markedCtx([7]);
+    await runAgent(other.ctx, 8, 'design', 'design', 'p');
+    expect(other.runs[0].session?.resume).toBe(false);
+  });
+});
+
+describe('prepareOutputs', () => {
+  const HOME = 'tmp/factory-common-outputs';
+  const outputs = (interrupted: number[]) => {
+    rmSync(`${HOME}/sessions`, { recursive: true, force: true });
+    for (const issue of interrupted) markResumed(HOME, issue, 'design');
+    return { cfg: { home: HOME } } as Ctx;
+  };
+  beforeEach(() => {
+    rmSync(HOME, { recursive: true, force: true });
+    mkdirSync(`${HOME}/.factory`, { recursive: true });
+    writeFileSync(`${HOME}/.factory/old.md`, 'x');
+  });
+
+  it('resets the outputs of an unmarked issue', () => {
+    prepareOutputs(outputs([]), 7, HOME);
+    expect(existsSync(`${HOME}/.factory/old.md`)).toBe(false);
+    expect(existsSync(`${HOME}/.factory`)).toBe(true);
+  });
+
+  it('keeps the outputs of a marked issue', () => {
+    prepareOutputs(outputs([7]), 7, HOME);
+    expect(existsSync(`${HOME}/.factory/old.md`)).toBe(true);
+  });
+
+  it('makes the outputs folder when none exists', () => {
+    rmSync(`${HOME}/.factory`, { recursive: true });
+    prepareOutputs(outputs([7]), 7, HOME);
+    expect(existsSync(`${HOME}/.factory`)).toBe(true);
   });
 });
 
@@ -73,9 +159,9 @@ describe('model routing', () => {
   it('runAgent reads the labels at each run, so a manual change counts on the next one', async () => {
     const labels: string[] = ['implementation-opus'];
     const { ctx, runs } = agentCtx(labels);
-    await runAgent(ctx, 7, 'testing', 'p');
+    await runAgent(ctx, 7, 'testing', 'test', 'p');
     labels.length = 0;
-    await runAgent(ctx, 7, 'testing', 'p');
+    await runAgent(ctx, 7, 'testing', 'test', 'p');
     expect(runs.map((run) => run.model)).toEqual(['opus-id', 'sonnet-id']);
   });
 });
@@ -91,7 +177,7 @@ describe('runAgent reference images', () => {
   it('puts the absolute image paths and the media folder in the prompt of every stage', async () => {
     for (const stage of ['triage', 'design', 'implement', 'testing'] as const) {
       const { ctx, runs } = agentCtx([], `look ${ASSET}`, [], hosted(200));
-      await runAgent(ctx, 7, stage, 'the prompt');
+      await runAgent(ctx, 7, stage, stage, 'the prompt');
       expect(runs[0].prompt).toMatch(/^the prompt\n\n.*\/work\/\.factory-media\/ref-[0-9a-f]{12}\.png \(png, 2x2,/s);
       expect(runs[0].mediaDir).toBe('tmp/factory-common-test/media/issue-7');
     }
@@ -99,13 +185,13 @@ describe('runAgent reference images', () => {
 
   it('takes images from feedback comments too', async () => {
     const { ctx, runs } = agentCtx([], 'no image here', [{ login: 'ann', body: `## Committee feedback\n![](${ASSET})` }], hosted(200));
-    await runAgent(ctx, 7, 'design', 'p');
+    await runAgent(ctx, 7, 'design', 'design', 'p');
     expect(runs[0].prompt).toContain('from the comment by ann');
   });
 
   it('fails the stage before the agent starts when an image cannot be fetched', async () => {
     const { ctx, runs } = agentCtx([], ASSET, [], hosted(403));
-    await expect(runAgent(ctx, 7, 'design', 'p')).rejects.toThrow('could not fetch, so no agent ran');
+    await expect(runAgent(ctx, 7, 'design', 'design', 'p')).rejects.toThrow('could not fetch, so no agent ran');
     expect(runs).toHaveLength(0);
   });
 });

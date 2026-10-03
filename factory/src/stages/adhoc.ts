@@ -1,9 +1,10 @@
 import { rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { ARTIFACT_DIR, collectArtifacts, holdArtifacts, releaseArtifacts } from '../adhoc-artifacts';
+import { roundSession } from '../sessions';
 import { readState, updateState } from '../state';
 import { GAME_DIR, OUT_DIR, type Ctx } from '../types';
-import { agentHome, fillPrompt, readOutput, resetOutputs, useOpenNetwork } from './common';
+import { RESUME_NOTE, agentHome, fillPrompt, isResuming, prepareOutputs, readOutput, useOpenNetwork } from './common';
 
 // The agent reads the factory's own records here, so it can answer questions about the factory too.
 export const FACTORY_STATE_MOUNT = '/factory/state';
@@ -16,16 +17,11 @@ export async function adhoc(ctx: Ctx, issue: number): Promise<void> {
   const item = await ctx.github.issue(issue);
   await ctx.repo.fetch();
   const dir = `${ctx.cfg.home}/work/adhoc-${issue}`;
-  rmSync(dir, { recursive: true, force: true });
-  await ctx.repo.prepareWorkClone('dev', 'dev', dir);
+  await prepareClone(ctx, issue, dir);
   const home = agentHome(dir, GAME_DIR);
-  resetOutputs(home);
+  prepareOutputs(ctx, issue, home);
   writeFileSync(`${home}/${OUT_DIR}/request.md`, `# Committee request\n\n${item.body}\n`);
-  const log = `${ctx.cfg.home}/logs/issue-${issue}-adhoc.log`;
-  const openNetwork = await useOpenNetwork(ctx, 'adhoc', issue);
-  const readOnly = { [dirname(ctx.statePath)]: FACTORY_STATE_MOUNT, [`${ctx.cfg.home}/logs`]: FACTORY_LOGS_MOUNT };
-  const prompt = fillPrompt('adhoc', { issue: String(issue), state: FACTORY_STATE_MOUNT, logs: FACTORY_LOGS_MOUNT, files: `${OUT_DIR}/${ARTIFACT_DIR}` });
-  await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt, log, openNetwork, readOnly });
+  await runAdhocAgent(ctx, issue, dir);
   const report = readOutput(home, 'report.md')?.trim();
   if (!report) throw new Error(`The agent wrote no ${OUT_DIR}/report.md`);
   // Files go to the requesting chat as Telegram documents and nowhere else. They never reach the web root or GitHub.
@@ -51,6 +47,22 @@ export async function adhoc(ctx: Ctx, issue: number): Promise<void> {
   releaseArtifacts(ctx.cfg.home, issue);
   rmSync(dir, { recursive: true, force: true });
   ctx.log('adhoc', issue, `report and ${files.length} files posted, issue closed`);
+}
+
+// A resumed agent continues in the clone it left. Any other run starts from a fresh clone of dev.
+async function prepareClone(ctx: Ctx, issue: number, dir: string): Promise<void> {
+  if (!isResuming(ctx, issue)) rmSync(dir, { recursive: true, force: true });
+  await ctx.repo.prepareWorkClone('dev', 'dev', dir);
+}
+
+async function runAdhocAgent(ctx: Ctx, issue: number, dir: string): Promise<void> {
+  const log = `${ctx.cfg.home}/logs/issue-${issue}-adhoc.log`;
+  const openNetwork = await useOpenNetwork(ctx, 'adhoc', issue);
+  const readOnly = { [dirname(ctx.statePath)]: FACTORY_STATE_MOUNT, [`${ctx.cfg.home}/logs`]: FACTORY_LOGS_MOUNT };
+  const session = roundSession(ctx.cfg.home, issue, 'adhoc', isResuming(ctx, issue));
+  if (session.resume) ctx.log('adhoc', issue, `resuming round adhoc, session ${session.id}`);
+  const prompt = session.resume ? RESUME_NOTE : fillPrompt('adhoc', { issue: String(issue), state: FACTORY_STATE_MOUNT, logs: FACTORY_LOGS_MOUNT, files: `${OUT_DIR}/${ARTIFACT_DIR}` });
+  await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt, log, openNetwork, readOnly, session });
 }
 
 type Reply = { chat: string; messageId: number };

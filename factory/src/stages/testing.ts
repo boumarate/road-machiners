@@ -5,7 +5,9 @@ import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
 import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type InlineButton } from '../types';
-import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir } from './common';
+import { bundleOf } from './bundle';
+import { reviewGate } from './review';
+import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir } from './common';
 
 // Each step logs its start time, so the log shows where the time goes.
 // The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
@@ -49,16 +51,18 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const item = await ctx.github.issue(issue);
   const base = baseBranchFor(ctx, item.labels);
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, workDir(ctx, issue));
-  resetOutputs(home);
+  prepareOutputs(ctx, issue, home);
   const merged = await mergeBase(ctx, issue, base, home);
-  let evidence = await agentRound(ctx, issue, 'test', base);
+  let evidence = await agentRound(ctx, issue, 'test', 'test', base);
   await requireBaseMerged(ctx, issue, base, merged);
+  // A fix round changes the code, so its evidence replaces the first round's.
+  if (!(await reviewGate(ctx, issue, base, async () => { evidence = await agentRound(ctx, issue, 'test-fix', 'review-fix', base); }))) return;
   let build = await ctx.repo.headHash(BRANCH(issue));
   const failure = await runChecks(ctx, issue, base, build);
   // The agent gets one round to fix what the factory's own checks found. A second failure stops the card.
   if (failure !== null) {
     writeFileSync(`${home}/${OUT_DIR}/check-failure.md`, failure);
-    evidence = await agentRound(ctx, issue, 'test-fix', base);
+    evidence = await agentRound(ctx, issue, 'test-fix', 'checks-fix', base);
     build = await ctx.repo.headHash(BRANCH(issue));
     const again = await runChecks(ctx, issue, base, build);
     if (again !== null) throw new Error(`The factory checks failed twice.\n${again}`);
@@ -102,8 +106,9 @@ async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: 
 }
 
 // Returns the evidence of the round, checked against the branch head the round left. A round that changed code must capture again.
-async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'test-fix', base: string): Promise<Evidence> {
-  await runAgent(ctx, issue, 'testing', fillPrompt(prompt, { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
+// `round` names the session, so the review's fix and the checks' fix each resume their own conversation.
+async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'test-fix', round: 'test' | 'review-fix' | 'checks-fix', base: string): Promise<Evidence> {
+  await runAgent(ctx, issue, 'testing', round, fillPrompt(prompt, { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   throwIfNeedsCommittee(home);
   readApproval(home);
@@ -179,7 +184,8 @@ function omit<T>(record: Record<string, T>, key: number): Record<string, T> {
 async function pullRequestUrl(ctx: Ctx, issue: number, title: string, approval: Approval, base: string): Promise<string> {
   const open = await ctx.github.pullRequestFor(BRANCH(issue));
   if (open !== null) return open;
-  const body = `Closes #${issue}.\n\n${approval.description}\n\nHow to try: ${approval.howToTry}\n\nThe factory merges it when the committee approves.`;
+  const closes = [issue, ...bundleOf(readState(ctx.statePath), issue)].map((n) => `#${n}`).join(', ');
+  const body = `Closes ${closes}.\n\n${approval.description}\n\nHow to try: ${approval.howToTry}\n\nThe factory merges it when the committee approves.`;
   return ctx.github.openPullRequest(BRANCH(issue), base, `#${issue} ${title}`, body);
 }
 

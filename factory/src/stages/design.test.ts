@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runStage } from './design';
-import { EMPTY_STATE, writeState } from '../state';
-import type { AgentRun, Ctx } from '../types';
+import { EMPTY_STATE, readState, writeState } from '../state';
+import { TASK_FILE, type AgentRun, type Ctx } from '../types';
 
 let home = '';
 let calls: string[] = [];
@@ -31,9 +31,9 @@ function fakeCtx(agent: (run: AgentRun) => void): Ctx {
     log: () => undefined,
     statePath: `${home}/state.json`,
     github: {
-      issue: async () => ({ number: 7, title: 'Big horn', body: 'Add a horn', labels, createdAt: '', state: 'OPEN', author: 'anna', thumbsUp: [] }),
+      issue: async (number: number) => ({ number, title: number === 7 ? 'Big horn' : 'Louder horn', body: number === 7 ? 'Add a horn' : 'Make it louder', labels, createdAt: '', state: 'OPEN', author: 'anna', thumbsUp: [] }),
       comments: async () => [{ login: 'a', body: 'yes please' }, ...earlier.map((body) => ({ login: 'bot', body }))],
-      comment: record('comment'), addLabel: record('addLabel'), close: record('close'), move: record('move'),
+      comment: record('comment'), addLabel: record('addLabel'), removeLabel: record('removeLabel'), close: record('close'), move: record('move'),
     },
     container: { agent: async (run: AgentRun) => { calls.push('agent'); agent(run); } },
     repo: {
@@ -46,6 +46,33 @@ function fakeCtx(agent: (run: AgentRun) => void): Ctx {
 }
 
 const PLAN = '# Task\n\n## Plan\n- step one\n\n## Verify\n';
+
+describe('design stage with a bundle', () => {
+  const bundled = (): void => writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), bundles: { '7': [9] } });
+
+  it('gives the agent every bundled issue after the lead, all as untrusted text', async () => {
+    bundled();
+    let input = '';
+    await runStage(fakeCtx((run) => {
+      input = readFileSync(`${run.clone}/${run.dir}/.factory/issue.md`, 'utf8');
+      mkdirSync(`${run.clone}/${run.dir}/.factory-tasks`, { recursive: true });
+      writeFileSync(`${run.clone}/${run.dir}/${TASK_FILE(7)}`, PLAN);
+    }), 7);
+    expect(input.startsWith('UNTRUSTED USER TEXT')).toBe(true);
+    expect(input).toContain('# Big horn\n\nAdd a horn\n\n## Comment by a\n\nyes please');
+    expect(input).toContain('# Bundled issue #9\n\n## Louder horn\n\nMake it louder\n\n### Comment by a\n\nyes please');
+    expect(input.indexOf('# Big horn')).toBeLessThan(input.indexOf('# Bundled issue #9'));
+  });
+
+  it('sends the bundled issues back to Triage on their own when the lead will not be built', async () => {
+    bundled();
+    await runStage(fakeCtx((run) => writeFileSync(`${run.clone}/${run.dir}/.factory/wont-do.md`, 'Against the design.\n')), 7);
+    expect(calls).toContain('comment 9 #7 will not be built, so this issue goes back to triage on its own.');
+    expect(calls).toContain('removeLabel 9 bundled');
+    expect(calls.at(-1)).toBe('move 9 Triage');
+    expect(readState(`${home}/state.json`).bundles).toEqual({});
+  });
+});
 
 describe('design stage', () => {
   it.each([

@@ -38,6 +38,12 @@ Judge the compare sheet by looking at it, and write each mismatch as a measureme
 Read CLAUDE.md and DESIGN.md first.
 Follow them.
 
+Read docs/architecture/principles.md.
+It holds this project's architecture principles.
+They come on top of the global principles of the up skills.
+For each project principle the change touches, answer its plan check in the task file's Principles section.
+A design that deviates from a project principle names it and says why.
+
 Create or revise the task file {{taskFile}}.
 Set `Mode: hands-off` in it.
 Run up:udesign and then up:uplan in hands-off mode.
@@ -50,6 +56,11 @@ Committee feedback sits in the issue comments under the heading "## Committee fe
 Read that feedback first.
 It comes before the original request.
 Revise the task file to answer it.
+
+Review findings sit in the issue comments under the heading "## Review findings".
+They mean the review blocked the built change twice.
+Treat them as a sign of a core flaw in the design, not as bugs to patch.
+Find the root cause behind them and revise the design to remove it.
 
 Triage already refused most requests that go against DESIGN.md.
 If one still does, do not plan it.

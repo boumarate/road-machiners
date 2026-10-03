@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { pngBytes } from '../photo-fixtures';
 import { EMPTY_STATE, readState, writeState } from '../state';
 import type { ReleaseState } from '../types';
 import { changeLines } from './release-common';
-import { fake, reset } from './test-fakes';
+import { ROOT, fake, reset } from './test-fakes';
 
 const deployed: string[] = [];
 vi.mock('../deploy', () => ({
@@ -36,6 +38,16 @@ describe('candidate', () => {
     expect(photo.caption).toContain('Play: https://play.test/rc/');
     expect(photo.caption).toContain('2 changes, listed in the message under this post.');
     expect(readState(f.ctx.statePath).release?.postId).toBe(42);
+  });
+
+  it('lists the issues bundled into a change under it, so the changelog sums up the bundle in one line', async () => {
+    const f = fake();
+    f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: RELEASE, bundles: { '3': [8, 9] } });
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': 'png' };
+    await candidate(f.ctx, 11);
+    const input = readFileSync(join(ROOT, 'work', 'release-candidate', 'game', '.factory', 'changelog.md'), 'utf8');
+    expect(input).toBe('#3 faster trucks\n  bundled: #8 T\n  bundled: #9 T\n#5 louder horn\n');
   });
 
   it('opens the pull request to main when none is open', async () => {

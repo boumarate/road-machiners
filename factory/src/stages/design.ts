@@ -1,5 +1,6 @@
 import { BRANCH, GAME_DIR, TASK_FILE, WONT_DO_LABEL, type Ctx } from '../types';
-import { agentHome, askAuthor, baseBranchOf, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
+import { releaseBundle } from './bundle';
+import { agentHome, askAuthor, baseBranchOf, fillPrompt, fitComment, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 import { existsSync, readFileSync } from 'node:fs';
 
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
@@ -8,10 +9,10 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await ctx.repo.fetch();
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, clone);
   const home = agentHome(clone, GAME_DIR);
-  resetOutputs(home);
+  prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
   const prompt = fillPrompt('design', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) });
-  await runAgent(ctx, issue, 'design', prompt);
+  await runAgent(ctx, issue, 'design', 'design', prompt);
   throwIfNeedsCommittee(home);
   const questions = readOutput(home, 'questions.md');
   if (questions !== null) return askBack(ctx, issue, questions);
@@ -35,6 +36,7 @@ async function refuse(ctx: Ctx, issue: number, reason: string): Promise<void> {
   await ctx.github.addLabel(issue, WONT_DO_LABEL);
   await ctx.github.close(issue, 'not planned');
   await ctx.github.move(issue, 'Done');
+  await releaseBundle(ctx, issue, 'will not be built');
 }
 
 function requirePlan(home: string, taskFile: string): void {
@@ -52,11 +54,8 @@ function planText(task: string): string {
   return (end < 0 ? rest : rest.slice(0, end)).join('\n').trim();
 }
 
-// GitHub caps a comment at 65536 characters. The rest of the room holds the wrapper and the marker.
-const DESIGN_COMMENT_LIMIT = 60000;
-
 // The task file never reaches git, so the issue shows the design and plan to anyone who wants to read them.
 async function postDesign(ctx: Ctx, issue: number, taskFile: string): Promise<void> {
-  const body = taskFile.length > DESIGN_COMMENT_LIMIT ? `${taskFile.slice(0, DESIGN_COMMENT_LIMIT)}\n\n(cut here, the full file is in the factory work clone)` : taskFile;
+  const body = fitComment(taskFile, 'the factory work clone');
   await ctx.github.comment(issue, `<details>\n<summary>Design and plan</summary>\n\n${body}\n\n</details>`);
 }

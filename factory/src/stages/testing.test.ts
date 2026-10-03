@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pngBytes } from '../photo-fixtures';
 import { EMPTY_STATE, readState, writeState } from '../state';
@@ -9,6 +9,9 @@ const { runStage, approvalCaption, approvalButtons } = await import('./testing')
 
 let home = '';
 let calls: string[] = [];
+let commentBodies: string[] = [];
+// Comments already on the issue before the stage runs.
+let priorComments: { login: string; body: string }[] = [];
 let shellScript = '';
 let shellEnv: Record<string, string> | undefined;
 let photoButtons: unknown;
@@ -21,15 +24,25 @@ let bases: string[] = [];
 const queued = (): Record<string, string> => readState(`${home}/state.json`).pendingApprovals;
 let conflicts: string[] = [];
 let merged = true;
+// The review agent's outputs in order. A null means it wrote no file. Rounds past the list get a clean review.
+let reviews: (string | null)[] = [];
+const PASSED = 'No blocking issue.\n\nREVIEW_VERDICT: PASS\n';
+const failed = (finding: string): string => `${finding}\n\nREVIEW_VERDICT: FAIL\n`;
+// The prompt of every review round, in order.
+let reviewPrompts: string[] = [];
 
 beforeEach(() => {
   albums = [];
   albumFails = false;
+  reviews = [];
+  reviewPrompts = [];
   conflicts = [];
   merged = true;
   mkdirSync('tmp', { recursive: true });
   home = mkdtempSync('tmp/factory-testing-');
   calls = [];
+  commentBodies = [];
+  priorComments = [];
   openPr = null;
   labels = [];
   bases = [];
@@ -45,9 +58,9 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
     statePath: `${home}/state.json`,
     github: {
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels, createdAt: '', state: 'OPEN', thumbsUp: [] }),
-      comments: async () => [],
       move: async (issue: number, column: string) => { calls.push(`move ${issue} ${column}`); },
-      comment: async (issue: number) => { calls.push(`comment ${issue}`); },
+      comment: async (issue: number, body: string) => { calls.push(`comment ${issue}`); commentBodies.push(body); },
+      comments: async () => priorComments,
       pullRequestFor: async (branch: string) => { calls.push(`pullRequestFor ${branch}`); return openPr; },
       openPullRequest: async (branch: string, base: string, title: string, body: string) => { calls.push(`openPullRequest ${branch} ${base} ${title} | ${body}`); return 'https://github.com/o/r/pull/50'; },
     },
@@ -63,7 +76,13 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
       editCaption: async (_chat: string, id: number, caption: string) => { calls.push(`editCaption ${id} ${caption}`); },
     },
     container: {
-      agent: async (run: AgentRun) => agent(run),
+      agent: async (run: AgentRun) => {
+        if (!run.prompt.includes('review round')) return agent(run);
+        calls.push(`review ${run.model} ${run.skill}`);
+        reviewPrompts.push(run.prompt);
+        const output = reviews.length > 0 ? reviews.shift() : PASSED;
+        if (typeof output === 'string') writeFileSync(`${run.clone}/${run.dir}/.factory/review.md`, output);
+      },
       shell: async (_dir: string, script: string, _log: string, env?: Record<string, string>) => {
         shellScript = script;
         shellEnv = env;
@@ -73,6 +92,13 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
     },
     repo: {
       prepareWorkClone: async (_b: string, base: string, dir: string) => { bases.push(`prepare ${base}`); mkdirSync(dir, { recursive: true }); },
+      // The review reads the incident log and the principles from dev, whatever the card's base.
+      readFile: async (branch: string, path: string) => {
+        if (branch !== 'dev') throw new Error(`readFile from ${branch}`);
+        if (path === 'docs/incident-log.md') return 'ID: R3\nwhat: propsNear scans every prop.\n';
+        if (path === 'game/docs/architecture/principles.md') return '## 3. Hot code uses an index\n';
+        throw new Error(`no file ${path}`);
+      },
       fetchFromWork: async () => 'w1',
       untrackFactoryFiles: async () => [],
       push: async (commit: string, branch: string) => { calls.push(`push ${commit} ${branch}`); },
@@ -100,6 +126,13 @@ describe('testing stage', () => {
     expect(opened).toContain('A loud horn.');
     expect(opened).toContain('How to try: Press H.');
     expect(opened).toContain('The factory merges it when the committee approves.');
+  });
+
+  it('closes every bundled issue from the pull request too', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), bundles: { '7': [9, 12] } });
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' })));
+    await runStage(ctx, 7);
+    expect(calls.find((call) => call.startsWith('openPullRequest'))).toContain('| Closes #7, #9, #12.');
   });
 
   it('reuses the open pull request of the branch', async () => {
@@ -201,6 +234,84 @@ describe('testing stage', () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })), 2);
     await expect(runStage(ctx, 7)).rejects.toThrow('The factory checks failed twice');
     expect(calls).not.toContain('move 7 Approval');
+  });
+
+  describe('review round', () => {
+    const outputs = (run: AgentRun): void => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' }));
+
+    it('runs /code-review once on the design model after the test round and before the checks', async () => {
+      await runStage(fakeCtx(outputs), 7);
+      expect(calls.filter((call) => call.startsWith('review'))).toEqual(['review opus /code-review']);
+      expect(calls.indexOf('review opus /code-review')).toBeLessThan(calls.indexOf('checks'));
+      expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+
+    it('pastes the incident log and the principles of the clone into the review prompt', async () => {
+      await runStage(fakeCtx(outputs), 7);
+      expect(reviewPrompts[0]).toContain('ID: R3\nwhat: propsNear scans every prop.');
+      expect(reviewPrompts[0]).toContain('## 3. Hot code uses an index');
+      expect(reviewPrompts[0]).toContain('git diff origin/dev...HEAD');
+    });
+
+    it('fails on a FAIL verdict, runs one fix round with the review, then passes a second review', async () => {
+      reviews = [failed('propsNear scans every prop per check. R3.')];
+      const prompts: string[] = [];
+      let seen = '';
+      const ctx = fakeCtx((run) => {
+        prompts.push(run.prompt);
+        if (run.prompt.includes('second round')) seen = readFileSync(`${run.clone}/${run.dir}/.factory/review-findings.md`, 'utf8');
+        outputs(run);
+      });
+      await runStage(ctx, 7);
+      expect(prompts).toHaveLength(2);
+      expect(prompts[1]).toContain('second round');
+      expect(seen).toBe('propsNear scans every prop per check. R3.\n\nREVIEW_VERDICT: FAIL\n');
+      expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(2);
+      expect(existsSync(`${home}/work/issue-7/game/.factory/review-findings.md`)).toBe(false);
+      expect(calls.at(-1)).toBe('move 7 Approval');
+    });
+
+    it('sends the card back to Design with the review when the second review fails again', async () => {
+      reviews = [failed('First review.'), failed('Hot scan in far.ts. Principle 3.')];
+      await runStage(fakeCtx(outputs), 7);
+      expect(commentBodies).toHaveLength(1);
+      expect(commentBodies[0]).toContain('## Review findings');
+      expect(commentBodies[0]).toContain('Hot scan in far.ts. Principle 3.');
+      expect(calls.at(-1)).toBe('move 7 Design');
+      expect(calls).not.toContain('checks');
+      expect(calls).not.toContain('move 7 Approval');
+      expect(existsSync(`${home}/work/issue-7/game/.factory/review-findings.md`)).toBe(false);
+    });
+
+    it('throws instead of a second redesign when the card already came back from the review once', async () => {
+      priorComments = [{ login: 'factory', body: '## Review findings\n\nThe review failed this change twice.' }];
+      reviews = [failed('First review.'), failed('Still scans every prop.')];
+      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('The review failed the change twice again after a redesign.\nStill scans every prop.');
+      expect(commentBodies).toHaveLength(0);
+      expect(calls).not.toContain('move 7 Design');
+      expect(calls).not.toContain('checks');
+    });
+
+    it('throws when review.md is missing', async () => {
+      reviews = [null];
+      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('wrote no .factory/review.md');
+      expect(calls).not.toContain('checks');
+    });
+
+    it.each([
+      ['Looks fine.\n', 'must end with REVIEW_VERDICT: PASS or REVIEW_VERDICT: FAIL'],
+      ['REVIEW_VERDICT: PASS\nMore text after the verdict.\n', 'must end with'],
+      ['REVIEW_VERDICT: FAIL\nOn second thought.\nREVIEW_VERDICT: PASS\n', 'names both verdicts'],
+    ])('throws on a review with no clear verdict: %s', async (output, message) => {
+      reviews = [output];
+      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow(message);
+      expect(calls).not.toContain('checks');
+    });
+
+    it('does not reuse the first review file for the second review', async () => {
+      reviews = [failed('First review.'), null];
+      await expect(runStage(fakeCtx(outputs), 7)).rejects.toThrow('wrote no .factory/review.md');
+    });
   });
 
   it('works on the release branch for a release task and merges there', async () => {
