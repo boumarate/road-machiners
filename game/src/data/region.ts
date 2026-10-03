@@ -60,8 +60,42 @@ function bend(a: Vec, b: Vec): Vec[] {
   return points;
 }
 
-const FALLEN_SUN_POS = scalePoint({ x: 64, y: 54 });
-const FALLEN_SUN_RADIUS = 44;
+export const FALLEN_SUN_POS = scalePoint({ x: 64, y: 54 });
+// The Fallen Sun's edge, in tiles from its centre (tmp/issue-81/r4/layout.md): the basin floor in TERRAIN.features.basins,
+// inset 1.5 tiles from the cliff arcs so their faces stay outside, with the crash furrow's floor spliced in to the
+// south-south-west. It is not a circle: the furrow reaches 112 tiles out and the crags come within 40.
+const FALLEN_SUN_OUTLINE: Vec[] = [
+  { x: -45.0, y: 0.0 }, // the west scree
+  { x: -41.3, y: -15.0 },
+  { x: -31.0, y: -26.0 }, // the left crag wall, inset
+  { x: -20.9, y: -33.5 },
+  { x: -11.4, y: -39.9 },
+  { x: -6.3, y: -44.6 }, // the north notch, at the floor edge, so a road can leave through it
+  { x: 1.6, y: -45.0 },
+  { x: 7.2, y: -40.9 }, // the right crag wall and the north-east wall, inset
+  { x: 15.3, y: -47.1 },
+  { x: 27.8, y: -44.5 },
+  { x: 37.8, y: -37.8 },
+  { x: 45.9, y: -26.5 }, // the east road
+  { x: 50.2, y: -8.9 }, // the east hill's foot
+  { x: 50.2, y: 8.9 },
+  { x: 45.3, y: 21.1 },
+  { x: 39.8, y: 33.4 }, // the south-east road
+  { x: 25.5, y: 44.2 },
+  { x: 8.2, y: 46.3 }, // the open south
+  { x: -2.4, y: 55.3 }, // down the furrow's east side
+  { x: -8.6, y: 78.4 },
+  { x: -14.8, y: 101.6 },
+  { x: -21.8, y: 112.2 }, // round the furrow's far end
+  { x: -30.0, y: 112.0 },
+  { x: -37.2, y: 108.0 },
+  { x: -38.0, y: 95.4 }, // back up the furrow's west side
+  { x: -31.8, y: 72.2 },
+  { x: -25.6, y: 49.1 },
+  { x: -23.5, y: 40.7 }, // the furrow's west lip
+  { x: -37.7, y: 26.4 },
+  { x: -43.5, y: 11.6 }, // the west road
+];
 const ORCHARD_POS = { x: 114, y: 284 }; // region (22.8, 56.8), the crossroads in the flat basin west of the north trunk road
 // Old Orchard's old road runs straight through its centre, in radians from map +x toward +y, pointing to its north
 // end. It is set so the gameplay camera shows the road at the concept image's 25 degrees above screen right.
@@ -137,10 +171,9 @@ function edgePoint(from: Vec, to: Vec, centre: Vec, outline: readonly Vec[]): Ve
   return { x: from.x + d.x * t, y: from.y + d.y * t };
 }
 
-// A point r tiles from the Fallen Sun's centre at a bearing in degrees from map +x toward +y.
-function fallenSunEdge(bearing: number, r: number): Vec {
-  const a = (bearing * Math.PI) / 180;
-  return { x: FALLEN_SUN_POS.x + r * Math.cos(a), y: FALLEN_SUN_POS.y + r * Math.sin(a) };
+// A point in tiles from the Fallen Sun's centre, on the map.
+function fromFallenSun(x: number, y: number): Vec {
+  return { x: FALLEN_SUN_POS.x + x, y: FALLEN_SUN_POS.y + y };
 }
 
 // Broken Wing: a crashed ship's wing lying along the road, which runs straight east-west (map yaw 0) so the wing
@@ -299,8 +332,8 @@ export const REGION = {
       name: "Fallen Sun",
       kind: "territory",
       pos: FALLEN_SUN_POS,
-      radius: FALLEN_SUN_RADIUS,
-      outline: null,
+      radius: boundingRadius(FALLEN_SUN_OUTLINE),
+      outline: FALLEN_SUN_OUTLINE,
     },
     {
       id: "salvage-yard",
@@ -436,33 +469,34 @@ export const REGION = {
       { x: 66, y: 76 },
     ]),
     // Three dead-end approaches come down the crater bank where the level concept's tracks leave the crater: from the
-    // west (bearing 166°), the east (-16°) and the south-east (37°). Each ends 4 tiles inside the edge, where the
-    // crater's tracks take over. No road goes through the Fallen Sun. The south-east road leaves the end of the
-    // Kiln Camp track, so raiders have a short way in.
+    // west (bearing 166°), the east (-16°) and the south-east (37°). Each runs on its bearing to a point 44 tiles from
+    // the centre, round 3's edge, and ends 4 tiles further in, where the crater's tracks take over. Points are in
+    // tiles from the centre. No road goes through the Fallen Sun. The south-east road leaves the end of the Kiln Camp
+    // track, so raiders have a short way in.
     [
       ...scaleRoad([
         { x: 43, y: 54 },
         { x: 50, y: 55 },
         { x: 54, y: 57 },
       ]),
-      fallenSunEdge(166, FALLEN_SUN_RADIUS),
-      fallenSunEdge(166, FALLEN_SUN_RADIUS - 4),
+      fromFallenSun(-42.693, 10.6446),
+      fromFallenSun(-38.8118, 9.6769),
     ],
     [
       ...scaleRoad([
         { x: 82, y: 49 },
         { x: 75, y: 50 },
       ]),
-      fallenSunEdge(-16, FALLEN_SUN_RADIUS),
-      fallenSunEdge(-16, FALLEN_SUN_RADIUS - 4),
+      fromFallenSun(42.2955, -12.128),
+      fromFallenSun(38.4505, -11.0255),
     ],
     [
       ...scaleRoad([
         { x: 66, y: 76 },
         { x: 73, y: 64 },
       ]),
-      fallenSunEdge(37, FALLEN_SUN_RADIUS),
-      fallenSunEdge(37, FALLEN_SUN_RADIUS - 4),
+      fromFallenSun(35.14, 26.4799),
+      fromFallenSun(31.9454, 24.0726),
     ],
   ] as Vec[][],
   roadWidth: 6,

@@ -2,7 +2,7 @@
 // Heights are in height units; one unit rises reliefPx screen pixels. Slopes are height units per tile.
 
 import { PHYSICS } from "./physics";
-import { BROKEN_WING, BROKEN_WING_POINT, MAP_SCALE, REGION, scalePoint } from "./region";
+import { BROKEN_WING, BROKEN_WING_POINT, FALLEN_SUN_POS, MAP_SCALE, REGION, scalePoint } from "./region";
 import { FALLEN_SUN_DECKS } from "./territory";
 import type { Vec } from "../sim/vec";
 
@@ -121,6 +121,64 @@ const WING_MOUNDS: Mound[] = [-1, 1].map((end) => ({
 
 const TRENCH = BROKEN_WING.trench;
 
+// An irregular crater: a floor polygon cut to depth (elevation units), falling back to the land outside over a bank.
+// floor points are tiles from center. bank (tiles) and rim (height units the lip stands over the land outside) are per
+// floor vertex, and blend along each edge between its two vertices. The lip rises with the bank to the rim at the
+// bank's top, then falls back to the land over as many tiles again. floorRelief adds swells of up to amplitude height
+// units across the floor, fading out over the bank, at frequency cycles per tile. See basin() in src/sim/elevation.ts.
+export type Basin = {
+  center: Vec;
+  floor: Vec[];
+  bank: number[];
+  rim: number[];
+  depth: number;
+  floorRelief: { frequency: number; amplitude: number };
+};
+
+// The Fallen Sun's basin, traced around the level concept's crater frame and the second reference's crags, gap and east
+// hill (tmp/issue-81/r4/layout.md). One unit of depth is 2.1 height units, so the floor lies about 3.8 units under
+// the land. A cliff arc's inner face climbs depth plus rim over its bank: 1.5 x (3.8 + 2.5) / 3.5 = 2.7 per tile at
+// the steepest, far over drive.maxSlope. A drivable bank needs about 1.5 x 3.8 / 0.2 = 28 tiles.
+const FALLEN_SUN_BASIN: Basin = {
+  center: FALLEN_SUN_POS,
+  floor: [
+    { x: -45.0, y: 0.0 }, // v0 180 deg: the west scree, the concept's red-brown hills (upper left)
+    { x: -41.3, y: -15.0 }, // v1 -160: the scree hills, WNW
+    { x: -32.2, y: -27.0 }, // v2 -140: the second reference's left crag wall starts, a cliff
+    { x: -21.7, y: -34.8 }, // v3 -122: left crag wall
+    { x: -11.9, y: -41.3 }, // v4 -106: left crag wall's east end; the NE drum sinks at its foot
+    { x: -6.3, y: -44.6 }, // v5 -98: the north notch, the reference's gap between its crags, west side
+    { x: 1.6, y: -45.0 }, // v6 -88: the north notch, east side
+    { x: 7.5, y: -42.3 }, // v7 -80: the right crag wall
+    { x: 15.8, y: -48.5 }, // v8 -72: right crag's south foot, 6 tiles past the bow nose
+    { x: 28.6, y: -45.8 }, // v9 -58: the north-east wall behind the bow nose
+    { x: 38.9, y: -38.9 }, // v10 -45: the north-east wall behind the small drum
+    { x: 45.9, y: -26.5 }, // v11 -30: the east road comes in
+    { x: 50.2, y: -8.9 }, // v12 -10: the east hill, the second reference's bottom-right hill
+    { x: 50.2, y: 8.9 }, // v13 10: the east hill
+    { x: 45.3, y: 21.1 }, // v14 25: ESE, where the hill falls away
+    { x: 39.8, y: 33.4 }, // v15 40: the south-east road
+    { x: 25.5, y: 44.2 }, // v16 60: the concept's open south-east bottom
+    { x: 8.2, y: 46.3 }, // v17 80: the open south
+    { x: -8.3, y: 47.3 }, // v18 100: the furrow's mouth
+    { x: -23.5, y: 40.7 }, // v19 120: the furrow's mouth, west lip
+    { x: -37.7, y: 26.4 }, // v20 145: south-west
+    { x: -43.5, y: 11.6 }, // v21 165: where the west road comes in, scree
+  ],
+  // The cliff arc v2..v4 and v7..v10 is steep, with the notch's long drivable bank between. The east hill's inner face
+  // climbs 1.5 x (3.8 + 2) / 16 = 0.54 per tile, under maxSlope. The open south banks keep a dirt road under 0.2.
+  bank: [12, 10, 4, 3.5, 3.5, 30, 30, 3.5, 3.5, 4, 4, 12, 16, 16, 22, 28, 28, 28, 26, 26, 22, 12],
+  rim: [1.0, 1.5, 2.0, 2.5, 2.5, 0, 0, 2.5, 3.0, 2.5, 2.0, 0.3, 2.0, 2.0, 0.5, 0, 0, 0, 0, 0, 0.5, 1.0],
+  depth: 1.8, // the round 3 bowl's depth
+  // Swells about 16 tiles apart, kept low so a road over them stays under a grade of 0.2.
+  floorRelief: { frequency: 1 / 16, amplitude: 0.45 },
+};
+
+// A point in tiles from the Fallen Sun's centre, on the map.
+function fromFallenSun(p: Vec): Vec {
+  return { x: FALLEN_SUN_POS.x + p.x, y: FALLEN_SUN_POS.y + p.y };
+}
+
 export const TERRAIN = {
   // Elevation noise: a fractal sum of value-noise octaves. freq is cycles per tile.
   // seedOffset keeps each octave sampling a different part of the hash space.
@@ -163,6 +221,23 @@ export const TERRAIN = {
       bank: TRENCH.bank,
       depth: TRENCH.depth,
     },
+    // The Fallen Sun's crash furrow (inferred: no reference shows it): gouged from the basin's open south rim toward the
+    // south-south-west, 44 tiles long, where the ship came in. It starts 58 tiles out, so its round head stays outside
+    // the floor and the south bank dips into it. 12 tiles each side hold the wing and a lane with a flap beside it.
+    furrow: {
+      path: [{ x: -15.0, y: 56.0 }, { x: -20.7, y: 77.3 }, { x: -26.4, y: 98.5 }].map(fromFallenSun),
+      width: 12,
+      bank: 12,
+      depth: 0.5,
+    },
+    // A pit down the furrow's middle under the wing's level span (inferred), where the wing's hull piers sit low enough
+    // for their tops to stay under the deck.
+    gouge: {
+      path: [{ x: -20.4, y: 76.3 }, { x: -24.6, y: 91.8 }].map(fromFallenSun),
+      width: 3,
+      bank: 3,
+      depth: 1.25,
+    },
     // Straight decks: the road decks, each between two road points, then the Fallen Sun's. See src/sim/bridge.ts.
     decks: [CANYON_BRIDGE, WING_DECK, ...FALLEN_SUN_DECKS] as readonly DeckSpec[],
     // Broken Wing's hoop: the wing's torn root bent up over the road, a baked prop at its built size. Its feet stand
@@ -193,13 +268,8 @@ export const TERRAIN = {
         bank: 24,
         depth: 1.4,
       },
-      {
-        center: scalePoint({ x: 64, y: 54 }),
-        radius: 50,
-        bank: 20,
-        depth: 1.8,
-      },
     ] as { center: Vec; radius: number; bank: number; depth: number }[],
+    basins: [FALLEN_SUN_BASIN] as Basin[],
     mounds: WING_MOUNDS,
   },
   reliefPx: 45, // screen pixels per height unit

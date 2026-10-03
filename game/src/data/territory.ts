@@ -98,7 +98,9 @@ export type WreckRules = {
   spotRadius: [number, number]; // tiles, a field spot's footprint
   seatEase: number; // tiles over which the ground levelled under a piece eases back to the crater relief
   rimRocks: RimRocks;
-  scree: { at: Vec; radius: number } | null; // tiles from the centre; the ground there is painted red-brown scree
+  // Floor vertex indices of the territory's basin, from..to, wrapping past the last vertex. The bank of that arc is
+  // painted red-brown scree.
+  scree: { from: number; to: number } | null;
   tracks: Ruts[];
 };
 // A territory is a wreck or a farm.
@@ -238,8 +240,9 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       // -41°, and its red-brown hills on the north-west rim from (200,100) to (480,60), bearings -164° to -138°. Their
       // feet stand 37 to 45 tiles out, as at (700,120) and (950,300), so the walls close the crater floor in.
       rimRocks: { from: -170 * DEG, to: -35 * DEG, radius: [40, 46], count: 28, size: [2.5, 4] },
-      // The red-brown scree slope of the concept's upper left, from (100,250) to (300,110).
-      scree: { at: { x: -38, y: 6 }, radius: 16 },
+      // The red-brown scree slope of the concept's upper left, from (100,250) to (300,110): the basin's west bank from
+      // its south-west vertex at 145° round to the left crag wall at -140°.
+      scree: { from: 20, to: 2 },
       // Twin-rut tracks traced from the concept, bent round the pieces. Each starts or ends at a road end or another
       // track.
       tracks: [

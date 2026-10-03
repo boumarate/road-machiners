@@ -25,7 +25,7 @@ describe('territory queries', () => {
   it('puts every entry on the edge', () => {
     const entries = territoryEntries(fallenSun as never);
     expect(entries.length).toBeGreaterThan(0);
-    for (const e of entries) expect(dist(e, fallenSun.pos)).toBeCloseTo(fallenSun.radius, 6);
+    for (const e of entries) expect(Math.abs(siteGap(fallenSun, e))).toBeLessThan(1e-6);
   });
 
   it("has three roads into the Fallen Sun, where the level concept's tracks leave the crater", () => {
@@ -33,6 +33,23 @@ describe('territory queries', () => {
     const bearings = entries.map((e) => (Math.atan2(e.y - fallenSun.pos.y, e.x - fallenSun.pos.x) * 180) / Math.PI).sort((a, b) => a - b);
     expect(bearings).toHaveLength(3);
     [-16, 37, 166].forEach((want, i) => expect(Math.abs(bearings[i] - want)).toBeLessThan(10));
+  });
+
+  it("follows the Fallen Sun's outline: the furrow is inside, and the cliff faces beside the north notch are not", () => {
+    if (fallenSun.kind !== 'territory' || !fallenSun.outline) throw new Error('The Fallen Sun has no outline');
+    const at = (x: number, y: number) => ({ x: fallenSun.pos.x + x, y: fallenSun.pos.y + y });
+    expect(fallenSun.radius).toBeCloseTo(Math.max(...fallenSun.outline.map((p) => Math.hypot(p.x, p.y))), 9);
+    // Down the crash furrow, past the old 44-tile circle.
+    expect(territoryAt(at(-20, 80))?.id).toBe('fallen-sun');
+    expect(territoryAt(at(-29, 108))?.id).toBe('fallen-sun');
+    // Out on the east floor, past the old circle.
+    expect(territoryAt(at(48, 0))?.id).toBe('fallen-sun');
+    // In the north notch, and on the crag faces on either side of it, inside the old circle.
+    expect(territoryAt(at(-2, -43.5))?.id).toBe('fallen-sun');
+    expect(territoryAt(at(-21.7, -34.8))).toBeNull();
+    expect(territoryAt(at(7.5, -42.3))).toBeNull();
+    // Beside the furrow, the land stays outside.
+    expect(territoryAt(at(0, 80))).toBeNull();
   });
 
   it('keeps every road out of the hazard', () => {
@@ -204,8 +221,8 @@ describe('the Fallen Sun layout', () => {
 
   it('keeps every piece centre, cache, track point and patch inside the territory', () => {
     const points = [...pieces.map((p) => p.pos), ...territoryCaches(t), ...territoryTracks(t).flat()];
-    for (const p of points) expect(dist(p, fallenSun.pos), `${p.x},${p.y}`).toBeLessThan(fallenSun.radius);
-    for (const patch of rules.patches) expect(Math.hypot(patch.at.x, patch.at.y)).toBeLessThan(fallenSun.radius);
+    for (const p of points) expect(siteGap(fallenSun, p), `${p.x},${p.y}`).toBeLessThan(0);
+    for (const patch of rules.patches) expect(siteGap(fallenSun, { x: fallenSun.pos.x + patch.at.x, y: fallenSun.pos.y + patch.at.y })).toBeLessThan(0);
   });
 
   it("keeps caches, tracks, patches and every piece but the reactor's housing out of the hazard", () => {

@@ -17,9 +17,9 @@ import {
 } from "./terrain";
 import { emptyWorld } from "./testkit";
 import { ROAD_INDEX } from "./road-index";
-import { dist, polylineDist, segmentDist, type Vec } from "./vec";
+import { dist, polylineDist, type Vec } from "./vec";
 import { newWorld } from "./world";
-import { siteGap } from "./sites";
+import { siteEdgeCrossings, siteGap } from "./sites";
 import type { World } from "./types";
 import { TEST_MAP } from "../test/map";
 import { FALLEN_SUN_DECKS, TERRITORIES } from "../data/territory";
@@ -137,14 +137,15 @@ describe("terrain grid", () => {
 
   it('puts three dead-end approaches into the Fallen Sun without a road through it', () => {
     const wreck = REGION.locations.find((site) => site.id === 'fallen-sun')!;
-    const entering = REGION.roads.filter((road) => road.some((p) => dist(p, wreck.pos) < wreck.radius));
+    const entering = REGION.roads.filter((road) => road.some((p) => siteGap(wreck, p) < 0));
     expect(entering).toHaveLength(3);
     for (const road of REGION.roads) {
-      const firstInside = road.findIndex((p) => dist(p, wreck.pos) < wreck.radius);
+      const firstInside = road.findIndex((p) => siteGap(wreck, p) < 0);
       const outside = firstInside < 0 ? road : road.slice(0, firstInside);
       // Once a road is inside, it ends there.
-      if (firstInside >= 0) for (const p of road.slice(firstInside)) expect(dist(p, wreck.pos)).toBeLessThan(wreck.radius);
-      for (let i = 1; i < outside.length; i++) expect(segmentDist(wreck.pos, outside[i - 1], outside[i])).toBeGreaterThanOrEqual(wreck.radius);
+      if (firstInside >= 0) for (const p of road.slice(firstInside)) expect(siteGap(wreck, p)).toBeLessThan(0);
+      // Before it enters, no stretch crosses the edge.
+      for (let i = 1; i < outside.length; i++) expect(siteEdgeCrossings(wreck, outside[i - 1], outside[i])).toEqual([]);
     }
   });
 

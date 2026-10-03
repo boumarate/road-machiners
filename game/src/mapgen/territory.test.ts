@@ -26,7 +26,7 @@ const rules = TERRITORIES['fallen-sun'].wreck!;
 const reactor = TERRITORIES['fallen-sun'].reactor!;
 const zone = hazardZones().find((z) => z.id === 'fallen-sun')!;
 const pieces = territoryPieces(t);
-const inside = TEST_MAP.props.filter((p) => dist(p.pos, fallenSun.pos) < fallenSun.radius);
+const inside = TEST_MAP.props.filter((p) => siteGap(fallenSun, p.pos) < 0);
 const DEBRIS_LOOKS = new Set<string>(rules.patches.flatMap((p) => p.debris.map((d) => d.look)));
 
 // A draft over the whole region with rolling ground, so the seat levels ground both below and above a piece's centre.
@@ -80,7 +80,7 @@ describe('the territory layer', () => {
       REGION.locations.splice(0, REGION.locations.length, ...all);
     }
     const full = territoryLayer(7, rollingDraft());
-    const ofSun = (props: readonly BakedProp[]) => props.filter((p) => dist(p.pos, fallenSun.pos) < fallenSun.radius);
+    const ofSun = (props: readonly BakedProp[]) => props.filter((p) => siteGap(fallenSun, p.pos) < 0);
     expect(ofSun(full.props).length).toBeGreaterThan(0);
     expect(ofSun(full.props)).toEqual(ofSun(solo.props));
     expect(full.heights).toEqual(solo.heights);
