@@ -2,16 +2,20 @@ import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { readCommittee, telegramIds } from './committee';
 import { markPost } from './post-status';
-import { deny, feedback } from './stages/approval';
+import { deny, routeFeedback } from './stages/approval';
 import { readState, updateState } from './state';
-import { ADHOC_LABEL, RELEASE_TASK_LABEL, type Ctx, type ReleaseState } from './types';
+import { ADHOC_LABEL, RELEASE_TASK_LABEL, type Ctx, type ReleaseState, type Route } from './types';
 
 const TITLE_LIMIT = 80;
-const KINDS = ['approve', 'deny', 'feedback', 'change', 'adhoc', 'ship', 'remove', 'release-task'];
+const KINDS = ['approve', 'deny', 'reply', 'answer', 'patch', 'redesign', 'change', 'adhoc', 'ship', 'remove', 'release-task'];
+const ROUTES: Route[] = ['answer', 'patch', 'redesign'];
+const SILENT_KINDS: InboxCommand['kind'][] = ['adhoc', 'reply', 'answer'];
 
 // One committee command, written by the Hermes plugin into $FACTORY_HOME/inbox.
+// `reply` is a plain reply to an approval post that Hermes still has to route. Hermes's route tool writes kind `route`,
+// which parsing turns into the kind of its route, so a member's `patch:` reply and Hermes's patch run the same path.
 export type InboxCommand = {
-  kind: 'approve' | 'deny' | 'feedback' | 'change' | 'adhoc' | 'ship' | 'remove' | 'release-task';
+  kind: 'approve' | 'deny' | 'reply' | Route | 'change' | 'adhoc' | 'ship' | 'remove' | 'release-task';
   issue: number | null;
   text: string | null;
   by: string; // Telegram user id
@@ -26,11 +30,18 @@ export function inboxDir(home: string): string {
 }
 
 export function parseCommand(raw: string): InboxCommand {
-  const data = JSON.parse(raw) as Partial<InboxCommand>;
+  const data = routeKind(JSON.parse(raw) as Partial<InboxCommand> & { route?: unknown });
   if (!KINDS.includes(String(data.kind))) throw new Error(`Unknown inbox command kind ${data.kind}`);
   if (typeof data.by !== 'string' || typeof data.chat !== 'string' || typeof data.messageId !== 'number') throw new Error('Inbox command lacks by, chat or messageId');
   requirePostId(data.postId);
   return data as InboxCommand;
+}
+
+function routeKind(data: Partial<InboxCommand> & { route?: unknown }): Partial<InboxCommand> {
+  if ((data.kind as string) !== 'route') return data;
+  if (!ROUTES.includes(data.route as Route)) throw new Error(`Unknown route ${String(data.route)}`);
+  const { route, ...rest } = data;
+  return { ...rest, kind: route as Route };
 }
 
 function requirePostId(postId: unknown): void {
@@ -62,9 +73,10 @@ async function handleFile(ctx: Ctx, path: string): Promise<void> {
 
 // Each command gets one answer in the chat, never two.
 // A command on a post answers with a status line on that post. A reply comes only when that edit fails.
-// An ad hoc task has Hermes's own reply already, so the factory adds nothing. Other commands get the answer as a reply.
+// An ad hoc task, a reply Hermes is routing and an answer have Hermes's own reply already, so the factory adds nothing.
+// An answer also keeps the post open with its buttons. Other commands get the answer as a reply.
 async function deliver(ctx: Ctx, command: InboxCommand, answer: string): Promise<void> {
-  if (command.kind === 'adhoc') return;
+  if (SILENT_KINDS.includes(command.kind)) return;
   if (command.postId === null) return void (await ctx.telegram.sendMessage(command.chat, answer, command.messageId));
   try {
     await markPost(ctx, command, command.byName ?? command.by);
@@ -89,16 +101,41 @@ async function handle(ctx: Ctx, command: InboxCommand): Promise<string> {
 async function handleIssueCommand(ctx: Ctx, command: InboxCommand, issue: number, by: string): Promise<string> {
   if (command.kind === 'ship') return queueShip(ctx, issue, by);
   if (command.kind === 'remove') return queueRemoval(ctx, issue, by, requireText(command));
-  if (command.kind === 'feedback') {
-    const dropped = await feedback(ctx, issue, by, requireText(command));
-    const note = dropped ? ' The queued approval is dropped.' : '';
-    return `Feedback on #${issue} is on the issue. The task goes back to design.${note}`;
-  }
+  if (command.kind === 'reply') return awaitRoute(ctx, command, issue);
+  if (ROUTES.includes(command.kind as Route)) return routed(ctx, command, issue, by);
   if (command.kind === 'deny') {
     await deny(ctx, issue, by);
     return `Issue #${issue} is denied and closed.`;
   }
   return queueApproval(ctx, issue, by);
+}
+
+const ROUTE_ANSWERS: Record<Route, (issue: number) => string> = {
+  answer: (issue) => `The question on #${issue} is on the issue. The card stays in Approval.`,
+  patch: (issue) => `Patch of #${issue} is queued. Sonnet fixes the build, then the factory checks run again.`,
+  redesign: (issue) => `Feedback on #${issue} is on the issue. The task goes back to design.`,
+};
+
+// Hermes routes the reply later. Until then the state holds it, so a reply that never gets a route becomes a failure.
+function awaitRoute(ctx: Ctx, command: InboxCommand, issue: number): string {
+  const postId = requirePost(command);
+  const reply = { issue, postId, text: requireText(command), at: ctx.now().toISOString() };
+  updateState(ctx.statePath, (state) => ({ ...state, unroutedReplies: { ...state.unroutedReplies, [String(command.messageId)]: reply } }));
+  return `Reply on #${issue} waits for Hermes to route it.`;
+}
+
+// A route settles every reply still waiting on the same post, since Hermes may route after a follow-up message.
+async function routed(ctx: Ctx, command: InboxCommand, issue: number, by: string): Promise<string> {
+  const route = command.kind as Route;
+  const postId = requirePost(command);
+  updateState(ctx.statePath, (state) => ({ ...state, unroutedReplies: Object.fromEntries(Object.entries(state.unroutedReplies).filter(([, reply]) => reply.postId !== postId)) }));
+  const dropped = await routeFeedback(ctx, issue, by, requireText(command), route);
+  return `${ROUTE_ANSWERS[route](issue)}${dropped ? ' The queued approval is dropped.' : ''}`;
+}
+
+function requirePost(command: InboxCommand): number {
+  if (command.postId === null) throw new Error(`A ${command.kind} command names no post`);
+  return command.postId;
 }
 
 async function queueApproval(ctx: Ctx, issue: number, by: string): Promise<string> {

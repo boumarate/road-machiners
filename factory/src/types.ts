@@ -2,8 +2,8 @@
 
 export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Approval' | 'Done';
 
-// Stages that run agents on a card. Verify is the agent half of the Testing column.
-export type CardStage = 'triage' | 'design' | 'implement' | 'verify';
+// Stages that run agents on a card. Verify is the agent half of the Testing column. Patch applies a small committee reply to a built card.
+export type CardStage = 'triage' | 'design' | 'implement' | 'patch' | 'verify';
 export type ReleaseStage = 'release' | 'candidate' | 'ship' | 'remove';
 export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'intake' | 'tick';
 
@@ -29,6 +29,7 @@ export type FactoryConfig = {
   committeeChat: string;
   publicChannel: string;
   stageTimeoutMinutes: number;
+  replyRouteMinutes: number; // minutes Hermes has to route a plain approval reply before it becomes a failure
   releaseDays: number;
   itchTarget: string | null; // itch.io page as "user/game". Null until set, and then a release fails loud.
   butlerKey: string | null; // BUTLER_API_KEY, only ever in the env of the butler call
@@ -76,7 +77,7 @@ export type Queue = 'branch' | 'triage' | 'design' | 'implement' | 'verify' | 't
 // Queues whose jobs only run agents in work clones, with no deploy or branch move.
 export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement', 'verify'];
 export const QUEUE_OF: Record<JobStage, Queue> = {
-  triage: 'triage', design: 'design', implement: 'implement', adhoc: 'implement', verify: 'verify',
+  triage: 'triage', design: 'design', implement: 'implement', adhoc: 'implement', patch: 'implement', verify: 'verify',
   checks: 'test',
   // An incident job pushes dev, and two of them at once would pick the same log id.
   approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', change: 'branch', incident: 'branch',
@@ -120,7 +121,11 @@ export type FactoryState = {
   devFailed: string | null; // short hash of dev whose build failed. The tick skips it until dev moves or Hermes clears it.
   interrupted: number[]; // issues whose job process died and got one resume. The next job on the issue continues its agents' sessions, and its end clears the issue.
   testPhase: Record<string, TestPhase>; // issue number -> where its Testing card stands. No entry means verify runs next.
+  patching: Record<string, string>; // issue number -> the commit of its last posted build. Its Implementation card runs a patch, not an implementation.
+  unroutedReplies: Record<string, UnroutedReply>; // Telegram message id of a plain approval reply -> what it answered. A route clears it, and a late one becomes a failure.
 };
+
+export type UnroutedReply = { issue: number; postId: number; text: string; at: string };
 
 // `checks`: verify or a patch is done, the factory checks run next. `fix`: the checks failed once, verify runs the fix round.
 // `checks-after-fix`: the checks run again, and a second failure stops the card.

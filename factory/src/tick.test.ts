@@ -201,7 +201,7 @@ function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: 
   const spawned: string[][] = [];
   const github = { cards: async () => cards, candidates: async () => [], addLabel: async (n: number, l: string) => { labels.push(`${n}:${l}`); }, comments: async () => comments, removeLabel: async (n: number, l: string) => { removed.push(`${n}:${l}`); } };
   const telegram = { sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; } };
-  const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', stageTimeoutMinutes: 30, ...CFG };
+  const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', stageTimeoutMinutes: 30, replyRouteMinutes: 15, ...CFG };
   const repo = { fetch: async () => {},headHash: async (branch: string) => { if (branch !== 'dev') throw new Error(`unexpected branch ${branch}`); return devHead; } };
   const ctx = { cfg, github, telegram, repo, statePath, now: () => NOW, log: () => undefined } as unknown as Ctx;
   const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, removeContainers: async (_run, id) => { killed.push(`containers ${id}`); }, spawn: (args, _cwd, _log, id) => { spawned.push([...args, id]); return 77; } };
@@ -266,6 +266,23 @@ describe('tick', () => {
     const phases = state({ testPhase: { 2: 'checks', 3: 'fix', 4: 'checks-after-fix' } });
     const picks = chooseJobs(phases, cards, NOW, { ...CFG, maxJobsPerDay: 10, verifyWorkers: 2, testWorkers: 2 });
     expect(picks).toEqual([{ stage: 'verify', issue: 1 }, { stage: 'checks', issue: 2 }, { stage: 'verify', issue: 3 }, { stage: 'checks', issue: 4 }]);
+  });
+
+  it('runs a patch for an Implementation card with a queued patch, in the implement queue', () => {
+    const picks = chooseJobs(state({ patching: { 4: 'abc1234' } }), [card(3, 'Implementation'), card(4, 'Implementation')], NOW, { ...CFG, maxJobsPerDay: 10 });
+    expect(picks).toEqual([{ stage: 'implement', issue: 3 }, { stage: 'patch', issue: 4 }]);
+  });
+
+  it('turns a reply Hermes left unrouted past the limit into a failure, and keeps a fresh one', async () => {
+    const h = harness(null, false);
+    const old = new Date(NOW.getTime() - 20 * 60_000).toISOString();
+    const fresh = new Date(NOW.getTime() - 5 * 60_000).toISOString();
+    writeState(h.ctx.statePath, state({ unroutedReplies: { 3: { issue: 4, postId: 42, text: 'show the atlas', at: old }, 6: { issue: 5, postId: 43, text: 'x', at: fresh } } }));
+    await tick(h.ctx, '/code', h.deps);
+    const after = readState(h.ctx.statePath);
+    expect(after.unroutedReplies).toEqual({ 6: { issue: 5, postId: 43, text: 'x', at: fresh } });
+    expect(after.failures).toMatchObject([{ stage: 'feedback', issue: 4, error: expect.stringContaining('got no route within 15 minutes') }]);
+    expect(h.labels).toEqual([`4:${STUCK_LABEL}`]);
   });
 
   it('runs a checks job beside a verify agent, one per queue', () => {

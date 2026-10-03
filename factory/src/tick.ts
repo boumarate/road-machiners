@@ -56,7 +56,7 @@ function byProgress(state: FactoryState, cards: Card[]): JobPick[] {
 // The card job of a column in CARD_ORDER.
 function cardStage(state: FactoryState, card: Card): JobStage {
   if (card.column === 'Testing') return testingStage(state, card.issue);
-  if (card.column === 'Implementation') return 'implement';
+  if (card.column === 'Implementation') return String(card.issue) in state.patching ? 'patch' : 'implement';
   return card.column === 'Design' ? 'design' : 'triage';
 }
 
@@ -271,9 +271,19 @@ async function noteCap(ctx: Ctx, cards: Card[], devHead: string | null): Promise
   updateState(ctx.statePath, (s) => ({ ...s, capNoticed: true }));
 }
 
+// A plain approval reply that Hermes did not route in time becomes a failure, so the incident watch wakes Hermes and the reply is never lost.
+async function expireReplies(ctx: Ctx): Promise<void> {
+  const late = Object.entries(readState(ctx.statePath).unroutedReplies).filter(([, reply]) => minutesSince(ctx, reply.at) > ctx.cfg.replyRouteMinutes);
+  for (const [messageId, reply] of late) {
+    updateState(ctx.statePath, (state) => ({ ...state, unroutedReplies: Object.fromEntries(Object.entries(state.unroutedReplies).filter(([id]) => id !== messageId)) }));
+    await reportFailure(ctx, 'feedback', reply.issue, `The reply ${messageId} to the approval post ${reply.postId} got no route within ${ctx.cfg.replyRouteMinutes} minutes: ${reply.text}`, null);
+  }
+}
+
 // One tick: check the running jobs, run intake, clean old builds, then start every job that fits. `deps` defaults to the real process control.
 export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS): Promise<void> {
   for (const job of readState(ctx.statePath).jobs) await checkJob(ctx, job, deps);
+  await expireReplies(ctx);
   await intake(ctx);
   const cards = await releaseAnswered(ctx, await ctx.github.cards());
   cleanBuilds(ctx, cards);

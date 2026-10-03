@@ -1,7 +1,8 @@
 import { rmSync } from 'node:fs';
 import { deployDev } from '../deploy';
+import { appendLedger } from '../ledger';
 import { readState, updateState } from '../state';
-import { BRANCH, FEEDBACK_HEADING, MergeConflictError, RELEASE_CANDIDATE_LABEL, WONT_DO_LABEL, type Ctx } from '../types';
+import { BRANCH, FEEDBACK_HEADING, MergeConflictError, RELEASE_CANDIDATE_LABEL, WONT_DO_LABEL, type Ctx, type FactoryState, type Route } from '../types';
 import { BASE_BRANCH, HOTFIX_BASE, agentLog, baseBranchFor, workDir } from './common';
 import { releaseBundle } from './bundle';
 import { shipHotfix } from './hotfix';
@@ -80,14 +81,27 @@ async function mergedIntoRelease(ctx: Ctx, issue: number, title: string, by: str
   return `Issue #${issue} ${title} is merged into the release ${branch}.`;
 }
 
-// Feedback wins over an approval queued for the same issue, since the card leaves Approval. Returns whether it dropped one.
-export async function feedback(ctx: Ctx, issue: number, by: string, text: string): Promise<boolean> {
+// A routed committee reply. Every route lands on the issue with its route, and the ledger records it.
+// An answer leaves the card and its post as they are. A patch or a redesign wins over an approval queued for the same issue,
+// since the card leaves Approval. Returns whether it dropped one.
+export async function routeFeedback(ctx: Ctx, issue: number, by: string, text: string, route: Route): Promise<boolean> {
   await requireApproval(ctx, issue);
-  await ctx.github.comment(issue, `${FEEDBACK_HEADING}\n\nFrom ${by}:\n\n${text}`);
-  await ctx.github.move(issue, 'Design');
-  const dropped = String(issue) in readState(ctx.statePath).pendingApprovals;
+  await ctx.github.comment(issue, `${FEEDBACK_HEADING}\n\nFrom ${by}, routed as ${route}:\n\n${text}`);
+  appendLedger(ctx.cfg.home, { kind: 'route', issue, route, by, at: ctx.now().toISOString() });
+  if (route === 'answer') return false;
+  const state = readState(ctx.statePath);
+  const dropped = String(issue) in state.pendingApprovals;
+  if (route === 'patch') startPatch(ctx, issue, state);
+  await ctx.github.move(issue, route === 'patch' ? 'Implementation' : 'Design');
   forgetPosts(ctx, issue, true);
   return dropped;
+}
+
+// The patch checks its diff against the build the committee played, so the card keeps that commit.
+function startPatch(ctx: Ctx, issue: number, state: FactoryState): void {
+  const played = state.builds[String(issue)];
+  if (played === undefined) throw new Error(`Issue #${issue} has no recorded build, so a patch has nothing to start from`);
+  updateState(ctx.statePath, (next) => ({ ...next, patching: { ...next.patching, [String(issue)]: played } }));
 }
 
 export async function deny(ctx: Ctx, issue: number, by: string): Promise<void> {

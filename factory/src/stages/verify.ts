@@ -38,7 +38,7 @@ export function setPhase(ctx: Ctx, issue: number, phase: TestPhase): void {
 // The base moved on since design cut the branch. Testing runs on the branch with the current base merged in,
 // so the committee plays what approve will merge, and conflicts reach the agent here instead of failing approve.
 // Returns the base commit it merged.
-async function mergeBase(ctx: Ctx, issue: number, base: string, home: string): Promise<string> {
+export async function mergeBase(ctx: Ctx, issue: number, base: string, home: string): Promise<string> {
   await ctx.repo.fetch();
   const { commit, conflicts } = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
   if (conflicts.length > 0) writeFileSync(`${home}/${OUT_DIR}/merge-conflicts.md`, `${conflicts.map((file) => `- ${file}`).join('\n')}\n`);
@@ -46,7 +46,7 @@ async function mergeBase(ctx: Ctx, issue: number, base: string, home: string): P
 }
 
 // Checks the commit merged above, not the base branch. A parallel approval may move the base on meanwhile, and approve merges that newer base anyway.
-async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: string): Promise<void> {
+export async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: string): Promise<void> {
   if (!(await ctx.repo.isMerged(commit, BRANCH(issue)))) throw new Error(`The testing agent left the merge of ${base} at ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
 }
 

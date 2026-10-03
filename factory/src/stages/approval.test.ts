@@ -4,7 +4,8 @@ import { writeState, readState, EMPTY_STATE } from '../state';
 import { MergeConflictError, type Column, type Ctx, type MergeStep } from '../types';
 
 vi.mock('../deploy', () => ({ deployDev: async () => 'https://play.test/dev/' }));
-const { approve, deny, feedback } = await import('./approval');
+const { approve, deny, routeFeedback } = await import('./approval');
+const { readLedger } = await import('../ledger');
 
 let home = '';
 let calls: string[] = [];
@@ -165,12 +166,51 @@ describe('approve', () => {
   });
 });
 
-describe('feedback', () => {
-  it('comments under the heading, moves to Design and drops the posts', async () => {
-    await feedback(fakeCtx(), 7, 'bob', 'Make it louder');
-    expect(calls).toEqual(['comment 7 ## Committee feedback\n\nFrom bob:\n\nMake it louder', 'move 7 Design']);
-    expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 200: 8 });
-    expect(readState(`${home}/state.json`).builds).toEqual({ 8: 'bbb2222' });
+describe('routeFeedback', () => {
+  it('redesign comments with the route, moves to Design, drops the posts and the queued approval', async () => {
+    expect(await routeFeedback(fakeCtx(), 7, 'bob', 'Make it louder', 'redesign')).toBe(true);
+    expect(calls).toEqual(['comment 7 ## Committee feedback\n\nFrom bob, routed as redesign:\n\nMake it louder', 'move 7 Design']);
+    const state = readState(`${home}/state.json`);
+    expect(state.approvalPosts).toEqual({ 200: 8 });
+    expect(state.builds).toEqual({ 8: 'bbb2222' });
+    expect(state.pendingApprovals).toEqual({});
+    expect(state.patching).toEqual({});
+  });
+
+  it('patch keeps the played build for the patch, moves to Implementation and drops the posts', async () => {
+    await routeFeedback(fakeCtx(), 7, 'bob', 'Louder horn', 'patch');
+    expect(calls).toEqual(['comment 7 ## Committee feedback\n\nFrom bob, routed as patch:\n\nLouder horn', 'move 7 Implementation']);
+    const state = readState(`${home}/state.json`);
+    expect(state.patching).toEqual({ 7: 'aaa1111' });
+    expect(state.approvalPosts).toEqual({ 200: 8 });
+  });
+
+  it('answer only comments, and keeps the card, its posts and its queued approval', async () => {
+    expect(await routeFeedback(fakeCtx(), 7, 'bob', 'Is there a top-down atlas?', 'answer')).toBe(false);
+    expect(calls).toEqual(['comment 7 ## Committee feedback\n\nFrom bob, routed as answer:\n\nIs there a top-down atlas?']);
+    const state = readState(`${home}/state.json`);
+    expect(state.approvalPosts).toEqual({ 100: 7, 101: 7, 200: 8 });
+    expect(state.pendingApprovals).toEqual({ 7: 'bob' });
+  });
+
+  it('records every route in the ledger', async () => {
+    await routeFeedback(fakeCtx(), 7, 'bob', 'q', 'answer');
+    await routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch');
+    expect(readLedger(home, new Date(0))).toEqual([
+      { kind: 'route', issue: 7, route: 'answer', by: 'bob', at: '2026-09-30T10:00:00.000Z' },
+      { kind: 'route', issue: 7, route: 'patch', by: 'bob', at: '2026-09-30T10:00:00.000Z' },
+    ]);
+  });
+
+  it('refuses a patch for a card with no recorded build', async () => {
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, approvalPosts: { 100: 7 } });
+    await expect(routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch')).rejects.toThrow('no recorded build');
+  });
+
+  it('throws when the card is not in Approval', async () => {
+    column = 'Design';
+    await expect(routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch')).rejects.toThrow('not in Approval');
+    expect(calls).toEqual([]);
   });
 });
 

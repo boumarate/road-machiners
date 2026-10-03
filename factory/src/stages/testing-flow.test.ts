@@ -7,6 +7,7 @@ import type { AgentRun, Ctx } from '../types';
 vi.mock('../deploy', () => ({ checkScope: () => undefined, publishBuild: (_ctx: unknown, _clone: string, scope: string) => `https://play.test/${scope}/`, recordBuild: () => undefined }));
 const { runStage: runChecks, approvalCaption, approvalButtons } = await import('./checks');
 const { runStage: runVerify } = await import('./verify');
+const { runStage: runPatch } = await import('./patch');
 
 // Runs the Testing column the way the tick does: verify or checks by the card's phase, until the card leaves Testing.
 // Verify, checks, the fix round and the second checks make four jobs at most.
@@ -506,5 +507,50 @@ describe('testing stage evidence', () => {
     writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
     await runStage(fakeCtx((run) => writeEvidence(run, items(3), each(3))), 7);
     expect(calls.some((call) => call.startsWith('photo') || call.startsWith('album'))).toBe(false);
+  });
+});
+
+describe('patch stage', () => {
+  const approval = JSON.stringify({ description: 'Grid icons now top-down', howToTry: 'Press I' });
+  const patching = (): void => writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), patching: { 7: 'aaa1111' } });
+
+  it('runs one agent on the build model with the played commit, then hands the card to checks in Testing', async () => {
+    labels = ['implementation-opus'];
+    patching();
+    const runs: AgentRun[] = [];
+    await runPatch(fakeCtx((run) => { runs.push(run); writeOutputs(run, approval); }), 7);
+    expect(runs.map((run) => run.model)).toEqual(['sonnet']);
+    expect(runs[0].prompt).toContain('played the build of commit aaa1111');
+    expect(runs[0].prompt).toContain('git diff aaa1111..HEAD');
+    expect(calls).not.toContain('checks');
+    expect(calls.filter((call) => call.startsWith('review'))).toEqual([]);
+    expect(calls.at(-1)).toBe('move 7 Testing');
+    const state = readState(`${home}/state.json`);
+    expect(state.patching).toEqual({});
+    expect(state.testPhase).toEqual({ 7: 'checks' });
+    expect(bases).toContain('merge dev');
+  });
+
+  it('is followed by the factory checks and a new post, like any Testing card', async () => {
+    patching();
+    await runPatch(fakeCtx((run) => writeOutputs(run, approval)), 7);
+    await runStage(fakeCtx(() => { throw new Error('checks run no agent'); }), 7);
+    expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+    expect(calls.some((call) => call.startsWith('photo') && call.includes('Grid icons now top-down'))).toBe(true);
+  });
+
+  it('sends the card to Design with the reason when the agent finds the plan must change', async () => {
+    patching();
+    await runPatch(fakeCtx((run) => writeFileSync(`${run.clone}/${run.dir}/.factory/needs-redesign.md`, 'It needs a second sprite sheet.\n')), 7);
+    expect(commentBodies.at(-1)).toBe('## Committee feedback\n\nThe patch found that this reply needs a new plan:\n\nIt needs a second sprite sheet.');
+    expect(calls.at(-1)).toBe('move 7 Design');
+    expect(calls).not.toContain('push w1 factory/issue-7');
+    expect(readState(`${home}/state.json`).patching).toEqual({});
+    expect(readState(`${home}/state.json`).testPhase).toEqual({});
+  });
+
+  it('refuses a card with no queued patch', async () => {
+    await expect(runPatch(fakeCtx(() => undefined), 7)).rejects.toThrow('no patch queued');
   });
 });
