@@ -28,7 +28,12 @@ export type FactoryConfig = {
   telegramToken: string;
   committeeChat: string;
   publicChannel: string;
-  stageTimeoutMinutes: number;
+  triageTimeoutMinutes: number; // minutes a job of the triage queue may run before the factory stops it
+  designTimeoutMinutes: number;
+  implementTimeoutMinutes: number;
+  verifyTimeoutMinutes: number;
+  testTimeoutMinutes: number;
+  branchTimeoutMinutes: number;
   replyRouteMinutes: number; // minutes Hermes has to route a plain approval reply before it becomes a failure
   releaseDays: number;
   wasteReviewDays: number; // days between waste reviews of the factory

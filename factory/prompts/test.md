@@ -54,7 +54,7 @@ Read each image with the Read tool before you list it.
 Write `.factory/evidence.json`, the ordered list of images. The first is `screenshot.png`.
 `{"commit": "<output of git rev-parse HEAD>", "features": [{"name": "Salvage yard", "kind": "location"}], "images": [{"file": "screenshot.png", "description": "Gate and landmarks", "covers": ["Salvage yard"], "sheet": false}]}`
 List each visible change under `features`. The kind is `location`, `item`, `system` or `other`.
-Each image has a description of up to 200 characters and `covers`, the exact feature names it shows. Every feature needs an image.
+Each image has a description and `covers`, the exact feature names it shows. Keep the description under 200 characters, since the factory cuts a longer one. Every feature needs an image.
 A `location` needs three images. A `system` needs an image with `"sheet": true`.
 Files are plain relative names inside `.factory/`, PNG, JPEG or WebP, under 10 MB, and a PNG's sides add up to under 10000 pixels.
 The factory rejects the manifest when `commit` is not the final head of the branch, so write it last, after your final commit.

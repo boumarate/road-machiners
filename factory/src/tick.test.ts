@@ -202,7 +202,7 @@ function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: 
   const pinned: string[] = [];
   const github = { cards: async () => cards, candidates: async () => [], addLabel: async (n: number, l: string) => { labels.push(`${n}:${l}`); }, comments: async () => comments, removeLabel: async (n: number, l: string) => { removed.push(`${n}:${l}`); } };
   const telegram = { sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; } };
-  const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', stageTimeoutMinutes: 30, replyRouteMinutes: 15, minFreeGb: 0.001, logDays: 14, cpuLight: 0.25, cpuImplement: 0.25, cpuTest: 0.5, ...CFG };
+  const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', triageTimeoutMinutes: 30, designTimeoutMinutes: 30, implementTimeoutMinutes: 120, verifyTimeoutMinutes: 30, testTimeoutMinutes: 30, branchTimeoutMinutes: 30, replyRouteMinutes: 15, minFreeGb: 0.001, logDays: 14, cpuLight: 0.25, cpuImplement: 0.25, cpuTest: 0.5, ...CFG };
   const repo = { fetch: async () => {},headHash: async (branch: string) => { if (branch !== 'dev') throw new Error(`unexpected branch ${branch}`); return devHead; } };
   const ctx = { cfg, github, telegram, repo, statePath, now: () => NOW, log: () => undefined } as unknown as Ctx;
   const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, removeContainers: async (_run, id) => { killed.push(`containers ${id}`); }, spawn: (args, _cwd, _log, id, cpus) => { spawned.push([...args, id]); pinned.push(`${args[0]} ${cpus}`); return 77; }, cores: () => 4 };
@@ -223,6 +223,13 @@ describe('tick', () => {
     expect(h.sent).toEqual([]);
     expect(readState(h.ctx.statePath).jobs).toEqual([]);
     expect(readLedger(h.ctx.cfg.home, new Date(0))).toEqual([{ kind: 'job', id: 'design-job', stage: 'design', issue: 5, startedAt: '2026-01-10T11:00:00Z', endedAt: NOW.toISOString(), outcome: 'timeout', agents: [] }]);
+  });
+
+  it('times a job by the limit of its own queue', async () => {
+    const h = harness(job('2026-01-10T11:00:00Z', 'implement'), true);
+    await tick(h.ctx, '/code', h.deps);
+    expect(h.killed).toEqual([]);
+    expect(readState(h.ctx.statePath).jobs.map((j) => j.stage)).toEqual(['implement']);
   });
 
   it('leaves a job in time alone and starts another beside it', async () => {

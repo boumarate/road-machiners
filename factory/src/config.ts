@@ -35,7 +35,12 @@ const KEYS = {
   telegramToken: 'TELEGRAM_BOT_TOKEN',
   committeeChat: 'FACTORY_COMMITTEE_CHAT',
   publicChannel: 'FACTORY_PUBLIC_CHANNEL',
-  stageTimeoutMinutes: 'FACTORY_STAGE_TIMEOUT_MINUTES',
+  triageTimeoutMinutes: 'FACTORY_TRIAGE_TIMEOUT_MINUTES',
+  designTimeoutMinutes: 'FACTORY_DESIGN_TIMEOUT_MINUTES',
+  implementTimeoutMinutes: 'FACTORY_IMPLEMENT_TIMEOUT_MINUTES',
+  verifyTimeoutMinutes: 'FACTORY_VERIFY_TIMEOUT_MINUTES',
+  testTimeoutMinutes: 'FACTORY_TEST_TIMEOUT_MINUTES',
+  branchTimeoutMinutes: 'FACTORY_BRANCH_TIMEOUT_MINUTES',
   replyRouteMinutes: 'FACTORY_REPLY_ROUTE_MINUTES',
   releaseDays: 'FACTORY_RELEASE_DAYS',
   wasteReviewDays: 'FACTORY_WASTE_REVIEW_DAYS',
@@ -56,7 +61,7 @@ const KEYS = {
 
 const RELEASE_ONLY = new Set<keyof FactoryConfig>(['itchTarget', 'butlerKey']);
 
-const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes', 'replyRouteMinutes', 'releaseDays', 'wasteReviewDays', 'maxJobsPerDay', 'triageWorkers', 'designWorkers', 'implementWorkers', 'verifyWorkers', 'testWorkers', 'minFreeGb', 'logDays', 'cpuLight', 'cpuImplement', 'cpuTest']);
+const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'triageTimeoutMinutes', 'designTimeoutMinutes', 'implementTimeoutMinutes', 'verifyTimeoutMinutes', 'testTimeoutMinutes', 'branchTimeoutMinutes','replyRouteMinutes', 'releaseDays', 'wasteReviewDays', 'maxJobsPerDay', 'triageWorkers', 'designWorkers', 'implementWorkers', 'verifyWorkers', 'testWorkers', 'minFreeGb', 'logDays', 'cpuLight', 'cpuImplement', 'cpuTest']);
 
 export function loadConfig(env: Record<string, string | undefined>): FactoryConfig {
   const missing = Object.entries(KEYS).filter(([field, key]) => !RELEASE_ONLY.has(field as keyof FactoryConfig) && !env[key]?.trim()).map(([, key]) => key);

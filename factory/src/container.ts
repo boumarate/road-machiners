@@ -11,10 +11,11 @@ const FACTORY_LABEL = 'factory=1';
 
 // Every factory container carries the factory label. A job's containers also carry its own label, so a kill finds them.
 // A job's containers run on the CPUs of its pool. A run by hand has no pool, so its containers are not pinned.
+// TEST_TIMEOUTS=off takes the time limits off the game's tests and playtest. On this shared server they measure load, not hangs, and the job's own time limit stops a hung run.
 function baseArgs(jobId: string | null, cpus: string | null): string[] {
   const label = jobId === null ? [] : ['--label', jobLabel(jobId)];
   const pin = cpus === null ? [] : ['--cpuset-cpus', cpus];
-  return ['run', '--rm', '--label', FACTORY_LABEL, ...label, ...pin];
+  return ['run', '--rm', '--label', FACTORY_LABEL, ...label, ...pin, '-e', 'TEST_TIMEOUTS=off'];
 }
 const PROXY_URL = `http://${PROXY_NAME}:${PROXY_PORT}`;
 const NO_PROXY = 'localhost,127.0.0.1';

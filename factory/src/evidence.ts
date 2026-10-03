@@ -75,9 +75,11 @@ function parseImage(item: unknown, index: number, names: Set<string>, out: strin
   return { path, description: text, covers: list as string[], sheet: sheet === true };
 }
 
+// A long description is cut with a mark, never refused, so a wordy caption cannot stop a card.
 function requireDescription(description: unknown, at: string): string {
-  if (typeof description !== 'string' || description.trim() === '' || description.length > DESCRIPTION_LIMIT) throw new Error(`${at} needs a description of 1 to ${DESCRIPTION_LIMIT} characters`);
-  return description.trim();
+  if (typeof description !== 'string' || description.trim() === '') throw new Error(`${at} needs a description`);
+  const text = description.trim();
+  return text.length > DESCRIPTION_LIMIT ? `${text.slice(0, DESCRIPTION_LIMIT - 1).trimEnd()}…` : text;
 }
 
 // The file lives inside .factory/ by a plain relative name. Links that point outside are refused.
