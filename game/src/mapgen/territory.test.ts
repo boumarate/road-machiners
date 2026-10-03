@@ -175,7 +175,7 @@ describe('the territory layer', () => {
 
   it('lets a truck drive from each road to the side of every cache and field spot', () => {
     const w = newWorld(1337, START_KITS.standard, TEST_MAP);
-    const spots = w.obstacles.filter((o) => isLootSpot(o) && dist(o.pos, fallenSun.pos) < fallenSun.radius);
+    const spots = w.obstacles.filter((o) => isLootSpot(o) && siteGap(fallenSun, o.pos) < 0);
     const reach = (o: (typeof spots)[number]) => (propReach(o) + ECONOMY.useRange) * ECONOMY.interactionScale;
     for (const entry of territoryEntries(t)) {
       for (const spot of spots) {
