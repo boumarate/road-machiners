@@ -815,7 +815,7 @@ function swapMount(world: World, shopId: string, stockPart: PartInstance, kind: 
 
 function shouldStrip(part: PartInstance, world: World, v: Vehicle): boolean {
   if (part.hp > 0) return false;
-  const stripValue = stripYield(part) * GOODS.parts.value;
+  const stripValue = stripYield(v, part) * GOODS.parts.value;
   return stripValue > partTradePrice(world, v, part, 'sell');
 }
 

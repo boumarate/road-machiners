@@ -4,7 +4,7 @@
 // section at the end of this file.
 
 import { partDef, type PartDef, type UtilityDef, type UtilityEffect, type UtilityEffectType } from '../data/parts';
-import { EMITTER } from '../data/utilities';
+import { EMITTER, WORK } from '../data/utilities';
 import { isHostile, noteAttack, type FireBlock } from './combat';
 import { findPart } from './damage';
 import { isKnockedOut } from './defeat';
@@ -234,6 +234,11 @@ export function tickCharges(world: World): void {
 // Whether the vehicle has a mounted utility of this effect above 0 HP. Several count as one.
 export function hasWorkingUtility(v: Vehicle, effect: UtilityEffectType): boolean {
   return mountedParts(v, 'utility').some((p) => p.hp > 0 && (partDef(p.defId) as UtilityDef).effect.type === effect);
+}
+
+// How many times the old time a refit or roadside patch takes for this truck: noCraneTime, cut by a working crane.
+export function workTimeMult(v: Vehicle): number {
+  return WORK.noCraneTime / (hasWorkingUtility(v, 'crane') ? WORK.craneSpeed : 1);
 }
 
 // Ages smoke, fields, flares and lines by a turn and removes those whose turns ran out, and the lines that no

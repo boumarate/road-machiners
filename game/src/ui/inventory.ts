@@ -490,14 +490,14 @@ export class InventoryView {
       {
         class: "inv-patch",
         disabled: reason !== null,
-        title: reason ?? `Strip: ${STRIP.turns} turns for ${stripYield(part)} parts`,
+        title: reason ?? `Strip: ${STRIP.turns} turns for ${stripYield(me, part)} parts`,
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();
           this.run((world) => startStrip(world, part.id));
         },
       },
-      reason ? "Strip" : `Strip ${STRIP.turns}t/${stripYield(part)}p`,
+      reason ? "Strip" : `Strip ${STRIP.turns}t/${stripYield(me, part)}p`,
     );
   }
 

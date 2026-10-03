@@ -9,6 +9,7 @@ import { cabShield, gunLayoutScore } from './armor';
 import { findSpot, freeCells, gridOf, isMounted, itemCells, MOUNT_CELLS, mountSpots, placementError, type Cell, type Spot } from './grid';
 import { requireTown, townAt } from './sites';
 import { disarm } from './claymore';
+import { workTimeMult } from './utility';
 import { startJob } from './jobs';
 import { RULES } from '../data/rules';
 import { PERK_NUMBERS } from '../data/skills';
@@ -132,9 +133,10 @@ export function moveItem(world: World, itemId: string, to: Spot): World {
   });
 }
 
-// Turns a field refit takes: the planned turns cut by the player's machining, at least 1.
+// Turns a field refit takes: the planned turns times the truck's work time (src/sim/utility.ts), cut by the player's
+// machining, at least 1.
 export function refitTurns(world: World, v: Vehicle, planned: number): number {
-  return Math.max(1, Math.ceil(planned * (1 - skillEffect(world, v, 'machining', 'refit'))));
+  return Math.max(1, Math.ceil(planned * workTimeMult(v) * (1 - skillEffect(world, v, 'machining', 'refit'))));
 }
 
 // Turns a field refit takes to move a part off a wreck stock or a knocked-out truck. The Cannibal perk sets the
