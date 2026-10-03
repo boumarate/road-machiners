@@ -11,6 +11,7 @@ import FORMAT_2_5 from './save-fixtures/format-2-5.json';
 import FORMAT_2_6 from './save-fixtures/format-2-6.json';
 import FORMAT_2_7 from './save-fixtures/format-2-7.json';
 import FORMAT_2_8 from './save-fixtures/format-2-8.json';
+import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS } from './save-migrations';
@@ -198,5 +199,19 @@ describe('save migration 8 to 9', () => {
   it('ends a search of the old stock and keeps other searches', () => {
     expect(next.vehicles[0].job).toBeNull();
     expect(next.vehicles[1]).toEqual(FORMAT_2_8.vehicles[1]);
+  });
+});
+
+describe('save migration 9 to 10', () => {
+  it('adds no craters and gives every shot and guard round a null burst, changing nothing else', () => {
+    const next = MIGRATIONS[9](FORMAT_2_9);
+    const [shot, guard, arrived] = FORMAT_2_9.events;
+    const burstless = (rounds: object[]) => rounds.map((round) => ({ ...round, burst: null }));
+
+    expect(next).toEqual({
+      ...FORMAT_2_9,
+      craters: [],
+      events: [{ ...shot, rounds: burstless(shot.rounds!) }, { ...guard, rounds: burstless(guard.rounds!) }, arrived],
+    });
   });
 });
