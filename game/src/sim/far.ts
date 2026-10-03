@@ -1,7 +1,7 @@
 // Travel for vehicles far from the player. They have no physics body: each turn they follow their
 // stored route at the speed the physics driver would plan and burn fuel for the distance, like the physics turn. They never
-// crash, but they cannot drive into another vehicle: a truck in the way stops them just short of it. A breakable prop
-// on the way breaks.
+// crash, but they cannot drive into another vehicle: a truck in the way holds them just short of it at its speed, and
+// the next route goes around it. A breakable prop on the way breaks.
 
 import { chassisDef } from '../data/chassis';
 import { RULES } from '../data/rules';
@@ -14,6 +14,7 @@ import { burnFuel, getResources } from './resources';
 import { fuelCap, vehicleStats, type VehicleStats } from './stats';
 import { parkedVehicles, throughSpeed } from './steering';
 import { isOnRope } from './tow';
+import type { Blocker } from './nav/buckets';
 import type { MoveOrder, Obstacle, Pose, Vehicle, World } from './types';
 import { bearing, dist, segmentDist, type Vec } from './vec';
 
@@ -58,8 +59,8 @@ export function advanceFar(w: World, v: Vehicle): void {
   const s = fuelLimited(w, v, full, v.speed, order);
   const next = order.kind === 'through' ? throughSpeed(s, v.speed, dist(v.pos, order.dest), order.pace) : Math.min(s.maxSpeed, v.speed + s.accel);
   const stored = keptFarRoute(v);
-  // A new route steers around parked vehicles, like the physics driver's.
-  const points = stored && stored.dest.x === order.dest.x && stored.dest.y === order.dest.y ? stored.points : route(w, v.pos, order.dest, full.radius, parkedVehicles(w, v.id), v);
+  // A new route steers around parked vehicles, like the physics driver's, and around slower ones it could reach.
+  const points = stored && stored.dest.x === order.dest.x && stored.dest.y === order.dest.y ? stored.points : route(w, v.pos, order.dest, full.radius, farBlockers(w, v, s), v);
 
   const planned = follow(v.pos, points, (v.speed + next) / 2);
   const block = firstContact(w, v, planned.path, full.radius);
@@ -73,7 +74,8 @@ export function advanceFar(w: World, v: Vehicle): void {
   v.trail = sample(start, walk.path, walk.moved);
   v.pos = { x: end.x, y: end.y };
   v.heading = v.trail[v.trail.length - 1].heading;
-  v.speed = block || (done && order.kind === 'stopAt') ? 0 : next;
+  // A truck that catches up with another falls in behind it at its speed, and a stop order ends at rest.
+  v.speed = done && order.kind === 'stopAt' ? 0 : block ? Math.min(next, block.other.speed) : next;
   burnFuel(w, v, walk.moved);
   breakCrossed(w, v, walk.path, full.radius);
   // A blocked truck drops its route, so next turn it plans one around the vehicles now parked.
@@ -82,6 +84,19 @@ export function advanceFar(w: World, v: Vehicle): void {
     w.events.push({ t: 'arrived', vehicle: v.id });
     v.order = null;
   }
+}
+
+// The trucks a new far route steers around: parked ones, and moving ones slower than this truck's top speed within
+// a turn's drive of it, so it overtakes them as a driver would instead of trailing them. A ram target stays a target.
+function farBlockers(w: World, v: Vehicle, s: VehicleStats): Blocker[] {
+  const target = v.brain?.ramTarget;
+  const reach = s.maxSpeed + radiusOf(v);
+  const slower = w.vehicles.filter((o) => o.id !== v.id && o.id !== target && o.speed >= RULES.parkedSpeed && o.speed < s.maxSpeed && dist(o.pos, v.pos) <= reach + radiusOf(o));
+  return [...parkedVehicles(w, v.id), ...slower.map((o) => ({ pos: o.pos, r: radiusOf(o) }))];
+}
+
+function radiusOf(v: Vehicle): number {
+  return chassisDef(v.chassisId).radius;
 }
 
 // A truck without a brain has nowhere to store its route, so in a game it plans every turn. The recorder's player is
