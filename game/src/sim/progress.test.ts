@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TIME } from '../data/time';
 import { MAX_RANK, type PerkId, RANK_COSTS, XP_RULES, XP_SOURCES } from '../data/skills';
 import {
-  affordableRanks, buyRank, canBuyRank, choosePerk, cumulativeCost, hasPerk, pendingPerkPairs, practice, rankCost, ranksCoveredBy, skillEffect,
+  affordableRanks, buyCheapestRanks, buyRank, canBuyRank, choosePerk, cumulativeCost, hasPerk, pendingPerkPairs, practice, rankCost, ranksCoveredBy, skillEffect,
   skillLevel, vehicleHasPerk, xpFor, xpTodayOf,
 } from './progress';
 import { vehicleStats } from './stats';
@@ -88,6 +88,18 @@ describe('buying a rank', () => {
     expect(affordableRanks(w)).toEqual(['driving', 'perception', 'machining', 'toughness']);
     w.player.xp = RANK_COSTS[0] - 1;
     expect(affordableRanks(w)).toEqual([]);
+  });
+
+  it('spends the pool on the cheapest ranks first, ties in skill order, until none is affordable', () => {
+    const w = emptyWorld();
+    w.player.ranks.driving = 1;
+    w.player.xp = 4 * RANK_COSTS[0] + 3;
+
+    const next = buyCheapestRanks(w);
+
+    expect(next.player.ranks).toEqual({ ...w.player.ranks, perception: 1, social: 1, machining: 1, toughness: 1 });
+    expect(next.player.xp).toBe(3);
+    expect(buyCheapestRanks(next)).toBe(next);
   });
 });
 

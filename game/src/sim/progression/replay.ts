@@ -92,7 +92,7 @@ export function targetMisses(curve: Curve, archetype: Archetype, turns: number):
 function levelMiss(skill: SkillId, level: number, day: number, reached: number | null, turns: number): string[] {
   const at = reached === null ? 'never' : `day ${(reached / TIME.turnsPerDay).toFixed(1)}`;
   const verdict = missVerdict(day * TIME.turnsPerDay, reached, turns);
-  return verdict ? [`${skill} level ${level}: ${at}, target day ${day}, ${verdict}`] : [];
+  return verdict ? [`${skill} rank ${level}: ${at}, target day ${day}, ${verdict}`] : [];
 }
 
 // A level reached before its window is too early. One reached after it, or unreached once the window closed within

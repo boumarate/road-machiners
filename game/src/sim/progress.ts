@@ -160,6 +160,18 @@ export function affordableRanks(world: World): SkillId[] {
   return SKILL_IDS.filter((skill) => canBuyRank(world, skill) === null);
 }
 
+// Spends the pool on the cheapest next rank, ties in SKILL_IDS order, until no rank is affordable. The scripted
+// players of the econ harness and the progression recorder buy this way, so their runs keep the effects they earn.
+export function buyCheapestRanks(world: World): World {
+  for (;;) {
+    const affordable = affordableRanks(world);
+    if (affordable.length === 0) return world;
+    const cost = (skill: SkillId): number => rankCost(world.player.ranks[skill] + 1);
+    const cheapest = affordable.reduce((best, skill) => (cost(skill) < cost(best) ? skill : best));
+    world = buyRank(world, cheapest);
+  }
+}
+
 // ---- Perks.
 
 export type PerkPair = { skill: SkillId; level: PerkLevel; perks: PerkId[] };

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { SKILL_IDS, XP_SOURCES } from '../../data/skills';
+import { RANK_COSTS, SKILL_IDS, XP_SOURCES } from '../../data/skills';
 import { TIME } from '../../data/time';
 import type { World, XpSource } from '../types';
 import { emptyWorld } from '../testkit';
-import { record, recordFrom, recordTurns, StallWatch, type TraceLine } from './record';
+import { record, recordFrom, recordTurns, StallWatch, stepsFrom, type TraceLine } from './record';
 import { replay } from './replay';
 
 const SHORT_RUN = 60;
@@ -44,6 +44,18 @@ describe('record', () => {
     const pool = SKILL_IDS.reduce((sum, skill) => sum + curve[skill].total, 0);
     expect(pool).toBeCloseTo(world.player.xp, 6);
   }, RUN_TIMEOUT);
+});
+
+describe('record with a pool to spend', () => {
+  it('buys the ranks the pool pays for before the bot plays the turn', () => {
+    const start = emptyWorld();
+    start.player.xp = RANK_COSTS[0];
+
+    const [step] = [...stepsFrom(start, 'saver', 'trader', 1)];
+
+    expect(step.world.player.ranks).toEqual({ ...start.player.ranks, driving: 1 });
+    expect(step.world.player.xp).toBeLessThan(RANK_COSTS[0]);
+  });
 });
 
 describe('record at the player\'s death', () => {

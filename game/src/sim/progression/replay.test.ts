@@ -103,14 +103,14 @@ describe('targetMisses', () => {
 
   it('flags a level reached too early or too late', () => {
     const early = targetMisses(curveWith('social', [1, 2, 3, day(TARGET_DAYS.main[4]), null]), 'trader', day(10));
-    expect(early).toContain(`social level 2: day 0.0, target day ${TARGET_DAYS.main[2]}, too early`);
+    expect(early).toContain(`social rank 2: day 0.0, target day ${TARGET_DAYS.main[2]}, too early`);
     const late = targetMisses(curveWith('social', [day(1), day(TARGET_DAYS.main[2]), day(5), null, null]), 'trader', pastWindow(TARGET_DAYS.main[4]));
-    expect(late).toContain(`social level 4: never, target day ${TARGET_DAYS.main[4]}, too late`);
+    expect(late).toContain(`social rank 4: never, target day ${TARGET_DAYS.main[4]}, too late`);
   });
 
   it('does not flag an unreached level whose window starts after the run', () => {
     const misses = targetMisses(curveWith('social', [day(1), day(TARGET_DAYS.main[2]), day(5), day(TARGET_DAYS.main[4]), null]), 'trader', pastWindow(TARGET_DAYS.off[2]));
-    expect(misses.some((m) => m.startsWith('social level 5'))).toBe(false);
+    expect(misses.some((m) => m.startsWith('social rank 5'))).toBe(false);
     expect(offOnly(misses).length).toBeGreaterThan(0); // off skills that never level still miss
   });
 });

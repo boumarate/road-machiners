@@ -34,7 +34,7 @@ import { corePart, freeCells, goodsCount, mountedParts } from '../sim/grid';
 import { mountPart, spareParts } from '../sim/inventory';
 import { startStrip, stripYield } from '../sim/jobs';
 import { generateNpcLoadout } from '../sim/npc-loadout';
-import { affordableRanks, buyRank, rankCost, skillLevel } from '../sim/progress';
+import { buyCheapestRanks, skillLevel } from '../sim/progress';
 import { chance, randInt } from '../sim/rng';
 import {
   acceptContract,
@@ -692,18 +692,6 @@ function maybeMaintain(world: World, telemetry: Telemetry, wishlist: WishlistHit
   return world;
 }
 
-// Spends the XP pool on the cheapest next rank, ties in SKILL_IDS order, until no rank is affordable. Every policy
-// does this after each trip, so its runs keep the skill effects it earns.
-function buyAffordableRanks(world: World): World {
-  for (;;) {
-    const affordable = affordableRanks(world);
-    if (affordable.length === 0) return world;
-    const cost = (skill: SkillId): number => rankCost(world.player.ranks[skill] + 1);
-    const cheapest = affordable.reduce((best, skill) => (cost(skill) < cost(best) ? skill : best));
-    world = buyRank(world, cheapest);
-  }
-}
-
 function maybeRepairAndUpgrade(world: World, telemetry: Telemetry): World {
   const shopId = shopAt(world);
   if (!shopId || shopDef(shopId).kind !== 'garage') return world;
@@ -860,7 +848,7 @@ export function runPolicy(seed: number, policy: PolicyName, days: number): RunRe
 
   while (world.turn < endTurn) {
     const before = world.turn;
-    world = buyAffordableRanks(takeOneTrip(world, policy, telemetry, mem, wishlist, day));
+    world = buyCheapestRanks(takeOneTrip(world, policy, telemetry, mem, wishlist, day));
     if (world.turn === before) passTurns(world, telemetry, 1, 0);
     while (world.turn >= nextDayAt && day < days) {
       day++;
