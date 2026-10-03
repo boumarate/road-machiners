@@ -4,7 +4,9 @@ import { CONDITION } from "../data/wear";
 import type { Contract } from "../sim/market";
 import { partDef, PARTS } from "../data/parts";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
-import type { GameEvent, Job, PartInstance } from "../sim/types";
+import type { GameEvent, Job, PartInstance, ShotRound } from "../sim/types";
+import { makePart } from "../sim/factory";
+import { mountPart } from "../sim/inventory";
 import { maxHp } from "../sim/wear";
 import { workOf, addState } from "../sim/states";
 import { startAid } from "../sim/aid";
@@ -142,6 +144,41 @@ describe("utility log", () => {
   it("logs no line for a utility use, so smoke never reads as mechanical state", () => {
     const w = emptyWorld();
     expect(eventText(w, { t: "utility", vehicle: w.player.vehicleId, part: "p1", effect: "sprout", target: null, point: null })).toBeNull();
+  });
+});
+
+describe("harpoon log", () => {
+  // The player with a harpoon and a seen trader hauler, and the player's harpoon shot at it.
+  function harpooned(rounds: ShotRound[]) {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const harpoon = makePart(w, "harpoon", 0);
+    if (!mountPart(w, me, harpoon)) throw new Error("No deck room for the harpoon");
+    const trader = addVehicle(w, "traders", "hauler", ["stockEngine"], { x: 33, y: 30 });
+    const engine = mountedParts(trader, "engine")[0];
+    const shot: GameEvent = { t: "shot", shooter: me.id, weapon: harpoon.id, target: trader.id, aim: "body", chance: 0.4, damageChance: 0.3, side: "left", rounds };
+    return { w, me, harpoon, trader, engine, shot };
+  }
+
+  it("names the part the player's line holds", () => {
+    const s = harpooned([]);
+    s.w.lines = [{ id: "l1", from: s.me.id, fromPart: s.harpoon.id, to: s.trader.id, toPart: s.engine.id, length: 10, turnsLeft: 3 }];
+    s.shot = { ...(s.shot as Extract<GameEvent, { t: "shot" }>), rounds: [{ hit: true, crit: false, offset: 0, struck: s.trader.id, hits: [{ part: s.engine.id, damage: 2 }], blast: [] }] };
+
+    expect(eventText(s.w, s.shot)?.text).toBe(`Harpoon → ${vehicleName(s.w, s.trader.id)} · line on Stock engine (40%) · Stock engine −2`);
+  });
+
+  it("reads a harpoon that holds nothing as a miss", () => {
+    const s = harpooned([{ hit: false, crit: false, offset: 3, struck: null, hits: [], blast: [] }]);
+
+    expect(eventText(s.w, s.shot)?.text).toBe(`Harpoon → ${vehicleName(s.w, s.trader.id)} · missed (40%)`);
+  });
+
+  it("tells the player its truck tore free of a line", () => {
+    const s = harpooned([]);
+    const mine = mountedParts(s.me, "engine")[0];
+
+    expect(eventText(s.w, { t: "lineTorn", line: "l1", vehicle: s.me.id, part: mine.id, damage: 12 })).toMatchObject({ text: `You tear free of a harpoon line · ${partDef(mine.defId).name} −12`, cls: "bad" });
   });
 });
 

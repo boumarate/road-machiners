@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { XP_TO_REACH } from '../data/skills';
+import { partDef, type UtilityDef } from '../data/parts';
 import { hitOdds } from '../sim/combat';
+import { makePart } from '../sim/factory';
+import { mountPart } from '../sim/inventory';
 import { corePart } from '../sim/grid';
 import { vehicleStats } from '../sim/stats';
 import { addVehicle, emptyWorld } from '../sim/testkit';
@@ -124,5 +127,37 @@ describe('hover card rows', () => {
   it('throws for an unknown truck', () => {
     const { world } = createDuel();
     expect(() => hitCardRows(world, 'nobody')).toThrow();
+  });
+});
+
+describe('hover card harpoon row', () => {
+  // The player facing east with a harpoon on its deck, and a buggy 5 tiles east in sight.
+  function harpoonDuel() {
+    const world = emptyWorld();
+    const me = world.vehicles[0];
+    me.heading = 0;
+    const harpoon = makePart(world, 'harpoon', 0);
+    if (!mountPart(world, me, harpoon)) throw new Error('No deck room for the harpoon');
+    const them = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 35, y: 30 }, Math.PI / 2);
+    refreshVision(world);
+    return { world, me, harpoon, them };
+  }
+
+  it('shows the harpoon on its utility key with its chance from hitOdds', () => {
+    const { world, me, them } = harpoonDuel();
+    const odds = hitOdds(world, me, { def: partDef('harpoon') as UtilityDef }, them, 'body');
+
+    const row = hitCardRows(world, them.id)!.mine.find((r) => r.label === '[5] Harpoon');
+
+    expect(row).toMatchObject({ odds, text: `${Math.round(odds.chance * 100)}%` });
+  });
+
+  it('shows a recharging harpoon with its turns left and no odds', () => {
+    const { world, harpoon, them } = harpoonDuel();
+    harpoon.charge = { reload: 3 };
+
+    const row = hitCardRows(world, them.id)!.mine.find((r) => r.label === '[5] Harpoon');
+
+    expect(row).toMatchObject({ odds: null, text: 'recharging 3 turns' });
   });
 });

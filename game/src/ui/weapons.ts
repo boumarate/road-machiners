@@ -199,7 +199,7 @@ function pickText(part: PartInstance): string {
   return PICK_TEXT[kind];
 }
 
-function utilityBlockText(part: PartInstance, block: FireBlock): string {
+export function utilityBlockText(part: PartInstance, block: FireBlock): string {
   if (block === "cooldown") return `recharging ${turns(chargeOf(part).reload)}`;
   return block === "disabled" ? "broken" : BLOCK_TEXT[block];
 }

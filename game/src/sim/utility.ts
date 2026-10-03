@@ -6,10 +6,10 @@ import type { FireBlock } from './combat';
 import { findPart } from './damage';
 import { isKnockedOut } from './defeat';
 import { isMounted, mountedParts } from './grid';
+import { endLines, fireHarpoon, harpoonBlock } from './harpoon';
 import { deploySmoke, dropField, oilShort, spillOil } from './hazards';
 import type { ChargeState, PartInstance, UtilityOrder, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
-import { canVehicleSee } from './vision';
 import { wornDef, wornTurns } from './wear';
 
 // What a part does when used: a utility effect, or arming a claymore ram.
@@ -63,7 +63,7 @@ const ARMS: Record<UseKind, (world: World, use: Use) => void> = {
     deploySmoke(world, vehicle, pointOf(order), e.radius, e.turns);
   },
   flare: notBuilt('flare'),
-  harpoon: notBuilt('harpoon'),
+  harpoon: (world, { vehicle, part, order }) => fireHarpoon(world, vehicle, part, truckOf(order)),
   caltrops: (world, { vehicle, part }) => dropField(world, vehicle, 'caltrops', effectOf(part, 'caltrops')),
   oil: (world, { vehicle, part }) => spillOil(world, vehicle, effectOf(part, 'oil')),
   claymore: notBuilt('claymore'),
@@ -76,6 +76,11 @@ function effectOf<T extends UtilityEffectType>(part: PartInstance, type: T): Ext
   const def = partDef(part.defId);
   if (def.kind !== 'utility' || def.effect.type !== type) throw new Error(`${def.name} is not a ${type}`);
   return def.effect as Extract<UtilityEffect, { type: T }>;
+}
+
+function truckOf(order: UtilityOrder): Extract<UtilityOrder, { kind: 'truck' }> {
+  if (order.kind !== 'truck') throw new Error(`A ${order.kind} order has no truck`);
+  return order;
 }
 
 function pointOf(order: UtilityOrder): Vec {
@@ -150,7 +155,7 @@ function costError(world: World, v: Vehicle, def: PartDef): string | null {
 }
 
 function targetError(world: World, v: Vehicle, part: PartInstance, order: UtilityOrder): string | null {
-  if (order.kind === 'truck') return truckOrderError(world, v, order);
+  if (order.kind === 'truck') return truckOrderError(world, v, part, order);
   if (order.kind === 'point' && pointBlock(v, part, order.pos)) return `${partDef(part.defId).name}: range`;
   return null;
 }
@@ -170,12 +175,13 @@ export function pointBlock(v: Vehicle, part: PartInstance, pos: Vec): FireBlock 
   return d < minRange || d > maxRange ? 'range' : null;
 }
 
-function truckOrderError(world: World, v: Vehicle, order: Extract<UtilityOrder, { kind: 'truck' }>): string | null {
+// A truck order follows the gun rules: the harpoon's sight, cover, range and arc.
+function truckOrderError(world: World, v: Vehicle, part: PartInstance, order: Extract<UtilityOrder, { kind: 'truck' }>): string | null {
   const target = world.vehicles.find((x) => x.id === order.targetId);
   if (!target || target.id === v.id) return `Bad target ${order.targetId}`;
-  if (!canVehicleSee(world, v, target.pos)) return 'Target is not in sight';
   if (order.aim !== 'body' && !findPart(target, order.aim)) return `Target has no part ${order.aim}`;
-  return null;
+  const block = harpoonBlock(world, v, part, target);
+  return block ? `${partDef(part.defId).name}: ${block}` : null;
 }
 
 // The activation step, after movement and vision and before the guns fire. Every order acts once and is cleared.
@@ -223,12 +229,14 @@ export function hasWorkingUtility(v: Vehicle, effect: UtilityEffectType): boolea
   return mountedParts(v, 'utility').some((p) => p.hp > 0 && (partDef(p.defId) as UtilityDef).effect.type === effect);
 }
 
-// Ages smoke, fields, flares and lines by a turn and removes those whose turns ran out.
+// Ages smoke, fields, flares and lines by a turn and removes those whose turns ran out, and the lines that no
+// longer hold.
 export function advanceUtilityEffects(world: World): void {
   world.smoke = aged(world.smoke);
   world.fields = aged(world.fields);
   world.flares = aged(world.flares);
   world.lines = aged(world.lines);
+  endLines(world);
 }
 
 function aged<T extends { turnsLeft: number }>(effects: T[]): T[] {

@@ -68,8 +68,7 @@ import { sunAt } from "../sim/sun";
 import { markError, markVehicle } from "../sim/detect";
 import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
-import { SmokeCloudsView } from "./render/smoke";
-import { GroundFieldsView } from "./render/fields";
+import { HazardViews } from "./render/hazards";
 import { UtilityAim } from "./utility-aim";
 import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
@@ -129,8 +128,7 @@ export class Game {
   private readonly zones = new ZonesView();
   private readonly contacts = new ContactsView();
   private readonly dust = new DustCloudsView();
-  private readonly smoke = new SmokeCloudsView();
-  private readonly fields = new GroundFieldsView();
+  private readonly hazards = new HazardViews();
   private readonly utilityAim = new UtilityAim({ world: () => this.world, apply: (next) => this.apply(next), note: (text) => this.hud.note(this.world, text, "bad") });
   private readonly soundRing = new SoundRingView();
   private readonly path: PathView;
@@ -240,8 +238,7 @@ export class Game {
       this.hoverArcs.root,
       this.contacts.root,
       this.dust.root,
-      this.smoke.root,
-      this.fields.root,
+      this.hazards.root,
       this.utilityAim.root,
       this.soundRing.root,
     );
@@ -1110,8 +1107,7 @@ export class Game {
     this.placePickRing(hide);
     this.contacts.update(this.world.terrain, this.world.player.contacts, playerVehicle(this.world).pos, this.world.turn, performance.now());
     this.dust.update(this.world, this.world.terrain, performance.now());
-    this.smoke.update(this.world, this.world.terrain, performance.now());
-    this.fields.update(this.world, this.world.terrain);
+    this.hazards.update(this.world, this.world.terrain, this.views, performance.now());
     this.utilityAim.draw(this.world, this.world.terrain, this.hoverGround, !steer);
     const meFrame = this.frames[playerVehicle(this.world).id];
     this.soundRing.update(

@@ -1,0 +1,108 @@
+// Harpoon lines in physics (src/phys/drive.ts): a one-sided spring between two trucks that tears under a hard pull.
+
+import { beforeAll, describe, expect, it } from 'vitest';
+import { PHYSICS } from '../data/physics';
+import { HARPOON } from '../data/utilities';
+import { mountedParts } from '../sim/grid';
+import { lineAnchors, type LineAnchor } from '../sim/harpoon';
+import { addVehicle, emptyWorld } from '../sim/testkit';
+import type { Vehicle, World } from '../sim/types';
+import { buildDrive, freeDrive, initPhysics, simulateTurn, syncDrive, TURN_STEPS, type Drive, type TurnResult } from './drive';
+import { rotateBy } from './frames';
+import { applyTurn } from './turn';
+
+beforeAll(async () => {
+  await initPhysics();
+});
+
+const S = PHYSICS.metersPerTile;
+// A pace in tiles per turn whose throttle, at a standstill, is half of full.
+const HALF_THROTTLE = ((0.5 / PHYSICS.driver.throttleGain) * PHYSICS.turnSeconds) / S;
+
+// A parked hauler with a harpoon and a scout 3 tiles ahead of it, both facing east, held by a line that is just taut.
+// The scout drives east at the given pace in tiles per turn, or as fast as it can.
+function tethered(pace?: number): { w: World; hauler: Vehicle; scout: Vehicle } {
+  const w = emptyWorld();
+  const hauler = addVehicle(w, 'traders', 'hauler', ['stockEngine', 'harpoon'], { x: 30, y: 30 });
+  const scout = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 33, y: 30 });
+  w.vehicles = w.vehicles.filter((v) => v.id === w.player.vehicleId || v === hauler || v === scout);
+  w.vehicles[0].pos = { x: 30, y: 26 };
+  const harpoon = mountedParts(hauler, 'utility')[0];
+  const held = mountedParts(scout, 'engine')[0];
+  w.lines = [{ id: 'l1', from: hauler.id, fromPart: harpoon.id, to: scout.id, toPart: held.id, length: 0, turnsLeft: 3 }];
+  w.lines[0].length = anchorGap(scout, hauler, lineAnchors(w)[0]);
+  scout.order = { kind: 'through', dest: { x: 80, y: 30 }, ...(pace === undefined ? {} : { pace }) };
+  return { w, hauler, scout };
+}
+
+// Meters between the anchors on the ground plane, from the trucks' sim poses.
+function anchorGap(scout: Vehicle, hauler: Vehicle, line: LineAnchor): number {
+  const at = (v: Vehicle, p: { x: number; z: number }) => ({
+    x: v.pos.x * S + Math.cos(v.heading) * p.x - Math.sin(v.heading) * p.z,
+    z: v.pos.y * S + Math.sin(v.heading) * p.x + Math.cos(v.heading) * p.z,
+  });
+  const a = at(hauler, line.fromAt);
+  const b = at(scout, line.toAt);
+  return Math.hypot(b.x - a.x, b.z - a.z);
+}
+
+// Plays turns of physics, carrying the drive from turn to turn, and applies each turn's result to the world.
+// Ages nothing, so only the pull ends the line. Returns each turn's result before its drive is freed.
+function play(w: World, turns: number, each: (r: TurnResult, turn: number) => void): void {
+  let d: Drive = buildDrive(w);
+  for (let i = 0; i < turns; i++) {
+    syncDrive(d, w);
+    const r = simulateTurn(d, w);
+    applyTurn(w, r);
+    each(r, i);
+    freeDrive(d);
+    d = r.next;
+  }
+  freeDrive(d);
+}
+
+describe('harpoon line physics', () => {
+  it('tears within 2 turns when a scout drives away at full throttle, and damages the held part once', () => {
+    const { w, scout } = tethered();
+    const held = mountedParts(scout, 'engine')[0];
+    const hp = held.hp;
+    const tears: number[] = [];
+
+    play(w, 2, (r, turn) => tears.push(...r.tears.map((t) => turn * TURN_STEPS + t.step)));
+
+    expect(tears).toHaveLength(1);
+    expect(w.lines).toEqual([]);
+    expect(held.hp).toBe(hp - HARPOON.tearDamage);
+  });
+
+  it('holds a scout at half throttle within a meter of its length', () => {
+    const { w, hauler, scout } = tethered(HALF_THROTTLE);
+    let worst = 0;
+
+    const line = lineAnchors(w)[0];
+
+    play(w, 3, (r) => {
+      expect(r.tears).toEqual([]);
+      r.frames[hauler.id].forEach((a, step) => {
+        const b = r.frames[scout.id][step];
+        const pa = rotateBy(a.rot, line.fromAt);
+        const pb = rotateBy(b.rot, line.toAt);
+        const gap = Math.hypot(b.pos.x + pb.x - a.pos.x - pa.x, b.pos.z + pb.z - a.pos.z - pa.z);
+        worst = Math.max(worst, gap - line.length);
+      });
+    });
+
+    expect(w.lines).toHaveLength(1);
+    expect(worst).toBeLessThanOrEqual(1);
+  });
+
+  it('does not pull a slack line', () => {
+    const { w, hauler } = tethered();
+    w.lines[0].length = 50;
+    const start = { ...hauler.pos };
+
+    play(w, 1, (r) => expect(r.tears).toEqual([]));
+
+    expect(hauler.pos.x).toBeCloseTo(start.x, 1);
+  });
+});

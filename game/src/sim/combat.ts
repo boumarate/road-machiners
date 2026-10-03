@@ -25,7 +25,8 @@ import { chance, gauss, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
 import { vehicleMass } from './mass';
 import { vehicleStats, type MountedWeapon } from './stats';
-import { partDef, type WeaponDef } from '../data/parts';
+import { partDef, type ShotDef, type UtilityDef, type WeaponDef } from '../data/parts';
+import type { Tier } from '../data/market';
 import type { Aim, GunState, NpcActivity, PartInstance, ShotRound, Vehicle, VehicleHits, World } from './types';
 import { weatherAt } from './weather';
 import { smokeCrosses } from './hazards';
@@ -93,17 +94,34 @@ function isLawman(v: Vehicle): boolean {
   return v.brain?.traits.includes("lawman") === true;
 }
 
+// What a shot is fired from: a gun, or a utility that fires a shot, such as the harpoon. Only its def counts.
+export type ShotSource = { def: WeaponDef | UtilityDef };
+// A mounted shot source and the sides of the truck it can fire toward, past the tall parts around it.
+export type AimedSource = ShotSource & { sides: Side[] };
+
+// The numbers a shot is aimed and rolled with. A utility's shot never strays: its one round lands on its target or
+// on the ground.
+type ShotNumbers = ShotDef & { id: string; tier: Tier; stray: number };
+
+function shotNumbers(src: ShotSource): ShotNumbers {
+  const def = src.def;
+  if (def.kind === "weapon") return def;
+  if (!def.shot) throw new Error(`${def.name} fires no shot`);
+  return { ...def.shot, id: def.id, tier: def.tier, stray: 0 };
+}
+
 // The target lies in the gun's own arc and on a side that no tall part blocks.
-export function inArc(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): boolean {
+export function inArc(shooter: Vehicle, mw: AimedSource, target: Vehicle): boolean {
   return inGunArc(shooter, mw, target) && sideOpen(shooter, mw, target);
 }
 
-function inGunArc(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): boolean {
-  if (mw.def.arc >= 360) return true;
-  return Math.abs(angleDiff(shooter.heading, bearing(shooter.pos, target.pos))) <= (mw.def.arc / 2) * DEG;
+function inGunArc(shooter: Vehicle, src: ShotSource, target: Vehicle): boolean {
+  const { arc } = shotNumbers(src);
+  if (arc >= 360) return true;
+  return Math.abs(angleDiff(shooter.heading, bearing(shooter.pos, target.pos))) <= (arc / 2) * DEG;
 }
 
-function sideOpen(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): boolean {
+function sideOpen(shooter: Vehicle, mw: AimedSource, target: Vehicle): boolean {
   return mw.sides.includes(sideToward(shooter, target.pos));
 }
 
@@ -163,16 +181,17 @@ function tickGun(part: PartInstance, fired: boolean): void {
   gun.reloadWork = 0;
 }
 
-// Two trucks on a radio call hold fire at each other.
-function targetBlock(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle): FireBlock | null {
+// Why a gun or a utility's shot cannot reach the target right now, or null. Two trucks on a radio call hold fire at
+// each other.
+export function targetBlock(world: World, shooter: Vehicle, mw: AimedSource, target: Vehicle): FireBlock | null {
   if (onCall(world, shooter, target)) return "talking";
   if (!canVehicleSee(world, shooter, target.pos)) return "unseen";
   if (!hasLineOfFire(world, shooter.pos, target.pos)) return "covered";
-  if (dist(shooter.pos, target.pos) > mw.def.range) return "range";
+  if (dist(shooter.pos, target.pos) > shotNumbers(mw).range) return "range";
   return arcBlock(shooter, mw, target);
 }
 
-function arcBlock(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): FireBlock | null {
+function arcBlock(shooter: Vehicle, mw: AimedSource, target: Vehicle): FireBlock | null {
   if (!inGunArc(shooter, mw, target)) return "arc";
   return sideOpen(shooter, mw, target) ? null : "blocked";
 }
@@ -328,11 +347,12 @@ function bodyChanceOf(
   return o.chance + (1 - promoted) * (onBody - onBoth);
 }
 
-// F2. A round hits when its angular error is smaller than the target's half-angle as seen from the gun.
+// F2. A round hits when its angular error is smaller than the target's half-angle as seen from the gun. src is a gun
+// or a utility that fires a shot.
 export function hitOdds(
   world: World,
   shooter: Vehicle,
-  mw: MountedWeapon,
+  src: ShotSource,
   target: Vehicle,
   aim: Aim,
 ): HitOdds {
@@ -342,10 +362,11 @@ export function hitOdds(
   const a = aiming(shooter, target, aim);
   const width = a.width;
   const halfAngle = width / (2 * distance);
-  const causes = spreadCauses(world, shooter, mw, target);
+  const shot = shotNumbers(src);
+  const causes = spreadCauses(world, shooter, shot, target);
   const spread = Object.values(causes).reduce((sum, cause) => sum + cause, 0);
   if (!(spread > 0))
-    throw new Error(`Spread ${spread} of ${mw.def.id} is not positive`);
+    throw new Error(`Spread ${spread} of ${shot.id} is not positive`);
   const chance = clamp(
     rawChance({ halfAngle, spread }),
     RULES.minHit,
@@ -353,7 +374,7 @@ export function hitOdds(
   );
   const bodyChance = bodyChanceOf(a, { chance, halfAngle, spread, distance });
   const odds = { chance, bodyChance, distance, width, halfAngle, spread, causes };
-  const damageChance = damageChanceOf({ world, shooter, target, round: mw.def.round, stray: mw.def.stray, aim, a }, odds);
+  const damageChance = damageChanceOf({ world, shooter, target, round: shot.round, stray: shot.stray, aim, a }, odds);
   return { ...odds, damageChance };
 }
 
@@ -483,8 +504,8 @@ function strayReach(c: Reach, candidates: { value: Vehicle; weight: number }[]):
 
 // Each cause of a shot's spread. The steady aim perk takes the shake of the player's own speed away. A target that
 // stands still takes a share off the whole spread, so a stuck or parked truck is easy to hit.
-function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle): HitOdds["causes"] {
-  const weapon = mw.def.spread * DEG;
+function spreadCauses(world: World, shooter: Vehicle, shot: ShotNumbers, target: Vehicle): HitOdds["causes"] {
+  const weapon = shot.spread * DEG;
   const n = across(shooter, target);
   const rel = {
     x: mps(target.speed) * Math.cos(target.heading) - mps(shooter.speed) * Math.cos(shooter.heading),
@@ -493,11 +514,11 @@ function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target:
   const steady = vehicleHasPerk(world, shooter, "steadyAim");
   const base = {
     weapon,
-    range: weapon * RULES.rangeFalloff[mw.def.tier] * (dist(shooter.pos, target.pos) / mw.def.range) ** 2,
+    range: weapon * RULES.rangeFalloff[shot.tier] * (dist(shooter.pos, target.pos) / shot.range) ** 2,
     skill: -weapon * skillEffect(world, shooter, "perception", "spread"),
-    crossing: (RULES.leadError * Math.abs(rel.x * n.x + rel.y * n.y)) / mw.def.round.speed,
-    own: steady ? 0 : RULES.shake * mw.def.shake * mps(Math.abs(shooter.speed)),
-    recoil: (mw.def.recoil * DEG) / (vehicleMass(shooter) / KG_PER_TONNE),
+    crossing: (RULES.leadError * Math.abs(rel.x * n.x + rel.y * n.y)) / shot.round.speed,
+    own: steady ? 0 : RULES.shake * shot.shake * mps(Math.abs(shooter.speed)),
+    recoil: (shot.recoil * DEG) / (vehicleMass(shooter) / KG_PER_TONNE),
     weather: vehicleHasPerk(world, shooter, "stormRider") ? 0 : weatherAt(world, shooter.pos).spread,
     smoke: smokeCrosses(world, shooter.pos, target.pos) ? SMOKE.spread : 0,
   };
@@ -644,11 +665,29 @@ function resolveRound(world: World, s: Shot, roll: Roll): ShotRound {
 // A hit enters the lane under its offset, or the aimed part's lane. An aimed miss that lands on the truck enters
 // the lane under its offset. A miss off the truck may stray into another truck near the line of fire.
 function landRound(world: World, s: Shot, roll: Roll, offset: number): Landing {
-  const { side, lanes, body } = s.aiming;
-  if (!roll.hit && Math.abs(offset) >= body / 2) return strayRound(world, s, missPoint(s.shooter, s.target, offset));
-  const lane = roll.hit && s.aiming.lane !== null ? s.aiming.lane : laneOfOffset(side, body, lanes, offset);
-  const hits = walkLane(world, s.target, side, lane, directRound(s.mw.def.round, roll.crit));
-  return { struck: s.target, lane, hits, point: lanePoint(s.target, side, lane) };
+  const lane = enteredLane(s.aiming, roll, offset);
+  if (lane === null) return strayRound(world, s, missPoint(s.shooter, s.target, offset));
+  const hits = walkLane(world, s.target, s.aiming.side, lane, directRound(s.mw.def.round, roll.crit));
+  return { struck: s.target, lane, hits, point: lanePoint(s.target, s.aiming.side, lane) };
+}
+
+// The target's lane a round enters, or null when it lands off the truck.
+function enteredLane(a: Aiming, roll: Roll, offset: number): number | null {
+  if (!roll.hit && Math.abs(offset) >= a.body / 2) return null;
+  return roll.hit && a.lane !== null ? a.lane : laneOfOffset(a.side, a.body, a.lanes, offset);
+}
+
+// One round from a utility's shot, rolled and landed on its target as a gun's round. A miss off the truck lands on
+// the ground and strays into nobody, and nothing splashes. The harpoon fires this way. The caller judges the attack.
+export function landSingleRound(world: World, shooter: Vehicle, src: ShotSource, target: Vehicle, aim: Aim): { odds: HitOdds; side: Side; round: ShotRound } {
+  const odds = hitOdds(world, shooter, src, target, aim);
+  const a = aiming(shooter, target, aim);
+  const roll = rollRound(world, odds, a);
+  const offset = a.center + roll.error * odds.distance;
+  const lane = enteredLane(a, roll, offset);
+  if (lane === null) return { odds, side: a.side, round: { hit: false, crit: false, offset, struck: null, hits: [], blast: [] } };
+  const hits = walkLane(world, target, a.side, lane, directRound(shotNumbers(src).round, roll.crit));
+  return { odds, side: a.side, round: { hit: true, crit: roll.crit, offset, struck: target.id, hits, blast: [] } };
 }
 
 // The round that walks the lane it landed in. A crit multiplies its damage and pen.

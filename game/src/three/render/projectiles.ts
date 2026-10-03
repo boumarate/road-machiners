@@ -3,7 +3,7 @@
 // ground, so the sim's spread shows. Render-only: randomness here never changes rules.
 
 import * as THREE from 'three';
-import { PARTS } from '../../data/parts';
+import { PARTS, type ShotDef } from '../../data/parts';
 import { computeRoundPoint, type V3 } from '../../phys/frames';
 import { PAL } from '../../render/palette';
 import type { ShotRound } from '../../sim/types';
@@ -33,7 +33,7 @@ export type ProjectileSpec = {
 };
 
 // The shot band is CONFIG.combatShotMs, so slow rounds mostly fly the rest of the band and fast ones a part of it.
-// Keys are weapon part def ids, plus guard for town and camp guns.
+// Keys are weapon part def ids and the ids of utilities that fire a shot, plus guard for town and camp guns.
 export const PROJECTILES: Record<string, ProjectileSpec> = {
   mg: { look: 'tracer', speed: 220, gapMs: 80, length: 1.4, width: 0.05, color: PAL.flash, flash: 0.6, wobble: 0 },
   guard: { look: 'tracer', speed: 220, gapMs: 80, length: 1.4, width: 0.05, color: PAL.flash, flash: 0.6, wobble: 0 },
@@ -56,15 +56,22 @@ export const PROJECTILES: Record<string, ProjectileSpec> = {
   slugCannon: { look: 'shell', speed: 100, gapMs: 150, length: 0.4, width: 0.14, color: 0xffad50, flash: 1, wobble: 0 },
   recoilless: { look: 'shell', speed: 60, gapMs: 0, length: 0.7, width: 0.2, color: 0xffad50, flash: 1.6, wobble: 0 },
   grenadeLauncher: { look: 'grenade', speed: 45, gapMs: 160, length: 0.3, width: 0.3, color: 0x4a4a3c, flash: 0.9, wobble: 0 },
+  // The harpoon's barbed bolt trails its line, so it flies slow and pale like the rope.
+  harpoon: { look: 'shell', speed: 70, gapMs: 0, length: 1, width: 0.1, color: PAL.rope, flash: 0.5, wobble: 0 },
   rocketRack: { look: 'missile', speed: 40, gapMs: 110, length: 0.9, width: 0.16, color: 0x6a6a64, flash: 0.9, wobble: 0.5 },
 };
 
-// The blast radius in meters of a weapon's rounds, or 0 for rounds that do not explode. Guard guns fire bullets.
+// The blast radius in meters of a weapon's or a shooting utility's rounds, or 0 for rounds that do not explode. Guard
+// guns fire bullets.
 export function blastRadiusOf(key: string): number {
-  if (key === 'guard') return 0;
+  return key === 'guard' ? 0 : roundOf(key).splashRadius;
+}
+
+function roundOf(key: string): ShotDef['round'] {
   const def = PARTS[key];
-  if (def?.kind !== 'weapon') throw new Error(`${key} is not a weapon`);
-  return def.round.splashRadius;
+  if (def?.kind === 'weapon') return def.round;
+  if (def?.kind === 'utility' && def.shot) return def.shot.round;
+  throw new Error(`${key} fires no shot`);
 }
 
 export function projectileOf(key: string): ProjectileSpec {

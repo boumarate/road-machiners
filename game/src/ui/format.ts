@@ -284,9 +284,13 @@ function spanLine(cls: string, spans: LogSpan[]): LogLine {
   return { text: spans.map((s) => s.text).join(''), cls, spans };
 }
 
+function shotText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLine | null {
+  return firedByUtility(world, e) ? harpoonText(world, e) : gunShotText(world, e);
+}
+
 // A shot by or at the player, or one whose stray rounds or blast hit the player. Trucks hit that the shot was not
 // aimed at follow as stray damage.
-function shotText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLine | null {
+function gunShotText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLine | null {
   const me = world.player.vehicleId;
   const damaged = shotDamage(e);
   if (e.shooter !== me && e.target !== me && !damaged.has(me)) return null;
@@ -295,6 +299,41 @@ function shotText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLine |
     ...damageSpans(world, id, h),
   ]);
   return spanLine(hurts(damaged.get(me)) ? 'bad' : '', [...aimedSpans(world, e, damaged.get(e.target) ?? []), ...strays]);
+}
+
+function firedByUtility(world: World, e: Extract<GameEvent, { t: 'shot' }>): boolean {
+  const shooter = findAny(world, e.shooter);
+  const part = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
+  return part !== undefined && partDef(part.defId).kind === 'utility';
+}
+
+// A harpoon shot by or at the player: "Harpoon → Buggy · line on Engine (40%)", or "missed", then the damage per
+// part. Its one round strays into nobody. The chance is the round's.
+function harpoonText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLine | null {
+  const me = world.player.vehicleId;
+  if (e.shooter !== me && e.target !== me) return null;
+  const onTarget = shotDamage(e).get(e.target) ?? [];
+  const what = harpoonOutcome(world, e);
+  return spanLine(e.target === me && hurts(onTarget) ? 'bad' : '', [
+    { text: `${partName(world, e.shooter, e.weapon)} → ${vehicleName(world, e.target)} · ${what}`, cls: '' },
+    { text: ` (${Math.round(e.chance * 100)}%)`, cls: 'dim' },
+    ...damageSpans(world, e.target, onTarget),
+  ]);
+}
+
+// What the harpoon holds after its shot: "line on Engine", or "missed" when no line holds.
+function harpoonOutcome(world: World, e: Extract<GameEvent, { t: 'shot' }>): string {
+  const line = world.lines.find((l) => l.from === e.shooter && l.fromPart === e.weapon && l.to === e.target);
+  return line ? `line on ${partName(world, e.target, line.toPart)}` : 'missed';
+}
+
+// A truck pulled hard enough to tear a harpoon line, and the part the line held took the tear.
+function lineTornText(world: World, e: Extract<GameEvent, { t: 'lineTorn' }>): LogLine {
+  const mine = e.vehicle === world.player.vehicleId;
+  return spanLine(mine ? 'bad' : '', [
+    { text: `${vehicleName(world, e.vehicle)} ${mine ? 'tear' : 'tears'} free of a harpoon line`, cls: '' },
+    ...damageSpans(world, e.vehicle, [{ part: e.part, damage: e.damage }]),
+  ]);
 }
 
 function hurts(hits: PartHit[] | undefined): boolean {
@@ -483,6 +522,7 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   escortHired: (e) => [e.by, e.client],
   escortRefused: (e) => [e.by, e.client],
   caltrops: (e) => [e.vehicle],
+  lineTorn: (e) => [e.vehicle],
 };
 
 function unnoticed(world: World, e: GameEvent): boolean {
@@ -578,6 +618,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   empty: () => null, // the HUD shows ammo; the log holds no gun state
   utility: () => null, // the utility row and the world show a use; effects with news log their own events
   caltrops: caltropsText,
+  lineTorn: lineTornText,
   say: sayText,
   job: jobText,
   weather: weatherText,

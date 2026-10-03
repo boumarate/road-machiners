@@ -24,9 +24,10 @@ import { angleDiff, bearing, clamp, DEG, dist, type Vec } from '../sim/vec';
 import { bodyOf, type Body } from '../sim/body';
 import { wheelMounts } from './body';
 import { computeClosingSpeed, locateCrashContact, type CrashGeometry } from '../sim/crash-contact';
-import { headingOf, headingQuat, noseRise, toPhysCircle, upOf, type Circle, type TurnFrames, type V3, type VehicleFrame } from './frames';
+import { headingOf, headingQuat, noseRise, rotateBy, toPhysCircle, upOf, type Circle, type TurnFrames, type V3, type VehicleFrame } from './frames';
 import { oilPatches } from '../sim/hazards';
-import { OIL } from '../data/utilities';
+import { lineAnchors, type BodyPoint, type LineAnchor } from '../sim/harpoon';
+import { HARPOON, OIL } from '../data/utilities';
 
 const S = PHYSICS.metersPerTile;
 const T = PHYSICS.truck;
@@ -70,7 +71,8 @@ export type Crash = { a: string; b: string; impact: number; contact: CrashGeomet
 export type Break = { prop: string; vehicle: string; step: number }; // a breakable prop the vehicle smashed through at this physics step
 export type VehicleResult = { passed: boolean; arrived: boolean };
 export type Landing = { vehicle: string; impact: number; step: number }; // wheels touching down after a jump, impact in m/s downward
-export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; breaks: Break[]; landings: Landing[]; results: Record<string, VehicleResult> };
+export type Tear = { line: string; step: number }; // a harpoon line that tore at this physics step
+export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; breaks: Break[]; landings: Landing[]; tears: Tear[]; results: Record<string, VehicleResult> };
 
 export type DriveSnapshot = Omit<Drive, "world"> & { snapshot: Uint8Array };
 
@@ -254,10 +256,13 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   const landings = new Landings();
   // Oil patches are fixed for the turn, so they convert once and the steps never read the sim.
   const oil = oilPatches(w).map((p) => toPhysCircle(p.pos, p.r));
+  // Harpoon lines too: their anchors come in body space, so the steps only read the bodies.
+  const lines = new Lines(lineAnchors(w), cars);
   for (let i = 0; i < steps; i++) {
     const before = new Map(cars.map((c) => [c.v.id, captureImpactMotion(c.body)]));
     for (const c of cars) driveStep(c, w.terrain, oil);
     for (const c of cars) c.ctl.updateVehicle(DT);
+    lines.pull(i);
     landings.note(cars, before, i);
     world.step(events);
     events.drainCollisionEvents((h1, h2, started) => {
@@ -270,7 +275,58 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   events.free();
   const results = Object.fromEntries(cars.map((c) => [c.v.id, c.result]));
   const obstacles = Object.fromEntries(Object.entries(d.obstacles).filter(([id]) => !contacts.isBroken(id)));
-  return { next: { world, bodies: { ...d.bodies }, obstacles, memory, terrain: d.terrain, decks: d.decks }, frames, crashes: contacts.crashes, breaks: contacts.breaks, landings: landings.all(), results };
+  return { next: { world, bodies: { ...d.bodies }, obstacles, memory, terrain: d.terrain, decks: d.decks }, frames, crashes: contacts.crashes, breaks: contacts.breaks, landings: landings.all(), tears: lines.tears, results };
+}
+
+// Harpoon lines between two trucks with bodies. A line is a one-sided spring on the ground plane between its anchors:
+// past its length it pulls both trucks toward each other with HARPOON.stiffness per meter of stretch plus
+// HARPOON.damping on the separating speed, and never pushes. A pull above HARPOON.tearForce tears it for the rest of
+// the turn. A line with a far truck does nothing.
+class Lines {
+  readonly tears: Tear[] = [];
+  private readonly held: { line: LineAnchor; a: Car; b: Car }[];
+
+  constructor(lines: LineAnchor[], cars: Car[]) {
+    const car = (id: string) => cars.find((c) => c.v.id === id);
+    this.held = lines.flatMap((line) => {
+      const a = car(line.from);
+      const b = car(line.to);
+      return a && b ? [{ line, a, b }] : [];
+    });
+  }
+
+  pull(step: number): void {
+    for (const h of this.held) {
+      if (this.tears.some((t) => t.line === h.line.id)) continue;
+      const force = pullLine(h.line, h.a.body, h.b.body);
+      if (force > HARPOON.tearForce) this.tears.push({ line: h.line.id, step });
+    }
+  }
+}
+
+// Pulls the two bodies together when the line is stretched, unless the pull tears it. Returns the pull in newtons.
+function pullLine(line: LineAnchor, a: RAPIER.RigidBody, b: RAPIER.RigidBody): number {
+  const pa = worldPoint(a, line.fromAt);
+  const pb = worldPoint(b, line.toAt);
+  const gap = Math.hypot(pb.x - pa.x, pb.z - pa.z);
+  if (gap <= line.length) return 0;
+  const n = { x: (pb.x - pa.x) / gap, z: (pb.z - pa.z) / gap };
+  const va = a.velocityAtPoint(pa);
+  const vb = b.velocityAtPoint(pb);
+  const separating = (vb.x - va.x) * n.x + (vb.z - va.z) * n.z;
+  const force = Math.max(0, HARPOON.stiffness * (gap - line.length) + HARPOON.damping * separating);
+  if (force > HARPOON.tearForce) return force;
+  const j = force * DT;
+  a.applyImpulseAtPoint({ x: n.x * j, y: 0, z: n.z * j }, pa, true);
+  b.applyImpulseAtPoint({ x: -n.x * j, y: 0, z: -n.z * j }, pb, true);
+  return force;
+}
+
+// A body-space point of a body in physics space.
+function worldPoint(body: RAPIER.RigidBody, at: BodyPoint): V3 {
+  const t = body.translation();
+  const r = rotateBy(body.rotation(), at);
+  return { x: t.x + r.x, y: t.y + r.y, z: t.z + r.z };
 }
 
 // The hardest landing of each truck this turn: its wheels touch the ground after a step with every wheel in the air.

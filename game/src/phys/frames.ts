@@ -49,6 +49,19 @@ export function headingQuat(heading: number): Quat {
   return { x: 0, y: Math.sin(-heading / 2), z: 0, w: Math.cos(-heading / 2) };
 }
 
+// v turned by the unit quaternion q.
+export function rotateBy(q: Quat, v: V3): V3 {
+  // t = 2 (q.xyz × v); v' = v + w t + q.xyz × t
+  const tx = 2 * (q.y * v.z - q.z * v.y);
+  const ty = 2 * (q.z * v.x - q.x * v.z);
+  const tz = 2 * (q.x * v.y - q.y * v.x);
+  return {
+    x: v.x + q.w * tx + (q.y * tz - q.z * ty),
+    y: v.y + q.w * ty + (q.z * tx - q.x * tz),
+    z: v.z + q.w * tz + (q.x * ty - q.y * tx),
+  };
+}
+
 // Sine of the nose pitch: positive when the nose points uphill.
 export function noseRise(q: Quat): number {
   return 2 * (q.x * q.y + q.w * q.z);
