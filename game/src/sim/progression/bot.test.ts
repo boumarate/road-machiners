@@ -288,6 +288,21 @@ describe('botOrders', () => {
     if (order?.kind !== 'stopAt') throw new Error('Expected a stop order');
     expect(Math.hypot(order.dest.x - me.pos.x, order.dest.y - me.pos.y)).toBeGreaterThan(20);
   });
+
+  it('has a broke hunter with no gun scavenge instead of patrol', () => {
+    const armed = parkedAt('bowl');
+    armed.player.money = 0;
+    const unarmed = structuredClone(armed);
+    const me = playerVehicle(unarmed);
+    me.items = me.items.filter((it) => it.kind !== 'part' || !mountedParts(me, 'weapon').includes(it.part));
+
+    const patrol = playerVehicle(botOrders(armed, 'hunter').world).order;
+    const scavenge = playerVehicle(botOrders(unarmed, 'hunter').world).order;
+    const scavenger = playerVehicle(botOrders(unarmed, 'scavenger').world).order;
+
+    expect(scavenge).toEqual(scavenger);
+    expect(scavenge).not.toEqual(patrol);
+  });
 });
 
 describe('the hunter', () => {

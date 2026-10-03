@@ -26,7 +26,7 @@ import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, site
 import { shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
 import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
-import { getUpkeepReserve, isWeak, ownDanger, perceiveDanger } from '../npc-decisions';
+import { firepower, getUpkeepReserve, isWeak, ownDanger, perceiveDanger } from '../npc-decisions';
 import { canReachSalvage, hasSalvage, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, sitePads, townAt, type Site } from '../sites';
@@ -476,6 +476,8 @@ function findSalvageSite(o: Orders): boolean {
 // demands it stand down once it is badly broken. With no foe in sight it follows the nearest it hears, loots the wrecks
 // it sees, sells in town when full and otherwise patrols the roads between the shops.
 function hunterGoal(o: Orders): void {
+  // Without a working gun it scavenges, which needs no money, until a town sells it one it can pay for.
+  if (firepower(o.world, o.me) === 0) return scavengerGoal(o);
   if (townAt(o.world) && hasCargo(o.world, o.me)) sellCargo(o);
   if (stripDowned(o) || engageFoe(o)) return;
   lootHere(o);
