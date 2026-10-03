@@ -197,12 +197,13 @@ export const TOPICS: Record<TopicId, Topic> = {
     },
   },
   // A robber that claimed cargo spilled from the player's broken cargo part calls once, even mid-fight. Leaving it
-  // makes peace and keeps the rest of the cargo. Refusing or hanging up keeps the fight.
+  // makes peace and keeps the rest of the cargo. Refusing or hanging up keeps the fight. It comes before the plain
+  // claim warning, which it ties and precedes in PARLEY, since the robber is still hostile.
   spillClaim: {
     id: 'spillClaim',
     once: true,
     ask: null,
-    raise: { when: ['claimsSpill'], priority: 3, duringFeud: true, duringCombat: true },
+    raise: { when: ['claimsSpill'], priority: 4, duringFeud: true, duringCombat: true },
     prepare: null,
     hangUp: ['settleRefused'],
     start: 'claim',

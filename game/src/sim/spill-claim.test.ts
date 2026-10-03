@@ -4,9 +4,9 @@ import { inFeud, isHostile } from './combat';
 import { playerVehicle } from './damage';
 import { chooseOption, currentOptions, raiseCalls } from './dialogue';
 import { gridOf, itemCells, mountedParts } from './grid';
-import { pushGoal } from './npc-activities';
+import { pushGoal, topGoal } from './npc-activities';
 import { warnedOff } from './parley';
-import { backedOff, claimantOf } from './salvage';
+import { backedOff, claimantOf, clearPiles } from './salvage';
 import { spillDeadRows } from './spill';
 import { addState } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls, startCombat } from './testkit';
@@ -65,6 +65,29 @@ describe('a robber claims spilled cargo', () => {
   it('claims the pile spilled by the player it robs, and radios a truce for it', () => {
     const { w, raider } = robbedPlayer();
     expect(claimantOf(w, spillPile(w))).toBe(raider);
+    raiseCalls(w);
+    expect(w.player.call).toMatchObject({ with: raider.id, topic: 'spillClaim' });
+  });
+
+  it('a robber hunting the player, not yet in combat, goes for the pile and keeps its claim', () => {
+    const w = quietWorld();
+    const me = playerVehicle(w);
+    const raider = npcAt(w, 'raiders', 36);
+    breakLoadedCargo(w, me);
+    spillDeadRows(w);
+    clearPiles(w);
+    const pile = spillPile(w);
+    expect(claimantOf(w, pile)).toBe(raider);
+    expect(topGoal(raider)).toMatchObject({ kind: 'loot', targetId: pile.id });
+  });
+
+  it('a robber not yet in combat radios its truce offer, not the plain warning off its claim', () => {
+    const w = quietWorld();
+    const me = playerVehicle(w);
+    const raider = npcAt(w, 'raiders', 36);
+    w.player.talked[raider.id] = { demand: 'refused' };
+    breakLoadedCargo(w, me);
+    spillDeadRows(w);
     raiseCalls(w);
     expect(w.player.call).toMatchObject({ with: raider.id, topic: 'spillClaim' });
   });

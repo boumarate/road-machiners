@@ -71,10 +71,13 @@ function cede(world: World, loser: Vehicle, winner: Vehicle, stock: SalvageStock
   makePeace(world, loser, winner);
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');
-  if (stock && winner.brain) {
-    pushGoal(world, winner, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason });
-    claimPile(world, stock, winner, [loser.id]);
-  }
+  if (stock && winner.brain) goTake(world, winner, stock, [loser.id], reason);
+}
+
+// The NPC claims the pile and goes to take it. In combat its loot goal pops, and the claim holds through the fight.
+function goTake(world: World, npc: Vehicle, stock: SalvageStock, warned: string[], reason: string): void {
+  pushGoal(world, npc, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason });
+  claimPile(world, stock, npc, warned);
 }
 
 // A stranded truck gives up to a robber: the cargo and the best installed parts go onto the ground, and the truck stays.
@@ -220,14 +223,14 @@ function claimedBy(world: World, npc: Vehicle): SalvageStock[] {
   return world.salvage.filter((stock) => claimantOf(world, stock) === npc);
 }
 
-// The nearest robber in the fight that sees cargo spilled from its target claims it, unless another driver holds a
-// claim on the pile. An NPC target answers at once, as it answers a demand. The player answers the robber's call.
+// The nearest robber that sees cargo spilled from its target claims it and goes to take it, unless another driver
+// holds a claim on the pile. An NPC target answers at once, as it answers a demand. The player answers the robber's call.
 export function claimSpill(world: World, victim: Vehicle, stock: SalvageStock): void {
   if (claimantOf(world, stock)) return;
   const robbers = world.vehicles.filter((npc) => npc.brain && npc.id !== victim.id && claimsSpillOf(world, npc, victim, stock));
   const robber = robbers.sort((a, b) => dist(a.pos, stock.pos) - dist(b.pos, stock.pos))[0];
   if (!robber) return;
-  claimPile(world, stock, robber, []);
+  goTake(world, robber, stock, [], 'take the spilled cargo');
   if (!victim.brain || isKnockedOut(victim)) return;
   if (decide(world, victim, 'threatened', robber.id, perceiveDanger(world, victim, robber)) === 'comply') abandonSpill(world, victim, robber, stock);
 }
