@@ -1,6 +1,6 @@
 # Deploys never cost job progress
 
-**Status:** validating
+**Status:** done
 **Branch:** deploy-job-continuity
 **Worktree:** .worktrees/deploy-job-continuity
 **Goal:** A factory deploy never stops or waits for a running job, and a job whose process dies restarts once with its agents' conversations intact. Confirming it needs a live deploy on the server while jobs run, and one job killed by hand that resumes.
@@ -173,14 +173,14 @@ Goal: proxy only. The live rollout must show a deploy while jobs run, with no pa
 
 ## Conclusion
 
-Outcome: code verified and reviewed at the head of `deploy-job-continuity`. The Goal waits for the live rollout.
+Outcome: the Goal held in the live rollout on 2026-10-03. Two updates switched releases while five jobs ran on, and a killed design job resumed its own Claude Code session.
 
 Invariants:
 - IV1, IV2, IV3 — Linux smoke and `test_update_scripts.py`: no pause, busy releases kept, the link swapped by `mv -T`.
 - IV4 to IV7 — `tick.test.ts`, `job.test.ts`, `sessions.test.ts` and `common.test.ts`.
 
 ### Assumptions check
-- AS1 — unverifiable locally. Print-mode resume by id held on the Mac. The cross-container case is checked in the rollout.
+- AS1 — held on the server. Design #155 was killed with 85 session lines. The tick removed its container, and the next start ran `--resume` with the same id, which grew the same file.
 - AS2 — unverifiable before the rollout. An image rebuild only changes later containers.
 - AS3 — held as a design choice: the tick removes a dead job's containers by label in every case.
 - AS4 — held in the Debian smoke as root. On the server the update runs as the factory user, which owns every job.
@@ -198,3 +198,5 @@ Review findings:
 - Important: the migration left the old update's `update to` pause, which the new code reads as Hermes's. Fixed: the layout script stops the update service and lifts that pause, with a test.
 
 Rollout order: stop the update timer on the server, merge, then run `deploy.py` once. Otherwise the old update script deploys the merge in place first.
+
+Rollout finding: the server mount of `/opt/factory` into Hermes hid the image's own files there, so Hermes failed its health check and the first update kept the old release. #189 moved them to `/opt/hermes-factory`.
