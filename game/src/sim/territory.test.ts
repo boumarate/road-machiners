@@ -327,14 +327,17 @@ describe("the Fallen Sun's dirt roads, wing and flaps", () => {
     expect(dist(onMap(inFurrow(dist(head, tail), 0)), tail)).toBeLessThan(1e-9);
   });
 
-  it('lays the wing as three decks end to end, up from the ground, level and down, with no lip (IV1)', () => {
-    expect(wing).toHaveLength(3);
-    const [up, span, down] = wing;
+  it('lays the wing as a chain of decks end to end, up from the ground, level over the piers and down, with no lip (IV1)', () => {
+    const span = wing[1];
     const top = span.rise[0];
     expect(top).toBeGreaterThan(0);
-    expect([up.rise, span.rise, down.rise]).toEqual([[0, top], [top, top], [top, 0]]);
-    for (const [a, b] of [[up, span], [span, down]]) {
+    expect(wing[0].rise).toEqual([0, top]);
+    expect(span.rise).toEqual([top, top]);
+    expect(wing.at(-1)!.rise[1]).toBe(0);
+    for (const d of wing.slice(2)) expect(d.rise[1]).toBeLessThan(d.rise[0]);
+    for (const [a, b] of wing.slice(1).map((b, k) => [wing[k], b])) {
       expect(dist(a.to, b.from)).toBeLessThan(1e-9);
+      expect(a.rise[1]).toBe(b.rise[0]);
       expect(deckEnds(TEST_MAP.terrain, a)[1]).toBe(deckEnds(TEST_MAP.terrain, b)[0]);
       for (let across = -b.width / 2 + 0.2; across < b.width / 2; across += 0.5) {
         const at = (k: number) => ({ x: b.from.x + b.axis.x * k - b.axis.y * across, y: b.from.y + b.axis.y * k + b.axis.x * across });

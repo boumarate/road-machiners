@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
+import { TERRAIN } from '../data/terrain';
 import { TERRITORIES } from '../data/territory';
 import { applyHazards } from './hazard';
-import { hazardZones, reactorPos, territoryPieces } from './territory';
+import { huntingGrounds } from './npc-decisions';
+import { siteGap } from './sites';
+import { hazardZones, reactorPos, territoryEntries, territoryGrounds, territoryPieces } from './territory';
 import { route } from './path';
 import { addVehicle, emptyWorld } from './testkit';
 import { getResources } from './resources';
 import type { World } from './types';
-import { dist } from './vec';
+import { dist, polylineDist } from './vec';
 
 const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
 const hazard = TERRITORIES['fallen-sun'].reactor!.hazard!;
@@ -82,5 +85,25 @@ describe('the reactor hazard', () => {
       }
       at = p;
     }
+  });
+});
+
+describe('hunting grounds in the Fallen Sun', () => {
+  const furrow = TERRAIN.features.furrow;
+  const entries = territoryEntries(sun as never);
+  const inner = territoryGrounds(sun as never).filter((p) => !entries.some((e) => dist(e, p) < 1e-9));
+
+  it('wait at every patch, each inside the outline and clear of the hazard', () => {
+    expect(inner).toHaveLength(TERRITORIES['fallen-sun'].wreck!.patches.length);
+    for (const p of inner) {
+      const where = `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+      expect(siteGap(sun, p), where).toBeLessThan(0);
+      expect(dist(p, core), where).toBeGreaterThan(hazard.radius);
+      expect(huntingGrounds(), where).toContainEqual(p);
+    }
+  });
+
+  it('reach down the crash furrow', () => {
+    expect(inner.filter((p) => polylineDist(p, furrow.path) < furrow.width).length).toBeGreaterThanOrEqual(2);
   });
 });

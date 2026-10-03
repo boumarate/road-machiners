@@ -24,7 +24,7 @@ import { START_KITS } from '../data/start';
 import { TEST_MAP } from '../test/map';
 import { fuelCap, vehicleStats } from './stats';
 import { heatAt } from './sun';
-import { dist, type Vec } from './vec';
+import { dist, polylineDist, type Vec } from './vec';
 import { advanceFar } from './far';
 import type { NpcActivity, Vehicle, World } from './types';
 import { addState } from './states';
@@ -388,6 +388,37 @@ describe('NPC activities', () => {
       for (const p of inTube) expect(offAxis(p)).toBeLessThan(3.5);
       expect(offAxis(took!.pos)).toBeLessThan(3.5);
     });
+
+    it('drives from the west road down into the crash furrow to a spot there, searches it and takes its loot', () => {
+      // The real map, and the scavenger at the west road's end, the entry nearest the furrow.
+      const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+      w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
+      const furrow = TERRAIN.features.furrow;
+      const start = territoryEntries(sun as never)[0];
+      const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], start);
+      npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+      // The furrow spot farthest from the entry.
+      const inFurrow = territorySpots(w, 'fallen-sun').filter((s) => polylineDist(s.pos, furrow.path) < furrow.width);
+      expect(inFurrow.length).toBeGreaterThan(0);
+      const spot = inFurrow.reduce((a, b) => (dist(b.pos, start) > dist(a.pos, start) ? b : a));
+      npc.brain.goals = [{ kind: 'scavenge', targetId: spot.id, destination: { ...spot.pos }, phase: 'travel', reason: 'search a loot spot' }];
+      const moveFar = (next: World) => next.vehicles.forEach((v) => v.brain && advanceFar(next, v));
+      // A spot seen on the way would pull the driver off this one.
+      forceOption('salvageSeen', 'keep');
+      const scrapIn = (world: World) => world.salvage.find((s) => s.id === spot.id)!.goods.scrap ?? 0;
+      const before = scrapIn(w);
+
+      let next = w;
+      let took = false;
+      for (let turn = 0; turn < 40 && !took; turn++) {
+        next = endTurn(next, moveFar);
+        took = (goodsCount(next.vehicles.find((v) => v.id === npc.id)!).scrap ?? 0) > 0;
+      }
+
+      expect(took).toBe(true);
+      expect(scrapIn(next)).toBeLessThan(before);
+      expect(next.events.filter((e) => e.t === 'stall')).toEqual([]);
+    }, 60_000);
 
     it('ends a trip to a territory at its road end, not at its centre', () => {
       const { w, npc } = createScavenger();

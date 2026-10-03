@@ -153,8 +153,12 @@ export function inFurrow(s: number, lat: number): Vec {
   return { x: FURROW_HEAD.x + FURROW_AXIS.x * s - FURROW_AXIS.y * lat, y: FURROW_HEAD.y + FURROW_AXIS.y * s + FURROW_AXIS.x * lat };
 }
 // The wing along the furrow's axis (inferred), in tiles down the furrow: the up-ramp's foot, the span's two ends, the
-// down-ramp's foot, and the tail junction where the lanes meet past it.
-const WING = { up: 15, span: 24, down: 46, end: 53, tail: 56 };
+// down-ramp's top and foot, and the tail junction where the lanes meet past it. The span ends at 46, just past the
+// piers' pits. The way down eases over the crest to 49, then runs to its foot at 56, so a truck coming off the span
+// does not fly off the crest: off a 7-tile ramp straight from the span it took air there and landed hard.
+const WING = { up: 15, span: 24, down: 46, ease: 49, end: 56, tail: 59 };
+// Height units the way down stands over the floor where its easing part meets its ramp.
+const WING_EASE_RISE = 1.2;
 // Height units a pier's seat lies under the furrow floor, so the r 6 drum's 15.8 m stands 0.4 to 1 m under the deck
 // line, 6 m over the floor.
 const PIER_SINK = 2.6;
@@ -402,9 +406,9 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         // up-ramp.
         dirt(LANE, [[-3.8, 45.2], inFurrow(-6, 0), inFurrow(WING.up, 0)]),
         // The east lane: from the same junction, over flap-furrow-e and down its landing, past the span to the tail.
-        dirt(LANE, [[-3.8, 45.2], inFurrow(-8, -10.25), inFurrow(WING.down, -10.25), inFurrow(WING.down + 6, -6), inFurrow(WING.tail, 0)]),
+        dirt(LANE, [[-3.8, 45.2], inFurrow(-8, -10.25), inFurrow(WING.down, -10.25), inFurrow(WING.end - 1, -6), inFurrow(WING.tail, 0)]),
         // The west lane: from the ring at (-19,39.9), over flap-furrow-w, past the span to the tail.
-        dirt(LANE, [[-19, 39.9], inFurrow(-8, 10.25), inFurrow(WING.down, 10.25), inFurrow(WING.down + 6, 6), inFurrow(WING.tail, 0)]),
+        dirt(LANE, [[-19, 39.9], inFurrow(-8, 10.25), inFurrow(WING.down, 10.25), inFurrow(WING.end - 1, 6), inFurrow(WING.tail, 0)]),
         // From the tail onto the wing's down-ramp.
         dirt(LANE, [inFurrow(WING.tail, 0), inFurrow(WING.end, 0)]),
       ],
@@ -416,7 +420,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         dirt(LANE, [[-1.8, -33], [-1.5, -38.5], [-2.2, -45], [-4.3, -53.5]]),
         // Out of the furrow's tail, east off the east lane over the low ground north of the Kiln road, since the land
         // past the tail climbs over a grade of 0.2.
-        dirt(LANE, [inFurrow(WING.down + 6, -6), [-13, 105], [-3, 102], [2, 100.5]]),
+        dirt(LANE, [inFurrow(WING.end - 1, -6), [-13, 105], [-3, 102], [2, 100.5]]),
         // South-west off the ring, up the 22-tile bank along the foot of the south-west hill, which climbs too steeply
         // across it: the reference's road out of its left edge at y 590.
         dirt(LANE, [[-30.3, 31], [-33, 37], [-33, 44], [-32.8, 52]]),
@@ -441,11 +445,12 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { id: 'fallen-sun-flap-furrow-e', from: inFurrow(0, -10.25), to: inFurrow(5, -10.25), width: 3, rise: [0, 0.35] },
         { id: 'fallen-sun-flap-furrow-w', from: inFurrow(0, 10.25), to: inFurrow(5, 10.25), width: 3, rise: [0, 0.35] },
         // The torn wing lying along the furrow, 8 tiles wide: an up-ramp from the ground to 1.5 units (6 m) over 9
-        // tiles, a level span over the two piers, and a down-ramp over 7. The furrow floor rises gently toward its tail,
+        // tiles, a level span over the two piers, and a way down over 10 that eases over its crest. The furrow floor rises gently toward its tail,
         // so both ramps climb under a grade of 0.2 on the baked map, which a loaded hauler still climbs.
         { id: 'fallen-sun-wing-up', from: inFurrow(WING.up, 0), to: inFurrow(WING.span, 0), width: 8, rise: [0, 1.5] },
         { id: 'fallen-sun-wing-span', from: inFurrow(WING.span, 0), to: inFurrow(WING.down, 0), width: 8, rise: [1.5, 1.5] },
-        { id: 'fallen-sun-wing-down', from: inFurrow(WING.down, 0), to: inFurrow(WING.end, 0), width: 8, rise: [1.5, 0] },
+        { id: 'fallen-sun-wing-ease', from: inFurrow(WING.down, 0), to: inFurrow(WING.ease, 0), width: 8, rise: [1.5, WING_EASE_RISE] },
+        { id: 'fallen-sun-wing-down', from: inFurrow(WING.ease, 0), to: inFurrow(WING.end, 0), width: 8, rise: [WING_EASE_RISE, 0] },
       ],
       // A landing strip runs 12 tiles past each lip: the truck lands about 4 tiles out and rolls on.
       landing: 12,
