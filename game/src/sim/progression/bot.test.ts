@@ -146,6 +146,7 @@ describe('botOrders', () => {
 
   it('has a stranded truck crawl to the nearest town', () => {
     const w = withoutEngine(parkedAt('bowl'));
+    w.shops.bowl.stock.push(makePart(w, 'stockEngine', 0));
     const me = playerVehicle(w);
     me.pos = { x: me.pos.x + 20, y: me.pos.y - 20 };
 
@@ -165,6 +166,28 @@ describe('botOrders', () => {
 
     expect(mountedParts(playerVehicle(turn.world), 'engine')).toHaveLength(1);
     expect(isStranded(turn.world, playerVehicle(turn.world))).toBe(false);
+  });
+
+  // Just off the Bowl pad with a haul for Nose: back to Bowl only for an engine it stocks and the money covers.
+  it('has a truck without an engine turn back only to a shop with an engine it can afford', () => {
+    const offPad = (engineInStock: boolean) => {
+      const w = withoutEngine(parkedAt('bowl'));
+      const me = playerVehicle(w);
+      me.pos = { x: me.pos.x + 8, y: me.pos.y };
+      w.player.money = 2000;
+      w.shops.bowl.stock = engineInStock ? [makePart(w, 'stockEngine', 0)] : [];
+      w.player.contracts.push({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units: 1, to: 'nose', reward: 300, deadline: 5000, window: 5000, rush: false, tier: 1 });
+      addGoods(w, me, 'salt', 1);
+      return botOrders(w, 'trader').world;
+    };
+    const dest = (w: World) => (playerVehicle(w).order as { dest: { x: number; y: number } }).dest;
+    const toward = (w: World, id: string) => nearestPad(town(id), playerVehicle(w).pos);
+
+    const stocked = offPad(true);
+    const bare = offPad(false);
+
+    expect(dest(stocked)).toEqual(toward(stocked, 'bowl'));
+    expect(dest(bare)).toEqual(toward(bare, 'nose'));
   });
 
   it('has a broke stranded truck crawl on with its goal instead of waiting in town', () => {

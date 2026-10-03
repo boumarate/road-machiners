@@ -6,10 +6,10 @@
 import { chassisDef } from '../../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../../data/goods';
 import { NPC_BEHAVIOR, NPC_UPKEEP } from '../../data/npcs';
-import { PARTS, partDef } from '../../data/parts';
+import { partDef } from '../../data/parts';
 import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
-import { CONDITION, ENGINE_HEAT } from '../../data/wear';
+import { ENGINE_HEAT } from '../../data/wear';
 import { TOPICS, type TopicId } from '../../data/dialogue';
 import { maxHp, partValue } from '../wear';
 import { inCombat, isHostile } from '../combat';
@@ -162,8 +162,9 @@ function workPatch(o: Orders, deal: NpcState): void {
 // turn's order.
 function serviceTrip(o: Orders, style: UpgradeStyle): boolean {
   if (isStranded(o.world, o.me) && !o.world.player.beacon) o.run((w) => setBeacon(w, true));
-  if (shopAt(o.world)) {
-    serviceInTown(o, style);
+  const shop = shopAt(o.world);
+  if (shop) {
+    serviceInTown(o, style, shop);
     return false;
   }
   if (!paidFixNeeded(o.world)) return false;
@@ -171,9 +172,9 @@ function serviceTrip(o: Orders, style: UpgradeStyle): boolean {
   return true;
 }
 
-function serviceInTown(o: Orders, style: UpgradeStyle): void {
+function serviceInTown(o: Orders, style: UpgradeStyle, shop: string): void {
   serviceHere(o);
-  restoreEngine(o);
+  restoreEngine(o, shop);
   if (paidFixNeeded(o.world)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money: ${needsOf(o.world)}`);
   upgradeGear(o, style);
 }
@@ -188,21 +189,15 @@ function paidFixNeeded(world: World): boolean {
   return needsService(world) || canRestoreEngine(world);
 }
 
-// In a shop, an engine it stocks must be affordable. Out of town, the bot knows no stock, so the money must cover
-// the cheapest engine's price at its most worn.
+// The shop it stands at, else the nearest shop, must stock an engine the money covers. A guess from engine prices
+// alone sent the bot back to a shop that had none it could afford, again and again.
 function canRestoreEngine(world: World): boolean {
   if (mountedParts(playerVehicle(world), 'engine').length > 0) return false;
-  return shopAt(world) ? stockEngine(world) !== null : world.player.money >= cheapestEngineValue();
+  return stockEngine(world, shopAt(world) ?? nearestShop(world).id) !== null;
 }
 
-function cheapestEngineValue(): number {
-  return Math.min(...Object.values(PARTS).filter((d) => d.kind === 'engine').map((d) => d.value * CONDITION.valueFactor[CONDITION.maxWear]));
-}
-
-// The cheapest engine the parked garage stocks that the bot can afford.
-function stockEngine(world: World): PartInstance | null {
-  const shopId = shopAt(world);
-  if (!shopId) return null;
+// The cheapest engine a shop stocks that the bot can afford.
+function stockEngine(world: World, shopId: string): PartInstance | null {
   const me = playerVehicle(world);
   const engines = shopState(world, shopId).stock.filter((p) => partDef(p.defId).kind === 'engine')
     .map((part) => ({ part, price: partTradePrice(world, me, part, 'buy') }))
@@ -211,10 +206,10 @@ function stockEngine(world: World): PartInstance | null {
   return engines[0]?.part ?? null;
 }
 
-// Buys and mounts the start kit's engine when the truck has none and the money covers it. Cargo on the engine mount
-// is sold to make room.
-function restoreEngine(o: Orders): void {
-  const engine = canRestoreEngine(o.world) ? stockEngine(o.world) : null;
+// Buys and mounts the cheapest engine the shop it stands at stocks, when the truck has none and the money covers it.
+// Cargo on the engine mount is sold to make room.
+function restoreEngine(o: Orders, shopId: string): void {
+  const engine = mountedParts(o.me, 'engine').length === 0 ? stockEngine(o.world, shopId) : null;
   if (!engine) return;
   if (!engineSpot(o.me, engine.defId) && hasCargo(o.world, o.me)) sellCargo(o);
   const spot = engineSpot(o.me, engine.defId);
