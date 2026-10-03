@@ -15,10 +15,9 @@ import { inCombat } from './combat';
 import { startJob } from './jobs';
 import { beginSearch } from './search';
 import { practice } from './progress';
-import { locationAt, townAt } from './sites';
+import { locationAt, siteGap, townAt, type Site } from './sites';
 import type { GridItem, PartInstance, SalvageStock, Vehicle, World } from './types';
 import { tileCenter } from './vision';
-import { dist, type Vec } from './vec';
 import { playerCommand } from './world';
 import { suppliesCap } from './stats';
 
@@ -27,7 +26,7 @@ export function discoverSites(world: World): void {
   for (const s of [...REGION.towns, ...REGION.locations]) {
     if (
       world.player.discovered.includes(s.id) ||
-      !seesArea(world, s.pos, s.radius)
+      !seesArea(world, s)
     )
       continue;
     discoverSite(world, s);
@@ -40,12 +39,6 @@ export function discoverSite(world: World, s: { id: string; name: string }): voi
   world.player.discovered.push(s.id);
   world.events.push({ t: "discover", location: s.id });
   practice(world, 'discover', 1, null, s.id);
-}
-
-export function applySiteAction(world: World): World | null {
-  if (canUseOasis(world)) return useOasis(world);
-  if (canScavenge(world)) return scavenge(world);
-  return null;
 }
 
 export function canUseOasis(world: World): boolean {
@@ -62,10 +55,8 @@ export function useOasis(world: World): World {
   });
 }
 
-function seesArea(world: World, center: Vec, radius: number): boolean {
-  return world.player.visible.some(
-    (idx) => dist(tileCenter(world, idx), center) <= radius,
-  );
+function seesArea(world: World, site: Site): boolean {
+  return world.player.visible.some((idx) => siteGap(site, tileCenter(world, idx)) <= 0);
 }
 
 // The stock with loot left that the parked player truck can reach, or null.
@@ -76,14 +67,24 @@ export function salvageHere(world: World): SalvageStock | null {
 
 // The stock with loot left in range of the player truck at any speed, or null. Moving trucks must stop to use it.
 export function salvageNear(world: World): SalvageStock | null {
+  return salvageListNear(world)[0] ?? null;
+}
+
+// Every stock with loot left in range of the player truck at any speed.
+export function salvageListNear(world: World): SalvageStock[] {
   const me = playerVehicle(world);
-  return world.salvage.find((stock) => hasSalvage(stock) && salvageInRange(me, stock)) ?? null;
+  return world.salvage.filter((stock) => hasSalvage(stock) && salvageInRange(me, stock));
 }
 
 // A knocked-out truck in reach of the player truck at any speed, or null. Moving trucks must stop to loot it.
 export function downedNear(world: World): Vehicle | null {
+  return downedListNear(world)[0] ?? null;
+}
+
+// Every knocked-out truck in reach of the player truck at any speed.
+export function downedListNear(world: World): Vehicle[] {
   const me = playerVehicle(world);
-  return world.vehicles.find((v) => v.id !== me.id && isKnockedOut(v) && inTowReach(me, v)) ?? null;
+  return world.vehicles.filter((v) => v.id !== me.id && isKnockedOut(v) && inTowReach(me, v));
 }
 
 // A knocked-out truck the parked player truck can loot now, or null.
@@ -99,33 +100,35 @@ export function emptySalvageNear(world: World): SalvageStock | null {
   return world.salvage.find((stock) => !stock.pile && !hasSalvage(stock) && salvageInRange(me, stock)) ?? null;
 }
 
-// The truck looting the stock or knocked-out truck in the parked player's reach, which keeps the player off it, or
-// null.
-export function lootBlockerHere(world: World): Vehicle | null {
-  const target = salvageHere(world) ?? downedHere(world);
-  return target && lootBlocker(world, playerVehicle(world), target.id);
+// The truck looting the given stock or knocked-out truck, which keeps the player off it, or null.
+export function lootBlockerHere(world: World, targetId: string): Vehicle | null {
+  return lootBlocker(world, playerVehicle(world), targetId);
 }
 
-// An unsearched stock is in reach and nobody else loots it: the player can start a search.
-export function canScavenge(world: World): boolean {
+// The stock with loot left that the parked player truck reaches, or null.
+function reachableStock(world: World, stockId: string): SalvageStock | null {
   const me = playerVehicle(world);
-  const stock = salvageHere(world);
-  return stock !== null && !world.player.scavenged.includes(stock.id) && !inCombat(world, me) && !lootBlocker(world, me, stock.id);
+  const stock = world.salvage.find((s) => s.id === stockId);
+  return stock && hasSalvage(stock) && canReachSalvage(me, stock) ? stock : null;
 }
 
-// A searched stock is in reach: the player can take its loot.
-export function canLoot(world: World): boolean {
-  const stock = salvageHere(world);
-  return stock !== null && world.player.scavenged.includes(stock.id);
+// The stock is unsearched, in reach and nobody else loots it: the player can start a search.
+export function canScavenge(world: World, stockId: string): boolean {
+  const me = playerVehicle(world);
+  return reachableStock(world, stockId) !== null && !world.player.scavenged.includes(stockId) && !inCombat(world, me) && !lootBlocker(world, me, stockId);
 }
 
-// Starts a timed search of the reachable stock. When it ends, the stock opens for looting.
-export function scavenge(world: World): World {
+// The stock is searched and in reach: the player can take its loot.
+export function canLoot(world: World, stockId: string): boolean {
+  return reachableStock(world, stockId) !== null && world.player.scavenged.includes(stockId);
+}
+
+// Starts a timed search of the given stock. When it ends, the stock opens for looting.
+export function scavenge(world: World, stockId: string): World {
   return playerCommand(world, (w) => {
-    const stock = salvageHere(w);
-    if (stock) requireLootFree(w, playerVehicle(w), stock.id);
-    if (!stock || !canScavenge(w)) throw new Error('Nothing unsearched in reach');
-    beginSearch(w, playerVehicle(w), stock.id);
+    if (w.salvage.some((s) => s.id === stockId)) requireLootFree(w, playerVehicle(w), stockId);
+    if (!canScavenge(w, stockId)) throw new Error('Nothing unsearched in reach');
+    beginSearch(w, playerVehicle(w), stockId);
   });
 }
 

@@ -28,9 +28,10 @@ import { cancelRefit, isParkedForWork, startRepair, startStrip, startWeld, strip
 import { vehicleHasPerk } from "../sim/progress";
 import { PERK_NUMBERS } from "../data/skills";
 import { repairPlan, type RepairPlan } from "../sim/repair";
+import { shopAt } from "../sim/market";
 import { townAt } from "../sim/sites";
-import { downedHere, takeAllLoot, takeLoot, takeStores } from "../sim/locations";
-import { hasStores, takeFromTruck } from "../sim/salvage";
+import { takeAllLoot, takeLoot, takeStores } from "../sim/locations";
+import { canLootTruck, hasStores, takeFromTruck } from "../sim/salvage";
 import { gaveUp, isKnockedOut } from "../sim/defeat";
 import { REGION } from "../data/region";
 import type {
@@ -40,9 +41,9 @@ import type {
   Vehicle,
   World,
 } from "../sim/types";
-import { el, panel } from "./dom";
+import { el, isBrowserChord, panel } from "./dom";
 import type { UiHost } from "./host";
-import { baselinePart, conditionMeter, createIcon, diffStats, footprint as footprintEl, partIcon, partStats, statGrid } from "./cards";
+import { baselinePart, conditionMeter, conditionRow, conditionTag, createIcon, diffStats, footprint as footprintEl, partIcon, partStats, statGrid } from "./cards";
 import { vehicleMass } from "../sim/mass";
 import {
   blockerIds,
@@ -122,7 +123,7 @@ export class InventoryView {
       this.select(null);
     });
     window.addEventListener("keydown", (e) => {
-      if (e.key.toLowerCase() !== "r" || e.repeat) return;
+      if (e.key.toLowerCase() !== "r" || e.repeat || isBrowserChord(e)) return;
       if (this.drag) this.rotate();
       else this.rotateSelected();
     });
@@ -414,7 +415,7 @@ export class InventoryView {
     if (item.kind !== "part") return this.goodActions(w, item.good);
     const buttons: (HTMLElement | null)[] = [
       mounted ? this.patchButton(w, playerVehicle(w), item.part) : null,
-      townAt(w) ? this.repairButton(w, item.part) : null,
+      shopAt(w) ? this.repairButton(w, item.part) : null,
       !mounted && partDef(item.part.defId).kind !== "core"
         ? this.stripButton(w, playerVehicle(w), item.part)
         : null,
@@ -429,7 +430,7 @@ export class InventoryView {
     part: PartInstance,
   ): HTMLElement | null {
     if (isJunk(part)) return null;
-    if (!fieldPatchable(part)) return townOnlyPatch(part);
+    if (!fieldPatchable(part)) return shopOnlyPatch(part);
     const plan = repairPlan(w, me, part.id);
     if (plan.needed === 0) return null;
     const reason = patchBlocker(w, me, plan);
@@ -534,6 +535,7 @@ export class InventoryView {
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
         createIcon(partIcon(p)),
         el("span", {}, d.name),
+        conditionTag(p),
         footprintEl(d.w, d.h),
         conditionMeter(p),
       );
@@ -563,6 +565,7 @@ export class InventoryView {
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
         createIcon(partIcon(p)),
         el("span", {}, d.name),
+        conditionTag(p),
         footprintEl(d.w, d.h),
         conditionMeter(p),
       );
@@ -930,10 +933,10 @@ export class InventoryScreen {
     this.render();
   }
 
-  // Opens the inventory with the grid of a knocked-out truck the player can loot on the right. False when none.
-  openDowned(world: World): boolean {
-    const downed = downedHere(world);
-    if (!downed) return false;
+  // Opens the inventory with the grid of the chosen knocked-out truck on the right. False when the player cannot loot it.
+  openDowned(world: World, vehicleId: string): boolean {
+    const downed = world.vehicles.find((v) => v.id === vehicleId);
+    if (!downed || !canLootTruck(playerVehicle(world), downed)) return false;
     this.view.setTruck(downed.id);
     this.root.style.display = "";
     this.render();
@@ -1005,18 +1008,20 @@ function fieldPatchable(part: PartInstance): boolean {
   return def.kind !== "armor" || def.fieldRepair !== "none";
 }
 
-// Armor that only a town repairs shows a disabled Patch button while damaged, so the player learns why.
-function townOnlyPatch(part: PartInstance): HTMLElement | null {
-  return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true }, "Patch (town only)") : null;
+// Armor that only a shop repairs shows a disabled Patch button while damaged, so the player learns why.
+function shopOnlyPatch(part: PartInstance): HTMLElement | null {
+  return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true }, "Patch (shop only)") : null;
 }
 
 // A part's condition and stats. A spare shows the change against the mounted part of its kind.
 function partDetails(me: Vehicle, part: PartInstance, mounted: boolean): HTMLElement[] {
   const kind = partDef(part.defId).kind;
   const base = mounted ? null : baselinePart(me, kind);
+  const row = conditionRow(part);
   return [
+    ...(row ? [row] : []),
     conditionMeter(part),
     statGrid(diffStats(partStats(part), base ? partStats(base) : null)),
-    base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name}`) : el("span"),
+    base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name} `, conditionTag(base)) : el("span"),
   ];
 }

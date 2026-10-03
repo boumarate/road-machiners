@@ -39,7 +39,7 @@ cp "$shot" ${OUT_DIR}/screenshot.png
 export async function candidate(ctx: Ctx, issue: number): Promise<void> {
   const release = requireRelease(ctx);
   if (release.issue !== issue) throw new Error(`Issue #${issue} is not the tracking issue of the open release, #${release.issue} is`);
-  await ctx.repo.sync(release.branch);
+  await ctx.repo.fetch();
   const features = await releaseFeatures(ctx, release);
   const dir = candidateDir(ctx);
   rmSync(dir, { recursive: true, force: true });

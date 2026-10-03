@@ -1,23 +1,26 @@
 // Static map obstacles: rocks, wrecks, buildings, water and baked landmarks. Map rocks are drawn once
-// as an instanced model per terrain chunk. Other obstacles are synced by id, so wrecks that appear mid-game (a vehicle dying)
-// get added without touching the rest. Loose loot piles and the debris of broken props are synced the same way.
+// as an instanced model per terrain chunk, and dead trees likewise through TreeInstances, which hides a broken tree.
+// Other obstacles are synced by id, so wrecks that appear mid-game (a vehicle dying) get added without touching the
+// rest. Loose loot piles and the debris of broken props are synced the same way.
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { hashStr } from '../../render/noise';
 import { PAL } from '../../render/palette';
 import { PHYSICS } from '../../data/physics';
-import { propPose, propReach, type PropPose } from '../../sim/mapgen';
+import { propPose, propReach } from '../../sim/mapgen';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import { hasSalvage, salvageUnits } from '../../sim/salvage';
 import type { BrokenProp, Obstacle, SalvageStock, World } from '../../sim/types';
 import { dist } from '../../sim/vec';
 import type { V3, VehicleFrame } from '../../phys/frames';
 import type { TurnResult } from '../../phys/drive';
-import { DebrisSim, FLY_REACH } from './debris';
+import { DebrisSim, disposeTree, FLY_REACH, truckBoxes } from './debris';
 import { instancedModel, model, socket } from './models';
+import { PartDebris } from './partDebris';
 import type { RenderScope } from './scope';
 import { TERRAIN_CHUNK } from './terrain';
+import { posed, TreeInstances } from './trees';
 
 const S = PHYSICS.metersPerTile;
 const CRATES_RADIUS = 1.5; // meters, the reference radius of tools/blender/crates.py
@@ -26,50 +29,60 @@ const PILE_MIN_SIZE = 0.5; // share of full size for a small pile, so it still r
 
 export class ObstacleViews {
   private readonly byId = new Map<string, THREE.Object3D>();
-  private rockIds: Set<string> | null = null; // map rocks, fixed at the first sync with the power lines
+  private fixed: Fixed | null = null; // map rocks and dead trees, fixed at the first sync with the power lines
   private readonly piles = new Map<string, { obj: THREE.Object3D; units: number }>();
   private readonly debris = new Map<string, THREE.Object3D>();
   private readonly flying: DebrisSim;
+  // The scrap of broken truck parts shares the prop scope and the truck boxes.
+  readonly parts: PartDebris;
   private obstacles: readonly Obstacle[] = [];
+  private readonly glows = new Map<string, Glow>(); // reactor glows by obstacle id, pulsed every frame
+  private clock = 0; // seconds of drawn frames, for the glow pulse
 
   constructor(private readonly scope: RenderScope, private readonly terrain: Terrain) {
     this.flying = new DebrisSim(terrain);
+    this.parts = new PartDebris(scope, terrain);
   }
 
   sync(obstacles: Obstacle[], salvage: SalvageStock[], broken: readonly BrokenProp[]): void {
     this.obstacles = obstacles;
     this.syncDebris(broken);
     this.syncPiles(salvage);
-    if (!this.rockIds) {
-      this.rockIds = this.addRocks(obstacles.filter((o) => o.kind === 'rock'));
-      addPowerLines(this.terrain, obstacles, this.scope);
-    }
-    const seen = new Set<string>();
-    let rocks = 0;
-    for (const o of obstacles) {
-      if (o.kind === 'rock') {
-        if (!this.rockIds.has(o.id)) throw new Error(`Rock ${o.id} appeared after map generation; rocks are drawn as fixed instances`);
-        rocks++;
-        continue;
-      }
-      seen.add(o.id);
-      if (!this.byId.has(o.id)) {
-        const obj = buildObstacle(this.terrain, o);
-        obj.traverse((m) => {
-          m.updateMatrix();
-          m.matrixAutoUpdate = false;
-        });
-        this.scope.add(obj, o.pos, viewReach(o));
-        this.byId.set(o.id, obj);
-      }
-    }
-    if (rocks !== this.rockIds.size) throw new Error('A map rock was removed; rocks are drawn as fixed instances');
+    const fixed = this.fixed ?? this.addFixed(obstacles);
+    syncRocks(fixed.rocks, obstacles);
+    syncTrees(fixed, obstacles);
+    const views = obstacles.filter((o) => o.kind !== 'rock' && !isTree(o));
+    for (const o of views) if (!this.byId.has(o.id)) this.addView(o);
+    const seen = new Set(views.map((o) => o.id));
     for (const [id, obj] of this.byId) {
       if (seen.has(id)) continue;
       this.scope.remove(obj);
       disposeTree(obj);
       this.byId.delete(id);
+      this.glows.delete(id);
     }
+  }
+
+  private addFixed(obstacles: Obstacle[]): Fixed {
+    const trees = obstacles.filter(isTree);
+    this.fixed = {
+      rocks: this.addRocks(obstacles.filter((o) => o.kind === 'rock')),
+      trees: new TreeInstances(this.scope, this.terrain, trees),
+      treeIds: new Set(trees.map((o) => o.id)),
+    };
+    addPowerLines(this.terrain, obstacles, this.scope);
+    return this.fixed;
+  }
+
+  private addView(o: Obstacle): void {
+    const obj = buildObstacle(this.terrain, o);
+    obj.traverse((m) => {
+      m.updateMatrix();
+      m.matrixAutoUpdate = false;
+    });
+    this.scope.add(obj, o.pos, viewReach(o));
+    this.byId.set(o.id, obj);
+    if (obj.userData.glow) this.glows.set(o.id, obj.userData.glow as Glow);
   }
 
   // Props break at the step their truck hits them, and once the movement is over every break of the turn has come.
@@ -77,8 +90,20 @@ export class ObstacleViews {
   // dt: seconds since the last drawn frame.
   play(anim: { result: TurnResult } | null, step: number | null, world: World, frames: Record<string, VehicleFrame>, dt: number): void {
     if (anim) this.smash(anim.result, step ?? Infinity, world.broken);
-    this.flying.moveTrucks(world.vehicles.filter((v) => frames[v.id]).map((v) => ({ id: v.id, chassisId: v.chassisId, ...frames[v.id] })));
+    const trucks = truckBoxes(world.vehicles, frames);
+    this.flying.moveTrucks(trucks);
     this.flying.step(dt);
+    this.parts.play(trucks, dt);
+    this.pulse(dt);
+  }
+
+  private pulse(dt: number): void {
+    this.clock += dt;
+    const k = 1 + REACTOR_PULSE.share * Math.sin((this.clock / REACTOR_PULSE.period) * Math.PI * 2);
+    for (const glow of this.glows.values()) {
+      for (const m of glow.materials) m.emissiveIntensity = REACTOR_GLOW.emissive * k;
+      glow.light.intensity = REACTOR_GLOW.intensity * k;
+    }
   }
 
   // Each prop broken this turn bursts into flying pieces at its hit step. The standing view goes.
@@ -87,14 +112,22 @@ export class ObstacleViews {
       if (b.step > step || this.debris.has(b.prop)) continue;
       const found = broken.find((p) => p.obstacle.id === b.prop);
       if (!found) throw new Error(`Prop ${b.prop} broke this turn but is not broken`);
-      const standing = this.byId.get(b.prop);
-      if (standing) {
-        this.scope.remove(standing);
-        disposeTree(standing);
-        this.byId.delete(b.prop);
-      }
+      this.dropStanding(b.prop);
       this.addDebris(found.obstacle, this.flying.burst(found.obstacle, velocityAt(result.frames[b.vehicle], b.step), this.obstacles));
     }
+  }
+
+  // A broken tree's instance hides. Any other prop's view goes.
+  private dropStanding(id: string): void {
+    if (this.fixed?.trees.has(id)) {
+      this.fixed.trees.hide(id);
+      return;
+    }
+    const standing = this.byId.get(id);
+    if (!standing) return;
+    this.scope.remove(standing);
+    disposeTree(standing);
+    this.byId.delete(id);
   }
 
   // Each broken prop lies as pieces where they came to rest until it grows back. Pieces block nothing. A prop broken
@@ -186,16 +219,6 @@ function velocityAt(frames: VehicleFrame[] | undefined, step: number): V3 {
   return { x: (b.x - a.x) * k, y: (b.y - a.y) * k, z: (b.z - a.z) * k };
 }
 
-function disposeTree(obj: THREE.Object3D): void {
-  obj.traverse((o) => {
-    if (o instanceof THREE.Mesh) {
-      o.geometry.dispose();
-      const mats = Array.isArray(o.material) ? o.material : [o.material];
-      for (const m of mats) m.dispose();
-    }
-  });
-}
-
 function buildObstacle(t: Terrain, o: Obstacle): THREE.Object3D {
   if (o.kind === 'water') return buildWater(t, o);
   // A site's boundary blocks traffic but has no model of its own; buildSites draws the site.
@@ -216,16 +239,6 @@ function rockPlacement(t: Terrain, o: Obstacle): { matrix: THREE.Matrix4; tint: 
   return { matrix: g.matrix, tint: 0.9 + hashStr(o.id) * 0.2 };
 }
 
-// A group at the prop's pose. A three.js turn by -yaw points the model's +X at map direction yaw. Model
-// sideways is three.js z and model up is three.js y.
-function posed(t: Terrain, pose: PropPose): THREE.Group {
-  const g = new THREE.Group();
-  g.position.set(pose.pos.x * S, heightAt(t, pose.pos.x, pose.pos.y) * S, pose.pos.y * S);
-  g.rotation.y = -pose.yaw;
-  g.scale.set(pose.scale.x, pose.scale.z, pose.scale.y);
-  return g;
-}
-
 // Wrecks, settlement buildings and baked landmarks. A building gets a roof color from its id.
 function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   const pose = propPose(o);
@@ -233,7 +246,25 @@ function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   const obj = model(pose.model);
   if (pose.model === 'building') paintRoof(obj, o.id);
   g.add(obj);
+  if (pose.model === 'reactor') lightCore(obj, g);
   return g;
+}
+
+// The reactor's core glows by itself and lights the pit around it, so its danger is seen before it is felt. The group
+// keeps its glow, so the views can pulse it.
+function lightCore(reactor: THREE.Object3D, g: THREE.Group): void {
+  const materials: THREE.MeshLambertMaterial[] = [];
+  eachMaterial(reactor, (m) => {
+    if (m.name !== 'glow') return;
+    m.emissive.setHex(PAL.reactorGlow);
+    m.emissiveIntensity = REACTOR_GLOW.emissive;
+    materials.push(m);
+  });
+  const light = new THREE.PointLight(PAL.reactorGlow, REACTOR_GLOW.intensity, REACTOR_GLOW.range, REACTOR_GLOW.decay);
+  light.position.set(0, REACTOR_GLOW.height, 0);
+  g.add(light);
+  const glow: Glow = { materials, light };
+  g.userData.glow = glow;
 }
 
 function paintRoof(house: THREE.Object3D, id: string): void {
@@ -263,6 +294,32 @@ function buildWater(t: Terrain, o: Obstacle): THREE.Object3D {
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
+function isTree(o: Obstacle): o is Landmark {
+  return o.kind === 'landmark' && o.look === 'deadTree';
+}
+
+// Map rocks and dead trees are drawn as fixed instances, so a rock can never come or go after the first sync. A dead
+// tree hides while broken and shows when it grows back, but one the bake did not place throws.
+type Fixed = { rocks: Set<string>; trees: TreeInstances; treeIds: Set<string> };
+
+function syncRocks(ids: Set<string>, obstacles: readonly Obstacle[]): void {
+  const rocks = obstacles.filter((o) => o.kind === 'rock');
+  for (const o of rocks) if (!ids.has(o.id)) throw new Error(`Rock ${o.id} appeared after map generation; rocks are drawn as fixed instances`);
+  if (rocks.length !== ids.size) throw new Error('A map rock was removed; rocks are drawn as fixed instances');
+}
+
+function syncTrees(fixed: Fixed, obstacles: readonly Obstacle[]): void {
+  const standing = new Set(obstacles.filter(isTree).map((o) => o.id));
+  for (const id of standing) fixed.trees.show(id);
+  for (const id of fixed.treeIds) if (!standing.has(id)) fixed.trees.hide(id);
+}
+
+// Glow strength, light strength, reach and fade in meters, and the light's height above the ground. The core is 24 m
+// across with an 11 m rod, so the light hangs over the rod and reaches across the pit to the hazard's edge and past it.
+const REACTOR_GLOW = { emissive: 2.5, intensity: 160, range: 110, decay: 1.5, height: 10 };
+// The glow swells and fades by this share over one period in seconds, slow like a failing core breathing.
+const REACTOR_PULSE = { share: 0.2, period: 5 };
+type Glow = { materials: THREE.MeshLambertMaterial[]; light: THREE.PointLight };
 const WIRES = ['wire0', 'wire1', 'wire2'];
 const SAG = 0.7; // meters a wire hangs below its ends at mid-span
 const WIRE_POINTS = 8;

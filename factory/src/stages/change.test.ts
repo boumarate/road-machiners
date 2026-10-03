@@ -29,10 +29,14 @@ describe('change', () => {
     const dirs: string[] = [];
     const agent = f.ctx.container.agent;
     f.ctx.container.agent = async (run) => { dirs.push(run.dir); await agent(run); };
+    const bases: string[] = [];
+    const prepare = f.ctx.repo.prepareWorkClone;
+    f.ctx.repo.prepareWorkClone = async (branch, base, dir) => { bases.push(base); await prepare(branch, base, dir); };
     await change(f.ctx, 4);
     expect(dirs).toEqual(['factory']);
-    expect(f.calls).toContain('push factory-change/4');
-    expect(f.calls).toContain('pr factory-change/4 dev Post daily');
+    expect(bases).toEqual(['main']);
+    expect(f.calls).toContain('push work-head factory-change/4');
+    expect(f.calls).toContain('pr factory-change/4 main Post daily');
     expect(readState(f.ctx.statePath).pendingChanges).toEqual([]);
     expect(readFileSync(join(ROOT, 'work/change-4/factory/.factory/request.md'), 'utf8')).toContain('ann');
   });

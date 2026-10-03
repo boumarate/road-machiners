@@ -1,3 +1,4 @@
+import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
@@ -76,6 +77,36 @@ const HILL_GRADE = 0.2; // height per tile, steeper than 90% of the generated ma
 const LIMP_GRADE = 0.35; // height per tile, a steep bank beside a road
 
 describe('physics turns', () => {
+  // A handle that once belonged to a collider, as a record left behind by a removal would hold.
+  const staleHandle = (d: Drive) => {
+    const collider = d.world.createCollider(RAPIER.ColliderDesc.ball(1));
+    const { handle } = collider;
+    d.world.removeCollider(collider, false);
+    return handle;
+  };
+
+  it('a synced obstacle record with no collider throws and names the prop', () => {
+    const w = emptyWorld();
+    const d = buildDrive(w);
+    try {
+      d.obstacles.rock1 = [staleHandle(d)];
+      expect(() => syncDrive(d, w)).toThrow(/Obstacle rock1 has no collider/);
+    } finally {
+      freeDrive(d);
+    }
+  });
+
+  it('a vehicle record with no body throws and names the vehicle', () => {
+    const w = emptyWorld();
+    const d = buildDrive(w);
+    try {
+      d.bodies[me(w).id] = staleHandle(d);
+      expect(() => syncDrive(d, w)).toThrow(/Vehicle .* has no body/);
+    } finally {
+      freeDrive(d);
+    }
+  });
+
   it('a truck knocked out while driving brakes to a stop', () => {
     // One drive carried from turn to turn, as in the game, so the body keeps its speed.
     let w = ordered({ kind: 'stopAt', dest: { x: 200, y: 30 } });
@@ -581,7 +612,7 @@ describe('physics turns', () => {
     const { w } = play(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 12);
     expect(me(w).pos.x).toBeGreaterThan(32);
     expect(me(w).speed).toBeGreaterThan(0.5);
-  });
+  }, 90_000); // twelve physics turns take 5s alone and over 30s when the whole suite shares the cores
 
   it('a click in the hold zone keeps its speed up a hill', () => {
     let w = emptyWorld({ x: 29, y: 30 });

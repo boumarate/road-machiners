@@ -34,7 +34,7 @@ function fakeCtx(verdict: string | null): Ctx {
       },
     },
     repo: {
-      sync: record('sync'), push: record('push'), fetchFromWork: record('fetch'),
+      fetch: record('fetch'), push: record('push'), fetchFromWork: record('fetchFromWork'),
       prepareWorkClone: async (_b: string, _base: string, dir: string) => { mkdirSync(dir, { recursive: true }); },
     },
   };

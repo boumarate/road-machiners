@@ -37,7 +37,7 @@ import {
 import { makePart } from "./factory";
 import { maxHp, partValue } from "./wear";
 import { addGoods, spareParts } from "./inventory";
-import { applySiteAction, canScavenge, salvageNear, scavenge, useOasis } from "./locations";
+import { canScavenge, canUseOasis, salvageNear, scavenge, useOasis } from "./locations";
 import { consumeSupplies } from "./supplies";
 import { heatAt } from "./sun";
 import { sitePads, townAt, townNear } from "./sites";
@@ -186,20 +186,76 @@ describe("garage", () => {
     expect(() => buySupply(w, "supplies", 1)).toThrow();
   });
 
-  it("sells fuel at the pump station but refuses food", () => {
-    const pumpStation = REGION.locations.find((l) => l.id === "pump-station")!;
-    const w = emptyWorld({ ...sitePads(pumpStation)[0] });
+  const STALLS = ["salvage-yard", "granary", "pump-station"];
+  const atSite = (id: string) => emptyWorld({ ...sitePads(REGION.locations.find((l) => l.id === id)!)[0] });
+
+  it.each(STALLS)("sells fuel and supplies at the %s at the town prices", (id) => {
+    const w = atSite(id);
+    w.player.money = 1000;
     w.player.fuel = 0;
-    const fueled = buySupply(w, "fuel", 1);
-    expect(fueled.player.fuel).toBeGreaterThan(0);
-    expect(() => buySupply(w, "supplies", 1)).toThrow(/does not sell/);
+    w.player.supplies = 0;
+    for (const kind of ["fuel", "supplies"] as const) {
+      const r = buySupply(w, kind, 3);
+      expect(r.player[kind]).toBe(3);
+      expect(r.player.money).toBe(1000 - 3 * ECONOMY.supplyPrice[kind]);
+    }
   });
 
-  it("refuses any supply at a stall that sells none", () => {
-    const granary = REGION.locations.find((l) => l.id === "granary")!;
-    const w = emptyWorld({ ...sitePads(granary)[0] });
-    expect(() => buySupply(w, "fuel", 1)).toThrow(/does not sell/);
-    expect(() => buySupply(w, "supplies", 1)).toThrow(/does not sell/);
+  it.each(STALLS)("repairs at the %s for the shown prices", (id) => {
+    const w = atSite(id);
+    const gun = mountedParts(w.vehicles[0])[0];
+    const cab = corePart(w.vehicles[0], "cab");
+    cab.hp = 10;
+    gun.hp = 1;
+    const part = partRepairCost(w, gun);
+
+    const one = repairPart(w, gun.id);
+    expect(mountedParts(one.vehicles[0])[0].hp).toBe(maxHp(gun));
+    expect(one.player.money).toBe(w.player.money - part);
+
+    const basics = repairBasics(w);
+    expect(corePart(basics.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
+    expect(basics.player.money).toBe(w.player.money - basicsRepairCost(w));
+
+    const all = repairAll(w);
+    expect(all.player.money).toBe(w.player.money - repairCost(w));
+    expect(mountedParts(all.vehicles[0])[0].hp).toBe(maxHp(gun));
+  });
+
+  it("leaves rebuildable junk to a town garage", () => {
+    const stall = atSite("granary");
+    const town = startAtBowl();
+    for (const w of [stall, town]) {
+      w.player.perks = ["rebuild"];
+      const junk = mountedParts(w.vehicles[0])[0];
+      junk.hp = 0;
+      junk.wear = CONDITION.maxWear + 1;
+    }
+    const junkId = mountedParts(stall.vehicles[0])[0].id;
+
+    expect(() => repairPart(stall, junkId)).toThrow(/junk/);
+    expect(repairCost(stall)).toBe(0);
+    expect(repairAll(stall).player.money).toBe(stall.player.money);
+    expect(mountedParts(repairAll(town).vehicles[0])[0]).toMatchObject({ rebuilt: true });
+  });
+
+  it.each(["scrapjaw", "dustwell", "orchard", "podfield"])("sells and repairs nothing at %s", (id) => {
+    const w = atSite(id);
+    corePart(w.vehicles[0], "cab").hp = 10;
+    w.player.fuel = 0;
+    const before = JSON.stringify(w);
+    expect(() => buySupply(w, "fuel", 1)).toThrow();
+    expect(() => buySupply(w, "supplies", 1)).toThrow();
+    expect(() => repairPart(w, corePart(w.vehicles[0], "cab").id)).toThrow();
+    expect(() => repairAll(w)).toThrow();
+    expect(() => repairBasics(w)).toThrow();
+    expect(JSON.stringify(w)).toBe(before);
+  });
+
+  it("still fills supplies free at an oasis", () => {
+    const w = atSite("dustwell");
+    w.player.supplies = 0;
+    expect(useOasis(w).player.supplies).toBeGreaterThan(0);
   });
 
   it("repairs parts for money", () => {
@@ -349,11 +405,11 @@ describe("garage", () => {
     expect(cab.hp).toBe(10);
   });
 
-  it("requires a town for individual repairs", () => {
+  it("requires a shop for individual repairs", () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const cab = corePart(w.vehicles[0], "cab");
     cab.hp = 10;
-    expect(() => repairPart(w, cab.id)).toThrow(/town/);
+    expect(() => repairPart(w, cab.id)).toThrow(/shop/);
     expect(cab.hp).toBe(10);
   });
 
@@ -565,11 +621,13 @@ describe("locations", () => {
     const w = emptyWorld({ ...sitePads(oasis)[0] });
     w.player.supplies = 1;
     w.vehicles[0].speed = RULES.parkedSpeed + 1;
-    expect(applySiteAction(w)).toBeNull();
+    expect(canUseOasis(w)).toBe(false);
+    expect(() => useOasis(w)).toThrow("Stop the truck first");
     expect(w.player.supplies).toBe(1);
     w.vehicles[0].speed = 0;
-    const after = applySiteAction(w);
-    expect(after?.player.supplies).toBe(RULES.baseSupplies);
+    expect(canUseOasis(w)).toBe(true);
+    const after = useOasis(w);
+    expect(after.player.supplies).toBe(RULES.baseSupplies);
     expect(after?.events).toContainEqual({ t: "info", text: `Filled supplies at ${oasis.name}` });
   });
 
@@ -581,11 +639,11 @@ describe("locations", () => {
   it("convoy starts a timed search, and a second search cannot start while it runs", () => {
     const convoy = REGION.locations.find((l) => l.kind === "convoy")!;
     const w = emptyWorld({ ...sitePads(convoy)[0] });
-    const after = scavenge(w);
+    const after = scavenge(w, convoy.id);
     expect(after.vehicles[0].job).toEqual(
       expect.objectContaining({ kind: "search", stockId: convoy.id }),
     );
-    expect(() => scavenge(after)).toThrow();
+    expect(() => scavenge(after, convoy.id)).toThrow();
   });
 
   it("a town in reach needs a stop before it can be used", () => {
@@ -600,7 +658,7 @@ describe("locations", () => {
     const convoy = REGION.locations.find((l) => l.kind === "convoy")!;
     const w = emptyWorld({ ...sitePads(convoy)[0] });
     w.vehicles[0].speed = RULES.parkedSpeed + 1;
-    expect(canScavenge(w)).toBe(false);
+    expect(canScavenge(w, convoy.id)).toBe(false);
     expect(salvageNear(w)?.id).toBe(convoy.id);
   });
 

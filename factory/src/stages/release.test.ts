@@ -13,7 +13,7 @@ describe('release cut', () => {
     const state = readState(f.ctx.statePath);
     expect(state.lastRelease).toBe('2026-09-29T10:00:00.000Z');
     expect(state.release).toBeNull();
-    expect(f.calls).toEqual(['sync']);
+    expect(f.calls).toEqual(['fetch']);
   });
 
   it('cuts the branch, opens the tracking issue and two cleanup tasks, and sets the release', async () => {
@@ -21,9 +21,8 @@ describe('release cut', () => {
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
     await release(f.ctx);
     expect(f.calls).toEqual([
-      'sync',
+      'fetch',
       'branch release/2026-09-29 dev',
-      'push release/2026-09-29',
       'createIssue Release 2026-09-29',
       'addCard Approval',
       'createIssue Optimize one slow spot (release 2026-09-29)',
@@ -43,7 +42,7 @@ describe('release cut', () => {
     f.changelog = ['Merge issue #3: faster trucks'];
     f.ctx.repo.isMerged = async (base: string, branch: string) => !(base === 'main' && branch === 'dev');
     await release(f.ctx);
-    expect(f.calls.slice(0, 4)).toEqual(['sync', 'merge main dev', 'push dev', 'branch release/2026-09-29 dev']);
+    expect(f.calls.slice(0, 4)).toEqual(['fetch', 'merge main dev', 'push dev','branch release/2026-09-29 dev']);
   });
 
   it('keeps the release set when a task cannot be opened, so the failure names the tracking issue', async () => {

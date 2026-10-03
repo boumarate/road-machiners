@@ -171,19 +171,49 @@ function withGaveUp_6_7(vehicle: SavedJson): SavedJson {
   return { ...vehicle, defeat: { ...defeat, gaveUp: defeat.phase === 'out' && ((cab?.part?.hp as number | undefined) ?? 0) > 0 } };
 }
 
-// Total XP a skill needed for each level at format 2.7; index is the level.
-const XP_TO_REACH_7_8 = [0, 200, 600, 1200, 2000, 3000];
+// The Fallen Sun became a territory with no stock of its own: its loot lies in baked spots. A search of the old stock
+// ends with it.
+const RETIRED_STOCK_7_8 = 'fallen-sun';
 
-// Step 7 to 8: each skill's old level becomes the same rank, and the XP past it goes to the shared pool. A level cost
-// what its rank costs now, so no earned XP is lost. Also read by the rescue of saves from before format 2.8.
-export function pooledSkills_7_8(skills: Record<string, number>): { xp: number; ranks: Record<string, number> } {
+function withoutRetiredStock_7_8(world: SavedJson): SavedJson {
+  const idle = (v: SavedJson): SavedJson => ((v.job as SavedJson | null | undefined)?.stockId === RETIRED_STOCK_7_8 ? { ...v, job: null } : v);
+  const player = world.player as SavedJson;
+  return {
+    ...world,
+    salvage: (world.salvage as SavedJson[]).filter((stock) => stock.id !== RETIRED_STOCK_7_8),
+    player: { ...player, scavenged: (player.scavenged as string[]).filter((id) => id !== RETIRED_STOCK_7_8) },
+    vehicles: (world.vehicles as SavedJson[]).map(idle),
+  };
+}
+
+// Old Orchard became a territory with no stock of its own: its loot lies in baked spots. A search of the old stock
+// ends with it. The step repeats the 7 to 8 one, since a committed step is never edited.
+const RETIRED_STOCK_8_9 = 'orchard';
+
+function withoutRetiredStock_8_9(world: SavedJson): SavedJson {
+  const idle = (v: SavedJson): SavedJson => ((v.job as SavedJson | null | undefined)?.stockId === RETIRED_STOCK_8_9 ? { ...v, job: null } : v);
+  const player = world.player as SavedJson;
+  return {
+    ...world,
+    salvage: (world.salvage as SavedJson[]).filter((stock) => stock.id !== RETIRED_STOCK_8_9),
+    player: { ...player, scavenged: (player.scavenged as string[]).filter((id) => id !== RETIRED_STOCK_8_9) },
+    vehicles: (world.vehicles as SavedJson[]).map(idle),
+  };
+}
+
+// Total XP a skill needed for each level at format 2.9; index is the level.
+const XP_TO_REACH_9_10 = [0, 200, 600, 1200, 2000, 3000];
+
+// Step 9 to 10: each skill's old level becomes the same rank, and the XP past it goes to the shared pool. A level cost
+// what its rank costs now, so no earned XP is lost. Also read by the rescue of saves from before format 2.10.
+export function pooledSkills_9_10(skills: Record<string, number>): { xp: number; ranks: Record<string, number> } {
   let xp = 0;
   const ranks: Record<string, number> = {};
   for (const [skill, total] of Object.entries(skills)) {
     let level = 0;
-    while (level < XP_TO_REACH_7_8.length - 1 && total >= XP_TO_REACH_7_8[level + 1]) level++;
+    while (level < XP_TO_REACH_9_10.length - 1 && total >= XP_TO_REACH_9_10[level + 1]) level++;
     ranks[skill] = level;
-    xp += total - XP_TO_REACH_7_8[level];
+    xp += total - XP_TO_REACH_9_10[level];
   }
   return { xp, ranks };
 }
@@ -238,10 +268,14 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     vehicles: (world.vehicles as SavedJson[]).map(withGaveUp_6_7),
     removed: (world.removed as SavedJson[]).map(withGaveUp_6_7),
   }),
-  // 7 to 8: XP goes to one pool and levels become bought ranks.
+  // 7 to 8: the Fallen Sun is a territory, so its site stock goes.
+  withoutRetiredStock_7_8,
+  // 8 to 9: Old Orchard is a territory, so its site stock goes.
+  withoutRetiredStock_8_9,
+  // 9 to 10: XP goes to one pool and levels become bought ranks.
   (world) => {
     const { skills, ...player } = world.player as SavedJson;
-    return { ...world, player: { ...player, ...pooledSkills_7_8(skills as Record<string, number>) } };
+    return { ...world, player: { ...player, ...pooledSkills_9_10(skills as Record<string, number>) } };
   },
 ];
 

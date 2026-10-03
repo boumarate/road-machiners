@@ -24,6 +24,7 @@ import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from 
 import { healPlayer } from './health';
 import { fireGuards } from './guards';
 import { discoverSites } from './locations';
+import { applyHazards } from './hazard';
 import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
 import { scrapPatch } from './economy';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
@@ -282,6 +283,7 @@ export function endTurn(
     fireWeapons(w);
     fireGuards(w);
     consumeSupplies(w);
+    applyHazards(w);
     scrapPatch(w);
     healPlayer(w);
     leakFuel(w);

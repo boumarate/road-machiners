@@ -18,6 +18,7 @@ body {
 }
 #ui {
   --ink: #e0d8ca;
+  --cond-pristine: #fff4d6;
   --muted: #aaa69e;
   --edge: #747777;
   --metal: #33383b;
@@ -128,6 +129,34 @@ body {
   background: var(--metal);
   border-top: 2px solid #838a8d;
 }
+.instrument-clock {
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 1px 6px;
+  background: #9fa58a;
+  color: #1f2418;
+  border: 1px solid #1a1e20;
+  border-radius: 2px;
+  box-shadow: inset 0 1px 0 #00000055;
+  font: 13px var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.speedometer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.speed-max {
+  font: 10px var(--font-mono);
+  color: var(--muted);
+}
 #ui .truck-instrument {
   position: relative;
   align-self: center;
@@ -176,15 +205,6 @@ body {
   text-align: center;
   font: 12px var(--font-mono);
 }
-.speed-unit {
-  position: absolute;
-  top: 52px;
-  left: 0;
-  right: 0;
-  text-align: center;
-  font: 7px var(--font-mono);
-  color: var(--muted);
-}
 .truck-instrument > .icon {
   position: absolute;
   left: -2px;
@@ -192,7 +212,7 @@ body {
   width: 16px;
   height: 16px;
 }
-/* Resources on the first row, time and heat on the second. */
+/* Resources on the first row, heat, engine and weather on the second. */
 .readouts {
   display: grid;
   grid-template-columns: repeat(4, auto);
@@ -218,16 +238,21 @@ body {
 .instrument-actions {
   grid-column: 1 / -1;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 4px;
   padding-top: 4px;
   border-top: 1px solid #ffffff14;
 }
-#ui .instrument-actions button:not(.switch) {
+#ui .instrument-actions button.instrument-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 10px;
-  padding: 2px 5px;
+  padding: 2px 8px;
+  border: 1px solid #5d6264;
+  border-radius: 3px;
   white-space: nowrap;
-  background: #292e31;
+  background: #2f3437;
 }
 #ui .instrument-actions button.switch {
   gap: 0;
@@ -241,9 +266,6 @@ body {
 .instrument-actions .icon {
   width: 15px;
   height: 15px;
-}
-.instrument-actions > span {
-  font-size: 11px;
 }
 
 /* Metal toggle switch: a riveted plate, the on option above the lever and the off option below. */
@@ -525,15 +547,41 @@ body {
 }
 .log h3 {
   font-size: 12px !important;
-  margin-bottom: 4px !important;
+  margin: 0 !important;
+}
+.log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.log-expand {
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 16px;
+}
+.log-time {
+  margin-right: 6px;
+  font: 11px var(--font-mono);
+  color: var(--muted);
 }
 .log-lines {
+  overflow-anchor: none;
   max-height: 86px;
   overflow: auto;
   scrollbar-width: thin;
 }
 .log-lines > div {
-  padding: 2px 0;
+  padding: 3px 0;
+}
+/* A modal takes the screen, so the log only grows while none is open. */
+#ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded {
+  z-index: 22;
+  width: 420px;
+  height: calc(100dvh - 112px - 72px);
+}
+#ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded .log-lines {
+  max-height: calc(100% - 28px);
 }
 #ui .recenter {
   left: 50%;
@@ -572,21 +620,26 @@ body {
 }
 #ui .help,
 #ui .feedback {
-  padding: 5px 9px;
+  padding: 0;
   background: #272b2ef5;
   font-size: 12px;
 }
 .help summary,
 .feedback summary {
+  display: block;
+  padding: 5px 9px;
   font-size: 16px;
   list-style: none;
 }
 .feedback details[open] summary {
   margin-bottom: 6px;
 }
+.feedback details[open] {
+  padding-bottom: 5px;
+}
 .feedback details a {
   display: block;
-  margin: 4px 0;
+  margin: 4px 9px;
   color: var(--ink);
   text-decoration: none;
   white-space: nowrap;
@@ -597,16 +650,18 @@ body {
   text-decoration: underline;
 }
 .help details[open] {
-  width: calc(var(--inspection-width) - 20px);
-  height: calc(var(--inspection-height) - 12px);
-  max-width: calc(100vw - 48px);
+  box-sizing: border-box;
+  width: calc(var(--inspection-width) - 2px);
+  height: calc(var(--inspection-height) - 2px);
+  max-width: calc(100vw - 30px);
+  padding-bottom: 5px;
   overflow: auto;
 }
 .help details[open] summary {
   margin-bottom: 8px;
 }
 .help details > div {
-  margin: 4px 0;
+  margin: 4px 9px;
   color: var(--muted);
 }
 .help .version {
@@ -698,6 +753,15 @@ body {
 }
 .action button {
   font-size: 14px;
+}
+#ui .action:has(.cycle) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.action .count {
+  font-size: 12px;
+  white-space: nowrap;
 }
 #ui .action button.combat {
   color: #ff5a40;
@@ -1170,6 +1234,10 @@ body {
 .inv-chip > span {
   flex: 1;
 }
+.inv-chip > .cond {
+  flex: none;
+  font-size: 11px;
+}
 .inv-chip > .icon {
   width: 22px;
   height: 22px;
@@ -1261,7 +1329,7 @@ body {
     flex-wrap: wrap;
   }
   #ui .weapons {
-    bottom: 175px;
+    bottom: 196px;
     max-width: calc(100vw - 30px);
   }
   #ui .log {
@@ -1273,6 +1341,10 @@ body {
   }
   .log-lines {
     max-height: 48px;
+  }
+  #ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded {
+    width: calc(100vw - 28px);
+    height: calc(100dvh - 176px - 72px);
   }
   .info {
     top: 190px;
@@ -1372,6 +1444,10 @@ canvas.view {
 #ui .top-right > .panel {
   position: static;
   padding: 6px 8px;
+}
+#ui .top-right > .camera-mode {
+  padding: 0;
+  border: 0;
 }
 .sound {
   font-size: 12px;
@@ -1500,6 +1576,49 @@ canvas.view {
 }
 .card-name .dim {
   font-size: 12px;
+}
+.card-cond {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 4px;
+  font-size: 12px;
+}
+.cond {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.cond .icon {
+  width: 12px;
+  height: 12px;
+}
+.cond .icon svg {
+  width: 12px;
+  height: 12px;
+}
+.cond-pristine {
+  color: var(--cond-pristine);
+}
+.cond-pristine .icon svg {
+  fill: var(--cond-pristine);
+  stroke: var(--cond-pristine);
+}
+.cond-w1 {
+  color: #e0d8ca;
+}
+.cond-w2 {
+  color: #cdbfa4;
+}
+.cond-w3 {
+  color: #b9a888;
+}
+.cond-w4 {
+  color: #a8997f;
+}
+.cond-junk {
+  color: #909395;
 }
 .card-compare {
   margin: 4px 0 6px;

@@ -1,13 +1,21 @@
 {
+  "turn": 40,
   "player": {
     "vehicleId": "player",
-    "money": 340,
-    "skills": { "driving": 0, "perception": 450, "machining": 600, "toughness": 3500, "social": 1999 },
-    "xpToday": { "driving": 0, "perception": 12.5, "machining": 80, "toughness": 0, "social": 40 },
-    "xpDay": 3,
-    "repeats": { "search:dump-1": { "count": 1, "turn": 610 }, "profit:bowl:salt": { "count": 2.5, "turn": 640 } },
-    "xpBySource": { "search": 600, "profit": 1999, "discover": 450, "heat": 3500 },
-    "perks": ["welder", "desertRat"]
+    "scavenged": ["fallen-sun", "wreck3"]
   },
-  "turn": 650
+  "vehicles": [
+    {
+      "id": "player",
+      "job": { "kind": "search", "stockId": "fallen-sun", "turnsLeft": 2 }
+    },
+    {
+      "id": "npc1",
+      "job": { "kind": "search", "stockId": "wreck3", "turnsLeft": 1 }
+    }
+  ],
+  "salvage": [
+    { "id": "fallen-sun", "pos": { "x": 320, "y": 270 }, "radius": 44, "goods": { "scrap": 1 }, "parts": [] },
+    { "id": "wreck3", "pos": { "x": 100, "y": 100 }, "radius": 1, "goods": { "scrap": 1 }, "parts": [] }
+  ]
 }

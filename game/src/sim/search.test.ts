@@ -7,7 +7,7 @@ import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
 import { beginSearch, startSearch } from './search';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import { goodsCount } from './grid';
-import { canLoot, canScavenge, lootBlockerHere, scavenge, takeAllLoot, takeLoot, takeStores } from './locations';
+import { canLoot, canScavenge, lootBlockerHere, salvageListNear, scavenge, takeAllLoot, takeLoot, takeStores } from './locations';
 import { resolveNpcActivities } from './npc-activities';
 import { sitePads } from './sites';
 import { refreshVision } from './vision';
@@ -15,6 +15,7 @@ import { findSpot, gridOf } from './grid';
 import { endTurn, setMoveOrder } from './world';
 import { advanceJobs, isBusy, startAutoRepair } from './jobs';
 import { addGoods } from './inventory';
+import { dumpOnPile } from './salvage';
 import { mountedParts } from './grid';
 
 describe('timed scavenging search', () => {
@@ -28,7 +29,7 @@ describe('timed scavenging search', () => {
     expect(me.job).toEqual(expect.objectContaining({ kind: 'repair', auto: true }));
     expect(isBusy(me)).toBe(false);
     w.salvage.push({ id: 'rich', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 3 }, parts: [] });
-    const next = scavenge(w);
+    const next = scavenge(w, 'rich');
     expect(next.vehicles[0].job).toEqual(expect.objectContaining({ kind: 'search' }));
     expect(next.events).toContainEqual(expect.objectContaining({ t: 'job', outcome: 'cancelled', job: expect.objectContaining({ auto: true }) }));
   });
@@ -48,7 +49,7 @@ describe('timed scavenging search', () => {
   it('takes turns in proportion to the stock, then opens it for looting', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.salvage.push({ id: 'rich', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 3 }, parts: [] });
-    let next = scavenge(w);
+    let next = scavenge(w, 'rich');
     expect(next.vehicles[0].job).toEqual(expect.objectContaining({ kind: 'search', turnsLeft: 3, total: 3 }));
     let turns = 0;
     while (next.vehicles[0].job) {
@@ -57,15 +58,15 @@ describe('timed scavenging search', () => {
     }
     expect(turns).toBe(3);
     expect(next.events).toContainEqual({ t: 'searched', stock: 'rich' });
-    expect(canLoot(next)).toBe(true);
-    expect(canScavenge(next)).toBe(false);
+    expect(canLoot(next, 'rich')).toBe(true);
+    expect(canScavenge(next, 'rich')).toBe(false);
   });
 
   it('searches a pile in one turn, however big', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const pile = { until: w.turn + SALVAGE.pileTurns, fromPlayer: false, basis: {} };
     w.salvage.push({ id: 'pile', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 5 }, parts: [], pile });
-    const next = endTurn(scavenge(w), testDrive);
+    const next = endTurn(scavenge(w, 'pile'), testDrive);
     expect(next.vehicles[0].job).toBeNull();
     expect(next.events).toContainEqual({ t: 'searched', stock: 'pile' });
   });
@@ -73,7 +74,7 @@ describe('timed scavenging search', () => {
   it('a move cancels the search, and the stock stays closed', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.salvage.push({ id: 'rich', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 5 }, parts: [] });
-    let next = endTurn(scavenge(w), testDrive);
+    let next = endTurn(scavenge(w, 'rich'), testDrive);
     next = setMoveOrder(next, { kind: 'through', dest: { x: 60, y: 30 } });
     for (let t = 0; t < 5 && next.vehicles[0].job; t++) next = endTurn(next, testDrive);
     expect(next.vehicles[0].job).toBeNull();
@@ -168,14 +169,14 @@ describe('machining on searches', () => {
     w.salvage.push({ id: 'rich', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 5 }, parts: [] });
     w.player.ranks.machining = 5;
     const turns = Math.ceil(5 * (1 - 5 * SKILL_EFFECTS.machining.search));
-    expect(scavenge(w).vehicles[0].job).toEqual(expect.objectContaining({ kind: 'search', turnsLeft: turns, total: turns }));
+    expect(scavenge(w, 'rich').vehicles[0].job).toEqual(expect.objectContaining({ kind: 'search', turnsLeft: turns, total: turns }));
   });
 
   it('still takes at least one turn at rank 5', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.salvage.push({ id: 'small', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: 1 }, parts: [] });
     w.player.ranks.machining = 5;
-    expect(scavenge(w).vehicles[0].job).toEqual(expect.objectContaining({ kind: 'search', turnsLeft: 1, total: 1 }));
+    expect(scavenge(w, 'small').vehicles[0].job).toEqual(expect.objectContaining({ kind: 'search', turnsLeft: 1, total: 1 }));
   });
 
   it('leaves NPC searches at full length', () => {
@@ -234,9 +235,9 @@ describe('one looter per wreck, for the player', () => {
   it('refuses a search while another driver searches the wreck, and names the driver', () => {
     const { w, wreck, npc } = sharedWreck();
     beginSearch(w, npc, wreck.id);
-    expect(canScavenge(w)).toBe(false);
-    expect(lootBlockerHere(w)).toBe(npc);
-    expect(() => scavenge(w)).toThrow(`${npc.name} is looting this wreck`);
+    expect(canScavenge(w, wreck.id)).toBe(false);
+    expect(lootBlockerHere(w, wreck.id)).toBe(npc);
+    expect(() => scavenge(w, wreck.id)).toThrow(`${npc.name} is looting this wreck`);
     expect(() => startSearch(w, wreck.id)).toThrow(`${npc.name} is looting this wreck`);
   });
 
@@ -252,12 +253,24 @@ describe('one looter per wreck, for the player', () => {
     expect(wreck.fuel).toBe(2);
   });
 
+  it('keeps a player pile dropped on a wreck apart from the wreck', () => {
+    const { w, wreck } = sharedWreck();
+    const me = w.vehicles[0];
+    const pile = dumpOnPile(w, me, me.items.find((item) => item.kind === 'good') ?? me.items[0]);
+    expect(salvageListNear(w).map((s) => s.id)).toEqual(expect.arrayContaining([wreck.id, pile.id]));
+    // A player pile counts as searched, so only the wreck needs a search.
+    expect(canScavenge(w, pile.id)).toBe(false);
+    expect(canLoot(w, pile.id)).toBe(true);
+    expect(canLoot(w, wreck.id)).toBe(false);
+    expect(scavenge(w, wreck.id).vehicles[0].job).toMatchObject({ kind: 'search', stockId: wreck.id });
+  });
+
   it('searches and loots once the other driver is gone', () => {
     const { w, wreck, npc } = sharedWreck();
     beginSearch(w, npc, wreck.id);
     w.vehicles = w.vehicles.filter((v) => v.id !== npc.id);
-    expect(lootBlockerHere(w)).toBeNull();
-    expect(scavenge(w).vehicles[0].job).toMatchObject({ kind: 'search', stockId: wreck.id });
+    expect(lootBlockerHere(w, wreck.id)).toBeNull();
+    expect(scavenge(w, wreck.id).vehicles[0].job).toMatchObject({ kind: 'search', stockId: wreck.id });
     w.player.scavenged.push(wreck.id);
     expect(goodsCount(takeAllLoot(w, wreck.id).vehicles[0]).scrap).toBeGreaterThan(0);
   });
@@ -269,7 +282,7 @@ describe('one looter per wreck, for the player', () => {
     resolveNpcActivities(w);
     expect(npc.job).toBeNull();
     expect(npc.brain!.goals).toEqual([]);
-    expect(canScavenge(w)).toBe(true);
+    expect(canScavenge(w, wreck.id)).toBe(true);
   });
 
   it('shares a salvage site with other searchers', () => {
@@ -278,7 +291,7 @@ describe('one looter per wreck, for the player', () => {
     w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 4 }, parts: [] }];
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { ...site.pos });
     beginSearch(w, npc, site.id);
-    expect(lootBlockerHere(w)).toBeNull();
-    expect(canScavenge(w)).toBe(true);
+    expect(lootBlockerHere(w, site.id)).toBeNull();
+    expect(canScavenge(w, site.id)).toBe(true);
   });
 });

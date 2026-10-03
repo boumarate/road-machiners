@@ -8,7 +8,7 @@ export const RULES = {
   crawlSpeed: 1, // below this speed turning slows toward a standstill
   lowFuelThreshold: 0.2, // share of tank remaining when speed is limited
   lowFuelSpeedFactor: 0.5, // share of normal top speed below the threshold
-  fuelUseFactor: 0.075, // share of the chassis fuel rate burned per tile; a daytime Bowl to Nose road trip uses under 60% of the starting fuel, leaving room for detours and fights
+  fuelUseFactor: 0.045, // share of the chassis fuel rate burned per tile; a daytime Bowl to Nose road trip uses under 36% of the starting fuel, leaving room for detours and fights
   npcStuckTurns: 2, // failed drive attempts before backing out
   npcRecoveryTurns: 2, // turns spent backing out before resuming the route
   // An NPC that stays put `turns` turns in a row while its goal point is out of reach, for any reason, drives `driveTurns`
@@ -23,6 +23,9 @@ export const RULES = {
   // A player click within throttle reach and less than `cone` degrees off straight behind backs the truck up.
   // Any other point behind turns the truck around nose first. A truck blocked in front, or a stuck NPC, backs out `distance` tiles.
   reverse: { cone: 20, distance: 1 },
+  // A driver that parks beside another truck tries points around it `meetStep` radians apart when the nearest is taken.
+  // 0.3 rad is under a truck length at the usual meeting distance, so no truck-wide gap is skipped.
+  meetStep: 0.3,
   arriveRadius: 0.5, // a stop order clears inside this distance
   // Throttle zones ahead of the truck. They span `reach` tiles, split into brake, hold and accelerate
   // shares in that order. A click's distance picks the zone.
@@ -122,9 +125,9 @@ export const RULES = {
   maxKillWrecks: 12, // oldest wrecks from kills are cleared past this, so obstacles do not pile up
 
   // Supplies, per turn
-  suppliesPerTurn: 0.015, // at base heat; a full load lasts about 550 daytime turns, enough to explore off the roads
+  suppliesPerTurn: 0.009, // at base heat; a full load lasts about 920 daytime turns, enough to explore off the roads
   baseSupplies: 20, // supply cap before mounted supply stores
-  suppliesLow: 4, // the HUD warns at or below this, about 110 daytime turns before running out
+  suppliesLow: 4, // the HUD warns at or below this, about 180 daytime turns before running out
   starveDamage: 5, // character health lost per turn without supplies
   starveFloor: 30, // starving stops here, so only cab damage can kill
   maxHealth: 100,
@@ -134,7 +137,7 @@ export const RULES = {
 
   // Knockout
   defeatPatch: 0.25, // share of max hp broken core parts get back when a driver wakes from a knockout
-  scrapPatch: 0.4, // share of max hp drive parts and of the tank a stranded, broke player with nothing to sell gets at a town
+  scrapPatch: 0.4, // share of max hp drive parts and of the tank a stranded, broke player with nothing to sell gets at a town; also the tank share a broke driver with a low tank gets at a serving site
   townPatch: 0.15, // share of max hp the engine, transmission, wheels, tank and cab get free when the player enters a town
   knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
   surrenderParts: 2, // installed parts, best first, a robber takes with the cargo from a stranded player who gives up
@@ -157,10 +160,10 @@ export const CHEATS = {
   searchRings: 20, // rings searched around a target before giving up
 };
 
-// Props a truck smashes through: fences and junk piles. Every other prop holds like a wall. See breakProp() in
+// Props a truck smashes through: fences, junk piles and dead trees. Every other prop holds like a wall. See breakProp() in
 // src/sim/salvage.ts.
 export const BREAKABLE = {
-  kinds: ['fence', 'junk'] as readonly LandmarkLook[], // landmark looks that break; a fence is planks and a junk pile loose scrap
+  kinds: ['fence', 'junk', 'deadTree'] as readonly LandmarkLook[], // landmark looks that break; a fence is planks, a junk pile loose scrap and a dead tree brittle wood
   breakSpeed: 3, // m/s, about 11 km/h: a truck rolling faster than walking pace breaks through, a creeping one stops
   slowdown: 0.3, // share of its speed a truck loses breaking through, so smashing a fence costs time
   damage: 2, // HP a break deals to the part that hit before armor: a scrape, a third of the softest wall crash (ramDamage × crashDamage × collisionMinImpact², about 6)

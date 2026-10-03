@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { STATE_TURNS } from '../data/npcs';
 import type { TraitId } from '../data/npcs';
 import { addGoods } from './inventory';
+import { getResources } from './resources';
+import { isStranded } from './stats';
 import { thinkNpc } from './npc-activities';
-import { canRob, decide, lootAppeal, npcProfile, optionWeights, ownDanger, vehicleDanger } from './npc-decisions';
+import { canRob, decide, wantsLoot, lootAppeal, npcProfile, optionWeights, ownDanger, vehicleDanger } from './npc-decisions';
 import { NPC_BEHAVIOR, TRAITS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { SKILL_EFFECTS } from '../data/skills';
@@ -616,5 +618,88 @@ describe('cargo value', () => {
     expect(hasLoot(bare)).toBe(true);
     expect(isHostile(w, raider, bare)).toBe(true);
     expect(canRob(w, robber, bare)).toBe(true);
+  });
+});
+
+describe('stranded robbers', () => {
+  const strand = (w: World, v: Vehicle) => { getResources(w, v).fuel = 0; };
+  const addRaider = (w: World, pos: Vec) => {
+    const raider = addVehicle(w, 'raiders', 'wagon', ['mg', 'stockEngine'], pos);
+    raider.brain = npcBrain('buggy', pos, ['raider']);
+    return raider;
+  };
+  const thinkMany = (w: World, id: string, target: string, turns = 40) => {
+    for (let seed = 0; seed < turns; seed++) {
+      w.rngState = seed;
+      const r = find(w, id);
+      thinkNpc(w, r);
+      expect(r.brain!.goals.some((g) => g.targetId === target && (g.kind === 'fight' || g.kind === 'investigate'))).toBe(false);
+    }
+  };
+
+  it('a stranded scumbag gets no rob option and starts no robbery', () => {
+    const { w, robber, target } = passing();
+    strand(w, robber);
+    expect(robWeight(w, robber, target, vehicleDanger(w, target))).toBeUndefined();
+    thinkMany(w, robber.id, target.id);
+    expect(stateOf(w, 'feud', robber.id, target.id)).toBeNull();
+  });
+
+  it('a stranded raider gets no fight or investigate against loot, whether out of fuel or engine', () => {
+    for (const strandIt of [strand, (w: World, v: Vehicle) => { for (const part of mountedParts(v, 'engine')) part.hp = 0; }]) {
+      const w = emptyWorld({ x: 200, y: 200 });
+      const raider = addRaider(w, { x: 10, y: 10 });
+      const target = addPrey(w, { x: 15, y: 10 });
+      const before = optionWeights(w, raider, 'hostileSeen', target.id, vehicleDanger(w, target));
+      expect(before.fight).toBeGreaterThan(0);
+      strandIt(w, raider);
+      if (!isStranded(w, raider)) continue;
+      expect(optionWeights(w, raider, 'hostileSeen', target.id, vehicleDanger(w, target)).fight).toBeUndefined();
+      expect(optionWeights(w, raider, 'contactHeard', target.id, vehicleDanger(w, target)).investigate).toBeUndefined();
+      thinkMany(w, raider.id, target.id);
+    }
+  });
+
+  it('a scumbag stranded mid-robbery gives it up and backs off, unless the prey fights it', () => {
+    for (const fights of [false, true]) {
+      const { w, robber, target } = passing();
+      addState(w, 'feud', robber.id, target.id, { kind: 'feud', robbery: true });
+      robber.brain!.goals.push({ kind: 'fight', targetId: target.id, destination: { ...target.pos }, reason: 'rob cargo', perceived: w.turn } as NpcActivity);
+      strand(w, robber);
+      if (fights) startCombat(w, target, robber);
+      thinkNpc(w, robber);
+      const held = robber.brain!.goals.some((g) => g.kind === 'fight' && g.targetId === target.id);
+      expect(held).toBe(fights);
+      expect(stateOf(w, 'feud', robber.id, target.id) !== null).toBe(fights);
+      expect(stateOf(w, 'backedOff', robber.id, target.id) !== null).toBe(!fights);
+    }
+  });
+
+  it('a stranded raider drops its fight on a looted trader unless it is attacked, and still fights back', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const raider = addRaider(w, { x: 10, y: 10 });
+    const target = addPrey(w, { x: 15, y: 10 });
+    raider.brain!.goals.push({ kind: 'fight', targetId: target.id, destination: { ...target.pos }, reason: 'raid', perceived: w.turn } as NpcActivity);
+    strand(w, raider);
+    thinkNpc(w, raider);
+    expect(raider.brain!.goals.some((g) => g.kind === 'fight' && g.targetId === target.id)).toBe(false);
+    expect(optionWeights(w, raider, 'attacked', target.id, vehicleDanger(w, target)).fightBack).toBeGreaterThan(0);
+  });
+
+  it('a stranded robber wants no loot', () => {
+    const { w, robber, target } = passing();
+    addState(w, 'feud', robber.id, target.id, { kind: 'feud', robbery: true });
+    expect(wantsLoot(w, robber, target)).toBe(true);
+    strand(w, robber);
+    expect(wantsLoot(w, robber, target)).toBe(false);
+  });
+
+  it('mobile robbers still rob', () => {
+    const { w, robber, target } = passing();
+    expect(robWeight(w, robber, target, vehicleDanger(w, target))).toBeGreaterThan(0);
+    const w2 = emptyWorld({ x: 200, y: 200 });
+    const raider = addRaider(w2, { x: 10, y: 10 });
+    const loaded = addPrey(w2, { x: 15, y: 10 });
+    expect(optionWeights(w2, raider, 'hostileSeen', loaded.id, vehicleDanger(w2, loaded)).fight).toBeGreaterThan(0);
   });
 });

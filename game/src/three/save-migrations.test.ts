@@ -12,9 +12,11 @@ import FORMAT_2_4 from './save-fixtures/format-2-4.json';
 import FORMAT_2_5 from './save-fixtures/format-2-5.json';
 import FORMAT_2_6 from './save-fixtures/format-2-6.json';
 import FORMAT_2_7 from './save-fixtures/format-2-7.json';
+import FORMAT_2_8 from './save-fixtures/format-2-8.json';
+import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
-import { MIGRATIONS, pooledSkills_7_8 } from './save-migrations';
+import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
 
 describe('save migrations', () => {
   it('0 to 1 gives the player townPatched false and keeps every other field', () => {
@@ -175,9 +177,37 @@ describe('save migration 6 to 7', () => {
 });
 
 describe('save migration 7 to 8', () => {
-  // Total XP each 2.7 level needed, a copy for the test.
+  const next = MIGRATIONS[7](FORMAT_2_7) as { salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
+
+  it('drops the Fallen Sun stock and its searched mark, and keeps every other stock', () => {
+    expect(next.salvage.map((stock) => stock.id)).toEqual(['wreck3']);
+    expect(next.player.scavenged).toEqual(['wreck3']);
+  });
+
+  it('ends a search of the old stock and keeps other searches', () => {
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[1]).toEqual(FORMAT_2_7.vehicles[1]);
+  });
+});
+
+describe('save migration 8 to 9', () => {
+  const next = MIGRATIONS[8](FORMAT_2_8) as { salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
+
+  it('drops the Old Orchard stock and its searched mark, and keeps every other stock', () => {
+    expect(next.salvage.map((stock) => stock.id)).toEqual(['wreck3']);
+    expect(next.player.scavenged).toEqual(['wreck3']);
+  });
+
+  it('ends a search of the old stock and keeps other searches', () => {
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[1]).toEqual(FORMAT_2_8.vehicles[1]);
+  });
+});
+
+describe('save migration 9 to 10', () => {
+  // Total XP each 2.9 level needed, a copy for the test.
   const reach = [0, 200, 600, 1200, 2000, 3000];
-  const migrated = () => MIGRATIONS[7](FORMAT_2_7) as { player: Pick<Player, 'xp' | 'ranks' | 'perks'> & Record<string, unknown> };
+  const migrated = () => MIGRATIONS[9](FORMAT_2_9) as { player: Pick<Player, 'xp' | 'ranks' | 'perks'> & Record<string, unknown> };
 
   it('turns each old level into the same rank, at 0, mid level, on a threshold and past the top', () => {
     expect(migrated().player.ranks).toEqual({ driving: 0, perception: 1, machining: 2, toughness: 5, social: 3 });
@@ -186,20 +216,20 @@ describe('save migration 7 to 8', () => {
   it('keeps every earned XP: the pool holds what the ranks did not cost', () => {
     const { xp, ranks } = migrated().player;
     const spent = Object.values(ranks).reduce((sum, rank) => sum + reach[rank], 0);
-    const earned = Object.values(FORMAT_2_7.player.skills).reduce((sum, n) => sum + n, 0);
+    const earned = Object.values(FORMAT_2_9.player.skills).reduce((sum, n) => sum + n, 0);
     expect(xp).toBe(250 + 500 + 799);
     expect(xp + spent).toBe(earned);
   });
 
   it('removes skills and leaves perks, daily XP, repeats and XP per source as they were', () => {
     const next = migrated();
-    const kept = Object.fromEntries(Object.entries(FORMAT_2_7.player).filter(([key]) => key !== 'skills'));
-    expect(next).toEqual({ ...FORMAT_2_7, player: { ...kept, xp: next.player.xp, ranks: next.player.ranks } });
+    const kept = Object.fromEntries(Object.entries(FORMAT_2_9.player).filter(([key]) => key !== 'skills'));
+    expect(next).toEqual({ ...FORMAT_2_9, player: { ...kept, xp: next.player.xp, ranks: next.player.ranks } });
     expect(next.player).not.toHaveProperty('skills');
   });
 
   it('pools a skill map the same way for the rescue', () => {
-    expect(pooledSkills_7_8(FORMAT_2_7.player.skills)).toEqual({ xp: migrated().player.xp, ranks: migrated().player.ranks });
+    expect(pooledSkills_9_10(FORMAT_2_9.player.skills)).toEqual({ xp: migrated().player.xp, ranks: migrated().player.ranks });
   });
 
   it('keeps owned perks valid and opens the pairs the old levels reached', () => {

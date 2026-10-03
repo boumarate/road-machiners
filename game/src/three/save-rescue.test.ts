@@ -8,7 +8,7 @@ import { loadWorld, saveOf } from './save';
 import { readCarried, rescueSave } from './save-rescue';
 import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
-import FORMAT_2_7 from './save-fixtures/format-2-7.json';
+import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import { MIGRATIONS } from './save-migrations';
 
 const KIT = startKit('standard');
@@ -49,16 +49,16 @@ describe('readCarried', () => {
     expect(carried.truck?.items.some((it) => it.kind === 'part' && it.part.defId === 'mg')).toBe(true);
   });
 
-  it('reads skill XP from before format 2.8 as the 7 to 8 step does', () => {
-    const old = readCarried({ format: { major: 2, minor: 7 }, world: FORMAT_2_7 });
-    const migrated = readCarried({ format: { major: 2, minor: 8 }, world: MIGRATIONS[7](FORMAT_2_7) });
+  it('reads skill XP from before format 2.10 as the 9 to 10 step does', () => {
+    const old = readCarried({ format: { major: 2, minor: 9 }, world: FORMAT_2_9 });
+    const migrated = readCarried({ format: { major: 2, minor: 10 }, world: MIGRATIONS[9](FORMAT_2_9) });
     expect(old.ranks).toEqual({ driving: 0, perception: 1, machining: 2, toughness: 5, social: 3 });
     expect(old.xp).toBe(1549);
     expect({ xp: old.xp, ranks: old.ranks }).toEqual({ xp: migrated.xp, ranks: migrated.ranks });
   });
 
   it('keeps old perks whose rank holds and drops the rest', () => {
-    const world = { ...FORMAT_2_7, player: { ...FORMAT_2_7.player, perks: ['welder', 'desertRat', 'steadyAim'] } };
+    const world = { ...FORMAT_2_9, player: { ...FORMAT_2_9.player, perks: ['welder', 'desertRat', 'steadyAim'] } };
     const { world: rescued } = carriedWorld(readCarried({ world }), KIT, TEST_MAP, fresh);
     expect(rescued.player.perks).toEqual(['welder', 'desertRat']);
     expect(rescued.player.ranks.toughness).toBe(5);

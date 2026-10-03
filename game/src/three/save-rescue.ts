@@ -6,7 +6,7 @@ import type { BakedMap } from '../sim/terrain';
 import { carriedWorld, type Carried, type CarriedItem, type CarriedPart, type CarryReport } from '../sim/world';
 import type { World } from '../sim/types';
 import type { SlotId } from './save-slots';
-import { pooledSkills_7_8 } from './save-migrations';
+import { pooledSkills_9_10 } from './save-migrations';
 import { storedSave, writeSave } from './save';
 
 type Json = Record<string, unknown>;
@@ -105,11 +105,11 @@ export function readCarried(raw: unknown): Carried {
   };
 }
 
-// The XP pool and skill ranks. A save from before format 2.8 holds XP per skill, which reads as the 2.7 to 2.8 step
+// The XP pool and skill ranks. A save from before format 2.10 holds XP per skill, which reads as the 2.9 to 2.10 step
 // reads it.
 function pooledOf(player: Json): Pick<Carried, 'xp' | 'ranks'> {
   if (objectOf(player.ranks)) return { xp: countOf(player.xp), ranks: countsOf(player.ranks) };
-  return pooledSkills_7_8(countsOf(player.skills));
+  return pooledSkills_9_10(countsOf(player.skills));
 }
 
 // Builds a new world from the stored save and stores it, so the next boot loads it. Null when the stored

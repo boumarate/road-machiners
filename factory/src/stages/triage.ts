@@ -6,7 +6,7 @@ type Verdict = { verdict: 'ready'; reason: string; hotfix: boolean } | { verdict
 // Reads a verdict without pushing anything. Ready cards go on to Design, refused ones close, unclear ones wait for the author.
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const clone = workDir(ctx, issue);
-  await ctx.repo.sync();
+  await ctx.repo.fetch();
   await ctx.repo.prepareWorkClone(BRANCH(issue), BASE_BRANCH, clone);
   const home = agentHome(clone, GAME_DIR);
   resetOutputs(home);
