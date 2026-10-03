@@ -20,7 +20,7 @@ function deg(r: number): string {
 // "18 m · shows 4.1 m wide · scatter 2.0° weapon +1.1° crossing +0.4° own speed −0.3° gunnery".
 // Extra causes that round to zero are left out.
 function detailLine(o: HitOdds): string {
-  const extra = ([[o.causes.range, 'range'], [o.causes.crossing, 'crossing'], [o.causes.own, 'own speed'], [o.causes.recoil, 'recoil'], [o.causes.skill, 'perception'], [o.causes.weather, 'weather'], [o.causes.still, 'still target']] as const)
+  const extra = ([[o.causes.range, 'range'], [o.causes.crossing, 'crossing'], [o.causes.own, 'own speed'], [o.causes.recoil, 'recoil'], [o.causes.skill, 'perception'], [o.causes.weather, 'weather'], [o.causes.smoke, 'smoke'], [o.causes.still, 'still target']] as const)
     .filter(([r]) => deg(r) !== '0.0')
     .map(([r, name]) => ` ${r < 0 ? '−' : '+'}${deg(r)}° ${name}`)
     .join('');
@@ -32,7 +32,7 @@ const MAIN_SHARE = 0.25;
 const MAX_REASONS = 2;
 
 // The biggest reasons the chance is low, in plain words: "far, you are moving". A parked target reads as easy.
-// An aimed part that other parts shield from this side leads.
+// Smoke between the trucks and an aimed part that other parts shield from this side lead.
 function reasonLine(o: HitOdds, aim: Aim): string {
   const c = o.causes;
   const covered = aim !== 'body' && Math.round(o.damageChance * 100) < Math.round(o.chance * 100);
@@ -41,9 +41,14 @@ function reasonLine(o: HitOdds, aim: Aim): string {
     .sort((a, b) => b[0] - a[0])
     .slice(0, covered ? MAX_REASONS - 1 : MAX_REASONS)
     .map(([, name]) => name);
-  if (covered) reasons.unshift('parts in the way');
-  if (deg(c.still) !== '0.0') reasons.unshift('target is parked: easy');
+  reasons.unshift(...leadReasons(c, covered));
   return reasons.length > 0 ? reasons.join(', ') : 'clear shot';
+}
+
+// Reasons named whatever their share: a parked target, smoke on the line and parts in the way.
+function leadReasons(c: HitOdds['causes'], covered: boolean): string[] {
+  const lead: [boolean, string][] = [[deg(c.still) !== '0.0', 'target is parked: easy'], [c.smoke > 0, 'smoke'], [covered, 'parts in the way']];
+  return lead.filter(([on]) => on).map(([, name]) => name);
 }
 
 function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim, name: string): HitRow {

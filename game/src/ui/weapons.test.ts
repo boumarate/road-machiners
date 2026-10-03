@@ -2,13 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { hitOdds } from "../sim/combat";
 import { playerVehicle } from "../sim/damage";
 import { mountedParts } from "../sim/grid";
-import type { Vehicle } from "../sim/types";
+import type { Vehicle, World } from "../sim/types";
 import { addState } from "../sim/states";
 import { vehicleStats } from "../sim/stats";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { refreshVision } from "../sim/vision";
 import type { UiHost } from "./host";
-import { HoverHold, WeaponPanel, aimAtPart, aimMarks, aimName, ammoCells, canForceReload, getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
+import { makePart } from "../sim/factory";
+import { mountPart } from "../sim/inventory";
+import { HoverHold, UtilityRow, WeaponPanel, aimAtPart, aimMarks, aimName, ammoCells, canForceReload, getWeaponReadout, toggleTarget, utilitySlots, utilityStatus, vehicleMarks } from "./weapons";
 
 function createDuel() {
   const world = emptyWorld();
@@ -358,6 +360,8 @@ describe("weapon panel keys and the turn button", () => {
       apply: vi.fn(),
       selectedWeapon: vi.fn<() => string | null>(() => null),
       selectWeapon: vi.fn(),
+      selectedUtility: vi.fn<() => string | null>(() => null),
+      selectUtility: vi.fn(),
       pressTurn: vi.fn(),
       releaseTurn: vi.fn(),
       runKey: vi.fn(),
@@ -409,5 +413,89 @@ describe("weapon panel keys and the turn button", () => {
     expect(host.pressTurn).toHaveBeenCalledTimes(1);
     win.fire("pointercancel");
     expect(host.releaseTurn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the utility row", () => {
+  // The player's truck with a Sprout and a Smoke mortar on deck, and a host that applies commands to its world.
+  function build() {
+    const world = { w: emptyWorld() };
+    const me = world.w.vehicles[0];
+    const sprout = makePart(world.w, "sprout", 0);
+    const mortar = makePart(world.w, "smokeMortar", 0);
+    for (const part of [sprout, mortar]) if (!mountPart(world.w, me, part)) throw new Error(`No room for ${part.defId}`);
+    const host = {
+      world: () => world.w,
+      apply: vi.fn((next: World) => { world.w = next; }),
+      selectedWeapon: () => null,
+      selectWeapon: vi.fn(),
+      selectedUtility: vi.fn<() => string | null>(() => null),
+      selectUtility: vi.fn(),
+      pressTurn: vi.fn(),
+      releaseTurn: vi.fn(),
+      runKey: vi.fn(),
+      autoTravel: () => false,
+      getTurnPhase: vi.fn<() => "Moving" | null>(() => null),
+    } satisfies UiHost;
+    return { world, host, row: new UtilityRow(host), sprout, mortar };
+  }
+
+  it("lists the active utilities in mount order, not the passive ones", () => {
+    const { world, sprout, mortar } = build();
+    const crane = makePart(world.w, "patcherCrane", 0);
+    mountPart(world.w, world.w.vehicles[0], crane);
+    expect(utilitySlots(world.w).map((p) => p.id)).toEqual([sprout.id, mortar.id]);
+  });
+
+  it("a self utility's press sets its use for this turn, and a second press clears it", () => {
+    const { world, row, sprout } = build();
+    row.selectUtility(0);
+    expect(world.w.vehicles[0].utilityOrders).toEqual({ [sprout.id]: { kind: "self" } });
+    expect(utilityStatus(world.w, sprout, false)).toEqual({ text: "use this turn", ready: true });
+    row.selectUtility(0);
+    expect(world.w.vehicles[0].utilityOrders).toEqual({});
+  });
+
+  it("a point utility's press selects it and a second press drops the selection", () => {
+    const { host, row, mortar } = build();
+    row.selectUtility(1);
+    expect(host.selectUtility).toHaveBeenLastCalledWith(mortar.id);
+    host.selectedUtility.mockReturnValue(mortar.id);
+    row.selectUtility(1);
+    expect(host.selectUtility).toHaveBeenLastCalledWith(null);
+  });
+
+  it("a recharging utility shows its turns and its press does nothing", () => {
+    const { world, host, row, sprout, mortar } = build();
+    sprout.charge = { reload: 3 };
+    mortar.charge = { reload: 1 };
+    row.selectUtility(0);
+    row.selectUtility(1);
+    expect(host.apply).not.toHaveBeenCalled();
+    expect(host.selectUtility).toHaveBeenLastCalledWith(null);
+    expect(utilityStatus(world.w, sprout, false)).toEqual({ text: "recharging 3 turns", ready: false });
+    expect(utilityStatus(world.w, mortar, false)).toEqual({ text: "recharging 1 turn", ready: false });
+  });
+
+  it("shows a broken utility, an armed claymore, a selected point utility and a set point", () => {
+    const { world, sprout, mortar } = build();
+    sprout.hp = 0;
+    expect(utilityStatus(world.w, sprout, false)).toEqual({ text: "broken", ready: false });
+    expect(utilityStatus(world.w, mortar, false)).toEqual({ text: "ready", ready: true });
+    expect(utilityStatus(world.w, mortar, true)).toEqual({ text: "click the ground", ready: true });
+    world.w.vehicles[0].utilityOrders[mortar.id] = { kind: "point", pos: { x: 40, y: 30 } };
+    expect(utilityStatus(world.w, mortar, false)).toEqual({ text: "point set", ready: true });
+    const claymore = makePart(world.w, "claymoreRam", 0);
+    claymore.charge = { reload: 0, armed: true };
+    expect(utilityStatus(world.w, claymore, false)).toEqual({ text: "armed", ready: true });
+  });
+
+  it("ignores presses while a turn plays and on an empty slot", () => {
+    const { host, row } = build();
+    row.selectUtility(3);
+    host.getTurnPhase.mockReturnValue("Moving");
+    row.selectUtility(0);
+    expect(host.apply).not.toHaveBeenCalled();
+    expect(host.selectUtility).not.toHaveBeenCalled();
   });
 });

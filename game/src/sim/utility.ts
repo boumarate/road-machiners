@@ -1,12 +1,14 @@
 // Utility parts: their charge, the orders that use them and the activation step of the turn. Each effect's world
 // object has its own owner file; this file only checks orders and hands each use to its effect.
 
-import { partDef, type PartDef, type UtilityDef, type UtilityEffectType } from '../data/parts';
+import { partDef, type PartDef, type UtilityDef, type UtilityEffect, type UtilityEffectType } from '../data/parts';
 import type { FireBlock } from './combat';
 import { findPart } from './damage';
 import { isKnockedOut } from './defeat';
 import { isMounted, mountedParts } from './grid';
+import { deploySmoke } from './smoke';
 import type { ChargeState, PartInstance, UtilityOrder, Vehicle, World } from './types';
+import { dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 import { wornDef, wornTurns } from './wear';
 
@@ -52,8 +54,14 @@ const passive = (kind: UseKind) => (): void => {
   throw new Error(`${kind} is passive and is never used`);
 };
 const ARMS: Record<UseKind, (world: World, use: Use) => void> = {
-  sprout: notBuilt('sprout'),
-  mortar: notBuilt('mortar'),
+  sprout: (world, { vehicle, part }) => {
+    const e = effectOf(part, 'sprout');
+    deploySmoke(world, vehicle, vehicle.pos, e.radius, e.turns);
+  },
+  mortar: (world, { vehicle, part, order }) => {
+    const e = effectOf(part, 'mortar');
+    deploySmoke(world, vehicle, pointOf(order), e.radius, e.turns);
+  },
   flare: notBuilt('flare'),
   harpoon: notBuilt('harpoon'),
   caltrops: notBuilt('caltrops'),
@@ -64,11 +72,34 @@ const ARMS: Record<UseKind, (world: World, use: Use) => void> = {
   scraper: passive('scraper'),
 };
 
+function effectOf<T extends UtilityEffectType>(part: PartInstance, type: T): Extract<UtilityEffect, { type: T }> {
+  const def = partDef(part.defId);
+  if (def.kind !== 'utility' || def.effect.type !== type) throw new Error(`${def.name} is not a ${type}`);
+  return def.effect as Extract<UtilityEffect, { type: T }>;
+}
+
+function pointOf(order: UtilityOrder): Vec {
+  if (order.kind !== 'point') throw new Error(`A ${order.kind} order has no point`);
+  return order.pos;
+}
+
 // The use of a part that has a charge: its utility effect, or arming for a claymore ram. Throws for any other part.
 function useKindOf(def: PartDef): UseKind {
   if (def.kind === 'utility') return def.effect.type;
   if (def.kind === 'armor' && def.claymore) return 'claymore';
   throw new Error(`${def.name} is not a utility`);
+}
+
+// The kind of order the part takes: self, truck or point, or null for a passive utility. Throws for a part that is
+// not a utility or a claymore ram.
+export function orderKindOf(part: PartInstance): UtilityOrder['kind'] | null {
+  return ORDER_KIND[useKindOf(partDef(part.defId))];
+}
+
+// The mounted parts that act on an order, working or not, in the truck's item order: active utilities and claymore
+// rams.
+export function chargedParts(v: Vehicle): PartInstance[] {
+  return mountedParts(v).filter((p) => p.charge !== undefined);
 }
 
 export function chargeOf(part: PartInstance): ChargeState {
@@ -109,7 +140,28 @@ export function utilityOrderError(world: World, v: Vehicle, partId: string, orde
   if (order.kind !== wanted) return `${def.name} takes a ${wanted} order`;
   const block = utilityBlock(world, v, part);
   if (block) return `${def.name}: ${block}`;
-  return order.kind === 'truck' ? truckOrderError(world, v, order) : null;
+  return targetError(world, v, part, order);
+}
+
+function targetError(world: World, v: Vehicle, part: PartInstance, order: UtilityOrder): string | null {
+  if (order.kind === 'truck') return truckOrderError(world, v, order);
+  if (order.kind === 'point' && pointBlock(v, part, order.pos)) return `${partDef(part.defId).name}: range`;
+  return null;
+}
+
+// How near and how far from the truck the part may send its point, in tiles. Throws for a part that takes no point.
+export function pointReach(part: PartInstance): { minRange: number; maxRange: number } {
+  const def = partDef(part.defId);
+  const e = def.kind === 'utility' ? def.effect : null;
+  if (!e || !('maxRange' in e)) throw new Error(`${def.name} takes no point`);
+  return { minRange: e.minRange, maxRange: e.maxRange };
+}
+
+// 'range' when the point lies nearer or farther than the part reaches from the truck, else null. No sight is needed.
+export function pointBlock(v: Vehicle, part: PartInstance, pos: Vec): FireBlock | null {
+  const { minRange, maxRange } = pointReach(part);
+  const d = dist(v.pos, pos);
+  return d < minRange || d > maxRange ? 'range' : null;
 }
 
 function truckOrderError(world: World, v: Vehicle, order: Extract<UtilityOrder, { kind: 'truck' }>): string | null {

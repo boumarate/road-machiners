@@ -32,6 +32,7 @@ export const PAL = {
   select: 0xf0d060,
   arcSpent: 0x9a9a94, // firing arc of a gun that is reloading or cooling down
   contact: 0xf4f1ea, // faint white sound waves around a contact
+  smoke: 0x1e1b19, // black smoke clouds from smoke utilities and their ground edge
   dustTrail: 0xe0c49a, // dust streak behind a contact seen by its dust, pale so it shows over fog
   radio: 0x8fe0c8, // crisp scanner blip
   flash: 0xfff0a0,

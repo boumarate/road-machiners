@@ -99,6 +99,23 @@ describe('hover card rows', () => {
     expect(hitCardRows(world, them.id)!.mine[0].detail).toContain(` −${(-o.causes.skill / DEG).toFixed(1)}° perception`);
   });
 
+  it('shows smoke between us as a scatter cause and names it as a reason', () => {
+    const { world, me, them, mine } = createDuel();
+    world.smoke = [{ id: 's1', source: me.id, pos: { x: 31.5, y: 30 }, r: 1, turnsLeft: 3 }];
+    const o = hitOdds(world, me, mine, them, 'body');
+    const row = hitCardRows(world, them.id)!.mine[0];
+    expect(o.causes.smoke).toBeGreaterThan(0);
+    expect(row.detail).toContain(` +${(o.causes.smoke / DEG).toFixed(1)}° smoke`);
+    expect(row.cause).toContain('smoke');
+  });
+
+  it('names no smoke on a clear shot', () => {
+    const { world, them } = createDuel();
+    const row = hitCardRows(world, them.id)!.mine[0];
+    expect(row.detail).not.toContain('smoke');
+    expect(row.cause).not.toContain('smoke');
+  });
+
   it('shows no card for my own truck', () => {
     const { world, me } = createDuel();
     expect(hitCardRows(world, me.id)).toBeNull();

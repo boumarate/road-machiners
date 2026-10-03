@@ -28,6 +28,8 @@ import { vehicleStats, type MountedWeapon } from './stats';
 import { partDef, type WeaponDef } from '../data/parts';
 import type { Aim, GunState, NpcActivity, PartInstance, ShotRound, Vehicle, VehicleHits, World } from './types';
 import { weatherAt } from './weather';
+import { smokeCrosses } from './smoke';
+import { SMOKE } from '../data/utilities';
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
 
 export type FireBlock =
@@ -191,6 +193,7 @@ export type HitOdds = {
     recoil: number; // the gun's kick, smaller on a heavier truck
     skill: number;
     weather: number;
+    smoke: number; // the line from shooter to target touches a smoke cloud
     still: number; // negative: a target standing still is easy to aim at
   }; // radians
 };
@@ -496,6 +499,7 @@ function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target:
     own: steady ? 0 : RULES.shake * mw.def.shake * mps(Math.abs(shooter.speed)),
     recoil: (mw.def.recoil * DEG) / (vehicleMass(shooter) / KG_PER_TONNE),
     weather: vehicleHasPerk(world, shooter, "stormRider") ? 0 : weatherAt(world, shooter.pos).spread,
+    smoke: smokeCrosses(world, shooter.pos, target.pos) ? SMOKE.spread : 0,
   };
   const sum = Object.values(base).reduce((a, cause) => a + cause, 0);
   const still = Math.abs(target.speed) < RULES.stillSpeed ? -sum * (1 - RULES.stillSpread) : 0;

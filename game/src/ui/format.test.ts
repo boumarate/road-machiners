@@ -138,6 +138,13 @@ describe("roundLabel", () => {
   });
 });
 
+describe("utility log", () => {
+  it("logs no line for a utility use, so smoke never reads as mechanical state", () => {
+    const w = emptyWorld();
+    expect(eventText(w, { t: "utility", vehicle: w.player.vehicleId, part: "p1", effect: "sprout", target: null, point: null })).toBeNull();
+  });
+});
+
 describe("collision log", () => {
   it("logs no crash, whether into a standing obstacle or through a fence", () => {
     const w = emptyWorld();

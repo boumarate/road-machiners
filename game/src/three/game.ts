@@ -67,6 +67,8 @@ import { sunAt } from "../sim/sun";
 import { markError, markVehicle } from "../sim/detect";
 import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
+import { SmokeCloudsView } from "./render/smoke";
+import { UtilityAim } from "./utility-aim";
 import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
 import { reportError } from "./crash";
@@ -125,6 +127,8 @@ export class Game {
   private readonly zones = new ZonesView();
   private readonly contacts = new ContactsView();
   private readonly dust = new DustCloudsView();
+  private readonly smoke = new SmokeCloudsView();
+  private readonly utilityAim = new UtilityAim({ world: () => this.world, apply: (next) => this.apply(next), note: (text) => this.hud.note(this.world, text, "bad") });
   private readonly soundRing = new SoundRingView();
   private readonly path: PathView;
   private readonly fx: Fx3D;
@@ -233,6 +237,8 @@ export class Game {
       this.hoverArcs.root,
       this.contacts.root,
       this.dust.root,
+      this.smoke.root,
+      this.utilityAim.root,
       this.soundRing.root,
     );
     this.overlay = overlay;
@@ -288,7 +294,7 @@ export class Game {
       autoTravel: () => this.travel.isAuto(this.world),
       dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.runKey("KeyF"),
-      aimPart: (vehicleId, partId) => this.anim === null && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
+      aimPart: (vehicleId, partId) => this.anim === null && !this.utilityAim.aimPart(vehicleById(this.world, vehicleId), partId) && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
@@ -310,6 +316,8 @@ export class Game {
       apply: (next) => { this.apply(next); if (!this.saves.held) saveInTown(window.localStorage, next, Date.now()); },
       selectedWeapon: () => this.selected,
       selectWeapon: (id) => { if (this.anim || this.modalOpen()) return; this.selected = id; this.refreshUi(); },
+      selectedUtility: () => this.utilityAim.selectedId,
+      selectUtility: (id) => this.selectUtility(id),
       pressTurn: () => this.pressTurn(),
       releaseTurn: () => this.releaseTurn(),
       runKey: (code) => this.runKey(code),
@@ -439,7 +447,7 @@ export class Game {
     const canvas = this.renderer.domElement;
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
     canvas.addEventListener("pointerdown", (e) => {
-      if (e.button === 0) this.onLeftClick(e);
+      if (e.button === 0 && !this.clickUtility(e)) this.onLeftClick(e);
     });
     window.addEventListener("pointermove", (e) => e.target === canvas && this.onHover(e));
     canvas.addEventListener("wheel", (e) => this.rig.zoomBy(e.deltaY), { passive: true });
@@ -485,6 +493,7 @@ export class Game {
     KeyX: { run: () => this.weapons.toggleVisible(), noModal: true },
     Digit0: { run: () => this.weapons.selectWeapon(null), noModal: true },
     ...Object.fromEntries([0, 1, 2, 3].map((i) => [`Digit${i + 1}`, { run: () => this.weapons.selectIndex(i), noModal: true as const, idle: true as const }])),
+    ...Object.fromEntries([0, 1, 2, 3].map((i) => [`Digit${i + 5}`, { run: () => this.weapons.utilities.selectUtility(i), noModal: true as const, idle: true as const }])),
     KeyE: { run: () => this.context.use(), noModal: true },
     ArrowLeft: { run: () => this.cycleContext(-1), noModal: true, idle: true },
     ArrowRight: { run: () => this.cycleContext(1), noModal: true, idle: true },
@@ -495,8 +504,14 @@ export class Game {
     KeyN: { run: () => this.hovered && !markError(this.world, this.hovered) && this.apply(markVehicle(this.world, this.hovered)), noModal: true, idle: true },
     KeyC: { run: () => this.toggleScreen(this.character), idle: true },
     KeyI: { run: () => this.toggleScreen(this.inventory), idle: true },
-    Escape: { run: () => this.closeScreens(null) },
+    Escape: { run: () => { this.closeScreens(null); this.selectUtility(null); } },
   };
+
+  private selectUtility(id: string | null): void {
+    if (this.anim || (id !== null && this.modalOpen())) return;
+    this.utilityAim.select(id);
+    this.refreshUi();
+  }
 
   private closeScreens(keep: CharacterScreen | InventoryScreen | null): void {
     for (const s of [this.town, this.trade, this.character, this.inventory]) if (s !== keep) s.close();
@@ -522,6 +537,14 @@ export class Game {
       return this.apply(setMoveOrder(this.world, { kind: "brake" }));
     const p = this.rig.groundUnder(e.clientX, e.clientY, this.ground);
     if (p) this.apply(setMoveOrder(this.world, clickOrder(p, e.shiftKey, playerVehicle(this.world))));
+  }
+
+  // A selected truck or point utility takes the click as its target instead of a move or a gun order.
+  private clickUtility(e: MouseEvent): boolean {
+    if (this.anim || this.modalOpen() || !playerCanAct(this.world)) return false;
+    const picked = this.pickVehicle(e.clientX, e.clientY);
+    const other = picked && picked.id !== playerVehicle(this.world).id ? picked : null;
+    return this.utilityAim.click(other, this.rig.groundUnder(e.clientX, e.clientY, this.ground));
   }
 
   private targetVehicle(target: Vehicle): void {
@@ -1086,6 +1109,8 @@ export class Game {
     this.placePickRing(hide);
     this.contacts.update(this.world.terrain, this.world.player.contacts, playerVehicle(this.world).pos, this.world.turn, performance.now());
     this.dust.update(this.world, this.world.terrain, performance.now());
+    this.smoke.update(this.world, this.world.terrain, performance.now());
+    this.utilityAim.draw(this.world, this.world.terrain, this.hoverGround, !steer);
     const meFrame = this.frames[playerVehicle(this.world).id];
     this.soundRing.update(
       this.world.terrain,

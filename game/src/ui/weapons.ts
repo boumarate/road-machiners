@@ -4,10 +4,11 @@ import { fireBlock, gunOf, hitOdds, type FireBlock } from "../sim/combat";
 import { gaveUp, isKnockedOut } from "../sim/defeat";
 import { findPart, playerVehicle } from "../sim/damage";
 import { vehicleStats, type MountedWeapon } from "../sim/stats";
-import type { Aim, Vehicle, World } from "../sim/types";
+import type { Aim, PartInstance, UtilityOrder, Vehicle, World } from "../sim/types";
 import { playerSees } from "../sim/vision";
 import { workOf } from "../sim/states";
-import { playerCanAct, reloadWeapon, setAutoFire, setWeaponOrder } from "../sim/world";
+import { playerCanAct, reloadWeapon, setAutoFire, setUtilityOrder, setWeaponOrder } from "../sim/world";
+import { chargeOf, chargedParts, orderKindOf, utilityBlock, utilityOrderError } from "../sim/utility";
 import { el, panel } from "./dom";
 import { meters } from "./units";
 import type { UiHost } from "./host";
@@ -170,12 +171,115 @@ export function getWeaponReadout(w: World, mw: MountedWeapon) {
   };
 }
 
+export const UTILITY_SLOTS = 4; // keys 5 to 8
+
+// What a set order reads as on its slot, and what a selected slot waits for.
+const ORDER_TEXT: Record<UtilityOrder["kind"], string> = { self: "use this turn", truck: "target set", point: "point set" };
+const PICK_TEXT: Record<UtilityOrder["kind"], string> = { self: "", truck: "click a truck", point: "click the ground" };
+
+// The parts in the utility row, in slot order: active utilities and claymore rams, working or not.
+export function utilitySlots(w: World): PartInstance[] {
+  return chargedParts(playerVehicle(w)).slice(0, UTILITY_SLOTS);
+}
+
+// A utility slot's state: an order set this turn, waiting for its target click, armed, ready, recharging or blocked.
+export function utilityStatus(w: World, part: PartInstance, selected: boolean): { text: string; ready: boolean } {
+  const me = playerVehicle(w);
+  const order = me.utilityOrders[part.id];
+  if (order) return { text: ORDER_TEXT[order.kind], ready: true };
+  if (chargeOf(part).armed) return { text: "armed", ready: true };
+  const block = utilityBlock(w, me, part);
+  if (block) return { text: utilityBlockText(part, block), ready: false };
+  return { text: selected ? pickText(part) : "ready", ready: true };
+}
+
+function pickText(part: PartInstance): string {
+  const kind = orderKindOf(part);
+  if (kind === null) throw new Error(`${partDef(part.defId).name} is passive and has no slot`);
+  return PICK_TEXT[kind];
+}
+
+function utilityBlockText(part: PartInstance, block: FireBlock): string {
+  if (block === "cooldown") return `recharging ${turns(chargeOf(part).reload)}`;
+  return block === "disabled" ? "broken" : BLOCK_TEXT[block];
+}
+
+// The utility row of the weapon panel. A slot press, by key or click, toggles a self use for this turn, or selects a
+// truck or point utility so the next click on a truck or the ground gives its order. A press on a slot with an order
+// clears it.
+export class UtilityRow {
+  constructor(private host: UiHost) {}
+
+  render(w: World): HTMLElement | null {
+    const parts = utilitySlots(w);
+    if (parts.length === 0) return null;
+    return el("div", { class: "weapon-slots utility-slots" }, ...parts.map((part, i) => this.renderSlot(w, part, i)));
+  }
+
+  private renderSlot(w: World, part: PartInstance, i: number): HTMLElement {
+    const selected = this.host.selectedUtility() === part.id;
+    const status = utilityStatus(w, part, selected);
+    const name = partDef(part.defId).name;
+    const key = i + 1 + UTILITY_SLOTS;
+    return el(
+      "div",
+      { class: "weapon-slot utility-slot", "data-utility": part.id },
+      el(
+        "button",
+        {
+          class: `weapon-pick ${selected ? "on" : ""}`,
+          "aria-pressed": String(selected),
+          "aria-label": `${name}: ${status.text}`,
+          title: `${name} [${key}]`,
+          onclick: () => this.host.runKey(`Digit${key}`),
+        },
+        el("span", { class: "weapon-number" }, `${key}`),
+        el("span", { class: "weapon-name" }, name),
+        createIcon("utility"),
+        el("span", { class: status.ready ? "good" : "dim", "data-status": "" }, status.text),
+      ),
+    );
+  }
+
+  // The press on slot i. Nothing happens while a turn plays or on an empty slot.
+  selectUtility(i: number): void {
+    if (this.host.getTurnPhase() !== null) return;
+    const w = this.host.world();
+    const part = utilitySlots(w)[i];
+    if (!part) return;
+    if (playerVehicle(w).utilityOrders[part.id]) return this.clearOrder(w, part);
+    if (orderKindOf(part) === "self") return this.useSelf(w, part);
+    this.togglePick(w, part);
+  }
+
+  // Selects a truck or point utility to wait for its target click, or drops the selection on a repeat press. A
+  // blocked part is not selected. The slot already shows why.
+  private togglePick(w: World, part: PartInstance): void {
+    const repeat = this.host.selectedUtility() === part.id;
+    this.host.selectUtility(repeat || utilityBlock(w, playerVehicle(w), part) ? null : part.id);
+  }
+
+  private clearOrder(w: World, part: PartInstance): void {
+    if (this.host.selectedUtility() === part.id) this.host.selectUtility(null);
+    this.host.apply(setUtilityOrder(w, part.id, null));
+  }
+
+  // A refused use changes nothing. The slot already shows why.
+  private useSelf(w: World, part: PartInstance): void {
+    if (utilityOrderError(w, playerVehicle(w), part.id, { kind: "self" }) === null)
+      this.host.apply(setUtilityOrder(w, part.id, { kind: "self" }));
+  }
+}
+
 export class WeaponPanel {
   private root = panel("weapons");
   private turn = panel('turn-control');
   private expanded = true;
+  readonly utilities: UtilityRow;
 
-  constructor(private host: UiHost) {}
+  constructor(private host: UiHost) {
+    this.utilities = new UtilityRow(host);
+  }
 
   render(): void {
     const w = this.host.world();
@@ -252,6 +356,7 @@ export class WeaponPanel {
         ...weapons.map((mw, i) => this.renderSlot(w, mw, i, locked)),
       ),
       weapons.length === 0 ? el("div", { class: "dim" }, "No weapons installed") : null,
+      this.utilities.render(w),
     );
   }
 
