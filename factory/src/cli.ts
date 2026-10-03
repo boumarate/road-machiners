@@ -5,7 +5,7 @@ import { writeHealth } from './health';
 import { drainInbox } from './inbox';
 import { intake } from './intake';
 import { runJob } from './job';
-import { pausedReason } from './pause';
+import { liftEndedPause, pausedReason } from './pause';
 import { tick } from './tick';
 import { guardTick } from './tick-guard';
 import type { JobStage } from './types';
@@ -24,11 +24,7 @@ async function main(args: string[]): Promise<void> {
   const [command, stage, issue] = args;
   if (command === 'tick') {
     writeHealth(ctx.cfg.home, ctx.cfg.minFreeGb, ctx.now());
-    const paused = pausedReason(ctx.cfg.home);
-    if (paused !== null) {
-      ctx.log('tick', null, `paused: ${paused}`);
-      return;
-    }
+    if (paused(ctx)) return;
     return guardTick(ctx, async () => {
       await drainInbox(ctx);
       await tick(ctx, codeDir);
@@ -37,6 +33,15 @@ async function main(args: string[]): Promise<void> {
   if (command === 'intake') return void (await intake(ctx));
   if (command === 'run') return runJob(ctx, parseStage(stage), issue === '-' ? null : parseIssue(issue));
   throw new Error(`Unknown command "${command}". Use tick, run <stage> <issue|->, or intake.`);
+}
+
+// Lifts a pause whose process ended, then tells whether the tick must skip.
+function paused(ctx: ReturnType<typeof realContext>): boolean {
+  const lifted = liftEndedPause(ctx.cfg.home);
+  if (lifted !== null) ctx.log('tick', null, `pause lifted, its process ended: ${lifted.replaceAll('\n', ' ')}`);
+  const reason = pausedReason(ctx.cfg.home);
+  if (reason !== null) ctx.log('tick', null, `paused: ${reason}`);
+  return reason !== null;
 }
 
 function parseStage(value: string | undefined): JobStage {

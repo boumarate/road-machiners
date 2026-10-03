@@ -129,6 +129,7 @@ Name the line, what you found and what you did in your issue comment or chat pos
 ## Changing factory state
 
 - Pause the factory before you edit the state file or the work clones. Write the reason into `/factory/home/paused`. Every tick skips while that file exists. Delete it when you are done.
+- Your turn can end before a long step you started finishes, and nothing wakes you when it ends. So when you start a step in the background with `nohup`, add the line `pid: <N>` to the pause file, with the process id of that step. Get it from `$!` in the same `factory-host` command. The tick lifts the pause by itself once that process ends. One pause names one process, so run two steps from one script.
 - A factory update never pauses the factory or stops jobs. Each deployed commit has its own folder under `/opt/factory/releases`, and running jobs finish on the code they started with.
 - A job whose process died resumes once by itself, with its agents' conversations. The tick log says so, and it is no incident. A second death fails the job like any other failure.
 - The pause does not stop running jobs. The list `jobs` in the state file holds them. Wait for them or let them fail.
@@ -144,7 +145,7 @@ Name the line, what you found and what you did in your issue comment or chat pos
 
 ## Changing the factory itself
 
-The server runs the factory from GitHub's `main`. A timer checks `main` every 2 minutes. When `main` moved, it pauses the factory and waits for the running jobs. Then it checks out `main`, rebuilds what changed and records the commit in `/factory/home/deployed`.
+The server runs the factory from GitHub's `main`. A timer checks `main` every 2 minutes. When `main` moved, it builds the new commit in its own release folder and records the commit in `/factory/home/deployed`. It never pauses the factory, so every pause you find was written by you or by a member.
 
 - Change factory code or `factory/settings.env` only with the `factory_queue_change` tool, or when a member sends `/change`. Both run the change job. It opens a pull request to `main`, and a member merges it. The update deploys it within minutes after the running jobs end.
 - `factory/settings.env` holds the limits, the models, the timeouts and the release days. When a member asks to change one, queue the change with the tool. Name the key and the new value in the request.
