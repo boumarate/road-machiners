@@ -62,6 +62,8 @@ const NAMES = [
   'gas_station',
   'ship_wing',
   'wing_deck',
+  'ship_wing_deck',
+  'ship_flap',
   'shack',
   'fence',
   'junk',

@@ -41,8 +41,8 @@ export const PAL = {
   reactorLight: 0x38d6e8, // the reactor's light, bluer than its core so on warm sand and hull it still reads green-teal
   reactorGlow: 0x5cf0b4, // the Fallen Sun reactor core, green-teal as in the level concept
   hull: { light: 0xc4baa6, grey: 0x8e887c, dark: 0x6e6a62, rust: 0x7e5634 }, // the Fallen Sun's off-white and grey hull metal and its rust streaks
-  craterSand: 0xccaa70, // ochre floor of a territory's crater
   scree: 0x8e5e44, // the red-brown scree slope on a crater bank, warm like the level concept's upper-left slope
+  dirtRoad: 0x6e5e50, // the Fallen Sun's grey-brown dirt roads, sampled from reference 3's roads against its #a08a70 islands
   rut: 0x8a6034, // twin dirt ruts of the Fallen Sun's crater tracks, darker than the sand they press
   text: '#f0e0b8',
   textDim: '#b8a888',
