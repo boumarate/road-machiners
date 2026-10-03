@@ -10,12 +10,15 @@ type Call = { cmd: string; args: string[]; opts?: RunOptions };
 const HOME = resolve('tmp/factory-container-test');
 const cfg = { image: 'img:1', oauthToken: 'secret-token', elevenlabsKey: 'sound-key', sfxMaxGenerations: 6, home: HOME } as FactoryConfig;
 
+// A finished agent run ends with this event, which the job's ledger line reads.
+const AGENT_RESULT = JSON.stringify({ type: 'result', duration_ms: 60_000, total_cost_usd: 1 });
+
 // Setup calls (network, proxy) answer per `setup`. Only the `docker run --rm` call answers with `code`.
 function fakeRun(code = 0, setup: Record<string, { code: number; stdout?: string }> = {}): { run: Run; calls: Call[] } {
   const calls: Call[] = [];
   const run: Run = async (cmd, args, opts) => {
     calls.push({ cmd, args, opts });
-    if (args[0] === 'run' && args[1] === '--rm') return { code, stdout: '', stderr: 'boom' };
+    if (args[0] === 'run' && args[1] === '--rm') return { code, stdout: code === 0 ? AGENT_RESULT : '', stderr: 'boom' };
     const stdout = args[0] === 'inspect' ? 'true sha:1' : args[0] === 'image' ? 'sha:1\n' : '';
     const answer = setup[args.slice(0, 2).join(' ')] ?? { code: 0, stdout };
     return { code: answer.code, stdout: answer.stdout ?? '', stderr: 'setup failed' };
@@ -27,6 +30,17 @@ const runCall = (calls: Call[]): Call => calls.find((call) => call.args[0] === '
 const setupCalls = (calls: Call[]): string[] => calls.filter((call) => call !== runCall(calls)).map((call) => call.args.join(' '));
 
 describe('dockerContainer', () => {
+  it('pins agent and shell containers to the job CPUs, and leaves a run by hand unpinned', async () => {
+    const pinned = fakeRun();
+    await dockerContainer(pinned.run, cfg, 'testing-8-x', '2-3').agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'p', log: '/l' });
+    await dockerContainer(pinned.run, cfg, 'testing-8-x', '2-3').shell('/c', 'x', '/l');
+    const runs = pinned.calls.filter((call) => call.args[0] === 'run' && call.args[1] === '--rm');
+    expect(runs.map((call) => call.args.slice(call.args.indexOf('--cpuset-cpus'), call.args.indexOf('--cpuset-cpus') + 2))).toEqual([['--cpuset-cpus', '2-3'], ['--cpuset-cpus', '2-3']]);
+    const free = fakeRun();
+    await dockerContainer(free.run, cfg, null).shell('/c', 'x', '/l');
+    expect(runCall(free.calls).args).not.toContain('--cpuset-cpus');
+  });
+
   it('passes the secrets by env only and mounts only the clone and the npm cache', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'do it', log: '/l.log' });

@@ -12,6 +12,7 @@ The end of the check log is in that file.
 The checks are `npm ci`, `npm test`, `npm run typecheck` and `npm run playtest -- --cpu` against the dev server.
 Find the cause of every failure and fix it.
 Fix failures your change did not cause too.
+Do not raise a test's time limit to make it pass, unless your change made that test slower. The factory reruns checks that only timed out by itself, so a timeout here comes with a real failure.
 Put each such fix in its own commit.
 Name it in the task file under Conclusion.
 

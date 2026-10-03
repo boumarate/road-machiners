@@ -1,5 +1,7 @@
+import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
 import { sweepLogs, sweepWork } from './cleanup';
+import { POOL_OF, cpuSets } from './cpus';
 import { removeStaleBuilds } from './deploy';
 import { freeGb } from './health';
 import { failureIssue, pruneFailures, reportFailure } from './fail';
@@ -158,9 +160,10 @@ export type TickDeps = {
   isAlive: (pid: number) => boolean;
   kill: (run: Run, pid: number, id: string) => Promise<void>;
   removeContainers: (run: Run, id: string) => Promise<void>;
-  spawn: (args: string[], cwd: string, log: string, id: string) => number;
+  spawn: (args: string[], cwd: string, log: string, id: string, cpus: string) => number;
+  cores: () => number;
 };
-export const REAL_DEPS: TickDeps = { isAlive, kill: killJob, removeContainers: removeJobContainers, spawn: spawnJob };
+export const REAL_DEPS: TickDeps = { isAlive, kill: killJob, removeContainers: removeJobContainers, spawn: spawnJob, cores: availableParallelism };
 
 function dropJob(ctx: Ctx, id: string): void {
   updateState(ctx.statePath, (state) => ({ ...state, jobs: state.jobs.filter((job) => job.id !== id) }));
@@ -226,10 +229,11 @@ function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): voi
   const stamp = ctx.now().toISOString().replaceAll(':', '');
   const id = `${pick.stage}-${pick.issue ?? '-'}-${stamp}`;
   const log = join(ctx.cfg.home, 'logs', `${id}.log`);
-  const pid = deps.spawn([pick.stage, String(pick.issue ?? '-')], codeDir, log, id);
+  const cpus = cpuSets(ctx.cfg, deps.cores())[POOL_OF[QUEUE_OF[pick.stage]]];
+  const pid = deps.spawn([pick.stage, String(pick.issue ?? '-')], codeDir, log, id, cpus);
   const job: Job = { ...pick, id, pid, startedAt: ctx.now().toISOString(), log };
   updateState(ctx.statePath, (state) => ({ ...state, jobs: [...state.jobs, job], jobStarts: countsAgainstCap(pick.stage) ? [...recentStarts(state, ctx.now()), job.startedAt] : state.jobStarts }));
-  ctx.log('tick', pick.issue, `started ${pick.stage}, pid ${pid}, log ${log}`);
+  ctx.log('tick', pick.issue, `started ${pick.stage}, pid ${pid}, CPUs ${cpus}, log ${log}`);
 }
 
 async function answeredWaiting(ctx: Ctx, card: Card): Promise<boolean> {

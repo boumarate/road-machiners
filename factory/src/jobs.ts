@@ -8,12 +8,15 @@ import type { Run } from './types';
 export const JOB_ID_ENV = 'FACTORY_JOB_ID';
 export const jobLabel = (id: string): string => `factory-job=${id}`;
 
+// The job process gets the CPUs of its pool in this variable, as a cpuset string, and pins its containers to them.
+export const JOB_CPUS_ENV = 'FACTORY_JOB_CPUS';
+
 // Starts `factory run <args>` detached, with output appended to the log. Returns its pid.
-export function spawnJob(args: string[], cwd: string, log: string, id: string): number {
+export function spawnJob(args: string[], cwd: string, log: string, id: string, cpus: string): number {
   mkdirSync(dirname(log), { recursive: true });
   const fd = openSync(log, 'a');
   try {
-    const env = { ...process.env, [JOB_ID_ENV]: id };
+    const env = { ...process.env, [JOB_ID_ENV]: id, [JOB_CPUS_ENV]: cpus };
     const child = spawn('npm', ['run', '-s', 'factory', '--', 'run', ...args], { cwd, env, detached: true, stdio: ['ignore', fd, fd] });
     child.unref();
     if (child.pid === undefined) throw new Error('job process did not start');

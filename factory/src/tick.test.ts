@@ -188,7 +188,7 @@ describe('chooseJobs', () => {
   });
 });
 
-type Harness = { ctx: Ctx; sent: string[]; labels: string[]; removed: string[]; deps: TickDeps; killed: string[]; spawned: string[][] };
+type Harness = { ctx: Ctx; sent: string[]; labels: string[]; removed: string[]; deps: TickDeps; killed: string[]; spawned: string[][]; pinned: string[] };
 
 function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: IssueComment[] = [], devHead = DEV): Harness {
   const dir = mkdtempSync(join(tmpdir(), 'tick-'));
@@ -199,13 +199,14 @@ function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: 
   const removed: string[] = [];
   const killed: string[] = [];
   const spawned: string[][] = [];
+  const pinned: string[] = [];
   const github = { cards: async () => cards, candidates: async () => [], addLabel: async (n: number, l: string) => { labels.push(`${n}:${l}`); }, comments: async () => comments, removeLabel: async (n: number, l: string) => { removed.push(`${n}:${l}`); } };
   const telegram = { sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; } };
-  const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', stageTimeoutMinutes: 30, replyRouteMinutes: 15, minFreeGb: 0.001, logDays: 14, ...CFG };
+  const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', stageTimeoutMinutes: 30, replyRouteMinutes: 15, minFreeGb: 0.001, logDays: 14, cpuLight: 0.25, cpuImplement: 0.25, cpuTest: 0.5, ...CFG };
   const repo = { fetch: async () => {},headHash: async (branch: string) => { if (branch !== 'dev') throw new Error(`unexpected branch ${branch}`); return devHead; } };
   const ctx = { cfg, github, telegram, repo, statePath, now: () => NOW, log: () => undefined } as unknown as Ctx;
-  const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, removeContainers: async (_run, id) => { killed.push(`containers ${id}`); }, spawn: (args, _cwd, _log, id) => { spawned.push([...args, id]); return 77; } };
-  return { ctx, sent, labels, removed, deps, killed, spawned };
+  const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, removeContainers: async (_run, id) => { killed.push(`containers ${id}`); }, spawn: (args, _cwd, _log, id, cpus) => { spawned.push([...args, id]); pinned.push(`${args[0]} ${cpus}`); return 77; }, cores: () => 4 };
+  return { ctx, sent, labels, removed, deps, killed, spawned, pinned };
 }
 
 const job = (startedAt: string, stage: Job['stage'] = 'design', issue: number | null = 5): Job => ({ id: `${stage}-job`, stage, issue, pid: 42, startedAt, log: '/l.log' });
@@ -230,6 +231,13 @@ describe('tick', () => {
     expect(h.killed).toEqual([]);
     expect(args(h)).toEqual([['design', '8']]);
     expect(readState(h.ctx.statePath).jobs.map((j) => [j.issue, j.pid])).toEqual([[5, 42], [8, 77]]);
+  });
+
+  it('starts each job on the CPUs of its pool, verify beside implement and checks alone on the test pool', async () => {
+    const h = harness(null, true, [card(3, 'Implementation'), card(4, 'Testing'), card(5, 'Testing')]);
+    writeState(h.ctx.statePath, state({ testPhase: { 5: 'checks' } }));
+    await tick(h.ctx, '/code', h.deps);
+    expect(h.pinned.sort()).toEqual(['checks 2-3', 'implement 1', 'verify 1']);
   });
 
   it('starts no job while free disk is under the minimum, and still cleans', async () => {

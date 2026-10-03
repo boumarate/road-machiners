@@ -55,7 +55,8 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const approval = readApproval(home);
   const build = await ctx.repo.headHash(BRANCH(issue));
   const evidence = readEvidence(home, build);
-  const failure = await runChecks(ctx, issue, base, build);
+  // Timeouts alone rerun here. A real failure goes to verify for one fix round. Three timeouts throw with the phase kept, so a retry runs the checks again.
+  const failure = await checkPatiently(ctx, issue, base, build);
   if (failure !== null) return failed(ctx, issue, home, phase, failure);
   const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
@@ -118,6 +119,30 @@ async function runChecks(ctx: Ctx, issue: number, base: string, build: string): 
     return null;
   } catch (error) {
     return checkFailure(log, error);
+  }
+}
+
+// Vitest's messages when a test, a hook or the runner itself ran out of time.
+const TIMEOUT_LINE = /(Test|Hook) timed out in \d+ms|Timeout calling "onTaskUpdate"/;
+
+// Whether every error in a check failure is a timeout. Such a failure says the machine was slow, not that the code is wrong.
+// A failure with no error line at all, like a failed playtest or typecheck, is a real one.
+export function timeoutOnly(failure: string): boolean {
+  const errors = failure.split('\n').filter((line) => /Error:|timed out in/.test(line));
+  return errors.length > 0 && errors.every((line) => TIMEOUT_LINE.test(line));
+}
+
+// Two reruns ride out a burst of load. A third timeout means the load stays, and Hermes has to look.
+const CHECK_RUNS = 3;
+
+// Runs the checks until they pass or fail for a real reason. Timeouts alone rerun the checks with no agent round,
+// since an agent would only raise the time limits. Returns null on a pass, or the real failure. Throws after CHECK_RUNS timeouts.
+async function checkPatiently(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
+  for (let run = 1; ; run++) {
+    const failure = await runChecks(ctx, issue, base, build);
+    if (failure === null || !timeoutOnly(failure)) return failure;
+    if (run === CHECK_RUNS) throw new Error(`The factory checks timed out ${CHECK_RUNS} times, under load. No test failed for another reason.\n${failure}`);
+    ctx.log('checks', issue, `the checks only timed out, run ${run} of ${CHECK_RUNS}, running them again`);
   }
 }
 

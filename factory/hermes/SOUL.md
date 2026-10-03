@@ -60,6 +60,8 @@ Jobs run in parallel, in six queues, each with its own worker limit.
 - The test queue runs the factory checks, with no agent. `FACTORY_TEST_WORKERS` sets its limit. Two at once timed out the game tests on the 4 CPUs.
 - The branch queue runs approve, remove, ship, the release cut, the candidate, `/dev/` rebuilds and `/change`. It runs one job at a time, since these move `dev`, `main` or the release.
 
+Each job runs on the CPUs of its pool. Triage, waste review, design and branch jobs share the light pool. Implement, patch, ad hoc and verify jobs share the implement pool. Checks use the test pool. The `FACTORY_CPU_*` shares in `factory/settings.env` size the pools. The tick log names each job's CPUs when it starts.
+
 An issue has at most one job at a time. Hotfix cards go first in their queue. A lock lets only one job use the host clone at a time, for one git step.
 
 GitHub holds every branch. The host clone `/factory/home/repo` keeps only GitHub's branches as `origin/*`, and every fetch deletes any local branch in it. A merge goes to GitHub at once, or fails with nothing changed. A hotfix and a Ship move all their branches in one push, or none of them. So a failed step leaves no state to repair, and a retry starts from GitHub.
@@ -97,6 +99,7 @@ A reply you did not route within `FACTORY_REPLY_ROUTE_MINUTES` becomes a `feedba
 Common fixes:
 
 - Retry a step: `gh issue edit N --remove-label factory-stuck`. The next tick runs the step again.
+- "The factory checks timed out 3 times, under load": the code passed, but the tests ran out of time three runs in a row. Read the load with `factory-host 'uptime; docker stats --no-stream'`. Find what used the test CPUs. Retry once the load falls. When it happens again within a day, post it to the committee with what held the CPUs.
 - Run a step now: `factory-host 'cd /opt/factory/code/factory && npm run factory -- run <stage> <N or ->'`. For example, `run approve 1` merges issue 1 into `dev` and rebuilds `/dev/`. `run dev -` rebuilds `/dev/` alone, and clears `devFailed` when it passes.
 - Move a card: `gh project item-edit` on Project 2 of owner `btseytlin`. Find ids with `gh project item-list` and `gh project field-list`.
 - Drop a queued action: edit `/factory/home/state/state.json` with `jq`, while the factory is paused and `jobs` is empty. The tick drops a dead or timed-out job from `jobs` by itself.
