@@ -9,8 +9,11 @@ import { AGENT_NETWORK, GAME_DIR, PROXY_NAME, PROXY_PORT, type AgentSession, typ
 const FACTORY_LABEL = 'factory=1';
 
 // Every factory container carries the factory label. A job's containers also carry its own label, so a kill finds them.
-function baseArgs(jobId: string | null): string[] {
-  return ['run', '--rm', '--label', FACTORY_LABEL, ...(jobId === null ? [] : ['--label', jobLabel(jobId)])];
+// A job's containers run on the CPUs of its pool. A run by hand has no pool, so its containers are not pinned.
+function baseArgs(jobId: string | null, cpus: string | null): string[] {
+  const label = jobId === null ? [] : ['--label', jobLabel(jobId)];
+  const pin = cpus === null ? [] : ['--cpuset-cpus', cpus];
+  return ['run', '--rm', '--label', FACTORY_LABEL, ...label, ...pin];
 }
 const PROXY_URL = `http://${PROXY_NAME}:${PROXY_PORT}`;
 const NO_PROXY = 'localhost,127.0.0.1';
@@ -88,7 +91,7 @@ function effortArgs(effort: string | undefined): string[] {
 
 // Agents get the work clone, the npm cache, the read-only folders their stage names, the OAuth token and the ElevenLabs key with its cap, nothing else. Secrets travel in the docker process env, never in argv.
 // Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
-export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null): Container {
+export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null, cpus: string | null = null): Container {
   return {
     async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, session, skill, effort }) {
       if (!openNetwork) await ensureProxy(run, cfg);
@@ -100,7 +103,7 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
       };
       const readOnlyArgs = Object.entries(readOnly).flatMap(([host, path]) => ['-v', `${host}:${path}:ro`]);
       const args = [
-        ...baseArgs(jobId), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount(session), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
+        ...baseArgs(jobId, cpus), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount(session), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
         'factory-agent', '-p', '--model', model, ...effortArgs(effort), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs(session),
       ];
       const input = [skill, outputsNote(dir), prompt].filter((part) => part !== undefined).join('\n\n');
@@ -109,7 +112,7 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
     },
     async shell(clone, script, log, env = {}) {
       await ensureProxy(run, cfg);
-      const args = [...baseArgs(jobId), ...mountArgs(cfg, clone, GAME_DIR), ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', script];
+      const args = [...baseArgs(jobId, cpus), ...mountArgs(cfg, clone, GAME_DIR), ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', script];
       const result = await run('docker', args, { logPath: log });
       must(result, `shell in ${clone}`);
     },

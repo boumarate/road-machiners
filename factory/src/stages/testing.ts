@@ -58,13 +58,13 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   // A fix round changes the code, so its evidence replaces the first round's.
   if (!(await reviewGate(ctx, issue, base, async () => { evidence = await agentRound(ctx, issue, 'test-fix', 'review-fix', base); }))) return;
   let build = await ctx.repo.headHash(BRANCH(issue));
-  const failure = await runChecks(ctx, issue, base, build);
+  const failure = await checkPatiently(ctx, issue, base, build);
   // The agent gets one round to fix what the factory's own checks found. A second failure stops the card.
   if (failure !== null) {
     writeFileSync(`${home}/${OUT_DIR}/check-failure.md`, failure);
     evidence = await agentRound(ctx, issue, 'test-fix', 'checks-fix', base);
     build = await ctx.repo.headHash(BRANCH(issue));
-    const again = await runChecks(ctx, issue, base, build);
+    const again = await checkPatiently(ctx, issue, base, build);
     if (again !== null) throw new Error(`The factory checks failed twice.\n${again}`);
   }
   const approval = readApproval(home);
@@ -147,6 +147,30 @@ async function runChecks(ctx: Ctx, issue: number, base: string, build: string): 
     return null;
   } catch (error) {
     return checkFailure(log, error);
+  }
+}
+
+// Vitest's messages when a test, a hook or the runner itself ran out of time.
+const TIMEOUT_LINE = /(Test|Hook) timed out in \d+ms|Timeout calling "onTaskUpdate"/;
+
+// Whether every error in a check failure is a timeout. Such a failure says the machine was slow, not that the code is wrong.
+// A failure with no error line at all, like a failed playtest or typecheck, is a real one.
+export function timeoutOnly(failure: string): boolean {
+  const errors = failure.split('\n').filter((line) => /Error:|timed out in/.test(line));
+  return errors.length > 0 && errors.every((line) => TIMEOUT_LINE.test(line));
+}
+
+// Two reruns ride out a burst of load. A third timeout means the load stays, and Hermes has to look.
+const CHECK_RUNS = 3;
+
+// Runs the checks until they pass or fail for a real reason. Timeouts alone rerun the checks with no agent round,
+// since an agent would only raise the time limits. Returns null on a pass, or the real failure. Throws after CHECK_RUNS timeouts.
+async function checkPatiently(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
+  for (let run = 1; ; run++) {
+    const failure = await runChecks(ctx, issue, base, build);
+    if (failure === null || !timeoutOnly(failure)) return failure;
+    if (run === CHECK_RUNS) throw new Error(`The factory checks timed out ${CHECK_RUNS} times, under load. No test failed for another reason.\n${failure}`);
+    ctx.log('testing', issue, `the checks only timed out, run ${run} of ${CHECK_RUNS}, running them again`);
   }
 }
 

@@ -38,6 +38,9 @@ export type FactoryConfig = {
   testWorkers: number; // jobs of the test queue that run at once
   minFreeGb: number; // under this much free disk, a tick starts no job
   logDays: number; // job logs older than this go
+  cpuLight: number; // share of the server's CPUs for triage, design and branch jobs
+  cpuImplement: number; // share of the server's CPUs for implement and ad hoc jobs
+  cpuTest: number; // share of the server's CPUs for testing
 };
 
 export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string };

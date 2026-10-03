@@ -5,7 +5,7 @@ import { EMPTY_STATE, readState, writeState } from '../state';
 import type { AgentRun, Ctx } from '../types';
 
 vi.mock('../deploy', () => ({ checkScope: () => undefined, publishBuild: (_ctx: unknown, _clone: string, scope: string) => `https://play.test/${scope}/`, recordBuild: () => undefined }));
-const { runStage, approvalCaption, approvalButtons } = await import('./testing');
+const { runStage, approvalCaption, approvalButtons, timeoutOnly } = await import('./testing');
 
 let home = '';
 let calls: string[] = [];
@@ -50,7 +50,9 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
-function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
+const TIMEOUT_FAILURE = ' FAIL  src/phys/drive.test.ts > climbs a hill\nError: Test timed out in 30000ms.\nIf this is a long-running test, pass a timeout value.\nError: [vitest-worker]: Timeout calling "onTaskUpdate"';
+
+function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText = 'npm test failed: 1 failed'): Ctx {
   let failuresLeft = shellFailures;
   const fake = {
     cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat' },
@@ -87,7 +89,7 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
         shellScript = script;
         shellEnv = env;
         calls.push('checks');
-        if (failuresLeft-- > 0) throw new Error('npm test failed: 1 failed');
+        if (failuresLeft-- > 0) throw new Error(failureText);
       },
     },
     repo: {
@@ -228,6 +230,29 @@ describe('testing stage', () => {
     await runStage(ctx, 7);
     await runStage(fakeCtx((run) => { models.push(run.model); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); }), 7);
     expect(models).toEqual(['opus', 'opus']);
+  });
+
+  it('reruns checks that only timed out, with no agent round, then posts', async () => {
+    const prompts: string[] = [];
+    const ctx = fakeCtx((run) => { prompts.push(run.prompt); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); }, 2, TIMEOUT_FAILURE);
+    await runStage(ctx, 7);
+    expect(prompts).toHaveLength(1);
+    expect(calls.filter((call) => call === 'checks')).toHaveLength(3);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+  });
+
+  it('fails with the load reason after three timed-out runs, with no agent round', async () => {
+    const prompts: string[] = [];
+    const ctx = fakeCtx((run) => { prompts.push(run.prompt); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); }, 3, TIMEOUT_FAILURE);
+    await expect(runStage(ctx, 7)).rejects.toThrow('The factory checks timed out 3 times, under load');
+    expect(prompts).toHaveLength(1);
+    expect(calls).not.toContain('move 7 Approval');
+  });
+
+  it('tells a timeout-only failure from a real one', () => {
+    expect(timeoutOnly(TIMEOUT_FAILURE)).toBe(true);
+    expect(timeoutOnly(`${TIMEOUT_FAILURE}\nAssertionError: expected 3 to be 4`)).toBe(false);
+    expect(timeoutOnly('playtest: the truck never moved')).toBe(false);
   });
 
   it('stops after the checks fail twice', async () => {
