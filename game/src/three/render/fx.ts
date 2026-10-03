@@ -17,6 +17,7 @@ import { tileAt } from '../../sim/terrain';
 import type { Vehicle, World } from '../../sim/types';
 import { maxHp } from '../../sim/wear';
 import type { CameraRig } from './camera';
+import { Casings } from './casings';
 import { Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan, type ShotCues } from './projectiles';
 
 // Pool sizes; effects beyond them are dropped rather than growing the pools. Wheel dust dominates: at the
@@ -264,10 +265,12 @@ export class Fx3D {
   private projectiles: Projectiles;
   private pending: Pending[] = [];
   private flashes: MuzzleFlashes;
+  private casings: Casings;
 
   constructor(private scene: THREE.Scene, private overlay: HTMLElement, private rig: CameraRig) {
     scene.add(this.puffs.mesh, this.glows.mesh);
     this.flashes = new MuzzleFlashes(scene);
+    this.casings = new Casings(scene);
     this.projectiles = new Projectiles(scene, (p) => this.missileSmoke(p));
     for (let i = 0; i < MAX_TEXTS; i++) {
       const el = document.createElement('div');
@@ -297,10 +300,12 @@ export class Fx3D {
 
   // One round leaves the muzzle after its delay and flies to its landing point. muzzle is read when the round
   // fires, so it starts at the barrel tip as the turret points then. A round with a blast radius in meters explodes
-  // where it lands. Any other lands with sparks when it struck something, else with dust.
-  shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan, blastRadius: number, cues: ShotCues): void {
+  // where it lands. Any other lands with sparks when it struck something, else with dust. A gun with a casing throws
+  // one as the round fires, stamped with the turn for its life.
+  shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan, blastRadius: number, cues: ShotCues, turn: number): void {
     const onFire = (m: Muzzle) => {
       this.flashes.show(m, spec.flash);
+      this.casings.eject(m, spec.casing, turn);
       this.puff(m.pos, PAL.flash, 1, { speed: 0, life: 0.12, scale: spec.flash * 0.6, grow: 1.6, additive: true });
       cues.fired(m);
     };
@@ -432,11 +437,13 @@ export class Fx3D {
     slot.el.style.opacity = '1';
   }
 
-  tick(dtMs: number): void {
+  // world gives the ground casings land on and the turn they age by.
+  tick(dtMs: number, world: World): void {
     const dt = dtMs / 1000;
     this.puffs.tick(dt);
     this.glows.tick(dt);
     this.flashes.tick(dt);
+    this.casings.tick(dt, world.terrain, world.turn);
     for (let i = this.pending.length - 1; i >= 0; i--) {
       const job = this.pending[i];
       job.left -= dt;

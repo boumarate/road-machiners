@@ -9,7 +9,7 @@ import type { Vec } from "../sim/vec";
 import { roundLabel } from "../ui/format";
 import { groundPoint, toMap, type V3 } from "../phys/frames";
 import type { Fx3D } from "./render/fx";
-import { blastRadiusOf, planVolley, projectileOf, roundAims, towardFrom, type Muzzle } from "./render/projectiles";
+import { blastRadiusOf, planVolley, projectileOf, roundAims, roundSpec, towardFrom, type Muzzle } from "./render/projectiles";
 import { viewOf, type VehicleView } from "./render/vehicle";
 import type { SoundDirector } from "./sound";
 
@@ -56,7 +56,7 @@ export function playVolley(
         if (burst) host.onBurst(burst);
       },
     };
-    host.fx.shot(spec, muzzle, plan, blastRadiusOf(weapon), cues);
+    host.fx.shot(roundSpec(spec, k), muzzle, plan, blastRadiusOf(weapon), cues, host.world.turn);
     showDamage(host, rounds[k], plan.delayMs + plan.flightMs, rows);
   });
   return Math.min(...plans.map((plan) => plan.delayMs + plan.flightMs));

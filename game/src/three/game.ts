@@ -944,7 +944,7 @@ export class Game {
     const at = playerVehicle(this.world).pos;
     const stormy = this.world.weather.some((e) => e.kind === "storm" && dist(at, e.pos) <= e.radius);
     this.stormTint.style.display = stormy ? "" : "none";
-    this.fx.tick(dt * speed);
+    this.fx.tick(dt * speed, this.world);
     this.playPanelSounds();
     this.updateLoops();
     this.weather.advance(dt);

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PARTS } from '../../data/parts';
 import { CONFIG } from '../../config';
 import type { ShotRound } from '../../sim/types';
-import { blastRadiusOf, planVolley, PROJECTILES, projectileOf, roundAims, type RoundAim } from './projectiles';
+import { blastRadiusOf, planVolley, PROJECTILES, projectileOf, roundAims, roundSpec, type RoundAim } from './projectiles';
 
 const A = { x: 0, y: 2, z: 0 };
 const B = { x: 40, y: 2, z: 0 };
@@ -103,5 +103,13 @@ describe('roundAims', () => {
     const [miss, hit] = roundAims(B, 'target', [shotRound(null, null), shotRound('target', null)], () => null, ground);
     expect(miss.burst).toBeNull();
     expect(hit.burst).toBeNull();
+  });
+});
+
+describe('roundSpec', () => {
+  it('throws one casing per shotgun shell and one per round of other guns', () => {
+    const casings = (id: string) => [0, 1, 2].map((k) => roundSpec(PROJECTILES[id], k).casing);
+    expect(casings('shotgun')).toEqual(['small', null, null]);
+    expect(casings('mg')).toEqual(['small', 'small', 'small']);
   });
 });

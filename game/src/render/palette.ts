@@ -37,6 +37,7 @@ export const PAL = {
   dustTrail: 0xe0c49a, // dust streak behind a contact seen by its dust, pale so it shows over fog
   radio: 0x8fe0c8, // crisp scanner blip
   flash: 0xfff0a0,
+  brass: 0xc8a048, // spent casings on the ground
   lamp: { on: 0xfff2c8, off: 0x8a8470 }, // headlight glass, lit at night
   truckGlow: 0xffffff, // faint white light over the player truck at night
   reactorGlow: 0x7cff5a, // the Fallen Sun reactor core and the light it throws
