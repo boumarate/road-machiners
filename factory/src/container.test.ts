@@ -54,7 +54,7 @@ describe('dockerContainer', () => {
     expect(call.args).toContain('/w/c:/work');
     expect(call.args).toContain(`${HOME}/npm-cache:/home/pwuser/.npm`);
     expect(call.args.slice(call.args.indexOf('-w'), call.args.indexOf('-w') + 2)).toEqual(['-w', '/work/game']);
-    expect(call.args.filter((a) => a === '-e')).toHaveLength(10);
+    expect(call.args.filter((a) => a === '-e')).toHaveLength(11);
     expect(call.args.slice(call.args.indexOf('img:1'))).toEqual(['img:1', 'factory-agent', '-p', '--model', 'opus', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose']);
   });
 
@@ -148,6 +148,12 @@ describe('dockerContainer', () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, 'testing-8-x').shell('/c', 'x', '/l');
     expect(runCall(calls).args.slice(0, 6)).toEqual(['run', '--rm', '--label', 'factory=1', '--label', 'factory-job=testing-8-x']);
+  });
+
+  it('takes the time limits off the game tests in every container', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).shell('/c', 'x', '/l');
+    expect(runCall(calls).args.join(' ')).toContain('-e TEST_TIMEOUTS=off');
   });
 
   it('fails loud when the proxy image is missing', async () => {

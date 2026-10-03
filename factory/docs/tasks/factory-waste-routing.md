@@ -224,7 +224,7 @@ Invariants:
 - AS3 — held: real transcripts on the server end with a `result` line, and the parser read one.
 
 ### Unknowns outcome
-- UK1 — still-open: a patch runs under `FACTORY_STAGE_TIMEOUT_MINUTES` until the live week shows its length.
+- UK1 — still-open: a patch runs under `FACTORY_IMPLEMENT_TIMEOUT_MINUTES`, the limit of its queue, until the live week shows its length.
 - UK2 — still-open: release candidate replies still route by fixed words.
 
 Plan adherence: `testing.test.ts` became one `testing-flow.test.ts` that runs verify and checks the way the tick does, not two files. The inbox kind `feedback` is gone, since the plugin no longer writes it. The waste review hands the agent issue histories and earlier reviews as files, since agents have no GitHub login.

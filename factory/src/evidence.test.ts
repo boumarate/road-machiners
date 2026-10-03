@@ -119,4 +119,12 @@ describe('readEvidence', () => {
     write({ features: [{ name: 'A', kind: 'other' }], images: [image(0, ['Z'])] });
     expect(read).toThrow('by exact name');
   });
+
+  it('cuts a long description to 200 characters instead of refusing it', () => {
+    shots(1);
+    write({ features: [{ name: 'A', kind: 'other' }], images: [{ ...image(0, ['A']), description: 'x'.repeat(215) }] });
+    const text = read().images[0].description;
+    expect(text).toHaveLength(200);
+    expect(text.endsWith('…')).toBe(true);
+  });
 });

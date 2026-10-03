@@ -177,7 +177,7 @@ function minutesSince(ctx: Ctx, iso: string): number {
 async function checkJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<void> {
   const minutes = minutesSince(ctx, job.startedAt);
   const alive = deps.isAlive(job.pid);
-  const inTime = minutes <= ctx.cfg.stageTimeoutMinutes;
+  const inTime = minutes <= timeoutOf(ctx.cfg, job.stage);
   if (alive && inTime) return ctx.log('tick', job.issue, `${job.stage} still running`);
   if (!alive && inTime && canResume(ctx, job)) return resumeJob(ctx, job, deps);
   await failJob(ctx, job, alive, deps);
@@ -188,8 +188,18 @@ async function failJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Prom
   recordJob(ctx.cfg.home, ctx.now(), job, alive ? 'timeout' : 'died');
   dropJob(ctx, job.id);
   forgetResume(ctx, job);
-  const reason = alive ? `timed out after ${ctx.cfg.stageTimeoutMinutes} minutes` : 'job process died without finishing';
+  const reason = alive ? `timed out after ${timeoutOf(ctx.cfg, job.stage)} minutes` : 'job process died without finishing';
   await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), reason, job.log);
+}
+
+// Each queue has its own time limit, since its jobs differ in length by hours.
+export function timeoutOf(cfg: FactoryConfig, stage: JobStage): number {
+  const queue = QUEUE_OF[stage];
+  const minutes: Record<Queue, number> = {
+    triage: cfg.triageTimeoutMinutes, design: cfg.designTimeoutMinutes, implement: cfg.implementTimeoutMinutes,
+    verify: cfg.verifyTimeoutMinutes, test: cfg.testTimeoutMinutes, branch: cfg.branchTimeoutMinutes,
+  };
+  return minutes[queue];
 }
 
 // A branch job moves branches and posts between its containers, so a restart could repeat a half done step. Its issue field may be a change id too.
