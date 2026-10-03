@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { FORTRESS, FORTRESS_SITES } from '../data/fortress';
 import { REGION } from '../data/region';
-import { siteGates, type Site } from '../sim/sites';
-import { DEG, dist, type Vec } from '../sim/vec';
+import { siteGates, type Site } from './sites';
+import { DEG, dist, type Vec } from './vec';
 import { fortressFootprint, fortressOutline, fortressPieces, type FortressPiece } from './fortress';
 
 const SITES: Site[] = [...REGION.towns, ...REGION.locations];

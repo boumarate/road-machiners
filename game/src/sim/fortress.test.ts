@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { FORTRESS, FORTRESS_SITES } from '../data/fortress';
 import { REGION } from '../data/region';
 import { TEST_MAP } from '../test/map';
-import { fortressPieces } from '../mapgen/fortress';
+import { fortressPieces } from './fortress';
 import { isDriveObstacle, isBakedObstacle, mapObstacles, propBoxes, propPose } from './mapgen';
 import { isFree } from './spawn';
 import { canUseSite, isFortress, siteGates, sitePads } from './sites';
@@ -106,10 +106,22 @@ describe('fortress ground', () => {
   });
 
   it('leaves every pad clear of the pieces (IV6)', () => {
+    const pieces = mapObstacles(TEST_MAP).filter((o) => o.kind === 'landmark' && o.look.startsWith('fort'));
+    const boxes = pieces.flatMap((o) => propBoxes(o));
+    const { length, width } = REGION.sites.pad;
     for (const s of FORT_SITES) {
       for (const pad of sitePads(s)) {
-        const hit = mapObstacles(TEST_MAP).filter((o) => o.kind === 'landmark' && o.look.startsWith('fort')).some((o) => propBoxes(o).some((b) => corners(b).some((c) => dist(c, pad) < 0.4)));
-        expect(hit, `${s.id} pad`).toBe(false);
+        const out = { x: (pad.x - s.pos.x) / dist(pad, s.pos), y: (pad.y - s.pos.y) / dist(pad, s.pos) };
+        // Sample the whole rectangle: length runs out from the gate, width along the site edge.
+        for (let i = 0; i <= 10; i++) {
+          for (let j = 0; j <= 14; j++) {
+            const u = (i / 10 - 0.5) * length;
+            const v = (j / 14 - 0.5) * width;
+            const p = { x: pad.x + out.x * u - out.y * v, y: pad.y + out.y * u + out.x * v };
+            const hit = boxes.some((b) => Math.abs((p.x - b.center.x) * b.axis.x + (p.y - b.center.y) * b.axis.y) < b.half.x && Math.abs(-(p.x - b.center.x) * b.axis.y + (p.y - b.center.y) * b.axis.x) < b.half.y);
+            expect(hit, `${s.id} pad at ${u.toFixed(1)}, ${v.toFixed(1)}`).toBe(false);
+          }
+        }
       }
     }
   });

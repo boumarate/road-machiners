@@ -3,12 +3,11 @@
 
 import * as THREE from 'three';
 import { REGION, type SiteLocationDef, type SiteEdge, type TownDef } from '../../data/region';
-import { FORTRESS_SITES } from '../../data/fortress';
-import { insideCurtain } from '../../mapgen/fortress';
+import { insideCurtain } from '../../sim/fortress';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
-import { siteGates } from '../../sim/sites';
+import { isFortress, siteGates } from '../../sim/sites';
 import { deckById, type Deck } from '../../sim/bridge';
 import { deckEnds, heightAt, type Terrain } from '../../sim/terrain';
 import { angleDiff, segmentDist } from '../../sim/vec';
@@ -193,32 +192,24 @@ type WallStyle = {
   height: number;
   thickness: number;
   segment: number; // tiles per straight section around the curve
-  towerEvery: number | null; // sections between wall towers
   ragged: boolean; // sections vary in height, like scrap and posts
   fence: boolean; // posts and two rails instead of solid sections
   colors: number[]; // section colors, one picked per section
   postColor: number;
   doorColor: number;
-  guarded: boolean; // a guard tower on each gate side and a banner pole at each gate
 };
 
 const SET = REGION.settlement;
-const PALISADE: WallStyle = { height: SET.palisadeHeight, thickness: SET.palisadeThickness, segment: SET.palisadeSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.trunk], postColor: PAL.rust.side, doorColor: PAL.trunk, guarded: false };
-const EDGE_STYLES: Record<Exclude<SiteEdge, 'fortress'> | 'town', WallStyle> = {
-  town: { height: SET.wallHeight, thickness: SET.wallThickness, segment: SET.wallSegment, towerEvery: SET.wallTowerEvery, ragged: false, fence: false, colors: [PAL.wall.side], postColor: PAL.wall.top, doorColor: PAL.rust.side, guarded: true },
-  palisade: PALISADE,
-  // Raider camps hide behind rusted scrap, with a gun tower on each side of every gate.
-  camp: { ...PALISADE, colors: [PAL.rust.side], postColor: PAL.rust.dark, doorColor: PAL.rust.dark, guarded: true },
-  stone: { height: SET.stoneHeight, thickness: SET.stoneThickness, segment: SET.stoneSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.rock.side, PAL.rock.top], postColor: PAL.rock.dark, doorColor: PAL.trunk, guarded: false },
-  fence: { height: SET.fenceHeight, thickness: SET.fenceThickness, segment: SET.fenceSegment, towerEvery: null, ragged: false, fence: true, colors: [PAL.trunk], postColor: PAL.trunk, doorColor: PAL.metal, guarded: false },
-  wrecks: { height: SET.wreckHeight, thickness: SET.wreckThickness, segment: SET.wreckSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.rust.side, PAL.metal, PAL.rust.dark], postColor: PAL.rust.dark, doorColor: PAL.metal, guarded: false },
+const EDGE_STYLES: Record<SiteEdge, WallStyle> = {
+  fence: { height: SET.fenceHeight, thickness: SET.fenceThickness, segment: SET.fenceSegment, ragged: false, fence: true, colors: [PAL.trunk], postColor: PAL.trunk, doorColor: PAL.metal },
+  wrecks: { height: SET.wreckHeight, thickness: SET.wreckThickness, segment: SET.wreckSegment, ragged: true, fence: false, colors: [PAL.rust.side, PAL.metal, PAL.rust.dark], postColor: PAL.rust.dark, doorColor: PAL.metal },
 };
 const SINK = 0.3; // tiles each edge piece reaches below the ground, so slopes leave no gap under it
 const DOOR_THICKNESS = 0.4; // door leaves as a share of the wall thickness
 
 function edgeStyle(site: Site): WallStyle {
-  const edge = 'kind' in site ? site.edge : 'town';
-  if (edge === 'fortress') throw new Error(`Site ${site.id} has a fortress curtain and no edge style`);
+  const edge = 'edge' in site ? site.edge : undefined;
+  if (edge === undefined) throw new Error(`Site ${site.id} has no edge style`);
   return EDGE_STYLES[edge];
 }
 
@@ -264,7 +255,6 @@ function addSections(b: SiteBuilder, ring: Ring, style: WallStyle, seed: number)
     const p = { x: Math.cos(a) * ring.mid, z: Math.sin(a) * ring.mid };
     if (style.fence) addFenceSection(b, ring, style, p, a, i);
     else b.addBox(p.x, p.z, style.thickness, height + SINK, ring.length, color, -SINK, -a);
-    if (hasTower(ring, style, i)) addPost(b, ring, i * ring.step, style.thickness * 2, style.height * 1.4, style.postColor);
     sections++;
   }
   return sections;
@@ -274,10 +264,6 @@ function addSections(b: SiteBuilder, ring: Ring, style: WallStyle, seed: number)
 function addFenceSection(b: SiteBuilder, ring: Ring, style: WallStyle, p: { x: number; z: number }, a: number, i: number): void {
   for (const lift of [0.45, 0.85]) b.addBox(p.x, p.z, style.thickness, 0.06, ring.length, style.colors[0], style.height * lift, -a);
   addPost(b, ring, i * ring.step, 0.12, style.height, style.postColor);
-}
-
-function hasTower(ring: Ring, style: WallStyle, i: number): boolean {
-  return style.towerEvery !== null && i % style.towerEvery === 0 && !ring.open[(i + ring.count - 1) % ring.count];
 }
 
 function addPost(b: SiteBuilder, ring: Ring, a: number, width: number, height: number, color: number): void {
@@ -298,13 +284,9 @@ function gateRuns(open: boolean[]): [number, number][] {
   return runs;
 }
 
-// Posts or guard towers on both sides, and two door leaves hinged at the posts that meet in the middle.
+// Posts on both sides, and two door leaves hinged at the posts that meet in the middle.
 function addGate(b: SiteBuilder, ring: Ring, style: WallStyle, from: number, to: number): void {
-  for (const a of [from, to]) {
-    if (style.guarded) addGuardTower(b, ring, style, a);
-    else addPost(b, ring, a, style.thickness * 1.6, style.height * 1.4, style.postColor);
-  }
-  if (style.guarded) addBanner(b, ring, from);
+  for (const a of [from, to]) addPost(b, ring, a, style.thickness * 1.6, style.height * 1.4, style.postColor);
   for (const a of [from, to]) addLamp(b, ring, style, a);
   const middle = (from + to) / 2;
   const doorHeight = style.fence ? style.height : style.height * 0.95;
@@ -323,32 +305,13 @@ function addLeaf(b: SiteBuilder, ring: Ring, style: WallStyle, hinge: number, ti
 
 // A lamp on a post, or on the tower top, beside each gate, so a stop shows from far away.
 function addLamp(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void {
-  const top = style.guarded ? SET.guardTowerHeight : Math.max(SET.lampHeight, style.height * 1.4);
+  const top = Math.max(SET.lampHeight, style.height * 1.4);
   const q = onEdge(ring, a, style.thickness);
-  if (!style.guarded) b.addBox(q.x, q.z, 0.18, top + SINK, 0.18, PAL.metal, -SINK, -a);
+  b.addBox(q.x, q.z, 0.18, top + SINK, 0.18, PAL.metal, -SINK, -a);
   b.addBox(q.x, q.z, 0.2, 0.35, 0.6, PAL.metal, top, -a);
   b.addBox(q.x, q.z, 0.24, 0.22, 0.45, PAL.lamp.on, top + 0.06, -a);
 }
 
-
-function addGuardTower(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void {
-  const tower = SET.guardTowerHeight;
-  const t = style.thickness;
-  addPost(b, ring, a, t * 2.4, tower, style.postColor);
-  const q = onEdge(ring, a, t * 2.4);
-  b.addBox(q.x, q.z, t * 3.2, 0.12, t * 3.2, PAL.wall.dark, tower, -a);
-  const gun = onEdge(ring, a, -t * 1.4);
-  b.addBox(gun.x, gun.z, 0.9, 0.12, 0.12, PAL.metal, tower + 0.2, -a);
-}
-
-// The pole rises from the gate's first tower. Its banner hangs across the tangent, so it faces the road.
-function addBanner(b: SiteBuilder, ring: Ring, a: number): void {
-  const tower = SET.guardTowerHeight;
-  const q = onEdge(ring, a, 1);
-  b.addBox(q.x, q.z, 0.12, SET.gatePoleHeight - tower, 0.12, PAL.trunk, tower);
-  const flag = { x: q.x - Math.sin(a) * 0.45, z: q.z + Math.cos(a) * 0.45 };
-  b.addBox(flag.x, flag.z, 0.05, 1, 0.8, PAL.rust.top, SET.gatePoleHeight - 1.1, -a);
-}
 
 function buildGranary(b: SiteBuilder): void {
   // Silos at the 1.1-tile radius of the old tanks. Their sheds face the loading ruin.
@@ -482,8 +445,8 @@ function buildCamp(b: SiteBuilder, id: string): void {
 }
 
 // Fortress sites stand behind baked curtain pieces and need no edge of their own, only an interior inside them.
-function closeSite(b: SiteBuilder, site: Site): void {
-  if (site.id in FORTRESS_SITES) pullInside(site, b.root);
+function closeSite(b: SiteBuilder, site: Site, t: Terrain): void {
+  if (isFortress(site)) pullInside(site, b.root, t);
   else addWall(b, site, edgeStyle(site));
 }
 
@@ -505,15 +468,21 @@ function insideSiteCurtain(site: Site, obj: THREE.Object3D): boolean {
 
 // A fortress interior was laid out for the whole circle. Every piece moves toward the center by one shared factor, the
 // largest one that puts all of them inside the curtain, so the arrangement stays and no piece touches a wall.
-function pullInside(site: Site, root: THREE.Group): void {
+function pullInside(site: Site, root: THREE.Group, t: Terrain): void {
   const cx = site.pos.x * S;
   const cz = site.pos.y * S;
   const homes = root.children.map((child) => child.position.clone());
-  for (let k = 1; k >= 0; k -= 0.05) {
+  let fits = false;
+  for (let step = 20; step >= 0 && !fits; step--) {
+    const k = step / 20;
     root.children.forEach((child, i) => child.position.set(cx + (homes[i].x - cx) * k, homes[i].y, cz + (homes[i].z - cz) * k));
-    if (root.children.every((child) => insideSiteCurtain(site, child))) return;
+    fits = root.children.every((child) => insideSiteCurtain(site, child));
   }
-  throw new Error(`The interior of ${site.id} does not fit inside its curtain`);
+  if (!fits) throw new Error(`The interior of ${site.id} does not fit inside its curtain`);
+  // The ground differs at the new spot, so each piece keeps its height over the ground.
+  root.children.forEach((child, i) => {
+    child.position.y += (heightAt(t, child.position.x / S, child.position.z / S) - heightAt(t, homes[i].x / S, homes[i].z / S)) * S;
+  });
 }
 
 type SiteDecor = (b: SiteBuilder, site: Site, t: Terrain) => void;
@@ -547,7 +516,7 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
   const decor = SITE_DECOR[site.id];
   if (decor === undefined) throw new Error(`Missing landmark model for ${site.id}`);
   decor(b, site, t);
-  closeSite(b, site);
+  closeSite(b, site, t);
   // Site models never move after they are built.
   b.root.traverse((o) => {
     o.updateMatrix();

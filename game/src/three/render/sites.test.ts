@@ -4,8 +4,9 @@ import { loadModels } from './models';
 import { buildSites } from './sites';
 import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
-import { insideCurtain } from '../../mapgen/fortress';
+import { insideCurtain } from '../../sim/fortress';
 import { isFortress, siteGates } from '../../sim/sites';
+import { heightAt, type Terrain } from '../../sim/terrain';
 
 // The model files as base64 data URLs, since tests run without a server.
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
@@ -69,6 +70,22 @@ describe('landmark scale', () => {
       const reach = group.userData.edgeReach as [number, number];
       expect(reach[0], site.id).toBeGreaterThan(site.radius - 1.5);
       expect(reach[1], site.id).toBeLessThanOrEqual(site.radius + 0.01);
+    }
+  });
+
+  it('keeps every pulled-in interior piece at its height over the ground on a slope', () => {
+    const size = 800;
+    const heights = Array.from({ length: (size + 1) ** 2 }, (_, k) => 0.004 * (k % (size + 1)) + 0.003 * Math.floor(k / (size + 1)));
+    const slope: Terrain = { size, heights, types: Array.from({ length: size * size }, () => 'hardpan' as const) };
+    const sloped = buildSites(slope);
+    for (const site of ALL.filter(isFortress)) {
+      const flat = sites.getObjectByName(`landmark-${site.id}`)!.children;
+      const hill = sloped.getObjectByName(`landmark-${site.id}`)!.children;
+      expect(hill.length, site.id).toBe(flat.length);
+      hill.forEach((child, i) => {
+        const ground = heightAt(slope, child.position.x / PHYSICS.metersPerTile, child.position.z / PHYSICS.metersPerTile) * PHYSICS.metersPerTile;
+        expect(child.position.y - ground, `${site.id} child ${i}`).toBeCloseTo(flat[i].position.y, 4);
+      });
     }
   });
 

@@ -9,7 +9,8 @@ export type SiteLocationDef = {
   kind: "oasis" | "convoy" | "landmark" | "camp";
   pos: Vec;
   radius: number;
-  edge: SiteEdge;
+  // The edge of a site without a fortress curtain. A fortress site (FORTRESS_SITES) has none.
+  edge?: SiteEdge;
 };
 // Open ground full of loot spots. It has no edge, gates or pads: trucks drive in. Its rules live in TERRITORIES.
 // outline is its edge as a polygon, in tiles from pos, or null when the edge is the circle of radius. For an outline,
@@ -17,8 +18,8 @@ export type SiteLocationDef = {
 // decides inside and outside.
 export type TerritoryDef = { id: string; name: string; kind: "territory"; pos: Vec; radius: number; outline: Vec[] | null };
 export type LocationDef = SiteLocationDef | TerritoryDef;
-// What closes a location on its collision edge. Towns always have a town wall.
-export type SiteEdge = "palisade" | "camp" | "stone" | "fence" | "wrecks" | "fortress";
+// What closes a location on its collision edge, when no fortress curtain does.
+export type SiteEdge = "fence" | "wrecks";
 export const MAP_SCALE = 5;
 
 export function scalePoint(p: Vec): Vec {
@@ -215,7 +216,6 @@ export const REGION = {
     { id: "orchard", name: "Old Orchard", kind: "territory", pos: ORCHARD_POS, radius: boundingRadius(ORCHARD_OUTLINE), outline: ORCHARD_OUTLINE },
     {
       id: "dustwell",
-      edge: "fortress",
       name: "Dustwell",
       kind: "oasis",
       pos: scalePoint({ x: 33.8, y: 32 }),
@@ -223,7 +223,6 @@ export const REGION = {
     },
     {
       id: "granary",
-      edge: "fortress",
       name: "The Granary",
       kind: "landmark",
       pos: scalePoint({ x: 50, y: 32.8 }),
@@ -263,7 +262,6 @@ export const REGION = {
     },
     {
       id: "green-pit",
-      edge: "fortress",
       name: "Green Pit",
       kind: "oasis",
       pos: scalePoint({ x: 71.8, y: 89 }),
@@ -271,7 +269,6 @@ export const REGION = {
     },
     {
       id: "south-lock",
-      edge: "fortress",
       name: "South Lock",
       kind: "landmark",
       pos: scalePoint({ x: 56.8, y: 94 }),
@@ -287,7 +284,6 @@ export const REGION = {
     },
     {
       id: "pump-station",
-      edge: "fortress",
       name: "Pump Station",
       kind: "landmark",
       pos: scalePoint({ x: 40.7, y: 51.7 }),
@@ -303,7 +299,6 @@ export const REGION = {
     },
     {
       id: "salvage-yard",
-      edge: "fortress",
       name: "Salvage Yard",
       kind: "convoy",
       pos: scalePoint({ x: 82, y: 52.2 }),
@@ -322,7 +317,6 @@ export const REGION = {
     // Raider camps. Raiders spawn at their gates and service there. Their gate guns shoot every outsider in range.
     {
       id: "scrapjaw",
-      edge: "fortress",
       name: "Scrapjaw Camp",
       kind: "camp",
       pos: scalePoint({ x: 22, y: 14 }),
@@ -330,7 +324,6 @@ export const REGION = {
     },
     {
       id: "kiln",
-      edge: "fortress",
       name: "Kiln Camp",
       kind: "camp",
       pos: scalePoint({ x: 66, y: 76 }),
@@ -492,25 +485,14 @@ export const REGION = {
     houseWidth: 2.7, // 10.8 m, against the pickup's 5.2 m length
     houseDepth: 2.1,
     houseHeights: [1.1, 1.8],
-    wallHeight: 1.6, // 6.4 m, well over a truck roof
-    wallThickness: 1.2,
-    wallSegment: 3, // tiles per straight wall section around the curve
-    wallTowerEvery: 5, // wall sections between towers
     gateWidth: 5, // tiles of shut doors where a road meets any site edge
-    palisadeHeight: 1, // 4 m of scrap and posts
-    palisadeThickness: 0.6,
-    palisadeSegment: 1.5,
-    stoneHeight: 0.6, // 2.4 m of piled stone around an oasis
-    stoneThickness: 0.9,
-    stoneSegment: 1.2,
     fenceHeight: 0.8, // 3.2 m of posts and rails
     fenceThickness: 0.15,
     fenceSegment: 1.5,
     wreckHeight: 0.9, // 3.6 m of piled car wrecks
     wreckThickness: 1,
     wreckSegment: 1.1, // about one car length
-    guardTowerHeight: 2.6, // gate towers stand a full floor over the town wall
-    gatePoleHeight: 5.5, // 22 m, so a gate shows from across the fog edge
+    guardTowerHeight: 2.6, // tiles; the height a gate gun sights from
     lampHeight: 1.6, // 6.4 m gate lamp posts, lower on the higher walls and towers
   },
   // The player starts off the north trunk road, which leaves Bowl toward Old Orchard, facing the road. The road
