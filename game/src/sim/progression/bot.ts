@@ -30,7 +30,7 @@ import { firepower, getUpkeepReserve, isWeak, ownDanger, perceiveDanger } from '
 import { canReachSalvage, hasSalvage, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, sitePads, townAt, type Site } from '../sites';
-import { fuelCap, isStranded, suppliesCap, vehicleStats } from '../stats';
+import { fuelCap, hasWorkingEngine, isStranded, suppliesCap, vehicleStats } from '../stats';
 import { inTowReach, setBeacon } from '../tow';
 import type { GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
 import { dist, type Vec } from '../vec';
@@ -69,7 +69,8 @@ export function isArchetype(value: string): value is Archetype {
 export function botOrders(world: World, archetype: Archetype, options: BotOptions = {}): BotTurn {
   const o = new Orders(world);
   const goal = goalOf(world, archetype, options);
-  answerCall(o, goal === 'hunter' ? HUNTER_REPLIES : DEFENDER_REPLIES);
+  const replies = goal === 'hunter' ? HUNTER_REPLIES : DEFENDER_REPLIES;
+  answerCall(o, wantsTow(world) ? replies : { ...replies, ...REFUSE_TOW });
   if (playerCanAct(o.world)) {
     keepSwitches(o);
     act(o, goal);
@@ -104,6 +105,7 @@ function goalOf(world: World, archetype: Archetype, options: BotOptions): Goal {
 // refuses a truce and answers a plea for mercy with a demand to be stripped.
 const DEFENDER_REPLIES: Partial<Record<TopicId, string>> = { demand: 'Come and get it.' };
 const HUNTER_REPLIES: Partial<Record<TopicId, string>> = { ...DEFENDER_REPLIES, truceOffer: 'No. We finish this.', mercyPlea: 'Stand down and let me strip your truck.' };
+const REFUSE_TOW: Partial<Record<TopicId, string>> = { tow: 'No thanks.', towFree: 'No thanks.' };
 
 // Every open call gets the first reply of each topic, unless the bot's replies name another. On the hub, the bot hangs
 // up, which is the last option.
@@ -159,16 +161,34 @@ function workPatch(o: Orders, deal: NpcState): void {
 // engine heads for the nearest shop with an engine its money and sellable gear cover, crawling or towed. Out of town
 // with low fuel, low supplies or a badly damaged part, and the money to fix it, it drives to the nearest shop. A need
 // it cannot pay for does not send it to town, so a poor bot drives on to earn, crawling if it must. A stranded truck
-// also turns its beacon on and takes the first tow offered on the radio. Returns true when the trip to a shop is this
-// turn's order.
+// that wants a tow turns its beacon on and takes the first tow offered on the radio. Returns true when the trip to a
+// shop is this turn's order.
 function serviceTrip(o: Orders, style: UpgradeStyle): boolean {
-  if (isStranded(o.world, o.me) && !o.world.player.beacon) o.run((w) => setBeacon(w, true));
+  const beacon = isStranded(o.world, o.me) && wantsTow(o.world);
+  if (beacon !== o.world.player.beacon) o.run((w) => setBeacon(w, beacon));
   const shop = shopAt(o.world);
   if (shop) serviceInTown(o, style, shop);
   const target = serviceStop(o.world);
   if (!target || target.id === shop) return false;
   driveToSite(o, target);
   return true;
+}
+
+// A stranded bot wants a tow only when a town can get it going: its tank is dry, or its money and sellable gear cover
+// the engine or the repair it lacks. A broke bot that can crawl refuses tows and crawls on to earn, since a tow back
+// to town fixes nothing and the fee puts it in debt.
+function wantsTow(world: World): boolean {
+  const me = playerVehicle(world);
+  if (world.player.fuel <= 0) return true;
+  if (mountedParts(me, 'engine').length === 0) return nearestEngineShop(world) !== null;
+  const fix = hasWorkingEngine(me) ? basicsRepairCost(world) : repairCost(world);
+  return fix <= engineBudget(world, nearestGarage(world).id);
+}
+
+function nearestGarage(world: World): Site {
+  const pos = playerVehicle(world).pos;
+  const garages = SHOP_SITES.filter((s) => shopDef(s.id).kind === 'garage');
+  return garages.reduce((best, s) => (dist(pos, s.pos) < dist(pos, best.pos) ? s : best));
 }
 
 function serviceStop(world: World): Site | null {

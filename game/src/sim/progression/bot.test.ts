@@ -160,6 +160,24 @@ describe('botOrders', () => {
     expect(turn.world.player.beacon).toBe(true);
   });
 
+  // A broken transmission strands the truck, and it still crawls. A tow helps only when the money and the gear for
+  // sale cover the repair. A robbery leaves only the built-in parts and the engine.
+  it('has a stranded truck call for a tow only when it can pay for the fix', () => {
+    const stranded = (money: number) => {
+      const w = parkedAt('bowl');
+      const me = playerVehicle(w);
+      me.pos = { x: me.pos.x + 40, y: me.pos.y };
+      me.items = me.items.filter((it) => it.kind === 'part' && ['core', 'engine'].includes(partDef(it.part.defId).kind));
+      for (const part of mountedParts(me)) if (part.defId.includes('transmission')) part.hp = 0;
+      w.player.money = money;
+      expect(isStranded(w, me)).toBe(true);
+      return botOrders(w, 'trader').world;
+    };
+
+    expect(stranded(2000).player.beacon).toBe(true);
+    expect(stranded(0).player.beacon).toBe(false);
+  });
+
   it('has a stranded truck without an engine buy and mount one in town', () => {
     const w = withoutEngine(parkedAt('bowl'));
     w.shops.bowl.stock.push(makePart(w, 'stockEngine', 0));
