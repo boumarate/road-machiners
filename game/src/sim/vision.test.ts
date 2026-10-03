@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TERRAIN } from '../data/terrain';
-import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
 import { WEATHER } from '../data/weather';
 import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { contactsOf, soundRange } from './detect';
@@ -201,18 +201,18 @@ describe('contact practice', () => {
 });
 
 describe('perception sight', () => {
-  it('reaches farther for the player at level 5', () => {
+  it('reaches farther for the player at rank 5', () => {
     const w = emptyWorld({ x: 60, y: 60 });
     const me = w.vehicles[0];
     const base = sightRadius(w, me);
-    w.player.skills.perception = XP_TO_REACH[5];
+    w.player.ranks.perception = 5;
     expect(sightRadius(w, me)).toBeCloseTo(base * (1 + 5 * SKILL_EFFECTS.perception.sight));
   });
 
-  it('shows the player more tiles at level 5', () => {
+  it('shows the player more tiles at rank 5', () => {
     const w = emptyWorld({ x: 60, y: 60 });
     const base = visibleTiles(w, { x: 60, y: 60 }).size;
-    w.player.skills.perception = XP_TO_REACH[5];
+    w.player.ranks.perception = 5;
     expect(visibleTiles(w, { x: 60, y: 60 }).size).toBeGreaterThan(base);
   });
 
@@ -220,7 +220,7 @@ describe('perception sight', () => {
     const w = emptyWorld({ x: 60, y: 60 });
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
     const base = sightRadius(w, npc);
-    w.player.skills.perception = XP_TO_REACH[5];
+    w.player.ranks.perception = 5;
     expect(sightRadius(w, npc)).toBe(base);
   });
 });

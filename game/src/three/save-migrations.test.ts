@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { baseGrid, isMounted, placementError } from '../sim/grid';
-import type { Vehicle } from '../sim/types';
+import { choosePerk, pendingPerkPairs, skillLevel } from '../sim/progress';
+import { emptyWorld } from '../sim/testkit';
+import type { Player, Vehicle } from '../sim/types';
 import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
 import FORMAT_2_2 from './save-fixtures/format-2-2.json';
@@ -12,9 +14,10 @@ import FORMAT_2_6 from './save-fixtures/format-2-6.json';
 import FORMAT_2_7 from './save-fixtures/format-2-7.json';
 import FORMAT_2_8 from './save-fixtures/format-2-8.json';
 import FORMAT_2_9 from './save-fixtures/format-2-9.json';
+import FORMAT_2_10 from './save-fixtures/format-2-10.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
-import { MIGRATIONS } from './save-migrations';
+import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
 
 describe('save migrations', () => {
   it('0 to 1 gives the player townPatched false and keeps every other field', () => {
@@ -203,9 +206,48 @@ describe('save migration 8 to 9', () => {
 });
 
 describe('save migration 9 to 10', () => {
-  it('gives the player the headlight switch off and keeps every other field', () => {
-    const next = MIGRATIONS[9](FORMAT_2_9);
+  // Total XP each 2.9 level needed, a copy for the test.
+  const reach = [0, 200, 600, 1200, 2000, 3000];
+  const migrated = () => MIGRATIONS[9](FORMAT_2_9) as { player: Pick<Player, 'xp' | 'ranks' | 'perks'> & Record<string, unknown> };
 
-    expect(next).toEqual({ ...FORMAT_2_9, player: { ...FORMAT_2_9.player, headlights: false } });
+  it('turns each old level into the same rank, at 0, mid level, on a threshold and past the top', () => {
+    expect(migrated().player.ranks).toEqual({ driving: 0, perception: 1, machining: 2, toughness: 5, social: 3 });
+  });
+
+  it('keeps every earned XP: the pool holds what the ranks did not cost', () => {
+    const { xp, ranks } = migrated().player;
+    const spent = Object.values(ranks).reduce((sum, rank) => sum + reach[rank], 0);
+    const earned = Object.values(FORMAT_2_9.player.skills).reduce((sum, n) => sum + n, 0);
+    expect(xp).toBe(250 + 500 + 799);
+    expect(xp + spent).toBe(earned);
+  });
+
+  it('removes skills and leaves perks, daily XP, repeats and XP per source as they were', () => {
+    const next = migrated();
+    const kept = Object.fromEntries(Object.entries(FORMAT_2_9.player).filter(([key]) => key !== 'skills'));
+    expect(next).toEqual({ ...FORMAT_2_9, player: { ...kept, xp: next.player.xp, ranks: next.player.ranks } });
+    expect(next.player).not.toHaveProperty('skills');
+  });
+
+  it('pools a skill map the same way for the rescue', () => {
+    expect(pooledSkills_9_10(FORMAT_2_9.player.skills)).toEqual({ xp: migrated().player.xp, ranks: migrated().player.ranks });
+  });
+
+  it('keeps owned perks valid and opens the pairs the old levels reached', () => {
+    const w = emptyWorld();
+    const { xp, ranks, perks } = migrated().player;
+    Object.assign(w.player, { xp, ranks, perks: [...perks] });
+    expect(skillLevel(w, 'toughness')).toBe(5);
+    expect(pendingPerkPairs(w).map((pair) => `${pair.skill} ${pair.level}`)).toEqual(['toughness 4', 'social 2']);
+    expect(() => choosePerk(w, 'cannibal')).toThrow(/already picked/);
+    expect(choosePerk(w, 'rumorMill').player.perks).toContain('rumorMill');
+  });
+});
+
+describe('save migration 10 to 11', () => {
+  it('gives the player the headlight switch off and keeps every other field', () => {
+    const next = MIGRATIONS[10](FORMAT_2_10);
+
+    expect(next).toEqual({ ...FORMAT_2_10, player: { ...FORMAT_2_10.player, headlights: false } });
   });
 });

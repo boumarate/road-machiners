@@ -1,10 +1,10 @@
 // The terrain grid. Heights live on tile corners, (size + 1) x (size + 1), so neighboring tiles share
 // edges. Each tile reads its four corners for slope, and has a type. Driving, sight, routing and
-// drawing all read this grid. On Canyon Bridge, heights and slopes are the deck's (see bridge.ts).
+// drawing all read this grid. On a deck like Canyon Bridge, heights and slopes are the deck's (see bridge.ts).
 // The grid comes from the baked map file, decoded below. The game never builds it.
 
 import { MAPGEN, TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../data/terrain';
-import { BRIDGE_AXIS, BRIDGE_LENGTH, deckAlong, spanAlong } from './bridge';
+import { deckAt, spanAt, type Deck } from './bridge';
 import { clamp, type Vec } from './vec';
 
 export type Terrain = {
@@ -30,20 +30,20 @@ export function tileAt(t: Terrain, p: Vec): number {
   return y * t.size + x;
 }
 
-// Height at a map point: the deck on Canyon Bridge, else the ground.
+// Height at a map point: the deck on a deck outline, else the ground.
 export function heightAt(t: Terrain, x: number, y: number): number {
-  const a = deckAlong(x, y);
-  return a === null ? groundAt(t, x, y) : deckHeight(t, a);
+  const on = deckAt(x, y);
+  return on === null ? groundAt(t, x, y) : deckHeight(t, on.deck, on.along);
 }
 
-// Height of a mark drawn on the map around a truck at `origin`, like its throttle zones. Beside Canyon
-// Bridge, a mark stays level with the deck where the truck is nearer the deck than the canyon floor, so
-// it does not hang down into the canyon.
+// Height of a mark drawn on the map around a truck at `origin`, like its throttle zones. Beside a deck,
+// a mark stays level with the deck where the truck is nearer the deck than the ground below, so it does
+// not hang down into a canyon like Canyon Bridge's.
 export function markHeightAt(t: Terrain, origin: Vec, x: number, y: number): number {
   const h = heightAt(t, x, y);
-  const a = spanAlong(x, y);
-  if (a === null) return h;
-  const deck = deckHeight(t, a);
+  const span = spanAt(x, y);
+  if (span === null) return h;
+  const deck = deckHeight(t, span.deck, span.along);
   if (h >= deck) return h;
   const from = heightAt(t, origin.x, origin.y);
   return Math.abs(from - deck) < Math.abs(from - h) ? deck : h;
@@ -68,25 +68,25 @@ export function groundAt(t: Terrain, x: number, y: number): number {
 }
 
 // Deck surface height at a distance along it: a straight line between the ground at both ends.
-export function deckHeight(t: Terrain, along: number): number {
-  const [from, to] = deckEnds(t);
-  return from + (to - from) * (along / BRIDGE_LENGTH);
+export function deckHeight(t: Terrain, deck: Deck, along: number): number {
+  const [from, to] = deckEnds(t, deck);
+  return from + (to - from) * (along / deck.length);
 }
 
 // Ground height at the deck's from and to ends.
-export function deckEnds(t: Terrain): [number, number] {
-  const { from, to } = T.features.bridge;
-  return [groundAt(t, from.x, from.y), groundAt(t, to.x, to.y)];
+export function deckEnds(t: Terrain, deck: Deck): [number, number] {
+  return [groundAt(t, deck.from.x, deck.from.y), groundAt(t, deck.to.x, deck.to.y)];
 }
 
 // Height change per tile along x and y. A tile centered on the deck takes the deck's grade.
 export function tileSlope(t: Terrain, tile: number): Vec {
   const i = tile % t.size;
   const j = Math.floor(tile / t.size);
-  if (deckAlong(i + 0.5, j + 0.5) === null) return groundSlope(t, tile);
-  const [from, to] = deckEnds(t);
-  const grade = (to - from) / BRIDGE_LENGTH;
-  return { x: grade * BRIDGE_AXIS.x, y: grade * BRIDGE_AXIS.y };
+  const on = deckAt(i + 0.5, j + 0.5);
+  if (on === null) return groundSlope(t, tile);
+  const [from, to] = deckEnds(t, on.deck);
+  const grade = (to - from) / on.deck.length;
+  return { x: grade * on.deck.axis.x, y: grade * on.deck.axis.y };
 }
 
 // Ground height change per tile along x and y, averaged over the tile's two edges on each axis.
@@ -114,7 +114,7 @@ export function isCliff(t: Terrain, tile: number): boolean {
 
 // Kinds of baked props, in their stored order: the map file keeps a kind as its index here.
 // New kinds go last, so older files keep their kinds.
-export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'hullRib', 'shipCache', 'coreWreck', 'reactor', 'hullWall', 'deckBay', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile'] as const;
+export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'hullRib', 'shipCache', 'coreWreck', 'reactor', 'hullWall', 'deckBay', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing'] as const;
 export type PropKind = (typeof PROP_KINDS)[number];
 // A prop the bake placed. yaw is in radians from map +x toward +y. group and step order the poles of one
 // power line, and are 0 for other props. A fence prop is one straight segment along its yaw, and r is half its length.

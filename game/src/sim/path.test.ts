@@ -16,6 +16,7 @@ import { editableTerrain, emptyWorld, npcBrain } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 // Shared read-only across every test below that needs a real generated map on this seed: newWorld
 // repeats obstacle generation, NPC spawns and vision on top of the terrain build, so building it once
@@ -164,9 +165,13 @@ describe("route", () => {
 
 describe('driver taste', () => {
   const brain = npcBrain('trader', { x: 0, y: 0 }, ['trader']);
-  const [bowl, nose] = REGION.towns;
-  const from = siteGates(nose)[0];
-  const to = siteGates(bowl)[0];
+  const site = (id: string) => {
+    const found = [...REGION.towns, ...REGION.locations].find((s) => s.id === id);
+    if (found === undefined) throw new Error(`No site ${id}`);
+    return found;
+  };
+  const from = siteGates(site('nose'))[0];
+  const to = siteGates(site('dustwell'))[0];
   const w = w1337;
   // Largest distance of either route's corners from the other route.
   const apart = (p: Vec[], q: Vec[]) => Math.max(...p.map((x) => polylineDist(x, q)), ...q.map((x) => polylineDist(x, p)));
@@ -174,7 +179,8 @@ describe('driver taste', () => {
   it('sends drivers between the same towns along different ways', () => {
     const routes = Array.from({ length: 10 }, (_, i) => [from, ...route(w, from, to, 0.8, [], { id: `v${100 + i}`, brain })]);
     const ways = routes.filter((r, i) => routes.slice(0, i).every((q) => apart(r, q) > 10));
-    // Bowl and Nose have two roads of close length, the north trunk and the middle road past Pump Station.
+    // Nose and Dustwell have two roads of close length, the north trunk past Burnt Convoy and the middle road over
+    // Broken Wing.
     expect(ways.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -686,7 +692,7 @@ describe('nav layers match the old grid rules', () => {
     }
     // Random points often land in closed cliff basins; some pairs still need a real search.
     expect(searched).toBeGreaterThanOrEqual(4);
-  }, 60_000);
+  }, budget(60_000));
 
   it('straightClear equals the reference line check', () => {
     let clear = 0;
@@ -722,7 +728,7 @@ describe('nav layers match the old grid rules', () => {
       expect(routeLength(from, again)).toBeLessThanOrEqual(1.1 * routeLength(from, ref));
     }
     expect(perfSnapshot()['route-cache-hit'].calls).toBeGreaterThan(0);
-  }, 60_000);
+  }, budget(60_000));
 
   it('a new kill wreck changes the route without rebuilding the static layer', () => {
     const a = { x: 30, y: 30 };
@@ -832,7 +838,7 @@ describe('long routes search a coarse corridor', () => {
     const ms = performance.now() - t;
     expect(got).toBeNull();
     expect(ms).toBeLessThan(5);
-  }, 60_000);
+  }, budget(60_000));
 
   it('a corridor cut by a kill wreck wall falls back to the full search', () => {
     const w = emptyWorld();
@@ -872,5 +878,5 @@ describe('long routes search a coarse corridor', () => {
     expect(found).toBeGreaterThanOrEqual(5);
     // Without kill wrecks or parked vehicles a chain of linked regions always holds a fine path.
     expect(perfSnapshot()['route-corridor-miss']).toBeUndefined();
-  }, 60_000);
+  }, budget(60_000));
 });

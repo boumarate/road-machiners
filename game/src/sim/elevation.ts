@@ -1,18 +1,21 @@
 // Deterministic elevation noise derived from a seed, not the seeded rng. It only seeds the
 // terrain grid in sim/terrain.ts and the map bake in mapgen/; everything else reads that grid.
 // Flattened near roads, towns and locations so they stay drivable, except in the gap under Canyon Bridge.
+// Crater bowls and mounds come after flattening, so roads keep them.
 
 import { TERRAIN } from '../data/terrain';
 import { REGION } from '../data/region';
 import { bridgeCut } from './bridge';
 import { INDEX_CELL, ROAD_INDEX, RoadIndex } from './road-index';
+import { heightFromElevation } from './terrain';
+import type { Vec } from './vec';
 
 // Territories keep their own ground: nothing flattens them.
 const SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 // Squared distance past which a site is sure to lie beyond flattenMargin. The extra tile keeps
 // the cheap test clear of rounding, so the exact test decides every near case.
 const SITE_SKIP2 = SITES.map((site) => (site.radius + TERRAIN.flattenMargin + 1) ** 2);
-const FEATURES = [TERRAIN.features.canyon, TERRAIN.features.dryRiver].map((feature) => ({
+const FEATURES = [TERRAIN.features.canyon, TERRAIN.features.dryRiver, TERRAIN.features.trench].map((feature) => ({
   feature,
   index: new RoadIndex([feature.path], INDEX_CELL),
   reach: feature.width + feature.bank,
@@ -102,10 +105,10 @@ function siteLevels(seed: number): number[] {
 export function elevationAt(seed: number, x: number, y: number): number {
   const height = reliefAt(seed, x, y) * (1 - flattenFactor(x, y) * (1 - bridgeCut(x, y)));
   // Roads retain broad grades; only their small bumps and channel crossings are smoothed.
-  return cratered(height + rollingAt(seed, x, y), x, y);
+  return bowls(height + rollingAt(seed, x, y), x, y);
 }
 
-// Unflattened elevation noise, ridges and the canyon and dry river channels.
+// Unflattened elevation noise, ridges and the channels: the canyon, the dry river and Broken Wing's trench.
 export function reliefAt(seed: number, x: number, y: number): number {
   const relief = TERRAIN.relief;
   const ridges = Math.abs(noise2(x * relief.ridgeFrequency, y * relief.ridgeFrequency, seed + 5000) - 0.5) * relief.ridgeAmplitude;
@@ -117,10 +120,10 @@ export function reliefAt(seed: number, x: number, y: number): number {
   return height;
 }
 
-// Broad rolling elevation, held at each site's own level near the site, with the craters cut in.
+// Broad rolling elevation, held at each site's own level near the site, with the craters cut in and the mounds raised.
 // Flattening never touches it.
 export function broadAt(seed: number, x: number, y: number): number {
-  return cratered(rollingAt(seed, x, y), x, y);
+  return bowls(rollingAt(seed, x, y), x, y);
 }
 
 function rollingAt(seed: number, x: number, y: number): number {
@@ -140,16 +143,38 @@ function rollingAt(seed: number, x: number, y: number): number {
   return rolling;
 }
 
-// The height with every crater bowl cut into it.
-function cratered(height: number, x: number, y: number): number {
-  let out = height;
-  for (const crater of TERRAIN.features.craters) {
-    const dx = crater.center.x - x;
-    const dy = crater.center.y - y;
-    // One tile past the bank keeps this cheap skip clear of rounding.
-    if (dx * dx + dy * dy > (crater.radius + crater.bank + 1) ** 2) continue;
-    const gap = Math.hypot(dx, dy) - crater.radius;
-    if (gap < crater.bank) out -= crater.depth * (gap <= 0 ? 1 : 1 - smooth(gap / crater.bank));
+// The elevation with every crater bowl cut into it and every mound raised on it. A mound is a crater turned up,
+// but its height is in height units, so it stands as tall over a hill as over a plain.
+function bowls(elevation: number, x: number, y: number): number {
+  let out = elevation;
+  for (const crater of TERRAIN.features.craters) out -= bowl(crater.center, crater.radius, crater.bank, crater.depth, x, y);
+  let rise = 0;
+  for (const mound of TERRAIN.features.mounds) rise += bowl(mound.center, mound.radius, mound.bank, mound.height, x, y);
+  return rise > 0 ? raised(out, rise) : out;
+}
+
+// A bowl's full size inside its radius, falling smoothly to 0 over its bank.
+function bowl(center: Vec, radius: number, bank: number, size: number, x: number, y: number): number {
+  const dx = center.x - x;
+  const dy = center.y - y;
+  // One tile past the bank keeps this cheap skip clear of rounding.
+  if (dx * dx + dy * dy > (radius + bank + 1) ** 2) return 0;
+  const gap = Math.hypot(dx, dy) - radius;
+  if (gap >= bank) return 0;
+  return size * (gap <= 0 ? 1 : 1 - smooth(gap / bank));
+}
+
+// The elevation whose height stands `rise` height units over the height of `elevation`. heightFromElevation()
+// climbs at least TERRAIN.height.hill per elevation unit, so the answer lies within rise / hill above, and
+// halving finds it to far below a millimetre.
+function raised(elevation: number, rise: number): number {
+  const target = heightFromElevation(elevation) + rise;
+  let low = elevation;
+  let high = elevation + rise / TERRAIN.height.hill;
+  for (let k = 0; k < 40; k++) {
+    const mid = (low + high) / 2;
+    if (heightFromElevation(mid) < target) low = mid;
+    else high = mid;
   }
-  return out;
+  return high;
 }

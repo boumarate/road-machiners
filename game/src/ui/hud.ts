@@ -26,7 +26,7 @@ import { createSwitch } from "./switch";
 import { Tips } from "./tips";
 import { kph } from "./units";
 import { playerVehicle } from "../sim/damage";
-import { pendingPerkPairs } from "../sim/progress";
+import { affordableRanks, pendingPerkPairs } from "../sim/progress";
 import { canDouse } from "../sim/engine-heat";
 import { ENGINE_HEAT } from "../data/wear";
 import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
@@ -368,19 +368,19 @@ export class Hud {
     return [headlights, overdrive, douse];
   }
 
-  // The character button, marked while a perk pair waits for a pick.
+  // The character button, marked while a perk pair waits for a pick or the XP pool pays for a rank.
   private characterButton(w: World, busy: boolean): HTMLElement {
-    const perkOpen = pendingPerkPairs(w).length > 0;
+    const marked = pendingPerkPairs(w).length > 0 || affordableRanks(w).length > 0;
     return el(
       "button",
       {
         class: "instrument-button",
         disabled: busy,
         onclick: () => this.actions.openCharacter(),
-        title: perkOpen ? "Driver and skills: a perk is ready to pick [C]" : "Driver and skills [C]",
+        title: marked ? "Driver and skills: XP to spend or a perk to pick [C]" : "Driver and skills [C]",
       },
       createIcon("driver"),
-      perkOpen ? "! [C]" : "[C]",
+      marked ? "! [C]" : "[C]",
     );
   }
 

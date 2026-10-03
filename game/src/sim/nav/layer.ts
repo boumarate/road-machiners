@@ -4,12 +4,11 @@
 // scales these costs.
 
 import { hazardZones } from '../territory';
-import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
 import { BREAKABLE } from '../../data/rules';
 import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../../data/terrain';
 import { nearRail } from '../bridge';
-import { boxDistance, isBreakable, isDriveObstacle, propBoxes, propKey, propReach, type PosedBox } from '../mapgen';
+import { blockingBoxes, boxDistance, isBreakable, isDriveObstacle, propKey, propReach, type PosedBox } from '../mapgen';
 import { isCliff, tileSlope, type Terrain } from '../terrain';
 import { hashRandom } from '../rng';
 import type { Obstacle, Vehicle, World } from '../types';
@@ -173,19 +172,7 @@ export function dynamicBlockers(obstacles: Obstacle[], extra: Blocker[]): Blocke
 // under canopies.
 function driveBlocker(o: Obstacle): Blocker {
   if (o.kind === 'site') return { pos: o.pos, r: o.r };
-  return { pos: o.pos, r: propReach(o), prop: { key: propKey(o), boxes: lowBoxes(propBoxes(o)) } };
-}
-
-// World clones share posed boxes, so each box list is filtered once.
-const lowBoxCache = new WeakMap<readonly PosedBox[], PosedBox[]>();
-
-function lowBoxes(boxes: readonly PosedBox[]): PosedBox[] {
-  let low = lowBoxCache.get(boxes);
-  if (!low) {
-    low = boxes.filter((b) => b.z0 < PHYSICS.truckClearance);
-    lowBoxCache.set(boxes, low);
-  }
-  return low;
+  return { pos: o.pos, r: propReach(o), prop: { key: propKey(o), boxes: blockingBoxes(o) } };
 }
 
 // Exact content key: number-to-string round-trips, so equal keys mean equal circles, and a prop key names its pose.
