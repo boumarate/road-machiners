@@ -7,7 +7,7 @@ import { accrueXp, levelOf, type SkillProgress } from '../progress';
 import type { SkillId, XpSource } from '../types';
 import { isArchetype, type Archetype } from './bot';
 import { LEDGER_KEYS } from './orders';
-import type { DayRow, RunEnd, TraceLine } from './record';
+import type { DayRow, RunEnd, RunFailure, TraceLine } from './record';
 
 // levels[i] is the first turn the skill reaches level i + 1, or null if it never does.
 export type SkillCurve = { levels: (number | null)[]; total: number; perDay: number };
@@ -66,12 +66,15 @@ function isDifficulty(value: unknown): value is number | null {
   return value === null || typeof value === 'number';
 }
 
-// The death marker that ends a trace file, or null for any other entry. Throws on a malformed marker.
-export function parseRunEnd(value: unknown): RunEnd | null {
+// The death or error marker that ends a trace file, or null for any other entry. Throws on a malformed marker.
+export function parseRunEnd(value: unknown): RunEnd | RunFailure | null {
   const entry = asRecord(value);
   if (!('end' in entry)) return null;
-  if (entry.end !== 'death' || !Number.isInteger(entry.turn)) throw new Error(`Bad run end ${JSON.stringify(value)}`);
-  return { end: 'death', turn: entry.turn as number };
+  if (!Number.isInteger(entry.turn)) throw new Error(`Bad run end ${JSON.stringify(value)}`);
+  const turn = entry.turn as number;
+  if (entry.end === 'death') return { end: 'death', turn };
+  if (entry.end === 'error' && typeof entry.message === 'string') return { end: 'error', turn, message: entry.message };
+  throw new Error(`Bad run end ${JSON.stringify(value)}`);
 }
 
 // Each way a curve misses its targets in TARGET_DAYS, as one readable line. `turns` is the run length: a level whose
@@ -98,9 +101,9 @@ function missVerdict(target: number, reached: number | null, turns: number): 'to
   return reached > late ? 'too late' : null;
 }
 
-// A recorded run read back from a trace file's parsed lines: a header, the trace lines, and a death marker last if
-// the player died. `turns` is the death turn for a run the player did not survive.
-export type Run = { archetype: Archetype; seed: number; turns: number; death: number | null; trace: TraceLine[]; rows: DayRow[] };
+// A recorded run read back from a trace file's parsed lines: a header, the trace lines, and a death or error marker
+// last if the run ended early. `turns` is then the turn it ended on.
+export type Run = { archetype: Archetype; seed: number; turns: number; death: number | null; error: RunFailure | null; trace: TraceLine[]; rows: DayRow[] };
 
 export function parseRun(values: readonly unknown[], label: string): Run {
   const [first, ...rest] = values;
@@ -108,10 +111,15 @@ export function parseRun(values: readonly unknown[], label: string): Run {
   const header = parseHeader(first, label);
   const end = rest.length > 0 ? parseRunEnd(rest[rest.length - 1]) : null;
   const body = end ? rest.slice(0, -1) : rest;
-  if (body.some((value) => parseRunEnd(value))) throw new Error(`${label} has lines after its death marker`);
+  if (body.some((value) => parseRunEnd(value))) throw new Error(`${label} has lines after its end marker`);
   const trace = body.filter((value) => !isDayRow(value)).map(parseTraceLine);
   const rows = body.filter(isDayRow).map(parseDayRow);
-  return { ...header, ...(end ? { turns: end.turn, death: end.turn } : { death: null }), trace, rows };
+  return { ...header, ...ending(end, header.turns), trace, rows };
+}
+
+function ending(end: RunEnd | RunFailure | null, turns: number): Pick<Run, 'turns' | 'death' | 'error'> {
+  if (!end) return { turns, death: null, error: null };
+  return { turns: end.turn, death: end.end === 'death' ? end.turn : null, error: end.end === 'error' ? end : null };
 }
 
 function isDayRow(value: unknown): boolean {

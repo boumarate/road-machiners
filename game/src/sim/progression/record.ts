@@ -31,6 +31,8 @@ import { TEST_MAP } from '../../test/map';
 export type TraceLine = { turn: number; source: XpSource; amount: number; difficulty: number | null; target: string };
 // The last entry of a run the player did not survive. turn is the world turn the player died on.
 export type RunEnd = { end: 'death'; turn: number };
+// The last entry of a run an error stopped. turn is the last world turn that finished, and message the error.
+export type RunFailure = { end: 'error'; turn: number; message: string };
 // rows holds the economy row of a day that ended on this step. death is set on the last step of a run the player did
 // not survive.
 export type RecordStep = { world: World; lines: TraceLine[]; rows: DayRow[]; death: RunEnd | null };

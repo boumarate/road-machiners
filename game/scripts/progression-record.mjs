@@ -1,12 +1,11 @@
 // Records progression traces: a bot plays each archetype on each seed, and every practice event goes to
 // tmp/progression/<archetype>-<seed>.jsonl. The first line holds the run, then one trace line per event and one
 // economy row per in-game day. A run the player did not survive ends early with a {"end":"death","turn":N} line.
-// Each run is a child process, and runs go in parallel up to the CPU count.
+// Each run is a child process. A run an error stops ends with {"end":"error","turn":N,"message":...}.
 // Usage: npm run progression:record -- --archetypes trader,hunter --seeds 1,2,3 --turns 2000
 // The markov archetype also needs --markov-turns <k>, the turns it keeps one goal.
 import { spawn } from 'node:child_process';
 import { closeSync, mkdirSync, openSync, renameSync, writeSync } from 'node:fs';
-import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { TIME } from '../src/data/time.ts';
 import { isArchetype } from '../src/sim/progression/bot.ts';
@@ -84,18 +83,15 @@ function parseJob(text) {
   return { archetype, seed: parseSeed(seedText) };
 }
 
+// Runs go one at a time, so a batch never loads more than one core.
 async function recordAll({ archetypes, seeds, turns, options }) {
   const jobs = archetypes.flatMap((archetype) => seeds.map((seed) => ({ archetype, seed })));
-  const width = Math.min(jobs.length, availableParallelism());
-  console.log(`Recording ${jobs.length} runs of ${turns} turns, ${width} at a time`);
+  console.log(`Recording ${jobs.length} runs of ${turns} turns, one at a time`);
   const failed = [];
-  const queue = [...jobs];
-  await Promise.all(Array.from({ length: width }, async () => {
-    for (let job = queue.shift(); job; job = queue.shift()) {
-      const code = await runChild(job, turns, options);
-      if (code !== 0) failed.push(`${job.archetype}-${job.seed}`);
-    }
-  }));
+  for (const job of jobs) {
+    const code = await runChild(job, turns, options);
+    if (code !== 0) failed.push(`${job.archetype}-${job.seed}`);
+  }
   if (failed.length > 0) throw new Error(`Runs failed: ${failed.join(', ')}`);
   console.log(`Wrote ${jobs.length} traces to ${OUT_DIR}/`);
 }
@@ -120,20 +116,34 @@ function recordOne({ archetype, seed }, turns, options) {
   const fd = openSync(`${path}.part`, 'w');
   const started = Date.now();
   writeSync(fd, `${JSON.stringify({ archetype, seed, turns, ...options })}\n`);
-  let count = 0;
-  let death = null;
-  for (const step of recordTurns(seed, archetype, turns, options)) {
+  const progress = { count: 0, end: null, lastTurn: 1 };
+  try {
+    writeSteps(fd, name, recordTurns(seed, archetype, turns, options), progress);
+  } catch (error) {
+    // A bot or rule error ends this run with an error marker, so the batch and the report go on without it.
+    console.error(error);
+    progress.end = { end: 'error', turn: progress.lastTurn, message: error instanceof Error ? error.message : String(error) };
+    process.exitCode = 1;
+  }
+  const { count, end } = progress;
+  // A run the player did not survive ends with the death marker.
+  if (end) writeSync(fd, `${JSON.stringify(end)}\n`);
+  closeSync(fd);
+  renameSync(`${path}.part`, path);
+  const ending = end ? `${end.end === 'death' ? 'died' : 'failed'} on turn ${end.turn}` : `${turns} turns`;
+  console.log(`${name}: ${ending}, ${count} events in ${((Date.now() - started) / 1000).toFixed(0)} s`);
+}
+
+// Writes each step's trace lines and rows as it comes, and keeps the count, the death marker and the last turn in
+// progress, so an error part way still leaves them.
+function writeSteps(fd, name, steps, progress) {
+  for (const step of steps) {
     const { world, lines, rows } = step;
     const written = [...lines, ...rows];
     if (written.length > 0) writeSync(fd, written.map((line) => `${JSON.stringify(line)}\n`).join(''));
-    count += lines.length;
-    death = step.death;
-    if ((world.turn - 1) % TIME.turnsPerDay === 0) console.log(`${name}: day ${(world.turn - 1) / TIME.turnsPerDay} done, ${count} events`);
+    progress.count += lines.length;
+    progress.end = step.death;
+    progress.lastTurn = world.turn;
+    if ((world.turn - 1) % TIME.turnsPerDay === 0) console.log(`${name}: day ${(world.turn - 1) / TIME.turnsPerDay} done, ${progress.count} events`);
   }
-  // A run the player did not survive ends with the death marker.
-  if (death) writeSync(fd, `${JSON.stringify(death)}\n`);
-  closeSync(fd);
-  renameSync(`${path}.part`, path);
-  const ending = death ? `died on turn ${death.turn}` : `${turns} turns`;
-  console.log(`${name}: ${ending}, ${count} events in ${((Date.now() - started) / 1000).toFixed(0)} s`);
 }
