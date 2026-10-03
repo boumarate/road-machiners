@@ -746,6 +746,11 @@ function engage(world: World, aggressor: Vehicle, target: Vehicle): void {
   else addState(world, "combat", aggressor.id, target.id, { kind: "none" });
 }
 
+// True while the aggressor holds a combat state toward the target: the holder of a combat state is the aggressor.
+export function fightsAgainst(world: World, aggressor: Vehicle, target: Vehicle): boolean {
+  return stateOf(world, "combat", aggressor.id, target.id) !== null;
+}
+
 // True while v is on either side of a combat state. The one combat test: a hostile in sight is only a warning.
 export function inCombat(world: World, v: Vehicle): boolean {
   return world.states.some((s) => s.kind === "combat" && (s.holder === v.id || s.other === v.id));

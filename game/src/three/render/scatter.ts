@@ -37,9 +37,10 @@ export function addScatter(t: Terrain, obstacles: Obstacle[], scope: RenderScope
     const scrub: Placed[] = [];
     for (let y = cy; y < Math.min(cy + TERRAIN_CHUNK, t.size); y++) for (let x = cx; x < Math.min(cx + TERRAIN_CHUNK, t.size); x++) {
       if (blocked[y * t.size + x]) continue;
+      const type = t.types[y * t.size + x];
       const h = hash2(x * 7 + 3, y * 13 + 5);
-      const isPebble = h < PEBBLE_CHANCE;
-      const isScrub = h > 1 - scrubChance(t.types[y * t.size + x]);
+      const isPebble = h < pebbleChance(type);
+      const isScrub = h > 1 - scrubChance(type);
       if (!isPebble && !isScrub) continue;
       const p = { x: x + hash2(x, y * 3), y: y + hash2(x * 5, y) };
       if (ROAD_INDEX.nearestWithin(p.x, p.y, ROAD_GAP) < ROAD_GAP) continue;
@@ -61,9 +62,16 @@ export function addScatter(t: Terrain, obstacles: Obstacle[], scope: RenderScope
   }
 }
 
-// Share of tiles of a ground type with a scrub tuft.
+// Share of tiles of a ground type with a scrub tuft. Nothing grows on hull plating.
 function scrubChance(type: TerrainTypeId): number {
+  if (type === 'hull') return 0;
   return type === 'scrub' ? SCRUB_ON_SCRUB : SCRUB_ELSEWHERE;
+}
+
+// Share of tiles of a ground type with a pebble cluster. Hull plating lies over the ground, so pebbles there would
+// poke through it.
+function pebbleChance(type: TerrainTypeId): number {
+  return type === 'hull' ? 0 : PEBBLE_CHANCE;
 }
 
 // Tiles whose center lies within an obstacle's radius plus the gap.

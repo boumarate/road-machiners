@@ -16,7 +16,7 @@ await loadModels(async (name) => {
 });
 const sites = buildSites({ size: 1, heights: [0, 0, 0, 0], types: ['hardpan'] });
 
-const ALL = [...REGION.towns, ...REGION.locations];
+const ALL = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 const ABANDONED = ALL.filter((s) => !isFortress(s));
 
 function measureSite(id: string): Vector3 {
@@ -122,12 +122,5 @@ describe('landmark scale', () => {
       });
       expect.soft(worst, site.id).toBeLessThanOrEqual(0.05);
     }
-  });
-
-  it('gives the orchard a field-sized footprint and the ship a larger hull', () => {
-    const orchard = measureSite('orchard');
-    expect(orchard.x).toBeGreaterThan(80);
-    expect(orchard.z).toBeGreaterThan(80);
-    expect(measureSite('fallen-sun').x).toBeGreaterThan(250);
   });
 });

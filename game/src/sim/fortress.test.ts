@@ -43,7 +43,7 @@ describe('fortress obstacles', () => {
   });
 
   it('keeps the circle of every abandoned site (IV7)', () => {
-    const abandoned = SITES.filter((s) => !isFortress(s));
+    const abandoned = SITES.filter((s) => !isFortress(s) && !('kind' in s && s.kind === 'territory'));
     expect(abandoned.length).toBeGreaterThan(0);
     for (const s of abandoned) expect(world.obstacles.find((o) => o.id === `site-${s.id}`)?.kind).toBe('site');
   });

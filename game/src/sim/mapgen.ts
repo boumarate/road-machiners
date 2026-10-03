@@ -6,9 +6,10 @@ import SHAPES from '../data/prop-shapes.json';
 import { REGION } from '../data/region';
 import { BREAKABLE } from '../data/rules';
 import { PROP_KINDS, type BakedMap, type BakedProp, type PropKind } from './terrain';
-import { isFortress } from './sites';
-import { randInt, randRange } from './rng';
+import { isFortress, siteGap } from './sites';
 import { TERRAIN } from '../data/terrain';
+import { randInt, randRange } from './rng';
+import { DECKS } from './bridge';
 import type { LandmarkLook, Obstacle, World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 
@@ -57,7 +58,7 @@ export function isBakedObstacle(o: Obstacle): boolean {
 function placeSites(): Obstacle[] {
   const S = REGION.sites;
   // A fortress site has no circle: its baked pieces are its walls, and the town houses come from the render.
-  const out: Obstacle[] = [...REGION.towns, ...REGION.locations].filter((s) => !isFortress(s)).map((s) => ({ id: `site-${s.id}`, pos: { ...s.pos }, r: s.radius, kind: 'site' }));
+  const out: Obstacle[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')].filter((s) => !isFortress(s)).map((s) => ({ id: `site-${s.id}`, pos: { ...s.pos }, r: s.radius, kind: 'site' }));
   for (const loc of REGION.locations) {
     if (loc.kind === 'oasis') out.push({ id: `pond-${loc.id}`, pos: { ...loc.pos }, r: S.pondRadius, kind: 'water' });
     // A fortress yard holds its wrecks inside the curtain, where no truck reaches them.
@@ -74,8 +75,8 @@ function placeRoadWrecks(world: World, out: Obstacle[]): void {
   }
 }
 
-// A random spot on a road shoulder, clear of sites, the bridge deck, the given obstacles, and any spot `allowed`
-// rejects. The world RNG picks it.
+// A random spot on a road shoulder, clear of sites, the decks and their ramps, the given obstacles, and any spot
+// `allowed` rejects. The world RNG picks it.
 export function findRoadWreckSpot(world: World, obstacles: Obstacle[], allowed: (pos: Vec, r: number) => boolean): { pos: Vec; r: number } {
   for (let tries = 1; tries <= O.maxTries; tries++) {
     const road = REGION.roads[randInt(world, 0, REGION.roads.length - 1)];
@@ -88,7 +89,7 @@ export function findRoadWreckSpot(world: World, obstacles: Obstacle[], allowed: 
     const len = dist(a, b);
     const pos = { x: a.x + (b.x - a.x) * t - ((b.y - a.y) / len) * side, y: a.y + (b.y - a.y) * t + ((b.x - a.x) / len) * side };
     const r = randRange(world, 0.55, 0.8);
-    if (clearOfSites(pos, r) && !overlapsAny(obstacles, pos, r) && !onBridge(pos, r) && allowed(pos, r)) return { pos, r };
+    if (clearOfSites(pos, r) && !overlapsAny(obstacles, pos, r) && clearOfDecks(pos, r) && allowed(pos, r)) return { pos, r };
   }
   throw new Error('Road wreck placement ran out of tries');
 }
@@ -107,15 +108,20 @@ export function isBreakable(o: Obstacle): boolean {
   return o.kind === 'landmark' && BREAKABLE.kinds.includes(o.look);
 }
 
-// A prop on the narrow bridge deck would close the crossing.
-export function onBridge(pos: Vec, r: number): boolean {
-  const bridge = TERRAIN.features.bridge;
-  return segmentDist(pos, bridge.from, bridge.to) < bridge.width / 2 + r;
+// A prop on a narrow deck would close the crossing. True when a circle reaches onto any deck.
+export function onDeck(pos: Vec, r: number): boolean {
+  return DECKS.some((deck) => segmentDist(pos, deck.from, deck.to) < deck.width / 2 + r);
+}
+
+// A wreck on a deck or its ramp would block the way over the deck. True when a circle keeps off every deck and every
+// ramp mound.
+function clearOfDecks(pos: Vec, r: number): boolean {
+  return !onDeck(pos, r) && TERRAIN.features.mounds.every((m) => dist(pos, m.center) >= m.radius + m.bank + r);
 }
 
 // Whether a prop keeps the extra site clearance from every town and location.
 export function clearOfSites(pos: Vec, r: number): boolean {
-  return [...REGION.towns, ...REGION.locations].every((s) => dist(pos, s.pos) > s.radius + O.siteClearance + r);
+  return [...REGION.towns, ...REGION.locations].every((s) => siteGap(s, pos) > O.siteClearance + r);
 }
 
 // Prop poses: the model each obstacle shows, and its place, turn and scale. The views draw from the pose, and
@@ -130,7 +136,7 @@ export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: num
 
 type FortLook = 'fortWall' | 'fortTower' | 'fortGate' | 'fortBastion' | 'fortInner';
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
-type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | FortModel;
+type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'hull_rib' | 'crates' | 'reactor' | 'hull_wall' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | FortModel;
 type FortModel = `fort_${'masonry' | 'ship' | 'scrap'}_${'wall' | 'tower' | 'gate' | 'bastion' | 'inner'}`;
 
 const M = PHYSICS.metersPerTile;
@@ -150,11 +156,34 @@ const LANDMARK_MODELS: Record<Exclude<LandmarkLook, FortLook>, PropModel> = {
   fence: 'fence',
   junk: 'junk',
   carWreck: 'wreck',
+  hullChunk: 'hull_chunk',
+  hullRib: 'hull_rib',
+  shipCache: 'crates',
+  coreWreck: 'tank_hulk',
+  reactor: 'reactor',
+  hullWall: 'hull_wall',
+  deckBay: 'crates',
+  deadTree: 'dead_tree',
+  armyCache: 'crates',
+  bunker: 'bunker',
+  sandbags: 'sandbags',
+  farmhouse: 'farmhouse',
+  barn: 'barn',
+  armyTruck: 'army_truck',
+  quonset: 'quonset',
+  guardPost: 'guard_post',
+  barrier: 'barrier',
+  drums: 'drums',
+  woodpile: 'woodpile',
+  shipWing: 'ship_wing',
 };
 // Footprint radius in meters each model is built at, for models that scale evenly to their obstacle radius. A
-// fence segment is 4 m long, so its radius is half that. The building model stretches to its footprint instead.
-// The pole, billboard and tank stand at their real size.
-const MODEL_RADIUS: Partial<Record<PropModel, number>> = { crag: 1, silo: 2.5, water_tower: 2, ruin_house: 4.8, gas_station: 7.2, bridge_broken: 6, wreck: 0.7 * M, shack: 3.6, junk: 2.4, fence: 2 };
+// fence or barrier segment is 4 m long and a hull wall segment 8 m, so each radius is half that: each is one
+// straight segment along their yaw. The orchard's buildings, army truck and clutter are built at their size against
+// the 8.1 m army truck, and the orchard poses them at about these radii, so they draw near scale 1 (each radius is
+// stated in its tools/blender script). A hull rib's legs stand at its radius. The building model stretches to its
+// footprint instead. The pole, billboard and tank stand at their real size.
+const MODEL_RADIUS: Partial<Record<PropModel, number>> = { crag: 1, silo: 2.5, water_tower: 2, ruin_house: 4.8, gas_station: 7.2, bridge_broken: 6, wreck: 0.7 * M, shack: 3.6, junk: 2.4, fence: 2, hull_chunk: 6, hull_rib: 3, crates: 1.5, reactor: 12, hull_wall: 4, farmhouse: 16, barn: 14.7, quonset: 12.9, bunker: 15.6, guard_post: 3.2, army_truck: 4.4, barrier: 2, drums: 1.75, woodpile: 2.6, ship_wing: 26.5 };
 const WRECK_RADIUS = 0.7; // tiles, the reference size of the wreck model
 const BUILDING_FILL = 0.78; // share of the obstacle radius a building's footprint fills
 const SHAPE_BOXES = new Map<string, readonly ShapeBox[]>(Object.entries(SHAPES).map(([name, shape]) => [name, shape.boxes]));
@@ -242,6 +271,20 @@ export function propBoxes(o: Obstacle): readonly PosedBox[] {
   return posedShape(o).boxes;
 }
 
+const BLOCKING_BOXES = new WeakMap<readonly PosedBox[], readonly PosedBox[]>();
+
+// The boxes of a prop that block a truck: those that start below truck roofs. Higher boxes, like a canopy or the
+// ship wing, leave trucks to pass under. World clones share posed boxes, so each list is filtered once.
+export function blockingBoxes(o: Obstacle): readonly PosedBox[] {
+  const boxes = propBoxes(o);
+  let low = BLOCKING_BOXES.get(boxes);
+  if (!low) {
+    low = boxes.filter((b) => b.z0 < PHYSICS.truckClearance);
+    BLOCKING_BOXES.set(boxes, low);
+  }
+  return low;
+}
+
 // Tiles from the prop's position to the farthest corner of its posed boxes. A circle of this radius holds the
 // whole shape, so a cheap test with it never misses a collision. The obstacle radius is only the placement footprint.
 export function propReach(o: Obstacle): number {
@@ -254,13 +297,13 @@ export function obstacleReach(o: Obstacle): number {
   return o.kind === 'site' || o.kind === 'water' ? o.r : propReach(o);
 }
 
-// Whether a disc of radius r at pos comes within margin of the obstacle. A prop is judged by its boxes, since its
+// Whether a disc of radius r at pos comes within margin of the obstacle. A prop is judged by its boxes that block trucks, since its
 // reach circle holds gaps a long gatehouse leaves open beside it.
 export function touchesObstacle(o: Obstacle, pos: Vec, r: number, margin: number = 0): boolean {
   const reach = obstacleReach(o);
   if (dist(o.pos, pos) >= reach + r + margin) return false;
   if (o.kind === 'site' || o.kind === 'water') return true;
-  return propBoxes(o).some((b) => boxDistance(b, pos) < r + margin);
+  return blockingBoxes(o).some((b) => boxDistance(b, pos) < r + margin);
 }
 
 // Names a prop's model, turn, scale and position: two props with one key have the same boxes.

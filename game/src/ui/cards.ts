@@ -6,10 +6,10 @@ import { RULES } from "../data/rules";
 import { chassisDef } from "../data/chassis";
 import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type FieldRepair } from "../data/parts";
 import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
-import { isJunk, maxHp, partValue, wornDef } from "../sim/wear";
+import { maxHp, partValue, wornDef } from "../sim/wear";
 import type { PartInstance, Vehicle } from "../sim/types";
 import { el } from "./dom";
-import { wearLabel } from "./format";
+import { conditionStatus, conditionTier, showsCondition, wearLabel } from "./format";
 import { fuelLiters, hp, kph, meters, mps2 } from "./units";
 
 const ART = {
@@ -46,6 +46,7 @@ const ART = {
   fuelDrums:
     '<ellipse cx="11.5" cy="9" rx="6.5" ry="3"/><ellipse cx="28.5" cy="9" rx="6.5" ry="3"/><path d="M5 9v25q6.5 4 13 0V9M22 9v25q6.5 4 13 0V9M5 18q6.5 4 13 0M5 27q6.5 4 13 0M22 18q6.5 4 13 0M22 27q6.5 4 13 0"/>',
   water: '<path d="M20 4Q8 19 8 26a12 12 0 0 0 24 0Q32 19 20 4zM13 27q2 5 7 5"/>',
+  star: '<path d="M20 3l5 11 12 1-9 8 3 12-11-7-11 7 3-12-9-8 12-1z"/>',
   turn: '<path d="M5 14h16V5l16 15-16 15v-9H5z"/>',
   tools:
     '<path d="M12 5l6 7-6 6-7-6q-3 10 10 11l14 14 8-8-14-14q1-13-11-10z"/>',
@@ -82,6 +83,7 @@ const ART = {
 export type IconName = keyof typeof ART;
 
 const ICON_NAMES: Record<IconName, string> = {
+  star: "Pristine",
   money: "Money",
   fuel: "Fuel",
   supplies: "Supplies",
@@ -217,11 +219,18 @@ export function conditionMeter(part: PartInstance): HTMLElement {
   );
 }
 
-// The line under a part's name: its wear and whether it works.
-function partNote(part: PartInstance): string {
-  if (isJunk(part)) return "junk, scrap only";
-  if (part.hp === 0) return `broken, ${wearLabel(part)}`;
-  return wearLabel(part);
+// A part's wear in its tier color. Only a pristine part gets the star. Null for a built-in part.
+export function conditionTag(part: PartInstance): HTMLElement | null {
+  if (!showsCondition(part)) return null;
+  const tier = conditionTier(part);
+  return el("span", { class: `cond cond-${tier}` }, ...(tier === "pristine" ? [createIcon("star")] : []), wearLabel(part));
+}
+
+// The row under a part's head: its wear on the left, whether it works on the right. Null for a built-in part.
+export function conditionRow(part: PartInstance): HTMLElement | null {
+  if (!showsCondition(part)) return null;
+  const status = conditionStatus(part);
+  return el("div", { class: "card-cond" }, conditionTag(part), el("span", { class: status.tone }, status.text));
 }
 
 export type PartCardOptions = {
@@ -241,9 +250,10 @@ export function partCard(o: PartCardOptions): HTMLElement {
       "div",
       { class: "card-head" },
       createIcon(partIcon(o.part)),
-      el("div", { class: "card-name" }, el("b", {}, def.name), el("span", { class: "dim" }, partNote(o.part))),
+      el("div", { class: "card-name" }, el("b", {}, def.name)),
       footprint(def.w, def.h),
     ),
+    conditionRow(o.part),
     ...(o.base ? [compareLine(o.base)] : []),
     conditionMeter(o.part),
     statGrid(diffs),
@@ -265,7 +275,7 @@ export function compareBase(selected: PartInstance | null, part: PartInstance): 
 
 // What the changes in the stat table are against.
 function compareLine(base: PartInstance): HTMLElement {
-  return el("div", { class: "card-compare" }, `Compared with ${partDef(base.defId).name}`);
+  return el("div", { class: "card-compare" }, `Compared with ${partDef(base.defId).name} `, conditionTag(base));
 }
 
 // A truck's grid seen from above, nose up, one colored square per cell.
@@ -424,7 +434,7 @@ function armorStats(part: PartInstance): Stat[] {
 }
 
 const FIELD_REPAIR: Record<FieldRepair, { rank: number; text: string; label: string }> = {
-  none: { rank: 0, text: "town", label: "Repair: town only" },
+  none: { rank: 0, text: "shop", label: "Repair: shop only" },
   capped: { rank: 1, text: "cap", label: "Field repair: partial" },
   full: { rank: 2, text: "full", label: "Field repair: full" },
 };

@@ -185,7 +185,8 @@ export function npcName(v: Vehicle): string {
   return `${template.profession} ${v.brain.driver}`;
 }
 
-const NEUTRAL_SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== "camp")];
+// Territories have no gates to spawn at.
+const NEUTRAL_SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== "camp" && l.kind !== "territory")];
 
 // A random site among the template's spawn sites.
 function siteFor(world: World, tpl: NpcTemplate): Site {
