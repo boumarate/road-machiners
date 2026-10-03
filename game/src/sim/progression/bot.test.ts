@@ -13,7 +13,11 @@ import { siteOf } from '../market';
 import { nearestPad, nearestTown } from '../sites';
 import { isStranded, vehicleStats } from '../stats';
 import { dist } from '../vec';
-import { addVehicle, emptyWorld, npcBrain, startCombat } from '../testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, startCombat, testDrive } from '../testkit';
+import { NPCS } from '../../data/npcs';
+import { playerTow } from '../tow';
+import { towData } from '../states';
+import { endTurn } from '../world';
 import { partTradePrice, repairCost } from '../economy';
 import { getUpkeepReserve } from '../npc-decisions';
 import { maxHp } from '../wear';
@@ -176,6 +180,31 @@ describe('botOrders', () => {
 
     expect(stranded(2000).player.beacon).toBe(true);
     expect(stranded(0).player.beacon).toBe(false);
+  });
+
+  // A trader parks beside a truck a robbery left with no engine and offers a tow to its nearest town.
+  it('has a truck without an engine take a tow only to a town where it can get one', () => {
+    const offerTo = (money: number, stock: 'there' | 'elsewhere') => {
+      const w = withoutEngine(emptyWorld({ x: 30, y: 30 }));
+      const me = playerVehicle(w);
+      me.items = me.items.filter((it) => it.kind === 'part' && partDef(it.part.defId).kind === 'core');
+      w.player.money = money;
+      const tower = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
+      tower.brain = npcBrain('trader', tower.pos, NPCS.trader.traits);
+      forceOption('strandedSeen', 'tow');
+      let at = w;
+      for (let i = 0; i < 30 && !playerTow(at); i++) at = endTurn(at, testDrive);
+      const site = towData(playerTow(at)!).site;
+      for (const [id, shop] of Object.entries(at.shops)) {
+        shop.stock = shop.stock.filter((p) => partDef(p.defId).kind !== 'engine');
+        if ((id === site) === (stock === 'there')) shop.stock.push(makePart(at, 'stockEngine', 0));
+      }
+      return playerTow(botOrders(at, 'trader').world);
+    };
+
+    expect(offerTo(0, 'there')).toBeNull();
+    expect(offerTo(2000, 'elsewhere')).toBeNull();
+    expect(offerTo(2000, 'there')).toMatchObject({ data: { hitched: true } });
   });
 
   it('has a stranded truck without an engine buy and mount one in town', () => {

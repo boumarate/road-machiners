@@ -31,7 +31,8 @@ import { canReachSalvage, hasSalvage, lootBlocker, takeError, takeFromTruck } fr
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, sitePads, townAt, type Site } from '../sites';
 import { fuelCap, hasWorkingEngine, isStranded, suppliesCap, vehicleStats } from '../stats';
-import { inTowReach, setBeacon } from '../tow';
+import { inTowReach, playerTow, setBeacon } from '../tow';
+import { towData } from '../states';
 import type { GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
 import { dist, type Vec } from '../vec';
 import { playerExplored, playerSees } from '../vision';
@@ -70,7 +71,7 @@ export function botOrders(world: World, archetype: Archetype, options: BotOption
   const o = new Orders(world);
   const goal = goalOf(world, archetype, options);
   const replies = goal === 'hunter' ? HUNTER_REPLIES : DEFENDER_REPLIES;
-  answerCall(o, wantsTow(world) ? replies : { ...replies, ...REFUSE_TOW });
+  answerCall(o, takesTowOffer(world) ? replies : { ...replies, ...REFUSE_TOW });
   if (playerCanAct(o.world)) {
     keepSwitches(o);
     act(o, goal);
@@ -174,21 +175,26 @@ function serviceTrip(o: Orders, style: UpgradeStyle): boolean {
   return true;
 }
 
-// A stranded bot wants a tow only when a town can get it going: its tank is dry, or its money and sellable gear cover
-// the engine or the repair it lacks. A broke bot that can crawl refuses tows and crawls on to earn, since a tow back
-// to town fixes nothing and the fee puts it in debt.
+// A stranded bot wants a tow only when some shop can get it going, and takes an offer only to such a shop. A broke bot
+// that can crawl refuses tows and crawls on to earn, since a tow to a town that cannot fix it puts it in debt.
 function wantsTow(world: World): boolean {
-  const me = playerVehicle(world);
-  if (world.player.fuel <= 0) return true;
-  if (mountedParts(me, 'engine').length === 0) return nearestEngineShop(world) !== null;
-  const fix = hasWorkingEngine(me) ? basicsRepairCost(world) : repairCost(world);
-  return fix <= engineBudget(world, nearestGarage(world).id);
+  return SHOP_SITES.some((s) => towFixes(world, s.id));
 }
 
-function nearestGarage(world: World): Site {
-  const pos = playerVehicle(world).pos;
-  const garages = SHOP_SITES.filter((s) => shopDef(s.id).kind === 'garage');
-  return garages.reduce((best, s) => (dist(pos, s.pos) < dist(pos, best.pos) ? s : best));
+function takesTowOffer(world: World): boolean {
+  const offer = playerTow(world);
+  return offer === null || towFixes(world, towData(offer).site);
+}
+
+// A dry tank fills anywhere. A truck without an engine needs a shop that stocks one its money and sellable gear
+// cover. A broken engine or transmission needs a garage and the money for the repair.
+function towFixes(world: World, siteId: string): boolean {
+  if (world.player.fuel <= 0) return true;
+  if (!(siteId in SHOPS)) return false;
+  const me = playerVehicle(world);
+  if (mountedParts(me, 'engine').length === 0) return stockEngine(world, siteId, engineBudget(world, siteId)) !== null;
+  const fix = hasWorkingEngine(me) ? basicsRepairCost(world) : repairCost(world);
+  return shopDef(siteId).kind === 'garage' && fix <= engineBudget(world, siteId);
 }
 
 function serviceStop(world: World): Site | null {
