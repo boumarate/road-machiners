@@ -179,9 +179,15 @@ function serviceStop(world: World): Site | null {
   return !shopAt(world) && needsService(world) ? nearestShop(world) : null;
 }
 
+// A bot in debt can buy no fuel, supplies or load, so it sells cargo, then gear, to clear the debt. The engine
+// comes next, since selling gear for it can leave money for fuel and supplies.
 function serviceInTown(o: Orders, style: UpgradeStyle, shop: string): void {
-  serviceHere(o);
+  if (o.world.player.money < 0) {
+    sellCargo(o);
+    sellGearFor(o, shop, 0);
+  }
   restoreEngine(o, shop);
+  serviceHere(o);
   if (needsService(o.world)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money: ${needsOf(o.world)}`);
   if (mountedParts(o.me, 'engine').length > 0) upgradeGear(o, style);
 }

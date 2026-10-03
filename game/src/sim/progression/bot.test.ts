@@ -193,9 +193,21 @@ describe('botOrders', () => {
     expect(dest(bare)).toEqual(toward(bare, 'nose'));
   });
 
+  it('has a bot in debt in town sell gear to clear it', () => {
+    const w = parkedAt('bowl');
+    w.player.money = -60;
+
+    const turn = botOrders(w, 'trader');
+
+    expect(turn.ledger.gear).toBeGreaterThan(0);
+    expect(turn.world.player.money).toBeGreaterThanOrEqual(0);
+  });
+
+  // Out of supplies too: the money left after the engine buys them.
   it('has a broke truck without an engine sell gear in town to buy one', () => {
     const w = withoutEngine(parkedAt('bowl'));
     w.player.money = 0;
+    w.player.supplies = 0;
     w.shops.bowl.stock = [makePart(w, 'stockEngine', 0)];
     const gearBefore = mountedParts(playerVehicle(w)).filter((p) => !['core', 'engine'].includes(partDef(p.defId).kind)).length;
 
@@ -205,6 +217,7 @@ describe('botOrders', () => {
     expect(mountedParts(me, 'engine')).toHaveLength(1);
     expect(mountedParts(me).filter((p) => !['core', 'engine'].includes(partDef(p.defId).kind)).length).toBeLessThan(gearBefore);
     expect(turn.world.player.money).toBeGreaterThanOrEqual(0);
+    expect(turn.world.player.supplies).toBeGreaterThan(0);
   });
 
   // A stall buys spares but takes no part off the truck, so the mounted gear stays. It hands a bought engine over
