@@ -1,5 +1,5 @@
 {
- "format": "2.10",
+ "format": "2.11",
  "shape": {
   "broken": [],
   "dustClouds": [],
@@ -48,16 +48,16 @@
    "money": "number",
    "overdrive": "boolean",
    "perks": [],
-   "repeats": {},
-   "rumored": [],
-   "scavenged": [],
-   "skills": {
+   "ranks": {
     "driving": "number",
     "machining": "number",
     "perception": "number",
     "social": "number",
     "toughness": "number"
    },
+   "repeats": {},
+   "rumored": [],
+   "scavenged": [],
    "state": "string",
    "storage": [],
    "supplies": "number",
@@ -67,6 +67,7 @@
    "visible": [
     "number"
    ],
+   "xp": "number",
    "xpBySource": {
     "aid": "number",
     "call": "number",
