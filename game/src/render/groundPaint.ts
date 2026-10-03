@@ -191,8 +191,7 @@ function tileIndex(size: number, x: number, y: number): number {
 }
 
 // Type colors blend between tile centers, with a little jitter so borders look worn, not ruled.
-function typeColor(look: TileLook, x: number, y: number): number {
-  const { i, j, fx, fy } = jittered(x, y);
+function typeColor(look: TileLook, { i, j, fx, fy }: Jittered): number {
   const size = look.t.size;
   const a = look.color[tileIndex(size, i + 0.5, j + 0.5)];
   const b = look.color[tileIndex(size, i + 1.5, j + 0.5)];
@@ -204,8 +203,7 @@ function typeColor(look: TileLook, x: number, y: number): number {
 }
 
 // The desert weight blends between tile centers like typeColor, so patches fray at type borders too.
-function desertAt(look: TileLook, x: number, y: number): number {
-  const { i, j, fx, fy } = jittered(x, y);
+function desertAt(look: TileLook, { i, j, fx, fy }: Jittered): number {
   const size = look.t.size;
   const a = look.desert[tileIndex(size, i + 0.5, j + 0.5)];
   const b = look.desert[tileIndex(size, i + 1.5, j + 0.5)];
@@ -215,8 +213,11 @@ function desertAt(look: TileLook, x: number, y: number): number {
   return top + (c + (d - c) * fx - top) * fy;
 }
 
-// The tile cell and blend fractions of a jittered point, measured from tile centers.
-function jittered(x: number, y: number): { i: number; j: number; fx: number; fy: number } {
+// The tile cell and blend fractions of a jittered point, measured from tile centers. One pixel's typeColor and
+// desertAt share it.
+type Jittered = { i: number; j: number; fx: number; fy: number };
+
+function jittered(x: number, y: number): Jittered {
   const jx =
     x +
     (hash2(Math.floor(x * JITTER_GRID), Math.floor(y * JITTER_GRID) + 7) -
@@ -249,10 +250,11 @@ function paintColor(type: TerrainTypeId): number {
 
 function groundColor(look: TileLook, x: number, y: number): number {
   const t = look.t;
-  const weight = desertAt(look, x, y);
+  const cell = jittered(x, y);
+  const weight = desertAt(look, cell);
   const calm = 1 - weight * DESERT_CALM;
   const n = look.broad.at(x / 7, y / 7) * 0.7 + look.fine.at(x / 2.5, y / 2.5) * 0.3 * calm;
-  let color = mix(typeColor(look, x, y), PAL.sand[3], n * 0.2);
+  let color = mix(typeColor(look, cell), PAL.sand[3], n * 0.2);
   color = desertSand(look, color, weight, x, y);
   const speckle = 1 + (hash2(Math.floor(x * 3), Math.floor(y * 3)) * 0.05 - 0.03) * calm;
   color = shade(color, speckle * look.shade[tileIndex(t.size, x, y)]);
