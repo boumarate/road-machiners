@@ -5,6 +5,8 @@ import { GOODS } from '../data/goods';
 import { PARTS } from '../data/parts';
 import { TIME } from '../data/time';
 import type { Contract } from '../sim/market';
+import { startFeuds } from '../sim/combat';
+import { addState } from '../sim/states';
 import { addVehicle, emptyWorld } from '../sim/testkit';
 import type { GameEvent, World } from '../sim/types';
 import { cloneWorld } from '../sim/world';
@@ -130,12 +132,32 @@ describe('RadioStation', () => {
     const w = world(10);
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: bowl.pos.x + 3, y: bowl.pos.y });
     const trader = addVehicle(w, 'traders', 'buggy', [], { x: bowl.pos.x + 4, y: bowl.pos.y });
+    addState(w, 'feud', raider.id, w.player.vehicleId, { kind: 'feud', robbery: true });
+    addState(w, 'feud', raider.id, trader.id, { kind: 'feud', robbery: true });
     const s = tuned(w);
     s.hear(later(w, RADIO.minGapTurns, [{ t: 'hostile', vehicle: raider.id, against: w.player.vehicleId }]));
     expect(s.next()).toBeNull();
     s.hear(later(w, 2 * RADIO.minGapTurns, [{ t: 'hostile', vehicle: raider.id, against: trader.id }]));
     expect(s.next()).toMatchObject({ topic: 'raid' });
     expect(s.next()).toBeNull();
+  });
+
+  it('reports no robbery when a raider fights back, and keeps the place free for a real one', () => {
+    const bowl = site('bowl');
+    const w = world(10);
+    const raider = addVehicle(w, 'raiders', 'buggy', [], { x: bowl.pos.x + 3, y: bowl.pos.y });
+    const trader = addVehicle(w, 'traders', 'buggy', [], { x: bowl.pos.x + 4, y: bowl.pos.y });
+    const s = tuned(w);
+    const shot = later(w, RADIO.minGapTurns);
+    startFeuds(shot, shot.vehicles.find((v) => v.id === trader.id)!, shot.vehicles.find((v) => v.id === raider.id)!);
+    expect(shot.events).toContainEqual({ t: 'hostile', vehicle: raider.id, against: trader.id });
+    s.hear(shot);
+    expect(s.next()).toBeNull();
+
+    const robbed = later(shot, RADIO.minGapTurns, [{ t: 'hostile', vehicle: raider.id, against: trader.id }]);
+    addState(robbed, 'feud', raider.id, trader.id, { kind: 'feud', robbery: true });
+    s.hear(robbed);
+    expect(s.next()).toMatchObject({ topic: 'raid' });
   });
 
   it('reports a raider knockout once per place per cooldown', () => {
