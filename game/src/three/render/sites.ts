@@ -18,6 +18,7 @@ import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
 import type { Motion, SiteMotion } from './site-motion';
 import { buildBowl } from './interiors/bowl';
+import { buildDustwell } from './interiors/dustwell';
 
 const S = PHYSICS.metersPerTile;
 type Site = TownDef | SiteLocationDef;
@@ -439,24 +440,12 @@ function buildWingDeck(t: Terrain): THREE.Group {
   return root;
 }
 
-function buildOasis(b: SiteBuilder, well: boolean): void {
-  if (well) {
-    b.addTank(0, 0, 1.2, 0.8, PAL.wall.side);
-    b.addTank(0, 0, 0.9, 0.04, PAL.water, 0.8);
-    for (const x of [-1.5, 1.5]) b.addBox(x, 0, 0.18, 2.6, 0.18, PAL.trunk);
-    b.addBox(0, 0, 3.3, 0.2, 0.25, PAL.trunk, 2.5);
-    b.addRuin(2.7, 2.7, 2.3, 2);
-    // The palm model leans, so yaw varies the lean.
-    for (let i = 0; i < 4; i++) {
-      const a = i * 1.7 + 0.4;
-      b.addModel('palm', Math.cos(a) * 4.8, Math.sin(a) * 4.8, a * 2.3);
-    }
-  } else {
-    b.addTank(0, 0, 2.8, 0.04, PAL.waterLight);
-    for (let i = 0; i < 9; i++) {
-      const a = i * Math.PI * 2 / 9;
-      b.addModel('palm', Math.cos(a) * 4, Math.sin(a) * 4, a * 2.3);
-    }
+// Green Pit's pool among palms.
+function buildOasis(b: SiteBuilder): void {
+  b.addTank(0, 0, 2.8, 0.04, PAL.waterLight);
+  for (let i = 0; i < 9; i++) {
+    const a = i * Math.PI * 2 / 9;
+    b.addModel('palm', Math.cos(a) * 4, Math.sin(a) * 4, a * 2.3);
   }
 }
 
@@ -579,8 +568,8 @@ const SITE_DECOR: Record<string, SiteDecor> = {
   'pump-station': (b) => buildPump(b),
   'south-lock': (b) => buildLock(b),
   'canyon-bridge': (b, _site, t) => buildBridge(b, t),
-  dustwell: (b) => buildOasis(b, true),
-  'green-pit': (b) => buildOasis(b, false),
+  dustwell: (b) => buildDustwell(b),
+  'green-pit': (b) => buildOasis(b),
   'broken-wing': (b) => buildWingSalvage(b),
   'glass-flats': (b) => b.addModel('glass_flats', 0, 0),
   nose: settlement,

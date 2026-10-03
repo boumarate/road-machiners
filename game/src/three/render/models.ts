@@ -97,6 +97,9 @@ const NAMES = [
   'windmill_rotor',
   'stilt_tank',
   'fruit_tree',
+  'pumpjack_base',
+  'pumpjack_beam',
+  'storage_tank',
 
   'bumper_front',
   'bumper_rear',

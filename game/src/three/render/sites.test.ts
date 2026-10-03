@@ -244,6 +244,64 @@ describe('landmark scale', () => {
     node.updateMatrix();
   });
 
+  it('rocks the Dustwell pumpjack beam as its one moving part, inside the curtain at rest and at both ends of its stroke (IV8, IV20)', () => {
+    const S = PHYSICS.metersPerTile;
+    const dustwell = ALL.find((s) => s.id === 'dustwell')!;
+    const own = movers.filter(({ node }) => {
+      let p: Object3D | null = node;
+      while (p !== null && p.name !== 'landmark-dustwell') p = p.parent;
+      return p !== null;
+    });
+    expect(own.map((m) => m.node.name)).toEqual(['pumpjack-beam']);
+    const { node, motion } = own[0];
+    const rest = { position: node.position.clone(), quaternion: node.quaternion.clone() };
+    const v = new Vector3();
+    // The 6 s stroke is at rest at 0 s and at its ends at 1.5 s and 4.5 s.
+    const tilts: number[] = [];
+    for (const seconds of [0, 1.5, 4.5]) {
+      motion(seconds, node, rest);
+      node.updateMatrix();
+      node.updateWorldMatrix(true, true);
+      tilts.push(node.quaternion.angleTo(rest.quaternion));
+      const outside: string[] = [];
+      node.traverse((o) => {
+        if (!(o instanceof Mesh)) return;
+        const pos = o.geometry.getAttribute('position');
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+          if (!insideCurtain(dustwell, { x: v.x / S, y: v.z / S })) outside.push(`${(v.x / S - dustwell.pos.x).toFixed(2)},${(v.z / S - dustwell.pos.y).toFixed(2)}`);
+          expect(v.y, `beam at ${seconds} s`).toBeGreaterThan(0);
+        }
+      });
+      expect(outside.slice(0, 3), `beam at ${seconds} s`).toEqual([]);
+    }
+    expect(tilts[0]).toBeCloseTo(0, 5);
+    expect(tilts[1]).toBeCloseTo((18 * Math.PI) / 180, 3);
+    expect(tilts[2]).toBeCloseTo((18 * Math.PI) / 180, 3);
+    motion(0, node, rest);
+    node.updateMatrix();
+  });
+
+  it('stands one pumpjack, three storage tanks and a shed with a lit doorway inside Dustwell (IV22)', () => {
+    const group = sites.getObjectByName('landmark-dustwell')!;
+    const named = (name: string) => {
+      const found: Object3D[] = [];
+      group.traverse((o) => {
+        if (o.name === name) found.push(o);
+      });
+      return found;
+    };
+    expect(named('pumpjack')).toHaveLength(1);
+    expect(named('pumpjack-beam')).toHaveLength(1);
+    expect(named('dustwell-shed')).toHaveLength(1);
+    expect(named('dustwell-tank')).toHaveLength(3);
+    const door = named('dustwell-shed-door');
+    expect(door).toHaveLength(1);
+    const lamp = (door[0] as Mesh).material as MeshLambertMaterial;
+    expect(lamp.color.getHex()).toBe(PAL.lamp.on);
+    expect(lamp.emissive.getHex()).toBe(PAL.lamp.on);
+  });
+
   it('keeps everything a truck could touch inside the edge of an abandoned site', () => {
     const S = PHYSICS.metersPerTile;
     const reach = 1; // tiles above the ground a truck body reaches
