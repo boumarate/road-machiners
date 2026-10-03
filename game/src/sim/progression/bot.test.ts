@@ -203,6 +203,20 @@ describe('botOrders', () => {
     expect(turn.world.player.money).toBeGreaterThanOrEqual(0);
   });
 
+  // Below the working capital a bot buys no upgrade, but a gun it lost it buys back.
+  it('has a hunter that lost its gun buy the cheapest one in town', () => {
+    const w = parkedAt('bowl');
+    const me = playerVehicle(w);
+    me.items = me.items.filter((it) => it.kind !== 'part' || !mountedParts(me, 'weapon').includes(it.part));
+    w.player.money = 600;
+    w.shops.bowl.stock = [makePart(w, 'mg', 0), makePart(w, 'heavyMg', 0)];
+
+    const turn = botOrders(w, 'hunter');
+
+    expect(mountedParts(playerVehicle(turn.world), 'weapon').map((p) => p.defId)).toEqual(['mg']);
+    expect(turn.ledger.gear).toBeLessThan(0);
+  });
+
   // Out of supplies too: the money left after the engine buys them.
   it('has a broke truck without an engine sell gear in town to buy one', () => {
     const w = withoutEngine(parkedAt('bowl'));

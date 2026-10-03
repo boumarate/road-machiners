@@ -35,7 +35,7 @@ import { inTowReach, setBeacon } from '../tow';
 import type { GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
 import { dist, type Vec } from '../vec';
 import { playerExplored, playerSees } from '../vision';
-import { mountBought, Orders, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
+import { mountBought, Orders, rearm, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
 
 // Every bot plays the base loop: earn money, pay upkeep, buy upgrades, and shoot back when attacked. Only the hunter
 // goes looking for fights. The fast trader wants speed and mounts no armor. The markov bot plays a random one of the
@@ -189,7 +189,9 @@ function serviceInTown(o: Orders, style: UpgradeStyle, shop: string): void {
   restoreEngine(o, shop);
   serviceHere(o);
   if (needsService(o.world)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money: ${needsOf(o.world)}`);
-  if (mountedParts(o.me, 'engine').length > 0) upgradeGear(o, style);
+  if (mountedParts(o.me, 'engine').length === 0) return;
+  rearm(o);
+  upgradeGear(o, style);
 }
 
 function needsOf(world: World): string {

@@ -78,6 +78,17 @@ function bestOption(o: Orders, style: UpgradeStyle): Option | null {
   return strongest(chassis ? [chassis, ...options] : options);
 }
 
+// A bot with no gun mounts the cheapest one the garage sells or it holds as a spare, from money above the upkeep
+// reserve. Working capital does not hold it back, since every bot shoots back and the hunter earns only with a gun.
+export function rearm(o: Orders): void {
+  const shop = shopAt(o.world);
+  if (mountedItems(o.me, 'weapon').length > 0 || !shop || shopDef(shop).kind !== 'garage') return;
+  const spend = o.world.player.money - getUpkeepReserve(o.me);
+  const guns = candidates(o, shop).filter((c) => partDef(c.part.defId).kind === 'weapon' && !isJunk(c.part) && c.price <= spend && installSpot(o.me, probe(c.part)));
+  const cheapest = guns.reduce<Candidate | null>((best, c) => (!best || c.price < best.price ? c : best), null);
+  if (cheapest) mount(o, cheapest, null);
+}
+
 function strongest(options: Option[]): Option | null {
   return options.reduce<Option | null>((best, option) => (!best || option.gain > best.gain ? option : best), null);
 }
