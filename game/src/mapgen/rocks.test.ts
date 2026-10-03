@@ -3,10 +3,12 @@ import { REGION } from '../data/region';
 import { GEOLOGY, MAPGEN, TERRAIN } from '../data/terrain';
 import { deckById } from '../sim/bridge';
 import { ROAD_INDEX } from '../sim/road-index';
-import { decodeMap, isCliff, tileAt, type BakedMap, type BakedProp } from '../sim/terrain';
+import { decodeMap, isCliff, tileAt, type BakedMap, type BakedProp, type Terrain } from '../sim/terrain';
 import { siteGap } from '../sim/sites';
 import { dist, segmentDist } from '../sim/vec';
 import { newDraft, rockLayer, type MapDraft } from './bake';
+import { BUILT_TRACK } from './newworld';
+import { tileOf, tilesWithin } from './oldworld';
 
 const SIZE = REGION.size;
 const O = REGION.obstacles;
@@ -74,6 +76,22 @@ describe('boulders', () => {
     const d = rockLayer(1337, cliffDraft());
 
     expectClear(d.props);
+  });
+
+  it('keeps every boulder off dirt track tiles, and places every other boulder as without the track', () => {
+    // A dirt track 6 tiles wide across the cliff foot, as a territory's spur crosses open land.
+    const marked = cliffDraft();
+    for (let y = 200; y < 206; y++) for (let x = FOOT - 20; x < FOOT + 20; x++) marked.built[y * SIZE + x] = BUILT_TRACK;
+    const onTrack = (d: MapDraft, rock: BakedProp) => [tileOf(SIZE, rock.pos), ...tilesWithin(SIZE, rock.pos, rock.r)].some((tile) => d.built[tile] === BUILT_TRACK);
+
+    const withTrack = rockLayer(1337, marked).props;
+    const without = rockLayer(1337, cliffDraft()).props;
+
+    expect(withTrack.filter((rock) => onTrack(marked, rock))).toEqual([]);
+    // Boulders the track turned away leave every other draw where it was.
+    const away = (rock: BakedProp) => rock.pos.y < 200 - 3 || rock.pos.y > 206 + 3;
+    expect(without.filter((rock) => !away(rock)).length).toBeGreaterThan(0);
+    expect(withTrack.filter(away)).toEqual(without.filter(away));
   });
 
   it('places the same boulders for the same seed', () => {
@@ -147,6 +165,13 @@ describe('boulders on the baked map', () => {
   it('keeps every boulder clear of roads, sites, the bridge, the margin and other rocks', () => {
     expectClear(boulders);
   }, 120_000); // checks every boulder against every road and site, slow when the suite runs in parallel
+
+  it('puts no boulder on or beside a dirt track tile', () => {
+    const terrain: Terrain = map.terrain;
+    const onTrack = boulders.filter((rock) => [tileAt(terrain, rock.pos), ...tilesWithin(terrain.size, rock.pos, rock.r)].some((tile) => terrain.types[tile] === 'track'));
+
+    expect(onTrack).toEqual([]);
+  }, 120_000);
 
   it('puts no boulder on a cliff tile', () => {
     const onCliff = boulders.filter((rock) => isCliff(map.terrain, tileAt(map.terrain, rock.pos)));

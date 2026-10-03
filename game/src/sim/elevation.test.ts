@@ -4,7 +4,7 @@ import { REGION } from '../data/region';
 import { MAPGEN, TERRAIN } from '../data/terrain';
 import { basin, elevationAt } from './elevation';
 import { heightFromElevation } from './terrain';
-import { DEG, type Vec } from './vec';
+import { DEG, polylineDist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
 
@@ -117,6 +117,18 @@ describe('the Fallen Sun basin', () => {
     }
     expect(rises.length).toBeGreaterThan(500);
     expect(Math.max(...rises) - Math.min(...rises)).toBeGreaterThanOrEqual(sunBasin.floorRelief.amplitude * 0.5);
+  });
+
+  it('owns its floor: one level plus its swells, whatever hills the land held there', () => {
+    const heights: number[] = [];
+    for (let y = -50; y <= 50; y += 2) for (let x = -50; x <= 50; x += 2) {
+      const p = { x: sunBasin.center.x + x, y: sunBasin.center.y + y };
+      // The crash furrow's head cuts into the south of the floor on purpose.
+      const furrow = TERRAIN.features.furrow;
+      if (basin(sunBasin, p.x, p.y).cut === sunBasin.depth && polylineDist(p, furrow.path) >= furrow.width + furrow.bank) heights.push(height(p));
+    }
+    expect(heights.length).toBeGreaterThan(500);
+    expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(sunBasin.floorRelief.amplitude + 1e-6);
   });
 
   it('leaves land far outside the basin untouched', () => {

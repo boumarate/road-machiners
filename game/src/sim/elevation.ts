@@ -15,7 +15,7 @@ const SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'te
 // Squared distance past which a site is sure to lie beyond flattenMargin. The extra tile keeps
 // the cheap test clear of rounding, so the exact test decides every near case.
 const SITE_SKIP2 = SITES.map((site) => (site.radius + TERRAIN.flattenMargin + 1) ** 2);
-const FEATURES = [TERRAIN.features.canyon, TERRAIN.features.dryRiver, TERRAIN.features.trench, TERRAIN.features.furrow, TERRAIN.features.gouge].map((feature) => ({
+const FEATURES = [TERRAIN.features.canyon, TERRAIN.features.dryRiver, TERRAIN.features.trench, TERRAIN.features.furrow].map((feature) => ({
   feature,
   index: new RoadIndex([feature.path], INDEX_CELL),
   reach: feature.width + feature.bank,
@@ -109,11 +109,10 @@ export function elevationAt(seed: number, x: number, y: number): number {
 }
 
 // Unflattened elevation noise, ridges and the channels: the canyon, the dry river, Broken Wing's trench and the Fallen
-// Sun's furrow and gouge.
+// Sun's furrow. A basin owns its floor, so the noise and ridges fade out across its bank and the floor takes its level
+// from the rolling height instead (see floorLevel()).
 export function reliefAt(seed: number, x: number, y: number): number {
-  const relief = TERRAIN.relief;
-  const ridges = Math.abs(noise2(x * relief.ridgeFrequency, y * relief.ridgeFrequency, seed + 5000) - 0.5) * relief.ridgeAmplitude;
-  let height = rawElevation(seed, x, y) + ridges;
+  let height = noiseRelief(seed, x, y) * (1 - floorOwned(x, y));
   for (const { feature, index, reach } of FEATURES) {
     const gap = index.nearestWithin(x, y, reach) - feature.width;
     if (gap < feature.bank) height -= feature.depth * (gap <= 0 ? 1 : 1 - smooth(gap / feature.bank));
@@ -127,7 +126,28 @@ export function broadAt(seed: number, x: number, y: number): number {
   return bowls(rollingAt(seed, x, y), x, y);
 }
 
+// The elevation noise and ridges, before any channel.
+function noiseRelief(seed: number, x: number, y: number): number {
+  const relief = TERRAIN.relief;
+  const ridges = Math.abs(noise2(x * relief.ridgeFrequency, y * relief.ridgeFrequency, seed + 5000) - 0.5) * relief.ridgeAmplitude;
+  return rawElevation(seed, x, y) + ridges;
+}
+
+// The broad rolling height, held at each site's level near a site, and at a basin's floor level across its floor.
 function rollingAt(seed: number, x: number, y: number): number {
+  const rolling = siteRolling(seed, x, y);
+  let owned = 0;
+  let level = 0;
+  for (const b of TERRAIN.features.basins) {
+    const share = basinShare(b, x, y);
+    if (share === 0) continue;
+    owned += share;
+    level += share * floorLevel(seed, b);
+  }
+  return owned === 0 ? rolling : rolling * (1 - owned) + level;
+}
+
+function siteRolling(seed: number, x: number, y: number): number {
   const relief = TERRAIN.relief;
   let rolling = (noise2(x * relief.broadFrequency, y * relief.broadFrequency, seed + 4000) - 0.5) * relief.broadAmplitude;
   for (let k = 0; k < SITES.length; k++) {
@@ -157,6 +177,34 @@ function bowls(elevation: number, x: number, y: number): number {
   }
   for (const mound of TERRAIN.features.mounds) rise += bowl(mound.center, mound.radius, mound.bank, mound.height, x, y);
   return rise > 0 ? raised(out, rise) : out;
+}
+
+// The share of the land a basin owns at a point: 1 on its floor, fading to 0 at the top of its bank. Basins never
+// overlap, so the shares of all basins add up to 1 at most.
+function floorOwned(x: number, y: number): number {
+  let owned = 0;
+  for (const b of TERRAIN.features.basins) owned += basinShare(b, x, y);
+  return owned;
+}
+
+function basinShare(b: Basin, x: number, y: number): number {
+  const floor = basinFloor(b);
+  if (!inBox(floor, x, y)) return 0;
+  const { gap, edge, along } = nearestEdge(floor.poly, { x, y });
+  return floorShare(gap, lerp(b.bank[edge], b.bank[(edge + 1) % floor.poly.length], along));
+}
+
+// The level a basin's floor is blended to, in elevation units before its cut: the land at its centre, noise, ridges
+// and rolling height together, so the floor is one level plus its own swells, whatever hills the land held there.
+// Held per seed, the one terrain generation is using.
+const FLOOR_LEVELS = new WeakMap<Basin, { seed: number; level: number }>();
+function floorLevel(seed: number, b: Basin): number {
+  let held = FLOOR_LEVELS.get(b);
+  if (held?.seed !== seed) {
+    held = { seed, level: noiseRelief(seed, b.center.x, b.center.y) + siteRolling(seed, b.center.x, b.center.y) };
+    FLOOR_LEVELS.set(b, held);
+  }
+  return held.level;
 }
 
 // Keeps each basin's floor swells on their own part of the hash space.

@@ -121,8 +121,9 @@ const WING_MOUNDS: Mound[] = [-1, 1].map((end) => ({
 
 const TRENCH = BROKEN_WING.trench;
 
-// An irregular crater: a floor polygon cut to depth (elevation units), falling back to the land outside over a bank.
-// floor points are tiles from center. bank (tiles) and rim (height units the lip stands over the land outside) are per
+// An irregular crater that owns its floor: inside the floor polygon the land is one level, the land at center less
+// depth (elevation units; a negative depth lifts the floor over the land there), plus its swells. Across a bank the
+// land fades back from that level to its own. floor points are tiles from center. bank (tiles) and rim (height units the lip stands over the land outside) are per
 // floor vertex, and blend along each edge between its two vertices. The lip rises with the bank to the rim at the
 // bank's top, then falls back to the land over as many tiles again. floorRelief adds swells of up to amplitude height
 // units across the floor, fading out over the bank, at frequency cycles per tile. See basin() in src/sim/elevation.ts.
@@ -136,9 +137,11 @@ export type Basin = {
 };
 
 // The Fallen Sun's basin, traced around the level concept's crater frame and the second reference's crags, gap and east
-// hill (tmp/issue-81/r4/layout.md). One unit of depth is 2.1 height units, so the floor lies about 3.8 units under
-// the land. A cliff arc's inner face climbs depth plus rim over its bank: 1.5 x (3.8 + 2.5) / 3.5 = 2.7 per tile at
-// the steepest, far over drive.maxSlope. A drivable bank needs about 1.5 x 3.8 / 0.2 = 28 tiles.
+// hill (tmp/issue-81/r4/layout.md). The floor lies at about -0.2 height units, 2 over the land at the centre, so the
+// three approach roads come down to it at their road grade and it lies above GEOLOGY.sandStart.below: a floor under
+// that line starts with blown sand, which the wind piles into dune ridges across every dirt road. The land behind the
+// crags stands near the floor's level, so a cliff arc's face is mostly its rim: 1.5 x 5 / 3.5 = 2.1 per tile at the
+// steepest, far over drive.maxSlope.
 const FALLEN_SUN_BASIN: Basin = {
   center: FALLEN_SUN_POS,
   floor: [
@@ -165,11 +168,12 @@ const FALLEN_SUN_BASIN: Basin = {
     { x: -37.7, y: 26.4 }, // v20 145: south-west
     { x: -43.5, y: 11.6 }, // v21 165: where the west road comes in, scree
   ],
-  // The cliff arc v2..v4 and v7..v10 is steep, with the notch's long drivable bank between. The east hill's inner face
-  // climbs 1.5 x (3.8 + 2) / 16 = 0.54 per tile, under maxSlope. The open south banks keep a dirt road under 0.2.
-  bank: [12, 10, 4, 3.5, 3.5, 30, 30, 3.5, 3.5, 4, 4, 12, 16, 16, 22, 28, 28, 28, 26, 26, 22, 12],
-  rim: [1.0, 1.5, 2.0, 2.5, 2.5, 0, 0, 2.5, 3.0, 2.5, 2.0, 0.3, 2.0, 2.0, 0.5, 0, 0, 0, 0, 0, 0.5, 1.0],
-  depth: 1.8, // the round 3 bowl's depth
+  // The cliff arc v2..v4 and v7..v10 is steep, with the notch's long drivable bank between. The east hill's own inner
+  // face stays under maxSlope. The east road's bank at v11 is 52 tiles and the south-east road's at v15 is 40, so each
+  // road comes down from its own land to the floor at its road grade. The open south banks keep a dirt road under 0.2.
+  bank: [12, 10, 4, 3.5, 3.5, 30, 30, 3.5, 3.5, 4, 4, 52, 16, 16, 30, 40, 36, 28, 26, 26, 22, 30],
+  rim: [1.0, 1.5, 5.0, 5.5, 5.5, 0, 0, 5.5, 5.5, 5.0, 4.5, 0, 2.0, 2.0, 0.5, 0, 0, 0, 0, 0, 0.5, 0],
+  depth: -1.06, // lifts the floor from the land's -2.2 at the centre to -0.2
   // Swells about 16 tiles apart, kept low so a road over them stays under a grade of 0.2.
   floorRelief: { frequency: 1 / 16, amplitude: 0.45 },
 };
@@ -229,14 +233,6 @@ export const TERRAIN = {
       width: 12,
       bank: 12,
       depth: 0.5,
-    },
-    // A pit down the furrow's middle under the wing's level span (inferred), where the wing's hull piers sit low enough
-    // for their tops to stay under the deck.
-    gouge: {
-      path: [{ x: -20.4, y: 76.3 }, { x: -24.6, y: 91.8 }].map(fromFallenSun),
-      width: 3,
-      bank: 3,
-      depth: 1.25,
     },
     // Straight decks: the road decks, each between two road points, then the Fallen Sun's. See src/sim/bridge.ts.
     decks: [CANYON_BRIDGE, WING_DECK, ...FALLEN_SUN_DECKS] as readonly DeckSpec[],

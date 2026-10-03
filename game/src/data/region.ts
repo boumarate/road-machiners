@@ -85,11 +85,11 @@ const FALLEN_SUN_OUTLINE: Vec[] = [
   { x: 8.2, y: 46.3 }, // the open south
   { x: -2.4, y: 55.3 }, // down the furrow's east side
   { x: -8.6, y: 78.4 },
-  { x: -14.8, y: 101.6 },
-  { x: -21.8, y: 112.2 }, // round the furrow's far end
-  { x: -30.0, y: 112.0 },
-  { x: -37.2, y: 108.0 },
-  { x: -38.0, y: 95.4 }, // back up the furrow's west side
+  { x: -13.6, y: 101.9 }, // a tile out from the furrow's east side, so the east lane past the wing's foot stays inside
+  { x: -22.6, y: 115.1 }, // round the furrow's far end, 3 tiles past its floor so the tail junction behind the wing fits
+  { x: -30.8, y: 114.9 },
+  { x: -38.8, y: 110.9 },
+  { x: -38.8, y: 95.4 }, // back up the furrow's west side, a tile out so the west lane past the wing's foot stays inside
   { x: -31.8, y: 72.2 },
   { x: -25.6, y: 49.1 },
   { x: -23.5, y: 40.7 }, // the furrow's west lip
@@ -469,34 +469,32 @@ export const REGION = {
       { x: 66, y: 76 },
     ]),
     // Three dead-end approaches come down the crater bank where the level concept's tracks leave the crater: from the
-    // west (bearing 166°), the east (-16°) and the south-east (37°). Each runs on its bearing to a point 44 tiles from
-    // the centre, round 3's edge, and ends 4 tiles further in, where the crater's tracks take over. Points are in
-    // tiles from the centre. No road goes through the Fallen Sun. The south-east road leaves the end of the Kiln Camp
-    // track, so raiders have a short way in.
+    // west (bearing 166°), the east (-27°) and the south-east (37°). Each ends 4 tiles inside the outline, on the dirt
+    // road web, which takes over there (tmp/issue-81/r4/layout.md). Points are in tiles from the centre. No road goes
+    // through the Fallen Sun. The east road comes in south of the small drum, on the second reference's road out of its
+    // right edge, instead of round 3's -16°, where the bow, the hazard and the east shards walled it in. The south-east
+    // road leaves the end of the Kiln Camp track, so raiders have a short way in.
     [
       ...scaleRoad([
         { x: 43, y: 54 },
         { x: 50, y: 55 },
         { x: 54, y: 57 },
       ]),
-      fromFallenSun(-42.693, 10.6446),
-      fromFallenSun(-38.8118, 9.6769),
+      fromFallenSun(-39.71, 9.9),
     ],
     [
-      ...scaleRoad([
-        { x: 82, y: 49 },
-        { x: 75, y: 50 },
-      ]),
-      fromFallenSun(42.2955, -12.128),
-      fromFallenSun(38.4505, -11.0255),
+      scalePoint({ x: 82, y: 49 }),
+      fromFallenSun(95, -36),
+      fromFallenSun(75, -37),
+      fromFallenSun(58, -34),
+      fromFallenSun(43.01, -21.92),
     ],
     [
       ...scaleRoad([
         { x: 66, y: 76 },
         { x: 73, y: 64 },
       ]),
-      fromFallenSun(35.14, 26.4799),
-      fromFallenSun(31.9454, 24.0726),
+      fromFallenSun(37.75, 28.44),
     ],
   ] as Vec[][],
   roadWidth: 6,

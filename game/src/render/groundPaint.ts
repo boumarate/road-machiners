@@ -5,6 +5,7 @@ import { REGION } from "../data/region";
 import { TERRAIN, TERRAIN_TYPES, type Basin, type TerrainTypeId } from "../data/terrain";
 import { TERRITORIES } from "../data/territory";
 import { groundSlope, type Terrain } from "../sim/terrain";
+import { basinUnder, isTerritory } from "../sim/territory";
 import { type Vec } from "../sim/vec";
 import { hash2 } from "./noise";
 import { PAL, mix, shade } from "./palette";
@@ -90,17 +91,10 @@ const SCREE_BAND_ALPHA = 0.5;
 
 // A territory's scree slope, red-brown over the bank of its basin's scree arc.
 function paintScree(c: PaintCanvas): void {
-  for (const t of REGION.locations.filter((l) => l.kind === "territory")) {
+  for (const t of REGION.locations.filter(isTerritory)) {
     const scree = TERRITORIES[t.id].wreck?.scree;
-    if (scree) paintScreeArc(c, basinUnder(t.id, t.pos), scree);
+    if (scree) paintScreeArc(c, basinUnder(t), scree);
   }
-}
-
-// The basin centred on a territory.
-function basinUnder(id: string, pos: Vec): Basin {
-  const b = TERRAIN.features.basins.find((basin) => basin.center.x === pos.x && basin.center.y === pos.y);
-  if (!b) throw new Error(`Territory ${id} has a scree arc but no basin centred on it`);
-  return b;
 }
 
 // The bank of floor vertices from..to, in bands from the floor edge up the bank.

@@ -35,7 +35,7 @@ describe('territory queries', () => {
     const entries = territoryEntries(fallenSun as never);
     const bearings = entries.map((e) => (Math.atan2(e.y - fallenSun.pos.y, e.x - fallenSun.pos.x) * 180) / Math.PI).sort((a, b) => a - b);
     expect(bearings).toHaveLength(3);
-    [-16, 37, 166].forEach((want, i) => expect(Math.abs(bearings[i] - want)).toBeLessThan(10));
+    [-27, 37, 166].forEach((want, i) => expect(Math.abs(bearings[i] - want)).toBeLessThan(10));
   });
 
   it("follows the Fallen Sun's outline: the furrow is inside, and the cliff faces beside the north notch are not", () => {

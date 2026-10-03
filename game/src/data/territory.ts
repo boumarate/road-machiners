@@ -23,13 +23,16 @@ export type Hazard = {
 };
 // One authored wreck piece. r is its placement radius in tiles: the model scales evenly from its reference radius
 // to r, so r is half the piece's length along its yaw for the long hull pieces.
-export type HullPiece = { look: LandmarkLook; at: Vec; yaw: number; r: number };
+// sink, when set, is height units the piece's seat lies under the ground at its centre, so it lies half buried in a
+// pit of its own; a piece without one seats at its centre's height.
+export type HullPiece = { look: LandmarkLook; at: Vec; yaw: number; r: number; sink?: number };
 export type Cache = { at: Vec };
 export type DebrisRule = { look: PropKind; count: number; radius: [number, number] };
 // A circle of drawn filler: debris and field spots picked inside it from the map seed.
 export type Patch = { at: Vec; radius: number; debris: DebrisRule[]; spots: number };
-// Rim rocks, chunks of crater wall drawn on an arc of the crater bank. Bearings in radians from map +x toward +y, distances in tiles.
-export type RimRocks = { from: number; to: number; radius: [number, number]; count: number; size: [number, number] };
+// Rim rocks, chunks of crater wall drawn on the bank of the territory's basin: along its floor vertices from..to,
+// wrapping past the last, and out[0] to out[1] tiles out from the floor edge. size is a rock's radius in tiles.
+export type RimRocks = { from: number; to: number; out: [number, number]; count: number; size: [number, number] };
 // A deck of a wreck in tiles from the territory centre: a straight span width tiles wide, rise height units over the
 // ground at its from and to ends. FALLEN_SUN_DECKS lists them on the map, src/sim/bridge.ts gives their geometry.
 export type WreckDeck = { id: string; from: Vec; to: Vec; width: number; rise: [number, number] };
@@ -120,8 +123,6 @@ export type TerritoryRules = {
   reactor: Reactor | null;
 };
 
-const DEG = Math.PI / 180;
-
 // Debris of the dense field in the concept's lower half, thinned to the second reference's sparse scrap: islands of
 // clean sand with a plate, a wrecked truck and a junk pile or two.
 const DENSE: DebrisRule[] = [
@@ -151,6 +152,12 @@ const FURROW_AXIS: Vec = { x: (FURROW_TAIL.x - FURROW_HEAD.x) / FURROW_LENGTH, y
 export function inFurrow(s: number, lat: number): Vec {
   return { x: FURROW_HEAD.x + FURROW_AXIS.x * s - FURROW_AXIS.y * lat, y: FURROW_HEAD.y + FURROW_AXIS.y * s + FURROW_AXIS.x * lat };
 }
+// The wing along the furrow's axis (inferred), in tiles down the furrow: the up-ramp's foot, the span's two ends, the
+// down-ramp's foot, and the tail junction where the lanes meet past it.
+const WING = { up: 15, span: 24, down: 46, end: 53, tail: 56 };
+// Height units a pier's seat lies under the furrow floor, so the r 6 drum's 15.8 m stands 0.4 to 1 m under the deck
+// line, 6 m over the floor.
+const PIER_SINK = 2.6;
 // A yaw that lies across the furrow.
 const ACROSS_FURROW = Math.atan2(FURROW_AXIS.y, FURROW_AXIS.x) - Math.PI / 2;
 
@@ -210,11 +217,11 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { look: 'hullGantry', at: { x: -24, y: -18.5 }, yaw: 0.133, r: 5.5 },
         // Huts: the collapsed hut (385,160), moved 4 tiles north-west off the track, and two small huts by the tower
         // (598,140) and (622,132): the first moved half a tile north from (-13.3,-26.1), off the road north of the
-        // tower, and the second 2.3 tiles south-west from (-12.6,-28.9), so the outer ring passes between it and the
-        // north-east drum. The shed (258,318).
+        // tower, and the second 3.4 tiles south-west from (-12.6,-28.9), so the outer ring passes between it and the
+        // north-east drum and the two huts stand apart, not inside each other. The shed (258,318).
         { look: 'shack', at: { x: -29, y: -10.5 }, yaw: 0.4, r: 2 },
         { look: 'shack', at: { x: -13.05, y: -26.6 }, yaw: -0.8, r: 1.2 },
-        { look: 'shack', at: { x: -14.35, y: -27.4 }, yaw: -0.6, r: 1.2 },
+        { look: 'shack', at: { x: -15.4, y: -28.9 }, yaw: -0.6, r: 1.2 },
         { look: 'shack', at: { x: -13.6, y: 23.2 }, yaw: 0.6, r: 2.5 },
         // Drums: sunk in the north-east wall (690,130)-(755,70); small at the right (918,285), moved 4 tiles out of the
         // hazard and then 1.8 tiles in from (31.5,-28.5), so the outer ring passes outside it; large at the lower right
@@ -229,10 +236,11 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { look: 'hullShard', at: { x: 27.5, y: 30.5 }, yaw: 0.4, r: 3.5 },
         { look: 'hullShard', at: { x: -11.9, y: 38.7 }, yaw: 2.1, r: 3.5 },
         { look: 'hullShard', at: { x: 32, y: -19.5 }, yaw: -1, r: 3.5 },
-        // The wing's piers (inferred): two big hull drums lying across the crash furrow under the wing's level span, in
-        // the gouge, so their tops come just under the deck and their ends stick out past both rails.
-        { look: 'hullDrum', at: inFurrow(23.5, 0), yaw: ACROSS_FURROW, r: 6 },
-        { look: 'hullDrum', at: inFurrow(34.5, 0), yaw: ACROSS_FURROW, r: 6 },
+        // The wing's piers (inferred): two big hull drums lying across the crash furrow under the wing's level span,
+        // half buried in pits of their own, so their tops come 0.4 to 1 m under the deck and their ends stick out past
+        // both rails. Each lies 3 tiles or more inside the span, so its pit never reaches a deck end's ground.
+        { look: 'hullDrum', at: inFurrow(30.5, 0), yaw: ACROSS_FURROW, r: 6, sink: PIER_SINK },
+        { look: 'hullDrum', at: inFurrow(39.5, 0), yaw: ACROSS_FURROW, r: 6, sink: PIER_SINK },
       ],
       // Inside hull pieces sight is short and an ambush waits at the open ends, so the rich loot lies there.
       caches: [
@@ -242,7 +250,9 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { at: { x: 5.6, y: 20.9 } },
         { at: { x: -21.1, y: 5.1 } }, // inside shell A (325,222)
         { at: { x: -13.8, y: -7.9 } }, // inside shell B (440,215)
-        { at: { x: -9.5, y: -1 } }, // west of the hub; the concept's (525,300) lies inside the hub
+        // West of the hub: the concept's (525,300) lies inside the hub. Moved 0.8 tiles east from (-9.5,-1), so its crates
+        // stand off the tiles of the road past the hub's west side.
+        { at: { x: -8.7, y: -1 } },
         // Past the spine's end at the bow's aft break, outside the hazard (590,320), 2 tiles west of round 3's
         // (19.5,-2.5), off the east lane where it turns south.
         { at: { x: 17.5, y: -3.2 } },
@@ -263,9 +273,10 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         // the road down the cage's east flank.
         { at: { x: 19.5, y: 19.5 }, radius: 8.5, debris: DENSE, spots: 2 },
         // Moved into the furrow from south of the large drum (633,465) and the lower left (146,301), where the crater
-        // flaps' landings now run (inferred): either side of the wing's up-ramp, between it and the flaps' landings.
-        { at: inFurrow(11, -6.4), radius: 5, debris: LIGHT, spots: 2 },
-        { at: inFurrow(11, 6.4), radius: 5, debris: LIGHT, spots: 2 },
+        // flaps' landings now run (inferred): either side of the road to the wing's up-ramp, between it and the flaps'
+        // landings, in the band 5 tiles wide that runs 16 tiles down the furrow's head, so two spots fit 6 apart.
+        { at: inFurrow(8, -5.2), radius: 8, debris: LIGHT, spots: 2 },
+        { at: inFurrow(8, 5.2), radius: 8, debris: LIGHT, spots: 2 },
         // The sparse scatter of the upper half.
         { at: { x: 28, y: -11 }, radius: 6, debris: LIGHT, spots: 1 }, // below the bow (777,345)
         { at: { x: -6.4, y: -13.7 }, radius: 7, debris: LIGHT, spots: 1 }, // the top centre (560,210)
@@ -279,9 +290,10 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       spotRadius: [0.6, 0.8],
       seatEase: 3,
       // Rock walls along the north rim: the concept's grey crags run from (620,40) to (1000,330), bearings -111° to
-      // -41°, and its red-brown hills on the north-west rim from (200,100) to (480,60), bearings -164° to -138°. Their
-      // feet stand 37 to 45 tiles out, as at (700,120) and (950,300), so the walls close the crater floor in.
-      rimRocks: { from: -170 * DEG, to: -35 * DEG, radius: [40, 46], count: 28, size: [2.5, 4] },
+      // -41°, and its red-brown hills on the north-west rim from (200,100) to (480,60), bearings -164° to -138°. They
+      // stand on the basin's bank from v1 (-160°) round the cliff arc and the notch to v10 (-45°), from the floor's foot
+      // up over the cliff tops, so the walls close the crater floor in.
+      rimRocks: { from: 1, to: 10, out: [0.5, 6], count: 28, size: [2.5, 4] },
       // The red-brown scree slope of the concept's upper left, from (100,250) to (300,110): the basin's west bank from
       // its south-west vertex at 145° round to the left crag wall at -140°.
       scree: { from: 20, to: 2 },
@@ -388,22 +400,23 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         // past the piers' seats, each over a flap at the furrow's head; a road onto each end of the wing.
         // From the ring's south-west junction (238,522) down the basin bank to the furrow's head, and on to the wing's
         // up-ramp.
-        dirt(LANE, [[-3.8, 45.2], inFurrow(-6, 0), inFurrow(6.5, 0)]),
+        dirt(LANE, [[-3.8, 45.2], inFurrow(-6, 0), inFurrow(WING.up, 0)]),
         // The east lane: from the same junction, over flap-furrow-e and down its landing, past the span to the tail.
-        dirt(LANE, [[-3.8, 45.2], inFurrow(-8, -10.25), inFurrow(44, -10.25), inFurrow(50, -6), inFurrow(54, 0)]),
+        dirt(LANE, [[-3.8, 45.2], inFurrow(-8, -10.25), inFurrow(WING.down, -10.25), inFurrow(WING.down + 6, -6), inFurrow(WING.tail, 0)]),
         // The west lane: from the ring at (-19,39.9), over flap-furrow-w, past the span to the tail.
-        dirt(LANE, [[-19, 39.9], inFurrow(-8, 10.25), inFurrow(44, 10.25), inFurrow(50, 6), inFurrow(54, 0)]),
+        dirt(LANE, [[-19, 39.9], inFurrow(-8, 10.25), inFurrow(WING.down, 10.25), inFurrow(WING.down + 6, 6), inFurrow(WING.tail, 0)]),
         // From the tail onto the wing's down-ramp.
-        dirt(LANE, [inFurrow(54, 0), inFurrow(51.5, 0)]),
+        dirt(LANE, [inFurrow(WING.tail, 0), inFurrow(WING.end, 0)]),
       ],
       // Spurs out past the edge into the wasteland, as the second reference's roads run out of its frame (inferred
       // ends). Each keeps clear of the region roads and the other sites.
       spurs: [
         // North through the cliff notch, east of the north-east drum: the reference's road out of its top at 935-945
-        // px. It ends 6 tiles out, before the land past the notch climbs over a grade of 0.2.
-        dirt(LANE, [[-1.8, -33], [-1.5, -38.5], [-2.2, -45], [-3.8, -51]]),
-        // Out of the furrow's far end, south-south-east down the low ground between two rises.
-        dirt(LANE, [inFurrow(54, 0), [-27.2, 113], [-24.8, 119]]),
+        // px. It ends 8 tiles out.
+        dirt(LANE, [[-1.8, -33], [-1.5, -38.5], [-2.2, -45], [-4.3, -53.5]]),
+        // Out of the furrow's tail, east off the east lane over the low ground north of the Kiln road, since the land
+        // past the tail climbs over a grade of 0.2.
+        dirt(LANE, [inFurrow(WING.down + 6, -6), [-13, 105], [-3, 102], [2, 100.5]]),
         // South-west off the ring, up the 22-tile bank along the foot of the south-west hill, which climbs too steeply
         // across it: the reference's road out of its left edge at y 590.
         dirt(LANE, [[-30.3, 31], [-33, 37], [-33, 44], [-32.8, 52]]),
@@ -427,14 +440,12 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         // On the furrow's two lanes at its head, launching down the furrow beside the wing's up-ramp.
         { id: 'fallen-sun-flap-furrow-e', from: inFurrow(0, -10.25), to: inFurrow(5, -10.25), width: 3, rise: [0, 0.35] },
         { id: 'fallen-sun-flap-furrow-w', from: inFurrow(0, 10.25), to: inFurrow(5, 10.25), width: 3, rise: [0, 0.35] },
-        // The torn wing lying along the furrow, 8 tiles wide: an up-ramp from the ground to 1.5 units (6 m) over 8
-        // tiles, a level span over the two piers, and a down-ramp. The span's ends stand just past the gouge's bank on
-        // the furrow floor, so the deck line sits 6 m over that floor and the piers' tops come just under it. The
-        // down-ramp lies on the flat floor at a grade of 0.19; the up-ramp's foot lies on the basin bank, which still
-        // climbs toward the furrow floor there, so the up-ramp is steeper.
-        { id: 'fallen-sun-wing-up', from: inFurrow(6.5, 0), to: inFurrow(14.5, 0), width: 8, rise: [0, 1.5] },
-        { id: 'fallen-sun-wing-span', from: inFurrow(14.5, 0), to: inFurrow(43.5, 0), width: 8, rise: [1.5, 1.5] },
-        { id: 'fallen-sun-wing-down', from: inFurrow(43.5, 0), to: inFurrow(51.5, 0), width: 8, rise: [1.5, 0] },
+        // The torn wing lying along the furrow, 8 tiles wide: an up-ramp from the ground to 1.5 units (6 m) over 9
+        // tiles, a level span over the two piers, and a down-ramp over 7. The furrow floor rises gently toward its tail,
+        // so both ramps climb under a grade of 0.2 on the baked map, which a loaded hauler still climbs.
+        { id: 'fallen-sun-wing-up', from: inFurrow(WING.up, 0), to: inFurrow(WING.span, 0), width: 8, rise: [0, 1.5] },
+        { id: 'fallen-sun-wing-span', from: inFurrow(WING.span, 0), to: inFurrow(WING.down, 0), width: 8, rise: [1.5, 1.5] },
+        { id: 'fallen-sun-wing-down', from: inFurrow(WING.down, 0), to: inFurrow(WING.end, 0), width: 8, rise: [1.5, 0] },
       ],
       // A landing strip runs 12 tiles past each lip: the truck lands about 4 tiles out and rolls on.
       landing: 12,

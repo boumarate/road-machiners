@@ -4,6 +4,7 @@
 
 import { REGION, type TerritoryDef } from '../data/region';
 import { SALVAGE, type LootTable } from '../data/salvage';
+import { TERRAIN, type Basin } from '../data/terrain';
 import { TERRITORIES, type FarmRoad, type FarmRules, type Hazard, type SpotTable, type TerritoryRules, type WreckRules } from '../data/territory';
 import { deckById } from './bridge';
 import { isTerritory, siteEdgeCrossings, siteGap } from './sites';
@@ -16,8 +17,8 @@ export { isTerritory };
 const GROUND_POINTS = 8; // hunting grounds beside a farm's spine, half on each side
 
 export type HazardZone = Hazard & { id: string; pos: Vec };
-// An authored hull piece in map tiles.
-export type BakedPiece = { look: LandmarkLook; pos: Vec; yaw: number; r: number };
+// An authored hull piece in map tiles. sink is height units its seat lies under the ground at its centre.
+export type BakedPiece = { look: LandmarkLook; pos: Vec; yaw: number; r: number; sink: number };
 
 // A landing strip past a deck's lip, in map tiles: from a, the lip's middle, to b, landing tiles further on, as wide
 // as the deck.
@@ -113,7 +114,7 @@ function onMap(t: TerritoryDef, at: Vec): Vec {
 }
 
 export function territoryPieces(t: TerritoryDef): BakedPiece[] {
-  return (TERRITORIES[t.id].wreck?.pieces ?? []).map((p) => ({ look: p.look, pos: onMap(t, p.at), yaw: p.yaw, r: p.r }));
+  return (TERRITORIES[t.id].wreck?.pieces ?? []).map((p) => ({ look: p.look, pos: onMap(t, p.at), yaw: p.yaw, r: p.r, sink: p.sink ?? 0 }));
 }
 
 export function territoryCaches(t: TerritoryDef): Vec[] {
@@ -140,6 +141,13 @@ export function landingStrips(t: TerritoryDef): LandingStrip[] {
       return { a, b: { x: a.x + deck.axis.x * ahead * wreck.landing, y: a.y + deck.axis.y * ahead * wreck.landing }, width: deck.width };
     });
   });
+}
+
+// The basin centred on a territory: the landform its scree and rim rocks follow.
+export function basinUnder(t: TerritoryDef): Basin {
+  const b = TERRAIN.features.basins.find((basin) => basin.center.x === t.pos.x && basin.center.y === t.pos.y);
+  if (!b) throw new Error(`Territory ${t.id} has no basin centred on it`);
+  return b;
 }
 
 // Where the reactor stands, which is also the centre of its hazard.
