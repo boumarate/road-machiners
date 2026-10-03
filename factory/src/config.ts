@@ -38,6 +38,7 @@ const KEYS = {
   stageTimeoutMinutes: 'FACTORY_STAGE_TIMEOUT_MINUTES',
   replyRouteMinutes: 'FACTORY_REPLY_ROUTE_MINUTES',
   releaseDays: 'FACTORY_RELEASE_DAYS',
+  wasteReviewDays: 'FACTORY_WASTE_REVIEW_DAYS',
   itchTarget: 'ITCH_TARGET',
   butlerKey: 'BUTLER_API_KEY',
   maxJobsPerDay: 'FACTORY_MAX_JOBS_PER_DAY',
@@ -50,7 +51,7 @@ const KEYS = {
 
 const RELEASE_ONLY = new Set<keyof FactoryConfig>(['itchTarget', 'butlerKey']);
 
-const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes', 'replyRouteMinutes', 'releaseDays', 'maxJobsPerDay', 'triageWorkers', 'designWorkers', 'implementWorkers', 'verifyWorkers', 'testWorkers']);
+const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes', 'replyRouteMinutes', 'releaseDays', 'wasteReviewDays', 'maxJobsPerDay', 'triageWorkers', 'designWorkers', 'implementWorkers', 'verifyWorkers', 'testWorkers']);
 
 export function loadConfig(env: Record<string, string | undefined>): FactoryConfig {
   const missing = Object.entries(KEYS).filter(([field, key]) => !RELEASE_ONLY.has(field as keyof FactoryConfig) && !env[key]?.trim()).map(([, key]) => key);

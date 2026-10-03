@@ -13,6 +13,7 @@ import { ship } from './stages/ship';
 import { runStage as checks } from './stages/checks';
 import { runStage as patch } from './stages/patch';
 import { runStage as verify } from './stages/verify';
+import { runStage as waste } from './stages/waste';
 import { runStage as triage } from './stages/triage';
 import { recordJob, type JobOutcome } from './ledger';
 import { clearSessions, resumedStage } from './sessions';
@@ -22,7 +23,7 @@ import { QUEUE_OF, type Ctx, type FactoryState, type Job, type JobStage } from '
 type Handler = (ctx: Ctx, issue: number) => Promise<void>;
 
 // Ship reads who pressed it from the state, so the job cannot run without a queued Ship.
-const HANDLERS: Record<Exclude<JobStage, 'release' | 'dev'>, Handler> = {
+const HANDLERS: Record<Exclude<JobStage, 'release' | 'dev' | 'waste'>, Handler> = {
   triage, design, implement, patch, verify, checks, change, adhoc, candidate, remove, incident,
   ship: (ctx, issue) => ship(ctx, issue, readState(ctx.statePath).pendingShip),
   approve: (ctx, issue) => approve(ctx, issue, readState(ctx.statePath).pendingApprovals[String(issue)] ?? 'the committee'),
@@ -85,10 +86,18 @@ function clearSessionsOf(ctx: Ctx, stage: JobStage, issue: number | null): void 
   if (issue !== null && QUEUE_OF[stage] !== 'branch') clearSessions(ctx.cfg.home, issue);
 }
 
-async function dispatch(ctx: Ctx, stage: JobStage, issue: number | null, job: Job | null): Promise<void> {
-  if (stage === 'release') return release(ctx);
+// Jobs that work on no issue.
+const ISSUELESS: Record<'release' | 'dev' | 'waste', (ctx: Ctx, job: Job | null) => Promise<unknown>> = {
+  release: (ctx) => release(ctx),
+  waste: (ctx) => waste(ctx),
   // A dev job run by hand has no job in the state, so its build output goes to a fixed log.
-  if (stage === 'dev') return rebuildDev(ctx, job?.log ?? `${ctx.cfg.home}/logs/dev-build.log`);
+  dev: (ctx, job) => rebuildDev(ctx, job?.log ?? `${ctx.cfg.home}/logs/dev-build.log`),
+};
+
+const isIssueless = (stage: JobStage): stage is keyof typeof ISSUELESS => stage in ISSUELESS;
+
+async function dispatch(ctx: Ctx, stage: JobStage, issue: number | null, job: Job | null): Promise<void> {
+  if (isIssueless(stage)) return void (await ISSUELESS[stage](ctx, job));
   if (issue === null) throw new Error(`Job ${stage} needs an issue or change id`);
   return HANDLERS[stage](ctx, issue);
 }

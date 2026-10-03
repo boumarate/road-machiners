@@ -3,11 +3,12 @@ import { join } from 'node:path';
 import { readCommittee, telegramIds } from './committee';
 import { markPost } from './post-status';
 import { deny, routeFeedback } from './stages/approval';
+import { proposalOf } from './stages/waste';
 import { readState, updateState } from './state';
-import { ADHOC_LABEL, RELEASE_TASK_LABEL, type Ctx, type ReleaseState, type Route } from './types';
+import { ADHOC_LABEL, RELEASE_TASK_LABEL, WASTE_LABEL, type Ctx, type ReleaseState, type Route } from './types';
 
 const TITLE_LIMIT = 80;
-const KINDS = ['approve', 'deny', 'reply', 'answer', 'patch', 'redesign', 'change', 'adhoc', 'ship', 'remove', 'release-task'];
+const KINDS = ['approve', 'deny', 'reply', 'answer', 'patch', 'redesign', 'change', 'adhoc', 'ship', 'remove', 'release-task', 'waste-change'];
 const ROUTES: Route[] = ['answer', 'patch', 'redesign'];
 const SILENT_KINDS: InboxCommand['kind'][] = ['adhoc', 'reply', 'answer'];
 
@@ -15,7 +16,7 @@ const SILENT_KINDS: InboxCommand['kind'][] = ['adhoc', 'reply', 'answer'];
 // `reply` is a plain reply to an approval post that Hermes still has to route. Hermes's route tool writes kind `route`,
 // which parsing turns into the kind of its route, so a member's `patch:` reply and Hermes's patch run the same path.
 export type InboxCommand = {
-  kind: 'approve' | 'deny' | 'reply' | Route | 'change' | 'adhoc' | 'ship' | 'remove' | 'release-task';
+  kind: 'approve' | 'deny' | 'reply' | Route | 'change' | 'adhoc' | 'ship' | 'remove' | 'release-task' | 'waste-change';
   issue: number | null;
   text: string | null;
   by: string; // Telegram user id
@@ -75,9 +76,10 @@ async function handleFile(ctx: Ctx, path: string): Promise<void> {
 // A command on a post answers with a status line on that post. A reply comes only when that edit fails.
 // An ad hoc task, a reply Hermes is routing and an answer have Hermes's own reply already, so the factory adds nothing.
 // An answer also keeps the post open with its buttons. Other commands get the answer as a reply.
+// A review post is a text message, which has no caption for a status line, so its button press gets a reply too.
 async function deliver(ctx: Ctx, command: InboxCommand, answer: string): Promise<void> {
   if (SILENT_KINDS.includes(command.kind)) return;
-  if (command.postId === null) return void (await ctx.telegram.sendMessage(command.chat, answer, command.messageId));
+  if (answersByReply(command)) return void (await ctx.telegram.sendMessage(command.chat, answer, command.messageId));
   try {
     await markPost(ctx, command, command.byName ?? command.by);
   } catch (error) {
@@ -86,6 +88,10 @@ async function deliver(ctx: Ctx, command: InboxCommand, answer: string): Promise
     ctx.log('tick', command.issue, `post status failed: ${message}`);
     await ctx.telegram.sendMessage(command.chat, `${answer}\nThe post could not show its status: ${message}`, command.messageId);
   }
+}
+
+function answersByReply(command: InboxCommand): boolean {
+  return command.postId === null || command.kind === 'waste-change';
 }
 
 async function handle(ctx: Ctx, command: InboxCommand): Promise<string> {
@@ -98,16 +104,24 @@ async function handle(ctx: Ctx, command: InboxCommand): Promise<string> {
   return handleIssueCommand(ctx, command, requireIssue(command), by);
 }
 
-async function handleIssueCommand(ctx: Ctx, command: InboxCommand, issue: number, by: string): Promise<string> {
-  if (command.kind === 'ship') return queueShip(ctx, issue, by);
-  if (command.kind === 'remove') return queueRemoval(ctx, issue, by, requireText(command));
-  if (command.kind === 'reply') return awaitRoute(ctx, command, issue);
-  if (ROUTES.includes(command.kind as Route)) return routed(ctx, command, issue, by);
-  if (command.kind === 'deny') {
+type IssueHandler = (ctx: Ctx, command: InboxCommand, issue: number, by: string) => string | Promise<string>;
+
+// The commands that act on one issue. Approve is the rest.
+const ISSUE_HANDLERS: Partial<Record<InboxCommand['kind'], IssueHandler>> = {
+  ship: (ctx, _command, issue, by) => queueShip(ctx, issue, by),
+  remove: (ctx, command, issue, by) => queueRemoval(ctx, issue, by, requireText(command)),
+  reply: (ctx, command, issue) => awaitRoute(ctx, command, issue),
+  answer: routed, patch: routed, redesign: routed,
+  'waste-change': (ctx, _command, issue, by) => queueReviewChange(ctx, issue, by),
+  deny: async (ctx, _command, issue, by) => {
     await deny(ctx, issue, by);
     return `Issue #${issue} is denied and closed.`;
-  }
-  return queueApproval(ctx, issue, by);
+  },
+};
+
+async function handleIssueCommand(ctx: Ctx, command: InboxCommand, issue: number, by: string): Promise<string> {
+  const handler = ISSUE_HANDLERS[command.kind];
+  return handler ? handler(ctx, command, issue, by) : queueApproval(ctx, issue, by);
 }
 
 const ROUTE_ANSWERS: Record<Route, (issue: number) => string> = {
@@ -186,6 +200,13 @@ async function openReleaseTask(ctx: Ctx, command: InboxCommand, by: string): Pro
   await ctx.github.addCard(n, 'Design');
   updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null } }));
   return `Opened #${n} as a task of release ${release.day}. A new candidate follows when it is done.`;
+}
+
+// The button under a waste review post queues the change the review proposed, as if a member sent it with /change.
+async function queueReviewChange(ctx: Ctx, issue: number, by: string): Promise<string> {
+  const review = await ctx.github.issue(issue);
+  if (!review.labels.includes(WASTE_LABEL)) throw new Error(`Issue #${issue} is no factory review.`);
+  return queueChange(ctx, `${proposalOf(review.body)}\n\nProposed by the factory review #${issue}.`, by);
 }
 
 function queueChange(ctx: Ctx, text: string, by: string): string {

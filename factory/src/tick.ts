@@ -14,12 +14,12 @@ import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Queue, Run 
 export type JobPick = { stage: JobStage; issue: number | null };
 // A candidate job and whether it may start at the daily cap.
 type Candidate = JobPick & { uncapped: boolean };
-type Due = Pick<FactoryConfig, 'releaseDays' | 'maxJobsPerDay' | 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'verifyWorkers' | 'testWorkers'>;
+type Due = Pick<FactoryConfig, 'releaseDays' | 'wasteReviewDays' | 'maxJobsPerDay' | 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'verifyWorkers' | 'testWorkers'>;
 
 const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
-// Committee-driven jobs never count against the daily cap.
-const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev'];
+// Committee-driven jobs and the factory's own review never count against the daily cap.
+const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev', 'waste'];
 const CARD_ORDER: Card['column'][] = ['Testing', 'Implementation', 'Design', 'Triage'];
 
 function isDue(last: string | null, now: Date, everyMs: number): boolean {
@@ -91,6 +91,12 @@ function candidateJob(state: FactoryState, cards: Card[]): JobPick | null {
   return { stage: 'candidate', issue: release.issue };
 }
 
+// An empty lastWasteReview waits: the tick sets it to now, so the first review covers a full period of ledger.
+function wasteReview(state: FactoryState, now: Date, cfg: Due): Candidate[] {
+  if (state.lastWasteReview === null || !isDue(state.lastWasteReview, now, cfg.wasteReviewDays * DAY_MS)) return [];
+  return [{ stage: 'waste', issue: null, uncapped: true }];
+}
+
 function releaseCut(state: FactoryState, now: Date, cfg: Due): JobPick | null {
   return state.release === null && isDue(state.lastRelease, now, cfg.releaseDays * DAY_MS) ? { stage: 'release', issue: null } : null;
 }
@@ -135,7 +141,7 @@ function fits(pick: JobPick, running: JobPick[], cfg: Due): boolean {
 export function chooseJobs(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): JobPick[] {
   let capLeft = cfg.maxJobsPerDay - recentStarts(state, now).length;
   const chosen: JobPick[] = [];
-  for (const candidate of [...branchCandidates(state, cards, now, cfg, devHead), ...cardCandidates(state, cards)]) {
+  for (const candidate of [...branchCandidates(state, cards, now, cfg, devHead), ...wasteReview(state, now, cfg), ...cardCandidates(state, cards)]) {
     const pick = { stage: candidate.stage, issue: candidate.issue };
     const capped = candidate.uncapped ? 0 : 1;
     if (capped > capLeft || !fits(pick, [...state.jobs, ...chosen], cfg)) continue;
@@ -284,6 +290,7 @@ async function expireReplies(ctx: Ctx): Promise<void> {
 export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS): Promise<void> {
   for (const job of readState(ctx.statePath).jobs) await checkJob(ctx, job, deps);
   await expireReplies(ctx);
+  if (readState(ctx.statePath).lastWasteReview === null) updateState(ctx.statePath, (state) => ({ ...state, lastWasteReview: ctx.now().toISOString() }));
   await intake(ctx);
   const cards = await releaseAnswered(ctx, await ctx.github.cards());
   cleanBuilds(ctx, cards);

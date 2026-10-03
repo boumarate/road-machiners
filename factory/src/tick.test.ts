@@ -9,7 +9,7 @@ import { EMPTY_STATE, readState, writeState } from './state';
 import { FACTORY_MARK, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type ReleaseState, type Ctx, type IssueComment, type FactoryState, type Job } from './types';
 
 const NOW = new Date('2026-01-10T12:00:00Z');
-const CFG = { releaseDays: 7, maxJobsPerDay: 3, triageWorkers: 3, designWorkers: 3, implementWorkers: 3, verifyWorkers: 1, testWorkers: 1 };
+const CFG = { releaseDays: 7, wasteReviewDays: 7, maxJobsPerDay: 3, triageWorkers: 3, designWorkers: 3, implementWorkers: 3, verifyWorkers: 1, testWorkers: 1 };
 // One worker per agent queue, so a test sees which card each queue prefers.
 const ONE = { ...CFG, triageWorkers: 1, designWorkers: 1, implementWorkers: 1 };
 const DEV = 'dev0001';
@@ -283,6 +283,21 @@ describe('tick', () => {
     expect(after.unroutedReplies).toEqual({ 6: { issue: 5, postId: 43, text: 'x', at: fresh } });
     expect(after.failures).toMatchObject([{ stage: 'feedback', issue: 4, error: expect.stringContaining('got no route within 15 minutes') }]);
     expect(h.labels).toEqual([`4:${STUCK_LABEL}`]);
+  });
+
+  it('starts the waste review when its period passed, at the cap too, before card work in the triage queue', () => {
+    const due = state({ lastWasteReview: '2026-01-02T12:00:00Z', jobStarts: starts(1, 2, 3) });
+    expect(chooseJobs(due, [card(5, 'Triage')], NOW, { ...CFG, triageWorkers: 1 })).toEqual([{ stage: 'waste', issue: null }]);
+    expect(chooseJobs(state({ lastWasteReview: '2026-01-05T12:00:00Z' }), [], NOW, CFG)).toEqual([]);
+  });
+
+  it('never starts a review the first time it sees no review, and starts the period then', async () => {
+    expect(chooseJobs(state({ lastWasteReview: null }), [], NOW, CFG)).toEqual([]);
+    const h = harness(null, false);
+    writeState(h.ctx.statePath, state({ lastWasteReview: null }));
+    await tick(h.ctx, '/code', h.deps);
+    expect(readState(h.ctx.statePath).lastWasteReview).toBe(NOW.toISOString());
+    expect(args(h)).toEqual([]);
   });
 
   it('runs a checks job beside a verify agent, one per queue', () => {
