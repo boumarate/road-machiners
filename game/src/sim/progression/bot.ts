@@ -121,11 +121,16 @@ function answerCall(o: Orders, replies: Partial<Record<TopicId, string>> = DEFEN
   }
 }
 
-// Auto patch and auto fire stay on for every bot, so every bot shoots back at hostiles like a player would. Only
-// the fighter drives at them.
+// Auto patch stays on for every bot. Auto fire shoots the nearest hostile in sight, and a raider is hostile to any
+// truck with loot, so it stays on only in combat: a bot shoots back like a player would and never opens fire on a
+// raider that left it alone. The hunter also turns it on at the foe it picks.
 function keepSwitches(o: Orders): void {
   if (!o.world.player.autoRepair) o.run((w) => setAutoRepair(w, true));
-  if (!o.world.player.autoFire) o.run((w) => setAutoFire(w, true));
+  setFire(o, inCombat(o.world, o.me));
+}
+
+function setFire(o: Orders, on: boolean): void {
+  if (o.world.player.autoFire !== on) o.run((w) => setAutoFire(w, on));
 }
 
 // ---- Holding still: jobs, a hot engine and patch deals.
@@ -523,6 +528,7 @@ function engageFoe(o: Orders): boolean {
 
 function engageSeen(o: Orders, foe: Vehicle): boolean {
   if (dangerOf(o.world, foe) > ownDanger(o.world, o.me)) return false;
+  setFire(o, true);
   if (!demandYield(o, foe)) driveTo(o, foe.pos);
   return true;
 }

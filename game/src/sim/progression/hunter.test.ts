@@ -55,9 +55,11 @@ describe('the hunter against one strong raider', () => {
     expect(playerSees(w, raider.pos)).toBe(true);
     expect(vehicleDanger(w, raider)).toBeGreaterThan(ownDanger(w, playerVehicle(w)));
 
-    const order = playerVehicle(botOrders(w, 'hunter').world).order;
+    const turn = botOrders(w, 'hunter').world;
+    const order = playerVehicle(turn).order;
 
-    // It keeps patrolling toward a shop instead.
+    // It holds its fire and keeps patrolling toward a shop instead.
+    expect(turn.player.autoFire).toBe(false);
     expect(order?.kind).toBe('stopAt');
     expect(order?.kind === 'stopAt' && dist(order.dest, raider.pos)).toBeGreaterThan(50);
   });
