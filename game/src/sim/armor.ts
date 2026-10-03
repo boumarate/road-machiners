@@ -142,6 +142,7 @@ function laneCells(g: Grid, side: Side, lane: number): { x: number; y: number }[
 
 // The only way damage reaches parts. A working mounted part takes damage × min(1, pen / armor), then lowers pen
 // by its armor, and damage drops in the same proportion as pen. The walk stops at zero pen. Holes, empty cells, goods, spares and broken parts let the round pass.
+// A broken cargo part's dead rows are still the truck's body, so they cost pen like empty cells.
 // A part covering several cells of the lane is hit once.
 export function walkLane(world: World, v: Vehicle, side: Side, lane: number, round: Round): PartHit[] {
   return planLane(v, side, lane, round).map((h) => ({ part: h.part.id, damage: damagePart(world, v, h.part, h.amount) }));
@@ -157,7 +158,7 @@ export function planLane(v: Vehicle, side: Side, lane: number, round: Round): { 
   const left = { pen: round.pen, damage: round.damage };
   for (const c of laneCells(g, side, lane)) {
     if (left.pen <= 0) break;
-    if (g.cells[c.y][c.x] === null) continue;
+    if (g.cells[c.y][c.x] === null && c.y < g.deadFrom) continue;
     left.pen -= RULES.cellPen;
     const part = owner.get(cellKey(c.x, c.y));
     if (!takesHit(part, left.pen, struck)) continue;
