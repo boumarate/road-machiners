@@ -5,12 +5,19 @@ import { PERF } from '../data/perf';
 import { BREAKABLE, RULES } from '../data/rules';
 import { TERRAIN } from '../data/terrain';
 import { PHYSICS } from '../data/physics';
+import { BROKEN_WING, BROKEN_WING_POINT } from '../data/region';
+import { START_KITS } from '../data/start';
 import { bodyOf } from '../sim/body';
+import { deckAt, deckById } from '../sim/bridge';
+import { heightAt } from '../sim/terrain';
+import type { Vec } from '../sim/vec';
 import { propPose, propShape } from '../sim/mapgen';
 import { emptyWorld } from '../sim/testkit';
 import type { LandmarkLook, Obstacle, World } from '../sim/types';
-import { endTurn, setMoveOrder } from '../sim/world';
-import { buildDrive, captureDrive, freeDrive, initPhysics, restoreDrive, syncDrive, toTilesPerTurn, TURN_STEPS, type Break, type Crash, type Drive, type TurnResult } from './drive';
+import { endTurn, newWorld, setMoveOrder } from '../sim/world';
+import { TEST_MAP } from '../test/map';
+import { buildDrive, captureDrive, freeDrive, GROUND, initPhysics, RAIL, restoreDrive, syncDrive, toTilesPerTurn, TURN_STEPS, type Break, type Crash, type Drive, type TurnResult } from './drive';
+import { toMap } from './frames';
 import { physicsMove } from './turn';
 
 beforeAll(async () => {
@@ -267,4 +274,62 @@ describe('breakable props', () => {
       freeDrive(d);
     }
   });
+});
+
+describe('Broken Wing', () => {
+  const deck = deckById('broken-wing');
+  const across = (p: Vec) => (p.y - deck.from.y) * deck.axis.x - (p.x - deck.from.x) * deck.axis.y;
+
+  // The baked map's world with only the player truck, driving carelessly straight through `to`.
+  function onMap(from: Vec, heading: number, to: Vec): World {
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
+    me(w).pos = { ...from };
+    me(w).heading = heading;
+    me(w).speed = 2;
+    me(w).direct = true;
+    w.player.fuel = 999;
+    return setMoveOrder(w, { kind: 'through', dest: to });
+  }
+
+  // Plays turns as play() does, keeping the player truck's frames: its map point and body height in meters.
+  function drive(w: World, turns: number): { w: World; hits: string[]; frames: { at: Vec; y: number }[] } {
+    let d = buildDrive(w);
+    const hits: string[] = [];
+    const frames: { at: Vec; y: number }[] = [];
+    for (let i = 0; i < turns; i++) {
+      let r: TurnResult | null = null;
+      const id = me(w).id;
+      w = endTurn(w, physicsMove(d, (x) => (r = x)));
+      hits.push(...w.events.flatMap((e) => (e.t === 'collision' ? [e.b] : [])));
+      hits.push(...r!.crashes.flatMap((c) => (c.b === GROUND ? [] : [c.b])));
+      for (const f of r!.frames[id]) frames.push({ at: toMap(f.pos), y: f.pos.y });
+      freeDrive(d);
+      d = r!.next;
+    }
+    freeDrive(d);
+    return { w, hits, frames };
+  }
+
+  it('a truck drives the road under the hoop, up the root ramp, along the deck and down the tip ramp', () => {
+    const end = BROKEN_WING_POINT(50, 0);
+    const { w, hits, frames } = drive(onMap(BROKEN_WING_POINT(BROKEN_WING.hoopAt - 8, 0), 0, end), 14);
+    expect(hits).toEqual([]);
+    expect(me(w).pos.x).toBeGreaterThan(end.x - 2);
+    // On the deck the body rides at its rest height over the deck line.
+    const b = bodyOf(me(w).chassisId);
+    const rest = b.wheelRadius + PHYSICS.truck.suspensionRest - b.wheelY;
+    const onDeck = frames.filter((f) => deckAt(f.at.x, f.at.y)?.deck.id === deck.id);
+    expect(onDeck.length).toBeGreaterThan(0);
+    for (const f of onDeck) expect(Math.abs(f.y - heightAt(w.terrain, f.at.x, f.at.y) * S - rest)).toBeLessThan(0.5);
+  }, 60_000);
+
+  it('a truck on the ground driving at either side of the deck meets the skirt and never gets under the deck', () => {
+    for (const side of [1, -1]) {
+      const { w, hits, frames } = drive(onMap(BROKEN_WING_POINT(0, side * 7), -side * Math.PI / 2, BROKEN_WING_POINT(0, -side * 10)), 4);
+      expect(hits).toContain(RAIL);
+      for (const f of frames) expect(side * across(f.at)).toBeGreaterThan(deck.width / 2);
+      expect(side * across(me(w).pos)).toBeGreaterThan(deck.width / 2);
+    }
+  }, 60_000);
 });

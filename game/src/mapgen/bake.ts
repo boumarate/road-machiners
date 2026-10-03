@@ -4,16 +4,18 @@
 
 import { REGION } from '../data/region';
 import { GEOLOGY, MAPGEN, TERRAIN, type TerrainTypeId } from '../data/terrain';
-import { bridgeCut, deckAlong } from '../sim/bridge';
+import { bridgeCut, deckAt } from '../sim/bridge';
 import { broadAt, flattenFactor, reliefAt } from '../sim/elevation';
 import { gradeRoads } from '../sim/road-grade';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, randRange, type Rng } from '../sim/rng';
 import { heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
-import { clearOfSites, onBridge } from '../sim/mapgen';
+import { clearOfSites, onDeck } from '../sim/mapgen';
+import { siteGap } from '../sim/sites';
 import { dist, polylineDist, type Vec } from '../sim/vec';
-import { BUILT_DIRTY_WATER, BUILT_SCRUB, BUILT_TOXIC, newWorldLayer } from './newworld';
+import { BUILT_CANAL, BUILT_PAD, BUILT_DIRTY_WATER, BUILT_HULL, BUILT_SCRUB, BUILT_TOXIC, BUILT_TRACK, newWorldLayer } from './newworld';
 import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer } from './oldworld';
+import { territoryLayer } from './territory';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
 
 export function bakeMap(seed: number): MapDraft {
@@ -22,6 +24,7 @@ export function bakeMap(seed: number): MapDraft {
   d = timed('finish', () => finishLayer(seed, d));
   d = timed('old world', () => oldWorldLayer(seed, d));
   d = timed('new world', () => newWorldLayer(seed, d));
+  d = timed('territories', () => territoryLayer(seed, d));
   d = timed('ground', () => groundLayer(seed, d));
   return timed('rocks', () => rockLayer(seed, d));
 }
@@ -108,7 +111,8 @@ export function finishLayer(seed: number, d: MapDraft): MapDraft {
 // tile marks, then the first geology rule that holds for the tile, then hardpan. Geology marks live on
 // corners, so each rule reads the tile's four corners.
 
-const SITES = [...REGION.towns, ...REGION.locations];
+// Territories keep their natural ground.
+const SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 const T = TERRAIN.types;
 const G = GEOLOGY.ground;
 
@@ -123,13 +127,17 @@ export function groundLayer(seed: number, d: MapDraft): MapDraft {
   return d;
 }
 
-// Ground types for old-world tile marks.
+// Ground types for tile marks of the old world, the new world and territories.
 const MARKED_TYPES: Record<number, TerrainTypeId> = {
   [BUILT_OLD_ROAD]: 'asphalt',
   [BUILT_FIELD]: 'field',
   [BUILT_SCRUB]: 'scrub',
   [BUILT_DIRTY_WATER]: 'dirtyWater',
   [BUILT_TOXIC]: 'toxic',
+  [BUILT_HULL]: 'hull',
+  [BUILT_TRACK]: 'track',
+  [BUILT_CANAL]: 'canal',
+  [BUILT_PAD]: 'concrete',
 };
 
 function pickType(g: GroundInput, x: number, y: number): TerrainTypeId {
@@ -148,11 +156,11 @@ function pickType(g: GroundInput, x: number, y: number): TerrainTypeId {
   return 'hardpan';
 }
 
-// The canyon and the dry river are water courses: their floors and lower banks are wash beds, never lakes,
+// The canyon, the dry river and Broken Wing's trench are water courses: their floors and lower banks are wash beds, never lakes,
 // even where the carved floor holds a closed hollow. Half the bank reaches the foot of the slope.
 function drainChannels(pond: Float32Array, size: number): Float32Array {
   const n = size + 1;
-  const channels = [TERRAIN.features.canyon, TERRAIN.features.dryRiver];
+  const channels = [TERRAIN.features.canyon, TERRAIN.features.dryRiver, TERRAIN.features.trench];
   for (let k = 0; k < pond.length; k++) {
     if (pond[k] === 0) continue;
     const p = { x: k % n, y: Math.floor(k / n) };
@@ -161,19 +169,11 @@ function drainChannels(pond: Float32Array, size: number): Float32Array {
   return pond;
 }
 
-// Road on roads and the bridge deck, hardpan on and around sites, null elsewhere.
+// Road on roads and the decks, hardpan on and around sites, null elsewhere.
 function builtType(c: Vec): TerrainTypeId | null {
-  if (deckAlong(c.x, c.y) !== null) return 'road';
+  if (deckAt(c.x, c.y) !== null) return 'road';
   if (ROAD_INDEX.nearestWithin(c.x, c.y, REGION.roadWidth / 2) < REGION.roadWidth / 2) return 'road';
-  return SITES.some((s) => nearSite(s.pos, s.radius, c)) ? 'hardpan' : null;
-}
-
-function nearSite(pos: Vec, radius: number, c: Vec): boolean {
-  const dx = pos.x - c.x;
-  const dy = pos.y - c.y;
-  // One tile past the margin keeps this cheap skip clear of rounding.
-  if (dx * dx + dy * dy > (radius + T.siteMargin + 1) ** 2) return false;
-  return Math.hypot(dx, dy) < radius + T.siteMargin;
+  return SITES.some((s) => siteGap(s, c) < T.siteMargin) ? 'hardpan' : null;
 }
 
 // Steep ground and ground where soil slumped are scree.
@@ -199,7 +199,17 @@ function sandType(g: GroundInput, _tile: number, k: number): TerrainTypeId | nul
   return cornerMean(g.d.sand, g.d.size, k) >= G.looseSand ? 'sand' : null;
 }
 
-const GEOLOGY_RULES: GroundRule[] = [screeType, pondType, washType, sandType];
+// Drift sand lies over Broken Wing's ramps, round the hoop's feet and on the trench floor, where the wing came down.
+function wingSandType(g: GroundInput, _tile: number, k: number): TerrainTypeId | null {
+  const n = g.d.size + 1;
+  const p = { x: (k % n) + 0.5, y: Math.floor(k / n) + 0.5 };
+  const F = TERRAIN.features;
+  if (F.mounds.some((m) => dist(p, m.center) <= m.radius + m.bank * 0.7)) return 'sand';
+  if (dist(p, F.wing.pos) <= F.wing.r) return 'sand';
+  return polylineDist(p, F.trench.path) <= F.trench.width ? 'sand' : null;
+}
+
+const GEOLOGY_RULES: GroundRule[] = [screeType, wingSandType, pondType, washType, sandType];
 
 // Largest and mean value over the four corners of the tile whose top-left corner is k.
 function cornerMax(a: ArrayLike<number>, size: number, k: number): number {
@@ -214,7 +224,7 @@ function cornerMean(a: ArrayLike<number>, size: number, k: number): number {
 
 
 // Rock layer: boulders on corners at the foot of cliffs and on ridge tops, each by its own chance from
-// the map seed, off the roads, sites, the bridge deck, cliffs, the map margin and earlier props. A boulder
+// the map seed, off the roads, sites, the decks, cliffs, the map margin and earlier props. A boulder
 // on a ridge top as high as the crag height is a crag, a larger rock spire.
 
 const O = REGION.obstacles;
@@ -281,5 +291,5 @@ function fitsOffRoad(size: number, heights: ArrayLike<number>, placed: BakedProp
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, roadGap) < roadGap) return false;
   const tile = Math.floor(pos.y) * size + Math.floor(pos.x);
   if (tileSteepness(heights, size, tile) > BOULDER_SLOPE_LIMIT) return false;
-  return !onBridge(pos, r) && clearOfSites(pos, r) && placed.every((o) => dist(pos, o.pos) >= o.r + r + O.gap);
+  return !onDeck(pos, r) && clearOfSites(pos, r) && placed.every((o) => dist(pos, o.pos) >= o.r + r + O.gap);
 }
