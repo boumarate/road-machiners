@@ -996,6 +996,15 @@ describe('stall watchdog', () => {
     }
     expect(w.events.some((e) => e.t === 'stall')).toBe(false);
   });
+
+  it('counts a driver shut down by an emitter pulse as making progress', () => {
+    const { w, npc } = frozen();
+    run(w, NPC_BEHAVIOR.stallTurns - 1);
+    npc.shutDown = { from: w.turn + 1, until: w.turn + 2 };
+    run(w, 2);
+    expect(npc.brain!.progress!.since).toBe(w.turn);
+    expect(w.events.some((e) => e.t === 'stall')).toBe(false);
+  });
 });
 
 describe('parking beside a truck', () => {

@@ -13,6 +13,7 @@ import { corePart, coreParts, mountedItems, mountedParts } from './grid';
 import { loadFactor, vehicleMass } from './mass';
 import { getResources } from './resources';
 import { isTowing } from './tow';
+import { isShutDown } from './utility';
 import type { PartInstance, Vehicle, World } from './types';
 import { DEG } from './vec';
 import { weatherAt } from './weather';
@@ -66,7 +67,6 @@ export function isStranded(world: World, v: Vehicle): boolean {
 
 export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   const ch = chassisDef(v.chassisId);
-  const engines = mountedParts(v, 'engine');
   const mass = vehicleMass(v);
   // Top speed and turning follow loadFactor(), which drops hard past the rated mass. The engine and brakes give fixed forces,
   // so acceleration and braking fall with mass.
@@ -79,24 +79,10 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   // Physics scales push force by accel over the chassis accel, so this gives every chassis the same limp push up hills.
   const limpAccel = limpSpeed * ch.accel;
 
-  let maxSpeed = limpSpeed;
-  let accel = limpAccel;
-  let fuelMult = 0;
-  // Without a working engine, or with a stalled one, the driver pushes the truck at limp speed and burns no fuel.
-  if (hasWorkingEngine(v) && !isStalled(world, v)) {
-    const e = wornDef<EngineDef>(engines[0]);
-    const drag = gunDrag(v, e.capacity);
-    maxSpeed = Math.max(RULES.minSpeedCap, (ch.maxSpeed + e.speedBonus) * load * wheels * drag);
-    accel = (ch.accel + e.accelBonus) * force * RULES.accelScale * drag;
-    fuelMult = e.fuelMult;
-    if (inOverdrive(world, v)) {
-      maxSpeed *= RULES.overdriveBoost;
-      accel *= RULES.overdriveBoost;
-    }
-    // A broken transmission leaves only a crawl to limp home.
-    if (!isWorking(corePart(v, 'transmission'))) maxSpeed = Math.min(maxSpeed, limpSpeed);
-  }
-  maxSpeed *= weatherAt(world, v.pos).speed;
+  // A truck an emitter pulse shut down has no drive at all: it coasts, steers and brakes in physics.
+  const drive = isShutDown(world, v) ? SHUT_DOWN : engineDrive(world, v, { load, wheels, force, limpSpeed, limpAccel });
+  const { accel, fuelMult } = drive;
+  let maxSpeed = drive.maxSpeed * weatherAt(world, v.pos).speed;
   // A tower drives with care while a truck hangs on its rope.
   if (isTowing(world, v.id)) maxSpeed *= TOW.speedShare;
 
@@ -115,6 +101,25 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     radius: ch.radius,
     weapons: mountedItems(v, 'weapon').map((item) => ({ part: item.part, def: wornDef<WeaponDef>(item.part), sides: openSides(v, item) })),
   };
+}
+
+type Drive = { maxSpeed: number; accel: number; fuelMult: number };
+type DriveShares = { load: number; wheels: number; force: number; limpSpeed: number; limpAccel: number };
+
+const SHUT_DOWN: Drive = { maxSpeed: 0, accel: 0, fuelMult: 0 };
+
+// What the engine gives. Without a working engine, or with a stalled one, the driver pushes the truck at limp speed
+// and burns no fuel.
+function engineDrive(world: World, v: Vehicle, s: DriveShares): Drive {
+  if (!hasWorkingEngine(v) || isStalled(world, v)) return { maxSpeed: s.limpSpeed, accel: s.limpAccel, fuelMult: 0 };
+  const ch = chassisDef(v.chassisId);
+  const e = wornDef<EngineDef>(mountedParts(v, 'engine')[0]);
+  const drag = gunDrag(v, e.capacity);
+  const boost = inOverdrive(world, v) ? RULES.overdriveBoost : 1;
+  const top = Math.max(RULES.minSpeedCap, (ch.maxSpeed + e.speedBonus) * s.load * s.wheels * drag) * boost;
+  // A broken transmission leaves only a crawl to limp home.
+  const maxSpeed = isWorking(corePart(v, 'transmission')) ? top : Math.min(top, s.limpSpeed);
+  return { maxSpeed, accel: (ch.accel + e.accelBonus) * s.force * RULES.accelScale * drag * boost, fuelMult: e.fuelMult };
 }
 
 // Speed and acceleration multiplier from the working guns. Each draws power from the engine, up to gunDragMax slower

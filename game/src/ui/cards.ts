@@ -149,9 +149,16 @@ export function createIcon(name: IconName): HTMLElement {
   return icon;
 }
 
+// The needle's share of the dial. A truck with no top speed, as one shut down by an emitter pulse, shows full while
+// it rolls and empty at rest.
+export function dialShare(speed: number, maxSpeed: number): number {
+  if (maxSpeed <= 0) return speed === 0 ? 0 : 1;
+  return Math.min(Math.abs(speed) / maxSpeed, 1);
+}
+
 export function createSpeedDial(speed: number, maxSpeed: number): HTMLElement {
   const dial = el("span", { class: "speed-dial", "aria-hidden": "true" });
-  const angle = -120 + Math.min(Math.abs(speed) / maxSpeed, 1) * 240;
+  const angle = -120 + dialShare(speed, maxSpeed) * 240;
   dial.innerHTML = `<svg viewBox="0 0 100 100"><circle class="dial-rim" cx="50" cy="50" r="47"/><circle class="dial-face" cx="50" cy="50" r="41"/><path class="dial-ticks" d="M17 68A38 38 0 1 1 83 68"/><path class="dial-needle" d="M50 50V17" transform="rotate(${angle} 50 50)"/><circle class="dial-pin" cx="50" cy="50" r="4"/></svg>`;
   return dial;
 }

@@ -810,3 +810,37 @@ describe('oil patches', () => {
     expect(many).toEqual(one);
   });
 });
+
+describe('a truck an emitter pulse shut down', () => {
+  // The player at 8 tiles per turn on flat ground, shut down from the next turn on for longer than the test plays.
+  function shutDown(order: MoveOrder | null): World {
+    const w = order ? ordered(order, 8) : emptyWorld();
+    me(w).speed = 8;
+    me(w).shutDown = { from: w.turn + 1, until: w.turn + 10 };
+    return w;
+  }
+
+  it('coasts on with no order, keeping over half its speed after a turn', () => {
+    const { w, d } = play(shutDown(null), 1);
+    freeDrive(d);
+
+    expect(me(w).speed).toBeGreaterThan(4);
+  });
+
+  it('coasts toward a drive-through point instead of braking, and burns no fuel', () => {
+    const w0 = shutDown({ kind: 'through', dest: { x: 120, y: 30 } });
+    const fuel = w0.player.fuel;
+    const { w, d } = play(w0, 1);
+    freeDrive(d);
+
+    expect(me(w).speed).toBeGreaterThan(4);
+    expect(w.player.fuel).toBe(fuel);
+  });
+
+  it('still brakes to a stop on a brake order', () => {
+    const { w, d } = play(shutDown({ kind: 'brake' }), 3);
+    freeDrive(d);
+
+    expect(me(w).speed).toBeLessThan(0.1);
+  });
+});

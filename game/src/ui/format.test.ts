@@ -182,6 +182,34 @@ describe("harpoon log", () => {
   });
 });
 
+describe("emitter pulse log", () => {
+  it("names the trucks the player's pulse shuts down", () => {
+    const w = emptyWorld();
+    const me = w.player.vehicleId;
+    const trader = addVehicle(w, "traders", "hauler", [], { x: 33, y: 30 });
+
+    expect(eventText(w, { t: "pulse", vehicle: me, pos: { x: 30, y: 30 }, hit: [trader.id] })).toEqual({ text: `Your emitter pulse shuts down ${vehicleName(w, trader.id)}`, cls: "good" });
+    expect(eventText(w, { t: "pulse", vehicle: me, pos: { x: 30, y: 30 }, hit: [] })).toEqual({ text: "Your emitter pulse catches nobody", cls: "dim" });
+  });
+
+  it("tells the player its truck is shut down and for how long", () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const raider = addVehicle(w, "raiders", "hauler", [], { x: 33, y: 30 });
+    me.shutDown = { from: w.turn + 1, until: w.turn + 2 };
+
+    expect(eventText(w, { t: "pulse", vehicle: raider.id, pos: { x: 33, y: 30 }, hit: [me.id] })).toEqual({ text: `${vehicleName(w, raider.id)}'s emitter pulse shuts your truck down for 2 turns`, cls: "bad" });
+  });
+
+  it("logs nothing for a pulse between other trucks", () => {
+    const w = emptyWorld();
+    const raider = addVehicle(w, "raiders", "hauler", [], { x: 33, y: 30 });
+    const trader = addVehicle(w, "traders", "hauler", [], { x: 35, y: 30 });
+
+    expect(eventText(w, { t: "pulse", vehicle: raider.id, pos: { x: 33, y: 30 }, hit: [trader.id] })).toBeNull();
+  });
+});
+
 describe("caltrops log", () => {
   it("tells the player its wheels took caltrops", () => {
     const w = emptyWorld();

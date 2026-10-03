@@ -543,9 +543,12 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   const stored = mem.route && dist(mem.route.dest, order.dest) < RULES.arriveRadius && mem.route.radius === s.radius ? continueRoute(w, v.pos, mem.route, order.dest, s.radius, blockers, v) : null;
   const path = v.direct ? null : stored ?? [...route(w, v.pos, order.dest, s.radius, blockers, v)]; // copied, since driving consumes it
   mem.route = path ? { ...keepRoute(w, order.dest, path, blockers), radius: s.radius } : null;
-  if (order.kind === 'stopAt') return { ...base, dest: stopPoint(path, order.dest), route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
+  // Without engine force, as while an emitter pulse shuts the truck down, the driver can only keep the speed it has:
+  // it coasts and steers, and brakes only to stop on a stop point.
+  const drive = (next: number) => toMps(engine ? next : speed);
+  if (order.kind === 'stopAt') return { ...base, dest: stopPoint(path, order.dest), route: path, target: drive(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
   const next = throughSpeed(s, speed, dist(v.pos, order.dest), order.pace);
-  return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };
+  return { ...base, dest: order.dest, route: path, target: drive(next), stopAt: false };
 }
 
 // A stop order arrives at the route's end, which is the closest point the planner reaches when the order point
@@ -688,27 +691,34 @@ function turnWheels(c: Car, steerTo: number): void {
 }
 
 // Throttle toward the target speed, plus the engine share that cancels gravity along the nose,
-// so a truck holds its speed on a slope. Without engine push the truck brakes.
+// so a truck holds its speed on a slope. Without engine push the truck brakes when it is too fast. A truck with no
+// engine force at all coasts while it is too slow.
 function applyPedals(c: Car, target: number, speed: number): void {
   const { plan, ctl } = c;
   const u = clamp((target - speed) * D.throttleGain + slopeThrottle(c, target), -1, 1);
-  const pushing = plan.engine && target !== 0 && Math.sign(u) === Math.sign(target);
-  const brake = brakeOf(plan, u, target, pushing);
+  const more = wantsMore(u, target);
+  const pushing = plan.engine && more;
+  const brake = more ? 0 : brakeOf(plan, u, target);
   const force = pushing ? u * plan.engineForce : 0;
   for (let i = 0; i < 4; i++) ctl.setWheelBrake(i, brake);
   for (const i of [2, 3]) ctl.setWheelEngineForce(i, force);
 }
 
-// Throttle share that holds the truck against gravity along its nose. A truck holding still brakes instead.
+// The throttle asks for more speed along the target's direction, so the driver does not brake.
+function wantsMore(u: number, target: number): boolean {
+  return target !== 0 && Math.sign(u) === Math.sign(target);
+}
+
+// Throttle share that holds the truck against gravity along its nose. A truck holding still brakes instead, and a
+// truck with no engine force has no throttle to hold with.
 function slopeThrottle(c: Car, target: number): number {
-  if (target === 0) return 0;
+  if (target === 0 || !c.plan.engine) return 0;
   const pull = T.gravityScale * PHYSICS.gravity * noseRise(c.body.rotation()) * c.s.mass;
   return pull / (2 * c.plan.engineForce);
 }
 
-// No brake while the engine pushes. A truck holding still brakes fully on top of the throttle's brake share.
-function brakeOf(plan: Plan, u: number, target: number, pushing: boolean): number {
-  if (pushing) return 0;
+// A truck holding still brakes fully on top of the throttle's brake share.
+function brakeOf(plan: Plan, u: number, target: number): number {
   return Math.abs(u) * plan.brakeForce + (target === 0 ? plan.brakeForce : 0);
 }
 

@@ -45,7 +45,7 @@ import { advanceContracts, advanceShops, initializeShops, marketStream, shopNear
 import { applyWear, carryHp } from './wear';
 import { advanceDust } from './detect';
 import { searchStream } from './search';
-import { activateUtilities, advanceUtilityEffects, tickCharges, utilityOrderError } from './utility';
+import { activateUtilities, advanceUtilityEffects, settleShutdowns, tickCharges, utilityOrderError } from './utility';
 import { caltropHits } from './hazards';
 import { advanceJobs, startAutoRepair } from './jobs';
 import { advanceEngineHeat } from './engine-heat';
@@ -318,6 +318,7 @@ export function endTurn(
     refreshVision(w);
     noteEscape(w);
     noteHurt(w);
+    settleShutdowns(w);
     watchStalls(w);
     endCallIfOut(w);
     raiseCalls(w);

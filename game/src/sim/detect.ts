@@ -19,15 +19,21 @@ import type { Contact, DustCloud, Vehicle, World } from './types';
 import { BEACON } from '../data/tow';
 import { WEATHER } from '../data/weather';
 import { dist, type Vec } from './vec';
+import { isShutDown } from './utility';
 import { weatherAt } from './weather';
 import { canVehicleSee, playerSees, sightRadius } from './vision';
 import { playerCanAct, update } from './world';
 
-// Range a moving vehicle's engine is heard from, ignoring hills. Zero while parked, stalled or without a working engine.
+// Range a moving vehicle's engine is heard from, ignoring hills. Zero while parked, stalled, shut down or without a
+// working engine.
 export function soundRange(world: World, v: Vehicle): number {
-  if (v.speed <= RULES.parkedSpeed || !hasWorkingEngine(v) || isStalled(world, v)) return 0;
+  if (v.speed <= RULES.parkedSpeed || !engineRuns(world, v)) return 0;
   const noise = (partDef(mountedParts(v, 'engine')[0].defId) as EngineDef).noise;
   return (DETECT.sound.limp + DETECT.sound.perSpeed * Math.max(0, v.speed - RULES.limpSpeed)) * noise;
+}
+
+function engineRuns(world: World, v: Vehicle): boolean {
+  return hasWorkingEngine(v) && !isStalled(world, v) && !isShutDown(world, v);
 }
 
 // A moving observer's own engine drowns out fainter sounds. Parked, it loses nothing.
@@ -71,10 +77,11 @@ function dustVisible(world: World, a: Vec, b: Vec, age: number): boolean {
   return true;
 }
 
-// Range a mounted scanner reaches, through hills. Zero without one mounted.
-export function scannerRange(v: Vehicle): number {
+// Range a mounted scanner reaches, through hills. Zero without one mounted, or while an emitter pulse shuts the
+// truck down.
+export function scannerRange(world: World, v: Vehicle): number {
   const scanners = mountedParts(v, 'scanner');
-  if (scanners.length === 0) return 0;
+  if (scanners.length === 0 || isShutDown(world, v)) return 0;
   return wornDef<ScannerDef>(scanners[0]).range;
 }
 
@@ -88,7 +95,7 @@ function idKey(id: string): number {
 // Contacts within `within` tiles of the observer. Cheap range checks run before any sight line is traced.
 export function contactsOf(world: World, observer: Vehicle, within: number): Contact[] {
   const out: Contact[] = [];
-  const scanned = scannerRange(observer); // the observer's own scanner, the same for every target below
+  const scanned = scannerRange(world, observer); // the observer's own scanner, the same for every target below
   const sight = sightRadius(world, observer);
   const clouds = cloudsSeenBy(world, observer).filter((c) => dist(observer.pos, c.pos) <= within);
   for (const v of world.vehicles) {
@@ -163,7 +170,7 @@ function channelShare(world: World, observer: Vehicle, v: Vehicle, source: Conta
 function sourceReach(world: World, observer: Vehicle, v: Vehicle, source: Exclude<Contact['sources'][number], 'dust' | 'mark'>): number {
   switch (source) {
     case 'sound': return hearingRange(world, observer, v);
-    case 'radio': return scannerRange(observer);
+    case 'radio': return scannerRange(world, observer);
     case 'beacon': return BEACON.range;
   }
 }

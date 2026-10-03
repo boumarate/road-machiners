@@ -24,6 +24,7 @@ import { isJunk, maxHp } from '../sim/wear';
 import { clockOf } from '../sim/sun';
 import type { PartHit } from '../sim/armor';
 import { shotDamage } from '../sim/combat';
+import { shutDownTurnsLeft } from '../sim/utility';
 import type { GameEvent, GridItem, Job, NpcState, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
 
@@ -605,6 +606,19 @@ function caltropsText(world: World, e: Extract<GameEvent, { t: 'caltrops' }>): L
   return { text: `${vehicleName(world, e.vehicle)} drives into caltrops`, cls: e.source === me ? 'good' : 'dim' };
 }
 
+// An emitter pulse the player fired, naming the trucks it shut down, or one that shut the player down. Others log
+// nothing.
+function pulseText(world: World, e: Extract<GameEvent, { t: 'pulse' }>): LogLine | null {
+  const me = playerVehicle(world);
+  if (e.vehicle === me.id) {
+    if (e.hit.length === 0) return { text: 'Your emitter pulse catches nobody', cls: 'dim' };
+    return { text: `Your emitter pulse shuts down ${e.hit.map((id) => vehicleName(world, id)).join(', ')}`, cls: 'good' };
+  }
+  if (!e.hit.includes(me.id)) return null;
+  const left = shutDownTurnsLeft(world, me);
+  return { text: `${vehicleName(world, e.vehicle)}'s emitter pulse shuts your truck down for ${left} ${left === 1 ? 'turn' : 'turns'}`, cls: 'bad' };
+}
+
 // Events whose log line has its own function.
 const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
   activity: activityText,
@@ -619,6 +633,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   utility: () => null, // the utility row and the world show a use; effects with news log their own events
   caltrops: caltropsText,
   lineTorn: lineTornText,
+  pulse: pulseText,
   say: sayText,
   job: jobText,
   weather: weatherText,

@@ -30,6 +30,7 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
   talking: "on the radio",
   out: "driver knocked out",
   unmounted: "not mounted",
+  shutDown: "shut down",
 };
 
 // One weapon aimed at a vehicle, as its marker shows it.

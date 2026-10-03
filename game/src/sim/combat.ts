@@ -31,6 +31,7 @@ import type { Aim, GunState, NpcActivity, PartInstance, ShotRound, Vehicle, Vehi
 import { weatherAt } from './weather';
 import { smokeCrosses } from './hazards';
 import { SMOKE } from '../data/utilities';
+import { isShutDown } from './utility';
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
 
 export type FireBlock =
@@ -45,7 +46,8 @@ export type FireBlock =
   | "covered"
   | "talking"
   | "out"
-  | "unmounted";
+  | "unmounted"
+  | "shutDown";
 
 export function inFeud(world: World, a: Vehicle, b: Vehicle): boolean {
   return stateOf(world, "feud", a.id, b.id) !== null || stateOf(world, "feud", b.id, a.id) !== null;
@@ -125,7 +127,8 @@ function sideOpen(shooter: Vehicle, mw: AimedSource, target: Vehicle): boolean {
   return mw.sides.includes(sideToward(shooter, target.pos));
 }
 
-// Why a weapon cannot fire at a target right now, or null if it can. A knocked-out driver fires nothing. The player only shoots what it sees.
+// Why a weapon cannot fire at a target right now, or null if it can. A knocked-out driver and a truck an emitter
+// pulse shut down fire nothing. The player only shoots what it sees.
 export function fireBlock(
   world: World,
   shooter: Vehicle,
@@ -133,6 +136,7 @@ export function fireBlock(
   target: Vehicle | null,
 ): FireBlock | null {
   if (isKnockedOut(shooter)) return "out";
+  if (isShutDown(world, shooter)) return "shutDown";
   return weaponBlock(mw) ?? (target ? targetBlock(world, shooter, mw, target) : "noTarget");
 }
 

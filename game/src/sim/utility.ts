@@ -1,14 +1,17 @@
 // Utility parts: their charge, the orders that use them and the activation step of the turn. Each effect's world
-// object has its own owner file; this file only checks orders and hands each use to its effect.
+// object has its own owner file; this file only checks orders and hands each use to its effect. The emitter's
+// shutdown is the exception: it has no world object, only a window on each truck it hits, and it lives in its own
+// section at the end of this file.
 
 import { partDef, type PartDef, type UtilityDef, type UtilityEffect, type UtilityEffectType } from '../data/parts';
-import type { FireBlock } from './combat';
+import { EMITTER } from '../data/utilities';
+import { isHostile, noteAttack, type FireBlock } from './combat';
 import { findPart } from './damage';
 import { isKnockedOut } from './defeat';
 import { isMounted, mountedParts } from './grid';
 import { endLines, fireHarpoon, harpoonBlock } from './harpoon';
 import { deploySmoke, dropField, oilShort, spillOil } from './hazards';
-import type { ChargeState, PartInstance, UtilityOrder, Vehicle, World } from './types';
+import type { ChargeState, GameEvent, PartInstance, UtilityOrder, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { wornDef, wornTurns } from './wear';
 
@@ -67,7 +70,7 @@ const ARMS: Record<UseKind, (world: World, use: Use) => void> = {
   caltrops: (world, { vehicle, part }) => dropField(world, vehicle, 'caltrops', effectOf(part, 'caltrops')),
   oil: (world, { vehicle, part }) => spillOil(world, vehicle, effectOf(part, 'oil')),
   claymore: notBuilt('claymore'),
-  emitter: notBuilt('emitter'),
+  emitter: (world, { vehicle, part }) => pulse(world, vehicle, effectOf(part, 'emitter')),
   crane: passive('crane'),
   scraper: passive('scraper'),
 };
@@ -132,6 +135,7 @@ export function utilityBlock(world: World, v: Vehicle, part: PartInstance): Fire
   if (isKnockedOut(v)) return 'out';
   if (!partOn(v, part.id).mounted) return 'unmounted';
   if (part.hp <= 0) return 'disabled';
+  if (isShutDown(world, v)) return 'shutDown';
   return chargeOf(part).reload > 0 ? 'cooldown' : null;
 }
 
@@ -242,4 +246,57 @@ export function advanceUtilityEffects(world: World): void {
 function aged<T extends { turnsLeft: number }>(effects: T[]): T[] {
   for (const e of effects) e.turnsLeft--;
   return effects.filter((e) => e.turnsLeft > 0);
+}
+
+// ---- Emitter shutdown: the pulse and the turns it shuts a truck down. Stats, fire, detection and the HUD ask here.
+//
+// A pulse in turn T shuts its trucks down from the end of turn T through the end of turn T+2: the player plans turns
+// T+1 and T+2 shut down, and both resolve shut down. Turn T itself, and every shot fired in it, runs as before.
+
+type EmitterEffect = Extract<UtilityEffect, { type: 'emitter' }>;
+
+// Every other truck within the radius, allies and neutrals too, is hit. Its speed is left as it is. The coil throws
+// the field outward, so the user is spared. Each hit is an attack, judged like a shot. settleShutdowns() shuts the
+// hit trucks down at the end of the turn.
+function pulse(world: World, user: Vehicle, effect: EmitterEffect): void {
+  const hit = world.vehicles.filter((v) => v.id !== user.id && dist(v.pos, user.pos) <= effect.radius);
+  for (const v of hit) noteAttack(world, user, v, !isHostile(world, v, user));
+  world.events.push({ t: 'pulse', vehicle: user.id, pos: { ...user.pos }, hit: hit.map((v) => v.id) });
+}
+
+// Near the end of the turn, after every shot: ends the shutdowns whose last turn this was, then shuts down the trucks
+// this turn's pulses hit for the next EMITTER.turns turns. A hit truck destroyed later in the turn is gone and needs
+// none.
+export function settleShutdowns(world: World): void {
+  for (const v of world.vehicles) if (v.shutDown && world.turn >= v.shutDown.until) delete v.shutDown;
+  for (const e of world.events) if (e.t === 'pulse') shutDown(world, e);
+}
+
+function shutDown(world: World, e: Extract<GameEvent, { t: 'pulse' }>): void {
+  const from = world.turn + EMITTER.startsAfter;
+  const until = from + pulseEffect(world, e.vehicle).turns - 1;
+  for (const v of world.vehicles) if (e.hit.includes(v.id)) v.shutDown = { from, until };
+}
+
+// The effect of the emitter a pulse came from, found on its user. Throws when the user has none mounted.
+export function pulseEffect(world: World, userId: string): EmitterEffect {
+  const user = [...world.vehicles, ...world.removed].find((v) => v.id === userId);
+  if (!user) throw new Error(`Pulse from unknown vehicle ${userId}`);
+  for (const part of mountedParts(user, 'utility')) {
+    const def = partDef(part.defId);
+    if (def.kind === 'utility' && def.effect.type === 'emitter') return def.effect;
+  }
+  throw new Error(`${user.name} pulsed with no emitter mounted`);
+}
+
+// Whether the truck is shut down: no engine force, no fire, no utilities, no scanner and no engine sound. It holds
+// while the player plans and while the turn resolves.
+export function isShutDown(world: World, v: Vehicle): boolean {
+  return v.shutDown !== undefined;
+}
+
+// The shut-down turns still to be played, counted while the player plans: 2 right after the pulse, then 1. 0 for a
+// truck that runs.
+export function shutDownTurnsLeft(world: World, v: Vehicle): number {
+  return v.shutDown ? v.shutDown.until - world.turn : 0;
 }

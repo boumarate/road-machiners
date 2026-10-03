@@ -40,6 +40,7 @@ import { heatAt } from './sun';
 import { canVehicleSee } from './vision';
 import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut, refitAtHome } from './defeat';
+import { isShutDown } from './utility';
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
 // of it. A new goal replaces any goal of its kind, so the stack never holds two goals of one kind. Every change logs
@@ -1028,10 +1029,10 @@ export function watchStalls(world: World): void {
   }
 }
 
-// A driver waiting on a timed state, knocked out, towed or with a tower on its way, counts as making progress:
-// the state ends the wait.
+// A driver waiting on a timed state, knocked out, shut down by an emitter pulse, towed or with a tower on its way,
+// counts as making progress: the state ends the wait.
 function madeProgress(world: World, v: Vehicle): boolean {
-  if (isKnockedOut(v) || isOnRope(world, v.id) || awaitsTower(world, v)) return true;
+  if (isKnockedOut(v) || isShutDown(world, v) || isOnRope(world, v.id) || awaitsTower(world, v)) return true;
   return v.brain!.progress?.key !== progressKey(v);
 }
 

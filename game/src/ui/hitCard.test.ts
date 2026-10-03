@@ -21,6 +21,19 @@ function createDuel() {
 }
 
 describe('hover card rows', () => {
+  it('shows the shut-down turns the hovered truck has ahead, and nothing while it runs', () => {
+    const { world, them } = createDuel();
+    expect(hitCardRows(world, them.id)!.shutDown).toBeNull();
+    them.shutDown = { from: world.turn + 1, until: world.turn + 2 };
+    expect(hitCardRows(world, them.id)!.shutDown).toBe('Shut down: 2 turns left');
+  });
+
+  it('shows my guns as shut down while I am', () => {
+    const { world, me, them } = createDuel();
+    me.shutDown = { from: world.turn, until: world.turn + 1 };
+    expect(hitCardRows(world, them.id)!.mine[0]).toMatchObject({ odds: null, text: 'shut down' });
+  });
+
   it('shows my weapon odds from hitOdds with every cause', () => {
     const { world, me, them, mine } = createDuel();
     const o = hitOdds(world, me, mine, them, 'body');

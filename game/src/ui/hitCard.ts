@@ -8,7 +8,7 @@ import { playerVehicle } from '../sim/damage';
 import { harpoonBlock } from '../sim/harpoon';
 import { vehicleStats, type MountedWeapon } from '../sim/stats';
 import type { Aim, PartInstance, Vehicle, World } from '../sim/types';
-import { chargedParts, orderKindOf, utilityBlock } from '../sim/utility';
+import { chargedParts, orderKindOf, shutDownTurnsLeft, utilityBlock } from '../sim/utility';
 import { DEG } from '../sim/vec';
 import { wornDef } from '../sim/wear';
 import { el } from './dom';
@@ -16,7 +16,8 @@ import { ammoText, blockText, utilityBlockText, utilitySlots, UTILITY_SLOTS } fr
 
 // `cause` names the biggest reasons in plain words. `detail` holds every number, for a tooltip.
 export type HitRow = { label: string; odds: HitOdds | null; text: string; cause: string | null; detail: string | null };
-export type HitCardData = { name: string; mine: HitRow[]; theirs: HitRow[] };
+// shutDown: the shut-down turns the hovered truck still has ahead, as words, or null while it runs.
+export type HitCardData = { name: string; shutDown: string | null; mine: HitRow[]; theirs: HitRow[] };
 
 function deg(r: number): string {
   return (Math.abs(r) / DEG).toFixed(1);
@@ -98,8 +99,10 @@ export function hitCardRows(world: World, hoveredId: string): HitCardData | null
   if (hoveredId === me.id) return null;
   const it = world.vehicles.find((v) => v.id === hoveredId);
   if (!it) throw new Error(`No vehicle ${hoveredId} to hover`);
+  const left = shutDownTurnsLeft(world, it);
   return {
     name: it.name,
+    shutDown: left > 0 ? `Shut down: ${left} ${left === 1 ? 'turn' : 'turns'} left` : null,
     mine: [
       ...vehicleStats(world, me).weapons.map((mw, i) => row(world, me, mw, it, aimAt(me, mw, it), `[${i + 1}] ${mw.def.name}`)),
       ...truckUtilities(me).map((part) => utilityRow(world, me, part, it, slotName(world, part))),
@@ -133,7 +136,8 @@ export class HitCard {
         ...(r.cause ? [el('div', { class: 'hc-cause dim', title: r.detail ?? '' }, r.cause)] : []),
       ])),
     ];
-    this.root.replaceChildren(...section('You → it', card.mine), ...section('It → you', card.theirs));
+    const shutDown = card.shutDown ? [el('div', { class: 'hc-cause' }, card.shutDown)] : [];
+    this.root.replaceChildren(...shutDown, ...section('You → it', card.mine), ...section('It → you', card.theirs));
   }
 
   hide(): void {

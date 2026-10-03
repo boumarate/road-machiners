@@ -1,5 +1,5 @@
-// The views of the utility effects that lie in the world: smoke clouds, ground fields and harpoon lines. HazardViews
-// owns them and updates them each frame. Render only: they read the world and never change it.
+// The views of the utility effects that lie in the world: smoke clouds, ground fields, harpoon lines and emitter
+// pulses. HazardViews owns them and updates them each frame. Render only: they read the world and never change it.
 //
 // Smoke clouds from world.smoke: black puffs that fill each cloud's circle, with a dark ring on the ground at its edge.
 // A cloud does not drift, so the ring is exactly where shots through it start to scatter.
@@ -8,15 +8,20 @@
 // dark decal on the ground. Each has a ring at its edge, so the edge reads where wheels start to suffer.
 //
 // Shown: clouds and fields the player sees any part of, and the player's own.
+//
+// Emitter pulses from the turn's pulse events: a ring that sweeps out over the ground to the pulse's radius and
+// fades, where the player sees the user, a truck it hit or the player is involved. Trucks with shut-down turns ahead
+// crackle with sparks while they are drawn.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2, valueNoise } from '../../render/noise';
 import { heightAt, type Terrain } from '../../sim/terrain';
-import type { GroundField, SmokeCloud, World } from '../../sim/types';
+import type { GameEvent, GroundField, SmokeCloud, World } from '../../sim/types';
 import type { Vec } from '../../sim/vec';
 import { playerSees } from '../../sim/vision';
+import { pulseEffect, shutDownTurnsLeft } from '../../sim/utility';
 import { HarpoonLinesView } from './lines';
 import type { VehicleView } from './vehicle';
 import { GroundBand } from './zones';
@@ -28,17 +33,19 @@ export class HazardViews {
   private readonly smoke = new SmokeCloudsView();
   private readonly fields = new GroundFieldsView();
   private readonly lines = new HarpoonLinesView();
+  private readonly pulses = new PulseView();
   readonly root = new THREE.Group();
 
   constructor() {
-    this.root.add(this.smoke.root, this.fields.root, this.lines.root);
+    this.root.add(this.smoke.root, this.fields.root, this.lines.root, this.pulses.root);
   }
 
-  // views: the vehicle views by vehicle id, which the harpoon lines run between.
+  // views: the vehicle views by vehicle id, which the harpoon lines run between and shut-down trucks spark on.
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number): void {
     this.smoke.update(world, terrain, nowMs);
     this.fields.update(world, terrain);
     this.lines.update(world, views);
+    this.pulses.update(world, terrain, views, nowMs);
   }
 }
 
@@ -221,4 +228,119 @@ class GroundFieldsView {
     }
     return group;
   }
+}
+
+// ---- Emitter pulses
+
+const PULSE_ORDER = 906; // above smoke (905), below contact markers
+const PULSE_LOOK = {
+  sweepMs: 900, // the ring's time from the user out to the radius
+  width: 0.5, // tiles across the ring
+  opacity: 0.8, // at the start of the sweep, fading to 0 at its end
+  sparks: 10, // per shut-down truck
+  sparkSize: 0.35, // meters across a spark
+  sparkReach: 1.4, // meters from the truck's center a spark jumps to
+  sparkHeight: 0.6, // meters above the truck's center the sparks center on
+};
+
+type Ring = { band: GroundBand; pos: Vec; r: number; startMs: number };
+
+class PulseView {
+  readonly root = new THREE.Group();
+  private readonly rings: Ring[] = [];
+  private played = new Set<string>(); // pulse events of the shown turn whose ring has started
+  private turn = -1;
+  private readonly sparks = new Map<string, THREE.Points>(); // by vehicle id
+  private readonly sparkMaterial = new THREE.PointsMaterial({ color: PAL.pulse.spark, size: PULSE_LOOK.sparkSize, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+
+  update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number): void {
+    this.startRings(world, nowMs);
+    this.sweep(terrain, nowMs);
+    this.crackle(world, views);
+  }
+
+  private startRings(world: World, nowMs: number): void {
+    if (world.turn !== this.turn) {
+      this.turn = world.turn;
+      this.played = new Set();
+    }
+    for (const e of world.events) {
+      if (e.t !== 'pulse' || this.played.has(e.vehicle) || !pulseShown(world, e)) continue;
+      this.played.add(e.vehicle);
+      const band = new GroundBand({ color: PAL.pulse.ring, opacity: PULSE_LOOK.opacity, renderOrder: PULSE_ORDER, overTrucks: false });
+      this.root.add(band.mesh);
+      this.rings.push({ band, pos: e.pos, r: pulseEffect(world, e.vehicle).radius, startMs: nowMs });
+    }
+  }
+
+  // Each ring sweeps out with a fast start and fades; a finished ring is dropped.
+  private sweep(terrain: Terrain, nowMs: number): void {
+    for (const ring of [...this.rings]) {
+      const t = (nowMs - ring.startMs) / PULSE_LOOK.sweepMs;
+      if (t >= 1) {
+        this.root.remove(ring.band.mesh);
+        ring.band.dispose();
+        this.rings.splice(this.rings.indexOf(ring), 1);
+        continue;
+      }
+      const outer = Math.max(PULSE_LOOK.width, ring.r * (1 - (1 - t) ** 2));
+      ring.band.set(terrain, ring.pos, outer - PULSE_LOOK.width, outer);
+      ring.band.mesh.material.opacity = PULSE_LOOK.opacity * (1 - t);
+    }
+  }
+
+  // Sparks jump to new spots around each drawn truck with shut-down turns ahead, every frame.
+  private crackle(world: World, views: ReadonlyMap<string, VehicleView>): void {
+    const shut = shutDownViews(world, views);
+    for (const [id, points] of this.sparks) {
+      if (shut.has(id)) continue;
+      this.root.remove(points);
+      points.geometry.dispose();
+      this.sparks.delete(id);
+    }
+    for (const [id, view] of shut) jump(this.sparksOf(id), view.center());
+  }
+
+  private sparksOf(id: string): THREE.Points {
+    const known = this.sparks.get(id);
+    if (known) return known;
+    const geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(PULSE_LOOK.sparks * 3), 3));
+    const points = new THREE.Points(geometry, this.sparkMaterial);
+    points.renderOrder = PULSE_ORDER;
+    points.frustumCulled = false;
+    this.root.add(points);
+    this.sparks.set(id, points);
+    return points;
+  }
+}
+
+// The drawn trucks with shut-down turns ahead, by vehicle id.
+function shutDownViews(world: World, views: ReadonlyMap<string, VehicleView>): Map<string, VehicleView> {
+  const shut = new Map<string, VehicleView>();
+  for (const v of world.vehicles) {
+    const view = views.get(v.id);
+    if (view && shutDownTurnsLeft(world, v) > 0) shut.set(v.id, view);
+  }
+  return shut;
+}
+
+// The player sees a pulse it fired or that hit it, or one whose user or a hit truck it sees.
+function pulseShown(world: World, e: Extract<GameEvent, { t: 'pulse' }>): boolean {
+  const me = world.player.vehicleId;
+  if (e.vehicle === me || e.hit.includes(me) || playerSees(world, e.pos)) return true;
+  return e.hit.some((id) => {
+    const v = world.vehicles.find((x) => x.id === id);
+    return v !== undefined && playerSees(world, v.pos);
+  });
+}
+
+// Scatters the sparks around a truck's center. Render only, so Math.random() is fine: sparks need no repeatable pattern.
+function jump(points: THREE.Points, at: { x: number; y: number; z: number }): void {
+  const position = points.geometry.getAttribute('position');
+  for (let i = 0; i < position.count; i++) {
+    const a = Math.random() * 2 * Math.PI;
+    const r = Math.random() * PULSE_LOOK.sparkReach;
+    position.setXYZ(i, at.x + Math.cos(a) * r, at.y + PULSE_LOOK.sparkHeight * Math.random(), at.z + Math.sin(a) * r);
+  }
+  position.needsUpdate = true;
 }
