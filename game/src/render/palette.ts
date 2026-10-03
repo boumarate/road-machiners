@@ -38,6 +38,7 @@ export const PAL = {
   lamp: { on: 0xfff2c8, off: 0x8a8470 }, // headlight glass, lit at night
   radioLight: { on: 0xff3020, off: 0x4a1a14 }, // antenna bulb, lit while the truck is on the radio
   truckGlow: 0xffffff, // faint white light over the player truck at night
+  reactorGlow: 0x7cff5a, // the Fallen Sun reactor core and the light it throws
   text: '#f0e0b8',
   textDim: '#b8a888',
   damageText: '#ff4a3a', // damage popups over a hit truck
