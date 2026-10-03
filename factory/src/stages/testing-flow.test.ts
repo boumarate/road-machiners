@@ -5,7 +5,19 @@ import { EMPTY_STATE, readState, writeState } from '../state';
 import type { AgentRun, Ctx } from '../types';
 
 vi.mock('../deploy', () => ({ checkScope: () => undefined, publishBuild: (_ctx: unknown, _clone: string, scope: string) => `https://play.test/${scope}/`, recordBuild: () => undefined }));
-const { runStage, approvalCaption, approvalButtons } = await import('./testing');
+const { runStage: runChecks, approvalCaption, approvalButtons } = await import('./checks');
+const { runStage: runVerify } = await import('./verify');
+
+// Runs the Testing column the way the tick does: verify or checks by the card's phase, until the card leaves Testing.
+// Verify, checks, the fix round and the second checks make four jobs at most.
+async function runStage(ctx: Ctx, issue: number): Promise<void> {
+  for (let job = 0; job < 4; job += 1) {
+    const phase = readState(ctx.statePath).testPhase[String(issue)];
+    await (phase === 'checks' || phase === 'checks-after-fix' ? runChecks(ctx, issue) : runVerify(ctx, issue));
+    if (!(String(issue) in readState(ctx.statePath).testPhase)) return;
+  }
+  throw new Error(`Testing of #${issue} did not leave the column in four jobs`);
+}
 
 let home = '';
 let calls: string[] = [];
@@ -230,10 +242,33 @@ describe('testing stage', () => {
     expect(models).toEqual(['opus', 'opus']);
   });
 
-  it('stops after the checks fail twice', async () => {
+  it('stops after the checks fail twice, and clears the phase so a retry starts from verify', async () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })), 2);
     await expect(runStage(ctx, 7)).rejects.toThrow('The factory checks failed twice');
     expect(calls).not.toContain('move 7 Approval');
+    expect(readState(ctx.statePath).testPhase).toEqual({});
+  });
+
+  it('runs no agent in a checks job, and hands a first failure to verify without throwing', async () => {
+    const agents: string[] = [];
+    const ctx = fakeCtx((run) => { agents.push(run.prompt); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); }, 1);
+    await runVerify(ctx, 7);
+    expect(readState(ctx.statePath).testPhase).toEqual({ 7: 'checks' });
+    const before = agents.length;
+    await runChecks(ctx, 7);
+    expect(agents).toHaveLength(before);
+    expect(readState(ctx.statePath).testPhase).toEqual({ 7: 'fix' });
+    expect(calls).not.toContain('move 7 Approval');
+    await runVerify(ctx, 7);
+    expect(agents.at(-1)).toContain('second round');
+    expect(readState(ctx.statePath).testPhase).toEqual({ 7: 'checks-after-fix' });
+    await runChecks(ctx, 7);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+    expect(readState(ctx.statePath).testPhase).toEqual({});
+  });
+
+  it('refuses checks for a card verify has not finished', async () => {
+    await expect(runChecks(fakeCtx(() => undefined), 7)).rejects.toThrow('not ready for checks, its test phase is none');
   });
 
   describe('review round', () => {

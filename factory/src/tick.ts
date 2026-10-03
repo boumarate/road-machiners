@@ -14,13 +14,13 @@ import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Queue, Run 
 export type JobPick = { stage: JobStage; issue: number | null };
 // A candidate job and whether it may start at the daily cap.
 type Candidate = JobPick & { uncapped: boolean };
-type Due = Pick<FactoryConfig, 'releaseDays' | 'maxJobsPerDay' | 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'testWorkers'>;
+type Due = Pick<FactoryConfig, 'releaseDays' | 'maxJobsPerDay' | 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'verifyWorkers' | 'testWorkers'>;
 
 const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
 // Committee-driven jobs never count against the daily cap.
 const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev'];
-const CARD_ORDER: [Card['column'], JobStage][] = [['Testing', 'testing'], ['Implementation', 'implement'], ['Design', 'design'], ['Triage', 'triage']];
+const CARD_ORDER: Card['column'][] = ['Testing', 'Implementation', 'Design', 'Triage'];
 
 function isDue(last: string | null, now: Date, everyMs: number): boolean {
   return last === null || now.getTime() - new Date(last).getTime() > everyMs;
@@ -49,8 +49,21 @@ function openCards(cards: Card[]): Card[] {
 }
 
 // Furthest along first, lowest issue first.
-function byProgress(cards: Card[]): JobPick[] {
-  return CARD_ORDER.flatMap(([column, stage]) => cards.filter((card) => card.column === column).sort((a, b) => a.issue - b.issue).map((card) => ({ stage, issue: card.issue })));
+function byProgress(state: FactoryState, cards: Card[]): JobPick[] {
+  return CARD_ORDER.flatMap((column) => cards.filter((card) => card.column === column).sort((a, b) => a.issue - b.issue).map((card) => ({ stage: cardStage(state, card), issue: card.issue })));
+}
+
+// The card job of a column in CARD_ORDER.
+function cardStage(state: FactoryState, card: Card): JobStage {
+  if (card.column === 'Testing') return testingStage(state, card.issue);
+  if (card.column === 'Implementation') return 'implement';
+  return card.column === 'Design' ? 'design' : 'triage';
+}
+
+// A Testing card runs the factory checks once verify or a patch set its phase, and verify otherwise.
+function testingStage(state: FactoryState, issue: number): JobStage {
+  const phase = state.testPhase[String(issue)];
+  return phase === 'checks' || phase === 'checks-after-fix' ? 'checks' : 'verify';
 }
 
 const has = (label: string) => (card: Card): boolean => card.labels.includes(label);
@@ -58,13 +71,13 @@ const lacks = (label: string) => (card: Card): boolean => !card.labels.includes(
 
 // Card jobs in order: hotfixes, ad hoc tasks, release tasks, then the rest. The tracking issue card only waits for Ship, so it never gets a card job.
 // A shipped bug waits for nothing else, and a hotfix card runs at the cap too, since the committee chose it.
-function cardCandidates(cards: Card[]): Candidate[] {
+function cardCandidates(state: FactoryState, cards: Card[]): Candidate[] {
   const open = openCards(cards).filter(lacks(RELEASE_LABEL));
-  const hotfix = byProgress(open.filter(has(HOTFIX_LABEL))).map((pick) => ({ ...pick, uncapped: true }));
+  const hotfix = byProgress(state, open.filter(has(HOTFIX_LABEL))).map((pick) => ({ ...pick, uncapped: true }));
   const rest = open.filter(lacks(HOTFIX_LABEL));
   const adhoc = rest.filter((card) => card.column === 'Implementation' && has(ADHOC_LABEL)(card)).sort((a, b) => a.issue - b.issue).map((card) => ({ stage: 'adhoc' as const, issue: card.issue }));
   const work = rest.filter(lacks(ADHOC_LABEL));
-  const normal = [...adhoc, ...byProgress(work.filter(has(RELEASE_TASK_LABEL))), ...byProgress(work.filter(lacks(RELEASE_TASK_LABEL)))];
+  const normal = [...adhoc, ...byProgress(state, work.filter(has(RELEASE_TASK_LABEL))), ...byProgress(state, work.filter(lacks(RELEASE_TASK_LABEL)))];
   return [...hotfix, ...normal.map((pick) => ({ ...pick, uncapped: !countsAgainstCap(pick.stage) }))];
 }
 
@@ -107,7 +120,7 @@ export function atCap(state: FactoryState, now: Date, cfg: Pick<FactoryConfig, '
 }
 
 function limits(cfg: Due): Record<Queue, number> {
-  return { branch: 1, triage: cfg.triageWorkers, design: cfg.designWorkers, implement: cfg.implementWorkers, test: cfg.testWorkers };
+  return { branch: 1, triage: cfg.triageWorkers, design: cfg.designWorkers, implement: cfg.implementWorkers, verify: cfg.verifyWorkers, test: cfg.testWorkers };
 }
 
 // A job fits when its queue has a free worker and no other job works on its issue.
@@ -122,7 +135,7 @@ function fits(pick: JobPick, running: JobPick[], cfg: Due): boolean {
 export function chooseJobs(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): JobPick[] {
   let capLeft = cfg.maxJobsPerDay - recentStarts(state, now).length;
   const chosen: JobPick[] = [];
-  for (const candidate of [...branchCandidates(state, cards, now, cfg, devHead), ...cardCandidates(cards)]) {
+  for (const candidate of [...branchCandidates(state, cards, now, cfg, devHead), ...cardCandidates(state, cards)]) {
     const pick = { stage: candidate.stage, issue: candidate.issue };
     const capped = candidate.uncapped ? 0 : 1;
     if (capped > capLeft || !fits(pick, [...state.jobs, ...chosen], cfg)) continue;

@@ -2,9 +2,10 @@
 
 export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Approval' | 'Done';
 
-export type CardStage = 'triage' | 'design' | 'implement' | 'testing';
+// Stages that run agents on a card. Verify is the agent half of the Testing column.
+export type CardStage = 'triage' | 'design' | 'implement' | 'verify';
 export type ReleaseStage = 'release' | 'candidate' | 'ship' | 'remove';
-export type Stage = CardStage | ReleaseStage | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'intake' | 'tick';
+export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'intake' | 'tick';
 
 export type FactoryConfig = {
   repo: string; // "owner/name" on GitHub
@@ -35,6 +36,7 @@ export type FactoryConfig = {
   triageWorkers: number; // jobs of the triage queue that run at once
   designWorkers: number; // jobs of the design queue that run at once
   implementWorkers: number; // jobs of the implement queue that run at once
+  verifyWorkers: number; // jobs of the verify queue that run at once
   testWorkers: number; // jobs of the test queue that run at once
 };
 
@@ -62,20 +64,20 @@ export type Card = { itemId: string; issue: number; column: Column; labels: stri
 // A job is one detached `factory run` process. `issue` is null for the release cut and a change id for change.
 // Candidate and ship carry the tracking issue, remove the issue of the feature to take out. Dev rebuilds /dev/ and has no issue.
 // An incident job carries the issue of a shipped bug fix.
-export type JobStage = CardStage | ReleaseStage | 'approve' | 'change' | 'adhoc' | 'incident' | 'dev';
+export type JobStage = CardStage | ReleaseStage | 'checks' | 'approve' | 'change' | 'adhoc' | 'incident' | 'dev';
 // `id` names the job's containers, so a kill stops only its own.
 export type Job = { id: string; stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
 
 // Jobs run in parallel up to a limit per queue.
 // The branch queue moves dev, main and the release, or rebuilds a shared build, so it runs one job at a time.
-// Triage, design and implement each get their own queue, so a short triage never waits behind a long build.
-// The test queue builds the game and plays it in a browser, which is heavy.
-export type Queue = 'branch' | 'triage' | 'design' | 'implement' | 'test';
+// Triage, design, implement and verify each get their own queue, so a short triage never waits behind a long build.
+// The test queue runs only the factory's checks: it builds the game and plays it in a browser, which loads the CPU. It runs no agent.
+export type Queue = 'branch' | 'triage' | 'design' | 'implement' | 'verify' | 'test';
 // Queues whose jobs only run agents in work clones, with no deploy or branch move.
-export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement'];
+export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement', 'verify'];
 export const QUEUE_OF: Record<JobStage, Queue> = {
-  triage: 'triage', design: 'design', implement: 'implement', adhoc: 'implement',
-  testing: 'test',
+  triage: 'triage', design: 'design', implement: 'implement', adhoc: 'implement', verify: 'verify',
+  checks: 'test',
   // An incident job pushes dev, and two of them at once would pick the same log id.
   approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', change: 'branch', incident: 'branch',
 };
@@ -117,7 +119,12 @@ export type FactoryState = {
   devBuild: string | null; // short hash of dev that /dev/ serves
   devFailed: string | null; // short hash of dev whose build failed. The tick skips it until dev moves or Hermes clears it.
   interrupted: number[]; // issues whose job process died and got one resume. The next job on the issue continues its agents' sessions, and its end clears the issue.
+  testPhase: Record<string, TestPhase>; // issue number -> where its Testing card stands. No entry means verify runs next.
 };
+
+// `checks`: verify or a patch is done, the factory checks run next. `fix`: the checks failed once, verify runs the fix round.
+// `checks-after-fix`: the checks run again, and a second failure stops the card.
+export type TestPhase = 'checks' | 'fix' | 'checks-after-fix';
 
 export interface GitHub {
   candidates(labels: string[]): Promise<Issue[]>;

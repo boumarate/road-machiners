@@ -137,10 +137,11 @@ describe('approve', () => {
     expect(readState(`${home}/state.json`).approvedResolving).toEqual({});
   });
 
-  it('clears a kept approver once the merge lands', async () => {
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, approvedResolving: { 7: 'bob', 8: 'ann' } });
+  it('clears a kept approver and a leftover test phase once the merge lands', async () => {
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, approvedResolving: { 7: 'bob', 8: 'ann' }, testPhase: { 7: 'checks', 8: 'fix' } });
     await approve(fakeCtx(), 7, 'bob');
     expect(readState(`${home}/state.json`).approvedResolving).toEqual({ 8: 'ann' });
+    expect(readState(`${home}/state.json`).testPhase).toEqual({ 8: 'fix' });
   });
 
   it('refuses a hotfix without itch.io keys before any git call', async () => {

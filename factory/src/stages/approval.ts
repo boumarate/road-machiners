@@ -20,7 +20,9 @@ function forgetPosts(ctx: Ctx, issue: number, dropPending: boolean): void {
     delete builds[String(issue)];
     const approvedResolving = { ...state.approvedResolving };
     delete approvedResolving[String(issue)];
-    return { ...state, approvalPosts, pendingApprovals, builds, approvedResolving };
+    const testPhase = { ...state.testPhase };
+    delete testPhase[String(issue)];
+    return { ...state, approvalPosts, pendingApprovals, builds, approvedResolving, testPhase };
   });
 }
 

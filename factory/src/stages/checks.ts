@@ -4,10 +4,10 @@ import { postWithEvidence } from '../evidence-post';
 import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
 import { readState, updateState } from '../state';
-import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type InlineButton } from '../types';
+import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, type Ctx, type InlineButton, type TestPhase } from '../types';
 import { bundleOf } from './bundle';
-import { reviewGate } from './review';
-import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir } from './common';
+import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, workDir } from './common';
+import { readApproval, setPhase, type Approval } from './verify';
 
 // Each step logs its start time, so the log shows where the time goes.
 // The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
@@ -44,36 +44,46 @@ SAVE_SCOPE="$BUILD_SCOPE" npm run build
 step "done"
 `;
 
-export type Approval = { description: string; howToTry: string };
-
+// The machine half of testing. It runs no agent, so it holds the test slot only for the checks and the build.
+// It checks the branch head that verify or a patch pushed, with the approval and evidence they left in the work clone.
+// A first failure hands the card to verify for one fix round. A failure after that fix stops the card.
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
+  const phase = checksPhase(ctx, issue);
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   const item = await ctx.github.issue(issue);
   const base = baseBranchFor(ctx, item.labels);
-  await ctx.repo.prepareWorkClone(BRANCH(issue), base, workDir(ctx, issue));
-  prepareOutputs(ctx, issue, home);
-  const merged = await mergeBase(ctx, issue, base, home);
-  let evidence = await agentRound(ctx, issue, 'test', 'test', base);
-  await requireBaseMerged(ctx, issue, base, merged);
-  // A fix round changes the code, so its evidence replaces the first round's.
-  if (!(await reviewGate(ctx, issue, base, async () => { evidence = await agentRound(ctx, issue, 'test-fix', 'review-fix', base); }))) return;
-  let build = await ctx.repo.headHash(BRANCH(issue));
-  const failure = await runChecks(ctx, issue, base, build);
-  // The agent gets one round to fix what the factory's own checks found. A second failure stops the card.
-  if (failure !== null) {
-    writeFileSync(`${home}/${OUT_DIR}/check-failure.md`, failure);
-    evidence = await agentRound(ctx, issue, 'test-fix', 'checks-fix', base);
-    build = await ctx.repo.headHash(BRANCH(issue));
-    const again = await runChecks(ctx, issue, base, build);
-    if (again !== null) throw new Error(`The factory checks failed twice.\n${again}`);
-  }
   const approval = readApproval(home);
+  const build = await ctx.repo.headHash(BRANCH(issue));
+  const evidence = readEvidence(home, build);
+  const failure = await runChecks(ctx, issue, base, build);
+  if (failure !== null) return failed(ctx, issue, home, phase, failure);
   const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
   const approver = approvedAlready(ctx, issue, item.labels);
   if (approver === null) await post(ctx, issue, approval, evidence, url, base);
+  clearPhase(ctx, issue);
   await ctx.github.move(issue, 'Approval');
   if (approver !== null) queueMerge(ctx, issue, approver);
+}
+
+function checksPhase(ctx: Ctx, issue: number): TestPhase {
+  const phase = readState(ctx.statePath).testPhase[String(issue)];
+  if (phase !== 'checks' && phase !== 'checks-after-fix') throw new Error(`Issue #${issue} is not ready for checks, its test phase is ${phase ?? 'none'}`);
+  return phase;
+}
+
+// The phase goes on a second failure too, so a retry after Hermes clears the stuck label starts again from verify.
+async function failed(ctx: Ctx, issue: number, home: string, phase: TestPhase, failure: string): Promise<void> {
+  if (phase === 'checks-after-fix') {
+    clearPhase(ctx, issue);
+    throw new Error(`The factory checks failed twice.\n${failure}`);
+  }
+  writeFileSync(`${home}/${OUT_DIR}/check-failure.md`, failure);
+  setPhase(ctx, issue, 'fix');
+}
+
+function clearPhase(ctx: Ctx, issue: number): void {
+  updateState(ctx.statePath, (state) => ({ ...state, testPhase: omit(state.testPhase, issue) }));
 }
 
 // Who approved the card before this round, or null when it needs a committee post.
@@ -87,46 +97,7 @@ function approvedAlready(ctx: Ctx, issue: number, labels: string[]): string | nu
 // The merge runs as an approve job in the branch queue, like a member's approval, so it never races another branch job.
 function queueMerge(ctx: Ctx, issue: number, by: string): void {
   updateState(ctx.statePath, (state) => ({ ...state, pendingApprovals: { ...state.pendingApprovals, [String(issue)]: by } }));
-  ctx.log('testing', issue, `approved by ${by} already, merge queued`);
-}
-
-// The base moved on since design cut the branch. Testing runs on the branch with the current base merged in,
-// so the committee plays what approve will merge, and conflicts reach the agent here instead of failing approve.
-// Returns the base commit it merged.
-async function mergeBase(ctx: Ctx, issue: number, base: string, home: string): Promise<string> {
-  await ctx.repo.fetch();
-  const { commit, conflicts } = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
-  if (conflicts.length > 0) writeFileSync(`${home}/${OUT_DIR}/merge-conflicts.md`, `${conflicts.map((file) => `- ${file}`).join('\n')}\n`);
-  return commit;
-}
-
-// Checks the commit merged above, not the base branch. A parallel approval may move the base on meanwhile, and approve merges that newer base anyway.
-async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: string): Promise<void> {
-  if (!(await ctx.repo.isMerged(commit, BRANCH(issue)))) throw new Error(`The testing agent left the merge of ${base} at ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
-}
-
-// Returns the evidence of the round, checked against the branch head the round left. A round that changed code must capture again.
-// `round` names the session, so the review's fix and the checks' fix each resume their own conversation.
-async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'test-fix', round: 'test' | 'review-fix' | 'checks-fix', base: string): Promise<Evidence> {
-  await runAgent(ctx, issue, 'testing', round, fillPrompt(prompt, { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
-  const home = agentHome(workDir(ctx, issue), GAME_DIR);
-  throwIfNeedsCommittee(home);
-  readApproval(home);
-  await guardAndPush(ctx, issue, base, 'testing');
-  return readEvidence(home, await ctx.repo.headHash(BRANCH(issue)));
-}
-
-function readApproval(home: string): Approval {
-  const raw = readOutput(home, 'approval.json');
-  if (raw === null) throw new Error('The testing stage wrote no .factory/approval.json');
-  if (readOutput(home, 'screenshot.png') === null) throw new Error('The testing stage wrote no .factory/screenshot.png');
-  return parseApproval(JSON.parse(raw));
-}
-
-function parseApproval(data: unknown): Approval {
-  const { description, howToTry } = (data ?? {}) as Record<string, unknown>;
-  if (typeof description !== 'string' || typeof howToTry !== 'string') throw new Error('.factory/approval.json needs string fields description and howToTry');
-  return { description, howToTry };
+  ctx.log('checks', issue, `approved by ${by} already, merge queued`);
 }
 
 function checkDir(ctx: Ctx, issue: number): string {

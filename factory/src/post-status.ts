@@ -1,5 +1,5 @@
 import type { InboxCommand } from './inbox';
-import { CAPTION_LIMIT, cut } from './stages/testing';
+import { CAPTION_LIMIT, cut } from './stages/checks';
 import { readState, updateState } from './state';
 import type { Ctx, FactoryState } from './types';
 

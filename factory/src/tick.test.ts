@@ -9,7 +9,7 @@ import { EMPTY_STATE, readState, writeState } from './state';
 import { FACTORY_MARK, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type ReleaseState, type Ctx, type IssueComment, type FactoryState, type Job } from './types';
 
 const NOW = new Date('2026-01-10T12:00:00Z');
-const CFG = { releaseDays: 7, maxJobsPerDay: 3, triageWorkers: 3, designWorkers: 3, implementWorkers: 3, testWorkers: 1 };
+const CFG = { releaseDays: 7, maxJobsPerDay: 3, triageWorkers: 3, designWorkers: 3, implementWorkers: 3, verifyWorkers: 1, testWorkers: 1 };
 // One worker per agent queue, so a test sees which card each queue prefers.
 const ONE = { ...CFG, triageWorkers: 1, designWorkers: 1, implementWorkers: 1 };
 const DEV = 'dev0001';
@@ -113,7 +113,7 @@ describe('chooseJobs', () => {
 
   it('runs a hotfix card before ad hoc work and other cards, at the cap too', () => {
     const cards = [card(2, 'Implementation', ['adhoc']), card(3, 'Testing'), card(9, 'Design', ['bug', 'hotfix']), card(8, 'Design', ['hotfix', 'factory-stuck'])];
-    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'design', issue: 9 }, { stage: 'adhoc', issue: 2 }, { stage: 'testing', issue: 3 }]);
+    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'design', issue: 9 }, { stage: 'adhoc', issue: 2 }, { stage: 'verify', issue: 3 }]);
     expect(chooseJobs(state({ jobStarts: starts(23, 5, 1) }), cards, NOW, CFG)).toEqual([{ stage: 'design', issue: 9 }, { stage: 'adhoc', issue: 2 }]);
   });
 
@@ -122,11 +122,11 @@ describe('chooseJobs', () => {
   });
 
   it('fills each queue up to its limit beside running jobs, never twice on one issue', () => {
-    const s = state({ jobs: [running('design', 1), running('testing', 7), running('approve', 9)], pendingChanges: [{ id: 3, text: 't', by: 'u' }] });
+    const s = state({ jobs: [running('design', 1), running('verify', 7), running('approve', 9)], pendingChanges: [{ id: 3, text: 't', by: 'u' }] });
     const cards = [card(1, 'Design'), card(2, 'Design'), card(8, 'Testing'), card(4, 'Triage'), card(5, 'Triage')];
     expect(chooseJobs(s, cards, NOW, { ...CFG, maxJobsPerDay: 10 })).toEqual([{ stage: 'design', issue: 2 }, { stage: 'triage', issue: 4 }, { stage: 'triage', issue: 5 }]);
     const idle = state({ jobs: [running('design', 1)] });
-    expect(chooseJobs(idle, cards, NOW, { ...CFG, maxJobsPerDay: 10, testWorkers: 2, designWorkers: 1 })).toEqual([{ stage: 'testing', issue: 8 }, { stage: 'triage', issue: 4 }, { stage: 'triage', issue: 5 }]);
+    expect(chooseJobs(idle, cards, NOW, { ...CFG, maxJobsPerDay: 10, testWorkers: 2, designWorkers: 1 })).toEqual([{ stage: 'verify', issue: 8 }, { stage: 'triage', issue: 4 }, { stage: 'triage', issue: 5 }]);
   });
 
   it('counts each counted pick against the cap slots left', () => {
@@ -155,7 +155,7 @@ describe('chooseJobs', () => {
 
   it('picks the card furthest along, lowest issue first, per queue', () => {
     const cards = [card(1, 'Design'), card(5, 'Implementation'), card(7, 'Testing'), card(6, 'Testing')];
-    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'testing', issue: 6 }, { stage: 'implement', issue: 5 }, { stage: 'design', issue: 1 }]);
+    expect(chooseJobs(state(), cards, NOW, ONE)).toEqual([{ stage: 'verify', issue: 6 }, { stage: 'implement', issue: 5 }, { stage: 'design', issue: 1 }]);
     expect(chooseJobs(state(), cards.slice(0, 1), NOW, ONE)).toEqual([{ stage: 'design', issue: 1 }]);
   });
 
@@ -244,17 +244,33 @@ describe('tick', () => {
   it('starts the chosen jobs and records each with its id', async () => {
     const h = harness(null, false, [card(8, 'Implementation'), card(9, 'Testing')]);
     await tick(h.ctx, '/code', h.deps);
-    expect(h.spawned).toEqual([['testing', '9', 'testing-9-2026-01-10T120000.000Z'], ['implement', '8', 'implement-8-2026-01-10T120000.000Z']]);
+    expect(h.spawned).toEqual([['verify', '9', 'verify-9-2026-01-10T120000.000Z'], ['implement', '8', 'implement-8-2026-01-10T120000.000Z']]);
     const started = readState(h.ctx.statePath).jobs;
     expect(started[1]).toMatchObject({ id: 'implement-8-2026-01-10T120000.000Z', stage: 'implement', issue: 8, pid: 77 });
     expect(started[1].log).toMatch(/logs\/implement-8-2026-01-10T120000\.000Z\.log$/);
   });
 
-  it('skips build cleanup while a testing or branch job runs', async () => {
-    const h = harness(job('2026-01-10T11:50:00Z', 'testing', 9), true, []);
+  it('skips build cleanup while a checks or branch job runs, not while a verify agent runs', async () => {
+    const h = harness(job('2026-01-10T11:50:00Z', 'checks', 9), true, []);
     mkdirSync(join(h.ctx.cfg.webRoot, 'fresh01'), { recursive: true });
     await tick(h.ctx, '/code', h.deps);
     expect(existsSync(join(h.ctx.cfg.webRoot, 'fresh01'))).toBe(true);
+    const agent = harness(job('2026-01-10T11:50:00Z', 'verify', 9), true, []);
+    mkdirSync(join(agent.ctx.cfg.webRoot, 'fresh01'), { recursive: true });
+    await tick(agent.ctx, '/code', agent.deps);
+    expect(existsSync(join(agent.ctx.cfg.webRoot, 'fresh01'))).toBe(false);
+  });
+
+  it('picks verify for a Testing card with no phase or a fix phase, and checks once verify is done', () => {
+    const cards = [card(1, 'Testing'), card(2, 'Testing'), card(3, 'Testing'), card(4, 'Testing')];
+    const phases = state({ testPhase: { 2: 'checks', 3: 'fix', 4: 'checks-after-fix' } });
+    const picks = chooseJobs(phases, cards, NOW, { ...CFG, maxJobsPerDay: 10, verifyWorkers: 2, testWorkers: 2 });
+    expect(picks).toEqual([{ stage: 'verify', issue: 1 }, { stage: 'checks', issue: 2 }, { stage: 'verify', issue: 3 }, { stage: 'checks', issue: 4 }]);
+  });
+
+  it('runs a checks job beside a verify agent, one per queue', () => {
+    const picks = chooseJobs(state({ testPhase: { 2: 'checks', 3: 'checks' } }), [card(1, 'Testing'), card(2, 'Testing'), card(3, 'Testing'), card(5, 'Testing')], NOW, { ...CFG, maxJobsPerDay: 10 });
+    expect(picks).toEqual([{ stage: 'verify', issue: 1 }, { stage: 'checks', issue: 2 }]);
   });
 
   it('starts a /dev/ rebuild when origin dev moved past the build', async () => {
@@ -377,8 +393,8 @@ describe('tick', () => {
     });
 
     it('resumes a test job too', async () => {
-      const h = harness(job(IN_TIME, 'testing', 5), false);
-      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME, 'testing', 5)] }));
+      const h = harness(job(IN_TIME, 'verify', 5), false);
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME, 'verify', 5)] }));
       await tick(h.ctx, '/code', h.deps);
       expect(readState(h.ctx.statePath)).toMatchObject({ interrupted: [5], failures: [], jobs: [] });
     });

@@ -9,7 +9,7 @@ import { tick } from './tick';
 import { guardTick } from './tick-guard';
 import type { JobStage } from './types';
 
-const JOB_STAGES: JobStage[] = ['triage', 'design', 'implement', 'testing', 'release', 'candidate', 'ship', 'remove', 'approve', 'change', 'adhoc', 'incident', 'dev'];
+const JOB_STAGES: JobStage[] = ['triage', 'design', 'implement', 'verify', 'checks', 'release', 'candidate', 'ship', 'remove', 'approve', 'change', 'adhoc', 'incident', 'dev'];
 
 // The process env wins, like loadEnvFile, so a job keeps what its tick passed down.
 function loadEnv(): void {
