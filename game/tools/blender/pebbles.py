@@ -16,7 +16,7 @@ from kit import Kit, parse_args  # noqa: E402
 from shapes import taper  # noqa: E402
 
 COLORS = {
-    "pebble": 0x9C7C54,  # PAL.pebble
+    "pebble": 0xB8AB9C,  # PAL.pebble
     "pebble_pale": 0x8A847D,  # PAL.stoneGrey, a cool grey stone beside the tan ones
     "pebble_dark": 0xB47F5D,  # PAL.stone.side
 }

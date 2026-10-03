@@ -36,7 +36,7 @@ const SCRUB_ON_SHOULDER = 0.1;
 const CACTUS_ON_DESERT = 0.02; // share of open desert tiles with a cactus, at full desert weight. Sparse, as trucks pass through.
 const CACTUS_BY_ROCK = 0.12; // share of desert tiles by a rock or crag with a cactus, at full desert weight
 // Big enough to read at the default zoom, small enough that a truck driving over them does not look like a crash.
-const PEBBLE_RADIUS = { min: 0.04, max: 0.09 }; // tiles
+const PEBBLE_RADIUS = { min: 0.07, max: 0.14 }; // tiles, so the main stone is 0.2-0.4 m across as in the reference
 const SCRUB_RADIUS = { min: 0.15, max: 0.24 }; // tiles, a clump 1.2-1.9 m across as in the reference
 const CACTUS_HEIGHT = { min: 1.1, max: 1.8 }; // meters, under the truck clearance so driving through does not look like a crash
 const TINT = { min: 0.85, max: 1.15 };

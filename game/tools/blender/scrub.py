@@ -18,9 +18,9 @@ from kit import Kit, parse_args  # noqa: E402
 from shapes import strut  # noqa: E402
 
 COLORS = {
-    "core": 0x7C8452,  # PAL.brush[0], dark stems in the middle of the clump
-    "stem": 0x8C9864,  # PAL.brush[1], the olive body
-    "tip": 0xA4A264,  # PAL.brush[2], dry stems at the rim that catch the light
+    "core": 0xA4AC70,  # PAL.brush[0], dark stems in the middle of the clump
+    "stem": 0xB4C084,  # PAL.brush[1], the olive body
+    "tip": 0xC8C484,  # PAL.brush[2], dry stems at the rim that catch the light
 }
 SEED = 29
 STEMS = 28
