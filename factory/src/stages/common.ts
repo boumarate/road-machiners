@@ -58,7 +58,7 @@ export async function writeIssueInput(ctx: Ctx, issue: number, home: string): Pr
   writeFileSync(`${home}/${OUT_DIR}/issue.md`, `${parts.join('\n\n')}\n`);
 }
 
-async function issueText(ctx: Ctx, issue: number, heading: string): Promise<string[]> {
+export async function issueText(ctx: Ctx, issue: number, heading: string): Promise<string[]> {
   const [item, comments] = await Promise.all([ctx.github.issue(issue), ctx.github.comments(issue)]);
   return [`${heading} ${item.title}`, item.body, ...comments.flatMap((comment) => [`${heading}# Comment by ${comment.login}`, comment.body])];
 }

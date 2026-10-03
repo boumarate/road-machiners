@@ -178,3 +178,32 @@ Approach: four phases on shared files, run in order by one implementer. The ledg
 - IF1 — `appendLedger`, `takeUsage`, `LedgerLine` in `src/ledger.ts`.
 - IF2 — `state.testPhase` and `TestPhase` in `src/types.ts`.
 - IF3 — inbox kinds `reply`, `route`, `patch`, `redesign`, `waste-change` and the `factory_route_reply` tool arguments.
+
+## Verify
+
+Result: passed
+
+Happy-path:
+- CK1 (AS3) — the ledger misreads a real agent transcript — held: `usageFromOutput` on a real `result` line from the server gave cost $3.20. The design, implement and testing logs of #131 and #128 each end with a `result` line.
+- CK2 — the other Hermes `pre_gateway_dispatch` hook swallows the rewrite — held: `hermes-session-reset-policy` returns None on every path, and the gateway skips non-dict results.
+
+Negative:
+- CK3 — a patch for a card with no recorded build leaves a half route behind — broke, fixed: it commented "routed as patch" and wrote a ledger line before it threw. `routeFeedback` now checks the build first. Test: `approval.test.ts` "refuses a patch ... before it comments".
+- CK4 (IV8) — a reply still waiting for Hermes outlives its post — broke, fixed: Approve or Deny left it in `unroutedReplies`, so 15 min later it became a false failure. `forgetPosts` now drops it. Test: "drops a reply still waiting for Hermes once the card leaves Approval".
+- CK5 — the waste review agent cannot read issue histories — broke, fixed: the prompt told it to run `gh`, and agent containers get no GitHub login. The job now writes `.factory/issues/issue-N.md` for the five most expensive issues and `.factory/earlier-reviews.md` from `$FACTORY_HOME/waste-reviews.md`.
+
+Invariants / assumptions:
+- CK6 (IV2) — a checks job starts an agent — held: test "runs no agent in a checks job".
+- CK7 (IV1) — a patch reaches the committee without the machine checks — held: the patch ends in phase `checks`, and only checks posts.
+- CK8 (IV5) — a job end path skips its ledger line — held: tests cover done, failed, timeout and died.
+
+Interfaces:
+- CK9 (IF3) — the plugin's commands and the factory's inbox disagree — held: see Smoke.
+
+Smoke: the real plugin hook and route tool wrote inbox files for a plain reply and a patch route, then the real `drainInbox` ran on them. It produced the issue comment, the move to Implementation, the post status line, `patching: {12: abc1234}`, an empty `unroutedReplies` and a route ledger line. The next `chooseJobs` picked `patch` for #12.
+Goal: proxy only. The live week on the server still has to show one answered reply, one patch under 30 minutes, one redesign and one weekly review post, and that a verify agent beside a checks run does not time out the game tests (AS2).
+Notes: a `testing` job still running old code at deploy time ends with its entry renamed to `verify` by the new `readState`. The tick then records it as died and marks the issue resumed once. The card has left Testing by then, and a later verify finds no stored session, so it starts fresh.
+
+## Code smells
+
+- `factory/README.md` Tests section — `uv run --with pytest pytest hermes` fails to collect `test_config_sync.py` without `--with pyyaml`.

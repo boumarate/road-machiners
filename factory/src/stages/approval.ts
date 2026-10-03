@@ -23,7 +23,9 @@ function forgetPosts(ctx: Ctx, issue: number, dropPending: boolean): void {
     delete approvedResolving[String(issue)];
     const testPhase = { ...state.testPhase };
     delete testPhase[String(issue)];
-    return { ...state, approvalPosts, pendingApprovals, builds, approvedResolving, testPhase };
+    // A reply to a closed post can no longer be routed, so it must not turn into a failure later.
+    const unroutedReplies = Object.fromEntries(Object.entries(state.unroutedReplies).filter(([, reply]) => reply.issue !== issue));
+    return { ...state, approvalPosts, pendingApprovals, builds, approvedResolving, testPhase, unroutedReplies };
   });
 }
 
@@ -86,22 +88,23 @@ async function mergedIntoRelease(ctx: Ctx, issue: number, title: string, by: str
 // since the card leaves Approval. Returns whether it dropped one.
 export async function routeFeedback(ctx: Ctx, issue: number, by: string, text: string, route: Route): Promise<boolean> {
   await requireApproval(ctx, issue);
+  const state = readState(ctx.statePath);
+  // Checked before anything is written, so a refused patch leaves no comment or ledger line behind.
+  const played = route === 'patch' ? playedBuild(state, issue) : null;
   await ctx.github.comment(issue, `${FEEDBACK_HEADING}\n\nFrom ${by}, routed as ${route}:\n\n${text}`);
   appendLedger(ctx.cfg.home, { kind: 'route', issue, route, by, at: ctx.now().toISOString() });
   if (route === 'answer') return false;
-  const state = readState(ctx.statePath);
-  const dropped = String(issue) in state.pendingApprovals;
-  if (route === 'patch') startPatch(ctx, issue, state);
+  if (played !== null) updateState(ctx.statePath, (next) => ({ ...next, patching: { ...next.patching, [String(issue)]: played } }));
   await ctx.github.move(issue, route === 'patch' ? 'Implementation' : 'Design');
   forgetPosts(ctx, issue, true);
-  return dropped;
+  return String(issue) in state.pendingApprovals;
 }
 
 // The patch checks its diff against the build the committee played, so the card keeps that commit.
-function startPatch(ctx: Ctx, issue: number, state: FactoryState): void {
+function playedBuild(state: FactoryState, issue: number): string {
   const played = state.builds[String(issue)];
   if (played === undefined) throw new Error(`Issue #${issue} has no recorded build, so a patch has nothing to start from`);
-  updateState(ctx.statePath, (next) => ({ ...next, patching: { ...next.patching, [String(issue)]: played } }));
+  return played;
 }
 
 export async function deny(ctx: Ctx, issue: number, by: string): Promise<void> {

@@ -202,9 +202,17 @@ describe('routeFeedback', () => {
     ]);
   });
 
-  it('refuses a patch for a card with no recorded build', async () => {
+  it('refuses a patch for a card with no recorded build before it comments or records anything', async () => {
     writeState(`${home}/state.json`, { ...EMPTY_STATE, approvalPosts: { 100: 7 } });
     await expect(routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch')).rejects.toThrow('no recorded build');
+    expect(calls).toEqual([]);
+    expect(readLedger(home, new Date(0))).toEqual([]);
+  });
+
+  it('drops a reply still waiting for Hermes once the card leaves Approval', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), unroutedReplies: { 5: { issue: 7, postId: 100, text: 'x', at: 'a' }, 6: { issue: 8, postId: 200, text: 'y', at: 'a' } } });
+    await approve(fakeCtx(), 7, 'bob');
+    expect(readState(`${home}/state.json`).unroutedReplies).toEqual({ 6: { issue: 8, postId: 200, text: 'y', at: 'a' } });
   });
 
   it('throws when the card is not in Approval', async () => {

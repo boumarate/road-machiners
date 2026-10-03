@@ -1,19 +1,20 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { appendLedger } from '../ledger';
 import { EMPTY_STATE, readState, writeState } from '../state';
 import type { AgentRun, Ctx, InlineButton } from '../types';
+import { fillPrompt } from './common';
 import { parseBrief, proposalOf, runStage } from './waste';
 
 const HOME = resolve('tmp/factory-waste-test');
 const NOW = new Date('2026-10-10T09:00:00Z');
 const BRIEF = 'BOTTLENECK: Cards waited 204 min for the verify queue.\nCHANGE:\nSet FACTORY_VERIFY_WORKERS to 2 in factory/settings.env.';
 
-type Seen = { runs: AgentRun[]; numbers: string; issues: { title: string; body: string; labels: string[] }[]; calls: string[]; buttons: InlineButton[][][] };
+type Seen = { runs: AgentRun[]; numbers: string; inputs: string[]; issues: { title: string; body: string; labels: string[] }[]; calls: string[]; buttons: InlineButton[][][] };
 
 function fakeCtx(brief: string | null): { ctx: Ctx; seen: Seen } {
-  const seen: Seen = { runs: [], numbers: '', issues: [], calls: [], buttons: [] };
+  const seen: Seen = { runs: [], numbers: '', inputs: [], issues: [], calls: [], buttons: [] };
   const ctx = {
     cfg: { home: HOME, repo: 'o/r', committeeChat: '-5', buildModel: 'sonnet', wasteReviewDays: 7 },
     statePath: `${HOME}/state/state.json`, now: () => NOW, log: () => undefined,
@@ -25,10 +26,15 @@ function fakeCtx(brief: string | null): { ctx: Ctx; seen: Seen } {
       agent: async (run: AgentRun) => {
         seen.runs.push(run);
         seen.numbers = readFileSync(`${run.clone}/${run.dir}/.factory/numbers.md`, 'utf8');
+        // A second review in one test has an empty window, so issue 7 is not among its expensive issues.
+        const issue = `${run.clone}/${run.dir}/.factory/issues/issue-7.md`;
+        seen.inputs = [existsSync(issue) ? readFileSync(issue, 'utf8') : '', readFileSync(`${run.clone}/${run.dir}/.factory/earlier-reviews.md`, 'utf8')];
         if (brief !== null) writeFileSync(`${run.clone}/${run.dir}/.factory/brief.md`, brief);
       },
     },
     github: {
+      issue: async (n: number) => ({ number: n, title: `Issue ${n}`, body: 'Make the horn louder.', labels: [] }),
+      comments: async () => [{ login: 'bot', body: 'Verify finished after 16 min.' }],
       createIssue: async (title: string, body: string, labels: string[]) => { seen.issues.push({ title, body, labels }); return 301; },
       close: async (n: number, reason: string) => { seen.calls.push(`close ${n} ${reason}`); },
     },
@@ -69,6 +75,19 @@ describe('waste review', () => {
     expect(seen.calls).toContain('close 301 completed');
     expect(seen.calls.at(-1)).toContain('Bottleneck: Cards waited 204 min for the verify queue.');
     expect(seen.buttons).toEqual([[[{ text: 'Queue as change', data: 'factory:waste:301' }]]]);
+  });
+
+  it('hands the agent the expensive issues and the earlier reviews, since agents have no GitHub login', async () => {
+    const first = fakeCtx(BRIEF);
+    await runStage(first.ctx);
+    expect(first.seen.inputs[0]).toContain('UNTRUSTED USER TEXT');
+    expect(first.seen.inputs[0]).toContain('Make the horn louder.');
+    expect(first.seen.inputs[0]).toContain('Verify finished after 16 min.');
+    expect(first.seen.inputs[1]).toBe('No earlier review.\n');
+    const second = fakeCtx(BRIEF);
+    await runStage(second.ctx);
+    expect(second.seen.inputs[1]).toContain('## 2026-10-10, #301\n\nBottleneck: Cards waited 204 min for the verify queue.');
+    expect(fillPrompt('waste', { days: '7', ledger: 'l', logs: 'g', state: 's' })).not.toContain('gh issue');
   });
 
   it('posts one line and no button when no waste stands out', async () => {
