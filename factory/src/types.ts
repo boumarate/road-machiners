@@ -273,6 +273,8 @@ export const NEEDS_INFO_LABEL = 'needs-info';
 export const FACTORY_MARK = '<!-- roam-factory -->'; // last line of every factory comment, so a factory comment differs from a member's
 export const QUESTIONS_HEADING = '## Questions from the factory';
 export const FEEDBACK_HEADING = '## Committee feedback';
+// An approval reply routed as an answer. Design reads it as context, never as a change request.
+export const QUESTION_HEADING = '## Committee question';
 export const REVIEW_HEADING = '## Review findings';
 // Agent containers sit on an internal Docker network. The proxy container is their only way out.
 export const AGENT_NETWORK = 'roam-factory-agents';

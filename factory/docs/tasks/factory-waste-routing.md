@@ -1,6 +1,6 @@
 # Cheap rework, a free test slot and a weekly waste review
 
-**Status:** executing
+**Status:** validating
 **Branch:** factory/waste-routing
 **Worktree:** .worktrees/waste-routing
 **Goal:** A small approval reply reaches the committee again in under 30 minutes, on Sonnet, with every machine check passed. The test slot runs no agent, so a card waits for it at most one machine check run. Once a week the committee gets one named bottleneck with its numbers and one proposed factory change it can queue with a button. Confirming it needs a live week on the server: one answered reply, one patch, one redesign and one weekly review post.
@@ -203,6 +203,37 @@ Interfaces:
 Smoke: the real plugin hook and route tool wrote inbox files for a plain reply and a patch route, then the real `drainInbox` ran on them. It produced the issue comment, the move to Implementation, the post status line, `patching: {12: abc1234}`, an empty `unroutedReplies` and a route ledger line. The next `chooseJobs` picked `patch` for #12.
 Goal: proxy only. The live week on the server still has to show one answered reply, one patch under 30 minutes, one redesign and one weekly review post, and that a verify agent beside a checks run does not time out the game tests (AS2).
 Notes: a `testing` job still running old code at deploy time ends with its entry renamed to `verify` by the new `readState`. The tick then records it as died and marks the issue resumed once. The card has left Testing by then, and a later verify finds no stored session, so it starts fresh.
+
+## Conclusion
+
+Outcome: built, verified and reviewed on `factory/waste-routing`. The Goal still needs the live week on the server after a merge into `main`.
+
+Invariants:
+- IV1 — a patch ends in phase `checks`, and only checks posts (`testing-flow.test.ts` patch tests).
+- IV2 — "runs no agent in a checks job".
+- IV3 — `test_route_prefix_picks_the_route_itself`.
+- IV4 — `approval.test.ts` routeFeedback tests check the comment per route.
+- IV5 — ledger tests for done, failed, timeout and died.
+- IV6 — `formatNumbers` writes the numbers, and the prompt forbids the agent's own.
+- IV7 — the review only opens an issue and posts a button. A member's merge of the `/change` pull request is the only path to a factory change.
+- IV8 — the stale reply test in `tick.test.ts`, and `forgetPosts` drops replies of a closed post.
+
+### Assumptions check
+- AS1 — unverifiable until the live week. A member's prefix and Hermes's shell bound a wrong route.
+- AS2 — unverifiable until the live week. `FACTORY_VERIFY_WORKERS=1` keeps at most one verify agent beside one checks run.
+- AS3 — held: real transcripts on the server end with a `result` line, and the parser read one.
+
+### Unknowns outcome
+- UK1 — still-open: a patch runs under `FACTORY_STAGE_TIMEOUT_MINUTES` until the live week shows its length.
+- UK2 — still-open: release candidate replies still route by fixed words.
+
+Plan adherence: `testing.test.ts` became one `testing-flow.test.ts` that runs verify and checks the way the tick does, not two files. The inbox kind `feedback` is gone, since the plugin no longer writes it. The waste review hands the agent issue histories and earlier reviews as files, since agents have no GitHub login.
+
+Review findings:
+- Important: a stale `patching` entry could turn a redesigned card's Implementation into a patch. Fixed: design drops it on entry.
+- Important: answer comments sat under the feedback heading, so a later design would treat a question as a requirement. Fixed: answers go under "## Committee question", and the design prompt says applied patches stay.
+
+Verified by: the plugin-to-inbox smoke in Verify, and a parse of a real agent `result` line from the server.
 
 ## Code smells
 

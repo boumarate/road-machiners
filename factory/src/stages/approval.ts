@@ -2,7 +2,7 @@ import { rmSync } from 'node:fs';
 import { deployDev } from '../deploy';
 import { appendLedger } from '../ledger';
 import { readState, updateState } from '../state';
-import { BRANCH, FEEDBACK_HEADING, MergeConflictError, RELEASE_CANDIDATE_LABEL, WONT_DO_LABEL, type Ctx, type FactoryState, type Route } from '../types';
+import { BRANCH, FEEDBACK_HEADING, QUESTION_HEADING, MergeConflictError, RELEASE_CANDIDATE_LABEL, WONT_DO_LABEL, type Ctx, type FactoryState, type Route } from '../types';
 import { BASE_BRANCH, HOTFIX_BASE, agentLog, baseBranchFor, workDir } from './common';
 import { releaseBundle } from './bundle';
 import { shipHotfix } from './hotfix';
@@ -91,7 +91,7 @@ export async function routeFeedback(ctx: Ctx, issue: number, by: string, text: s
   const state = readState(ctx.statePath);
   // Checked before anything is written, so a refused patch leaves no comment or ledger line behind.
   const played = route === 'patch' ? playedBuild(state, issue) : null;
-  await ctx.github.comment(issue, `${FEEDBACK_HEADING}\n\nFrom ${by}, routed as ${route}:\n\n${text}`);
+  await ctx.github.comment(issue, `${route === 'answer' ? QUESTION_HEADING : FEEDBACK_HEADING}\n\nFrom ${by}, routed as ${route}:\n\n${text}`);
   appendLedger(ctx.cfg.home, { kind: 'route', issue, route, by, at: ctx.now().toISOString() });
   if (route === 'answer') return false;
   if (played !== null) updateState(ctx.statePath, (next) => ({ ...next, patching: { ...next.patching, [String(issue)]: played } }));

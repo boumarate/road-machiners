@@ -64,7 +64,7 @@ A rerun of design, implementation and testing costs hours. So a reply to an appr
 - patch: a small change that keeps the plan. The card moves to Implementation, and `patching` in the state file keeps the commit of the played build. The patch job runs one Sonnet agent with `prompts/patch.md`. It merges `dev`, applies the reply, checks only the diff since the played build and writes new approval text and evidence. It skips design and the code review. Then the card goes to Testing in phase `checks`, so the full machine checks run before a new post. An agent that finds the plan must change writes `.factory/needs-redesign.md`, and the card goes to Design with its reason.
 - redesign: the plan changes. The card goes to Design, as before.
 
-Every route lands on the issue under "## Committee feedback" with its route, and in the ledger. A patch or a redesign closes the post with a status line and drops a queued approval. A reply that gets no route within `FACTORY_REPLY_ROUTE_MINUTES` becomes a `feedback` failure, so Hermes's incident watch sees it.
+Every route lands on the issue with its route, and in the ledger. A patch or a redesign goes under "## Committee feedback". An answer goes under "## Committee question", so a later design reads it as context, not as a change. Design also drops a patch queued before the card reached it. A patch or a redesign closes the post with a status line and drops a queued approval. A reply that gets no route within `FACTORY_REPLY_ROUTE_MINUTES` becomes a `feedback` failure, so Hermes's incident watch sees it.
 
 ## Ledger and waste review
 

@@ -187,7 +187,7 @@ describe('routeFeedback', () => {
 
   it('answer only comments, and keeps the card, its posts and its queued approval', async () => {
     expect(await routeFeedback(fakeCtx(), 7, 'bob', 'Is there a top-down atlas?', 'answer')).toBe(false);
-    expect(calls).toEqual(['comment 7 ## Committee feedback\n\nFrom bob, routed as answer:\n\nIs there a top-down atlas?']);
+    expect(calls).toEqual(['comment 7 ## Committee question\n\nFrom bob, routed as answer:\n\nIs there a top-down atlas?']);
     const state = readState(`${home}/state.json`);
     expect(state.approvalPosts).toEqual({ 100: 7, 101: 7, 200: 8 });
     expect(state.pendingApprovals).toEqual({ 7: 'bob' });
