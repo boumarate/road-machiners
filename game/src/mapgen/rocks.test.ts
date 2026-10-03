@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { GEOLOGY, MAPGEN, TERRAIN } from '../data/terrain';
+import { deckById } from '../sim/bridge';
 import { ROAD_INDEX } from '../sim/road-index';
 import { decodeMap, isCliff, tileAt, type BakedMap, type BakedProp } from '../sim/terrain';
 import { siteGap } from '../sim/sites';
@@ -13,7 +14,7 @@ const SITES = [...REGION.towns, ...REGION.locations];
 
 // Every rock and crag off roads, sites, the bridge deck and the map margin, and apart from every other one.
 function expectClear(rocks: BakedProp[]): void {
-  const bridge = TERRAIN.features.bridge;
+  const bridge = deckById('canyon-bridge');
   for (const rock of rocks) {
     const { x, y } = rock.pos;
     expect(Math.min(x, y, SIZE - x, SIZE - y)).toBeGreaterThanOrEqual(O.edgeMargin);

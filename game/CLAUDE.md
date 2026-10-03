@@ -19,6 +19,7 @@ Read the doc for an area before changing it.
 - [Rendering and UI](docs/architecture/render.md): outlines, scope, props, debris, tips and audio.
 - [Map and world](docs/architecture/map.md): the bake layers, the bridge, weather and vision.
 - [Saves](docs/architecture/saves.md): slots, boot, versions and rescue.
+- [Principles](docs/architecture/principles.md): the project's architecture principles every design answers to, like one rulebook for every truck, no hot full scans and same seed, same game.
 - [Art pipeline](docs/art.md): Blender models, the truck grid projection and part model rules.
 - [Sound](docs/sound.md), [Publishing](docs/publishing.md), [Wiki](docs/wiki/README.md).
 
@@ -45,7 +46,6 @@ Game settings live in `src/config.ts`. Copy `.env.example` to `.env` for sound g
 - Sim functions take state and return new state. Rendering reads state and never changes rules.
 - `src/sim/world.ts` runs the turn pipeline. Commands go through `update()`, which clones the world and mutates the draft.
 - `src/data/` holds all balance numbers and content. Sim code reads numbers from there, never inline.
-- All sim randomness goes through `src/sim/rng.ts` with state in the world. Shops draw from `world.marketRng` and driver names from `world.nameRng`, so they never shift other randomness. Render and audio may use `Math.random()` or `src/render/noise.ts`.
 - `src/phys/` runs vehicle movement in Rapier and plugs into the turn pipeline. The path preview runs the same physics as the turn.
 - `src/three/` holds the 3D game, with `game.ts` wiring input, sim, physics, view and UI. `src/three/render/` holds the 3D views, `src/render/` the palette, painters and part looks, and `src/ui/` the HTML panels.
 - `src/mapgen/` bakes the map offline. The game only reads the map file.

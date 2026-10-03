@@ -207,7 +207,7 @@ export class Game {
     this.pickRing.renderOrder = 5;
     this.scene.add(this.pickRing);
 
-    // Ground and props cull separately, so ground picking only hits terrain and the bridge deck.
+    // Ground and props cull separately, so ground picking only hits terrain and the decks.
     this.sightLimit = new SightLimit(this.world.size);
     const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit, false, false);
     const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true, true);

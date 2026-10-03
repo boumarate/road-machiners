@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { REGION } from '../data/region';
+import { BROKEN_WING, BROKEN_WING_POINT, REGION } from '../data/region';
 import { TERRITORIES } from '../data/territory';
 import { START_KITS } from '../data/start';
 import { PHYSICS } from '../data/physics';
@@ -9,7 +9,7 @@ import type { Obstacle } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
-import { PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
+import { groundAt, PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
@@ -102,7 +102,8 @@ describe('world from the baked map', () => {
   it('keeps every baked landmark off every road surface and out of every site', () => {
     // A territory's own props stand inside it.
     const sites = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
-    const landmarks = baked.filter((o): o is Landmark => o.kind === 'landmark');
+    // The ship wing is the exception: it hangs over its road and reaches the Broken Wing hull by design.
+    const landmarks = baked.filter((o): o is Landmark => o.kind === 'landmark' && o.look !== 'shipWing');
     expect(landmarks.length).toBeGreaterThan(0);
     for (const o of landmarks) {
       const reach = REGION.roadWidth / 2 + o.r;
@@ -286,4 +287,60 @@ describe('prop poses', () => {
   it('refuses a model with no shape', () => {
     expect(() => propShape('nothing')).toThrow(/nothing/);
   });
+});
+
+describe('Broken Wing on the baked map', () => {
+  const M = PHYSICS.metersPerTile;
+  const HALF = REGION.roadWidth / 2;
+  const hoop = mapObstacles(TEST_MAP).find((o) => o.kind === 'landmark' && o.look === 'shipWing');
+  if (hoop === undefined) throw new Error('The baked map has no hoop');
+  const boxes = propBoxes(hoop);
+  const hoopGround = groundAt(TEST_MAP.terrain, hoop.pos.x, hoop.pos.y) * M;
+  const W = BROKEN_WING;
+  // Road points across the full road, every half tile along it.
+  const road = (from: number, to: number): Vec[] => {
+    const out: Vec[] = [];
+    for (let a = from; a <= to; a += 0.5) for (let s = -HALF; s <= HALF; s += 0.5) out.push(BROKEN_WING_POINT(a, s));
+    return out;
+  };
+  // Under the hoop: its band along the road, 23 m long in the model, with a tile to spare each way.
+  const under = road(W.hoopAt - 4, W.hoopAt + 4);
+  // The ramps and the deck, from the root ramp's foot to the tip ramp's foot.
+  const reach = W.deckHalf + W.mound.gap + W.mound.flat + W.mound.bank;
+  const stretch = road(-reach, reach);
+
+  it('places the hoop on the Broken Wing road and draws it at its authored size, so its boxes keep their pass-under heights', () => {
+    expect(hoop.pos).toEqual(BROKEN_WING_POINT(W.hoopAt, 0));
+    expect(propPose(hoop).scale).toEqual({ x: 1, y: 1, z: 1 });
+  });
+
+  it('keeps the hoop off the deck and its ramps', () => {
+    for (const b of boxes) for (const p of stretch) expect(boxDistance(b, p)).toBeGreaterThan(0);
+  });
+
+  it('arches over the road: the hoop covers road points under it', () => {
+    expect(under.filter((p) => boxes.some((b) => boxDistance(b, p) === 0)).length).toBeGreaterThan(under.length / 4);
+  });
+
+  it('leaves every road point under the hoop a truck height and a metre clear of the road', () => {
+    for (const p of under) {
+      const ground = groundAt(TEST_MAP.terrain, p.x, p.y) * M;
+      for (const b of boxes.filter((box) => boxDistance(box, p) === 0)) {
+        expect(hoopGround + b.z0 - ground).toBeGreaterThanOrEqual(PHYSICS.truckClearance + 1);
+      }
+    }
+  });
+
+  it('stands the low boxes of the hoop, its feet, off the road surface', () => {
+    for (const b of boxes.filter((box) => box.z0 < PHYSICS.truckClearance)) {
+      for (const p of under) expect(boxDistance(b, p)).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps every other prop, road wreck and site off the road under the hoop, on the ramps and on the deck', () => {
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const points = [...under, ...stretch];
+    const on = w.obstacles.filter((o) => o.id !== hoop.id && o.kind !== 'water' && points.some((p) => dist(o.pos, p) <= o.r));
+    expect(on.map((o) => o.id)).toEqual([]);
+  }, 60_000);
 });
