@@ -79,7 +79,7 @@ export function botOrders(world: World, archetype: Archetype, options: BotOption
 
 // A hold, a service stop and a fight each take the turn's command before the goal does.
 function act(o: Orders, goal: Goal): void {
-  if (holds(o) || serviceTrip(o, GEAR_STYLES[goal]) || defend(o)) return;
+  if (holds(o) || serviceTrip(o, GEAR_STYLES[goal]) || defend(o, goal)) return;
   GOALS[goal](o);
 }
 
@@ -552,13 +552,20 @@ function dangerOf(world: World, foe: Vehicle): number {
 }
 
 // A bot under fire turns on a foe it judges no more dangerous than itself, as an NPC does, so its guns bear. Against a
-// stronger foe it keeps driving its goal at full speed toward a shop. True when the turn's command went to the fight.
-function defend(o: Orders): boolean {
+// stronger foe it keeps driving its goal at full speed toward a shop. Only the hunter fights a foe it can outrun: a
+// won fight still costs repairs, and broken wheels leave the truck for the next raider. True when the turn's command
+// went to the fight.
+function defend(o: Orders, goal: Goal): boolean {
   if (!inCombat(o.world, o.me)) return false;
   const foe = weakestFoe(o.world);
   if (!foe || dangerOf(o.world, foe) > ownDanger(o.world, o.me)) return false;
+  if (goal !== 'hunter' && outruns(o.world, o.me, foe)) return false;
   driveTo(o, foe.pos);
   return true;
+}
+
+function outruns(world: World, me: Vehicle, foe: Vehicle): boolean {
+  return vehicleStats(world, me).maxSpeed > vehicleStats(world, foe).maxSpeed;
 }
 
 // Calls a badly broken foe in sight and demands it stand down, once. A foe that agrees is knocked out where it stands

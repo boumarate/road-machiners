@@ -1,7 +1,7 @@
 import { PRESSURE_MAX } from '../../data/market';
 import type { World } from '../types';
 import { describe, expect, it } from 'vitest';
-import { chassisDef } from '../../data/chassis';
+import { CHASSIS, chassisDef } from '../../data/chassis';
 import { REGION } from '../../data/region';
 import { partDef } from '../../data/parts';
 import { CONDITION } from '../../data/wear';
@@ -11,7 +11,8 @@ import { goodsCount, mountedParts } from '../grid';
 import { addGoods, removeAllGoods, stowPart } from '../inventory';
 import { siteOf } from '../market';
 import { nearestPad, nearestTown } from '../sites';
-import { isStranded } from '../stats';
+import { isStranded, vehicleStats } from '../stats';
+import { dist } from '../vec';
 import { addVehicle, emptyWorld, npcBrain, startCombat } from '../testkit';
 import { partTradePrice, repairCost } from '../economy';
 import { getUpkeepReserve } from '../npc-decisions';
@@ -329,6 +330,24 @@ describe('the hunter', () => {
     const order = playerVehicle(turn.world).order;
     if (order?.kind !== 'stopAt') throw new Error('Expected a stop order');
     expect(Math.hypot(order.dest.x - raider.pos.x, order.dest.y - raider.pos.y)).toBeLessThan(6);
+  });
+
+  it('has a trader run from a weak raider it can outrun and turn on one it cannot', () => {
+    const attackedBy = (chassisId: string) => {
+      const w = emptyWorld({ x: 30, y: 30 });
+      const me = playerVehicle(w);
+      me.speed = 0;
+      const raider = addVehicle(w, 'raiders', chassisId, ['stockEngine'], { x: 36, y: 30 });
+      raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+      startCombat(w, raider, me);
+      const faster = vehicleStats(w, raider).maxSpeed >= vehicleStats(w, me).maxSpeed;
+      const order = playerVehicle(botOrders(w, 'trader').world).order;
+      return { faster, turned: order?.kind === 'stopAt' && dist(order.dest, raider.pos) < 1 };
+    };
+    const runs = Object.keys(CHASSIS).map(attackedBy);
+
+    expect(runs.some((r) => r.faster) && runs.some((r) => !r.faster)).toBe(true);
+    for (const r of runs) expect(r.turned).toBe(r.faster);
   });
 
   it('drives at the weaker of two raiders in sight', () => {
