@@ -33,7 +33,7 @@ import { canUseSite, nearestPad, nearestTown, sitePads, townAt, type Site } from
 import { fuelCap, hasWorkingEngine, isStranded, suppliesCap, vehicleStats } from '../stats';
 import { inTowReach, playerTow, setBeacon } from '../tow';
 import { towData } from '../states';
-import type { GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
+import type { Call, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
 import { dist, type Vec } from '../vec';
 import { playerExplored, playerSees } from '../vision';
 import { mountBought, Orders, rearm, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
@@ -107,18 +107,24 @@ function goalOf(world: World, archetype: Archetype, options: BotOptions): Goal {
 const DEFENDER_REPLIES: Partial<Record<TopicId, string>> = { demand: 'Come and get it.' };
 const HUNTER_REPLIES: Partial<Record<TopicId, string>> = { ...DEFENDER_REPLIES, truceOffer: 'No. We finish this.', mercyPlea: 'Stand down and let me strip your truck.' };
 const REFUSE_TOW: Partial<Record<TopicId, string>> = { tow: 'No thanks.', towFree: 'No thanks.' };
+const YIELD_CARGO = 'Fine. Take it.';
 
-// Every open call gets the first reply of each topic, unless the bot's replies name another. On the hub, the bot hangs
-// up, which is the last option.
+// Every open call gets the first reply of each topic, unless the bot's replies name another. Every bot hands its
+// cargo to a demand from a foe that outmatches it. On the hub, the bot hangs up, which is the last option.
 function answerCall(o: Orders, replies: Partial<Record<TopicId, string>> = DEFENDER_REPLIES): void {
   const seen = new Set<string>();
   for (let call = o.world.player.call; call; call = o.world.player.call) {
     const at = `${call.with}:${call.topic}:${call.node}`;
     if (seen.has(at)) throw new Error(`Bot call loops back to ${at}`);
     seen.add(at);
-    const pick = call.topic ? Math.max(0, currentOptions(o.world).findIndex((option) => option.text === replies[call.topic!])) : currentOptions(o.world).length - 1;
+    const pick = call.topic ? Math.max(0, currentOptions(o.world).findIndex((option) => option.text === replyTo(o.world, call, replies))) : currentOptions(o.world).length - 1;
     o.run((w) => chooseOption(w, pick));
   }
+}
+
+function replyTo(world: World, call: Call, replies: Partial<Record<TopicId, string>>): string | undefined {
+  if (call.topic === 'demand' && outmatchedBy(world, vehicleById(world, call.with))) return YIELD_CARGO;
+  return call.topic ? replies[call.topic] : undefined;
 }
 
 // Auto patch stays on for every bot. Auto fire shoots the nearest hostile in sight, and a raider is hostile to any
@@ -583,17 +589,23 @@ function dangerOf(world: World, foe: Vehicle): number {
   return danger;
 }
 
-// A bot under fire turns on a foe it judges no more dangerous than itself, as an NPC does, so its guns bear. Against a
-// stronger foe it keeps driving its goal at full speed toward a shop. Only the hunter fights a foe it can outrun: a
-// won fight still costs repairs, and broken wheels leave the truck for the next raider. True when the turn's command
-// went to the fight.
+// A bot under fire turns on a foe it judges no more dangerous than itself, as an NPC does, so its guns bear. From a
+// stronger foe it runs for the nearest town, where guards cover it. Only the hunter fights a foe it can outrun: a won
+// fight still costs repairs, and broken wheels leave the truck for the next raider. With no foe in sight the goal goes
+// on. True when the turn's command went to the fight.
 function defend(o: Orders, goal: Goal): boolean {
   if (!inCombat(o.world, o.me)) return false;
   const foe = weakestFoe(o.world);
-  if (!foe || dangerOf(o.world, foe) > ownDanger(o.world, o.me)) return false;
-  if (goal !== 'hunter' && outruns(o.world, o.me, foe)) return false;
-  driveTo(o, foe.pos);
+  if (!foe) return false;
+  const fights = dangerOf(o.world, foe) <= ownDanger(o.world, o.me) && (goal === 'hunter' || !outruns(o.world, o.me, foe));
+  if (fights) driveTo(o, foe.pos);
+  else driveToSite(o, nearestTown(o.world));
   return true;
+}
+
+// A foe the bot can neither beat nor outrun takes the cargo anyway, and the gear with it after a knockout.
+function outmatchedBy(world: World, foe: Vehicle): boolean {
+  return dangerOf(world, foe) > ownDanger(world, playerVehicle(world)) && !outruns(world, playerVehicle(world), foe);
 }
 
 function outruns(world: World, me: Vehicle, foe: Vehicle): boolean {

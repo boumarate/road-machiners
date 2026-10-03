@@ -389,12 +389,32 @@ describe('the hunter', () => {
       startCombat(w, raider, me);
       const faster = vehicleStats(w, raider).maxSpeed >= vehicleStats(w, me).maxSpeed;
       const order = playerVehicle(botOrders(w, 'trader').world).order;
-      return { faster, turned: order?.kind === 'stopAt' && dist(order.dest, raider.pos) < 1 };
+      const toTown = nearestPad(nearestTown(w), me.pos);
+      return { faster, turned: order?.kind === 'stopAt' && dist(order.dest, raider.pos) < 1, ran: order?.kind === 'stopAt' && dist(order.dest, toTown) < 1 };
     };
     const runs = Object.keys(CHASSIS).map(attackedBy);
 
     expect(runs.some((r) => r.faster) && runs.some((r) => !r.faster)).toBe(true);
-    for (const r of runs) expect(r.turned).toBe(r.faster);
+    for (const r of runs) expect([r.turned, r.ran]).toEqual([r.faster, !r.faster]);
+  });
+
+  // A raider demands the cargo. A trader too slow to get away hands it to a stronger raider and refuses a weaker one.
+  it('has a trader hand its cargo only to a raider that outmatches it', () => {
+    const demandedBy = (weapons: string[]) => {
+      const w = emptyWorld({ x: 30, y: 30 });
+      const me = playerVehicle(w);
+      addGoods(w, me, 'salt', 2);
+      for (const wheel of mountedParts(me).filter((p) => p.defId.includes('wheel'))) wheel.hp = 0;
+      const raider = addVehicle(w, 'raiders', 'buggy', [...weapons, 'stockEngine'], { x: 36, y: 30 });
+      raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+      expect(vehicleStats(w, raider).maxSpeed).toBeGreaterThanOrEqual(vehicleStats(w, me).maxSpeed);
+      startCombat(w, raider, me);
+      w.player.call = { with: raider.id, topic: 'demand', node: 'demand', vars: {}, line: { text: 'Dump your cargo and roll on.', vars: {} } };
+      return goodsCount(playerVehicle(botOrders(w, 'trader').world)).salt ?? 0;
+    };
+
+    expect(demandedBy(['autocannon', 'ram'])).toBe(0);
+    expect(demandedBy([])).toBeGreaterThan(0);
   });
 
   it('drives at the weaker of two raiders in sight', () => {
