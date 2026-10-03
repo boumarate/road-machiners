@@ -19,6 +19,9 @@ const SOURCE_PATHS = [/^\/user-attachments\/(assets\/[0-9a-f-]{36}|files\/\d+\/[
 // Where GitHub's attachment URLs redirect to. Exact hosts only, so no wildcard opens the way to other buckets.
 const REDIRECT_HOSTS = [...SOURCE_HOSTS, 'objects.githubusercontent.com', 'github-production-user-asset-6210df.s3.amazonaws.com', 'github-production-repository-file-5c1aeb.s3.amazonaws.com'];
 const TOKEN_HOST = 'github.com';
+// The game's own site. Only root-level image files and /concepts/<name> images, with plain names, never a query, so no page, API or secret path matches.
+const FIRST_PARTY_HOST = 'roam-game.online';
+const FIRST_PARTY_PATH = /^\/(concepts\/)?[A-Za-z0-9][A-Za-z0-9_-]{0,99}\.(jpg|jpeg|png|webp)$/;
 
 export type ImageType = 'png' | 'jpeg' | 'gif' | 'webp';
 export type MediaEntry = {
@@ -49,10 +52,17 @@ export function extractMediaUrls(text: string): string[] {
   add(/!\[[^\]]*\]\(\s*<?(https:\/\/[^\s)>]+)/g);
   add(/<img\b[^>]*?\bsrc\s*=\s*["'](https:\/\/[^"']+)["']/gi);
   add(/(?<![("'=])(https:\/\/github\.com\/user-attachments\/assets\/[0-9a-f-]{36})/gi);
+  add(/(?<![("'=\w/.])(https:\/\/roam-game\.online\/(?:concepts\/)?[\w-]+\.(?:jpe?g|png|webp))(?![\w?#/.-])/gi);
   return [...new Set(found.sort((a, b) => a.at - b.at).map((hit) => hit.url))];
 }
 
+export function firstPartySource(raw: string): boolean {
+  const url = parseHttps(raw);
+  return url !== null && url.hostname === FIRST_PARTY_HOST && url.search === '' && url.hash === '' && FIRST_PARTY_PATH.test(url.pathname);
+}
+
 export function allowedSource(raw: string): boolean {
+  if (firstPartySource(raw)) return true;
   const url = parseHttps(raw);
   return url !== null && SOURCE_HOSTS.includes(url.hostname) && SOURCE_PATHS.some((path) => path.test(url.pathname));
 }
@@ -113,9 +123,13 @@ async function readCapped(res: Response): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-// Checks one hop before a request goes out. Only GitHub's own hosts, over plain https, may be asked.
-function checkedHop(url: string): URL {
+// Checks one hop before a request goes out. A first-party image may only redirect to first-party images. Otherwise only GitHub's own hosts, over plain https, may be asked.
+function checkedHop(url: string, firstParty: boolean): URL {
   const target = parseHttps(url);
+  if (firstParty) {
+    if (target === null || !firstPartySource(url)) throw new Error(`it redirects to ${hostOf(url)}, which is not an allowed first-party image`);
+    return target;
+  }
   if (target === null || !REDIRECT_HOSTS.includes(target.hostname)) throw new Error(`it redirects to ${hostOf(url)}, which is not a GitHub attachment host`);
   return target;
 }
@@ -128,8 +142,9 @@ function hopHeaders(opts: MediaOptions, target: URL, hop: number): Record<string
 // Follows redirects by hand, so every hop is checked before a request goes out.
 async function download(opts: MediaOptions, start: string): Promise<Buffer> {
   let url = start;
+  const firstParty = firstPartySource(start);
   for (let hop = 0; hop <= MAX_HOPS; hop++) {
-    const target = checkedHop(url);
+    const target = checkedHop(url, firstParty);
     const res = await opts.fetch(target, { redirect: 'manual', headers: hopHeaders(opts, target, hop), signal: AbortSignal.timeout(TIMEOUT_MS) });
     const next = res.headers.get('location');
     if (res.status >= 300 && res.status < 400 && next) { url = new URL(next, target).toString(); continue; }
@@ -161,6 +176,7 @@ async function fetchOne(opts: MediaOptions, raw: string, source: string): Promis
   const url = plainUrl(raw);
   const data = await download(opts, raw);
   const type = detectType(data);
+  if (type === null && firstPartySource(raw)) throw new Error('it is not a PNG, JPEG, GIF or WebP image');
   if (type === null) return { url, source, status: 'skipped', bytes: data.length, reason: 'it is not a PNG, JPEG, GIF or WebP image, so nobody saw it' };
   const size = imageSize(data, type);
   if (!validSize(size)) throw new Error(`it does not decode as a ${type} image`);

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { solidPng } from './media-fixtures';
-import { MAX_BYTES, MAX_FILES, MEDIA_MOUNT, allowedSource, detectType, extractMediaUrls, fetchMedia, imageSize, mediaSection, requireMedia } from './media';
+import { MAX_BYTES, MAX_FILES, MEDIA_MOUNT, allowedSource, firstPartySource, detectType, extractMediaUrls, fetchMedia, imageSize, mediaSection, requireMedia } from './media';
 
 const UUID = '24c78bbf-b445-42bb-a191-2eba2e36379e';
 const ASSET = `https://github.com/user-attachments/assets/${UUID}`;
@@ -178,5 +178,64 @@ describe('image detection', () => {
     expect(detectType(Buffer.from('GIF89a'))).toBe('gif');
     expect(detectType(Buffer.from('RIFF\0\0\0\0WEBPVP8 '))).toBe('webp');
     expect(detectType(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'))).toBeNull();
+  });
+});
+
+describe('first-party images', () => {
+  const FP = 'https://roam-game.online/unique-name.jpg';
+  const JPG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 0, 3, 0, 4, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]), Buffer.alloc(8)]);
+  const run = (replies: Record<string, Reply>, text = FP, token?: string) => {
+    const f = fakeFetch(replies);
+    return fetchMedia({ fetch: f.fetch, dir: mkdtempSync(join(dir, 'run-')), texts: [{ source: 'issue body', text }], token }).then((entries) => ({ entries, seen: f.seen }));
+  };
+
+  it('accepts only plain root-level and concepts image paths on https', () => {
+    for (const ok of [FP, 'https://roam-game.online/a.png', 'https://roam-game.online/concepts/safe-name_1.webp']) expect(firstPartySource(ok), ok).toBe(true);
+    for (const bad of ['http://roam-game.online/a.jpg', 'https://roam-game.online/a.jpg?x=1', 'https://roam-game.online/a.jpg#f', 'https://roam-game.online/.env', 'https://roam-game.online/a.svg',
+      'https://roam-game.online/dev/a.jpg', 'https://roam-game.online/concepts%2fa.jpg', 'https://roam-game.online/concepts/x/a.jpg', 'https://roam-game.online/.hidden.jpg',
+      'https://www.roam-game.online/a.jpg', 'https://roam-game.online.evil.com/a.jpg', 'https://roam-game.online@evil.com/a.jpg', 'https://roam-game.online:8443/a.jpg', 'https://evil.com/roam-game.online/a.jpg']) {
+      expect(firstPartySource(bad), bad).toBe(false);
+    }
+  });
+
+  it('extracts bare first-party links but not other paths', () => {
+    expect(extractMediaUrls(`see ${FP} and https://roam-game.online/page and https://roam-game.online/a.jpg?x=1`)).toEqual([FP]);
+  });
+
+  it('downloads an allowed image without any credentials', async () => {
+    const { entries, seen } = await run({ [FP]: { status: 200, body: JPG } }, `![x](${FP})`, 'gh-secret');
+    expect(entries[0]).toMatchObject({ status: 'ok', type: 'jpeg', url: FP });
+    expect(seen.map((s) => s.auth)).toEqual([undefined]);
+    expect(mediaSection(entries)).toContain(`${MEDIA_MOUNT}/${entries[0].file}`);
+  });
+
+  it('fails the stage for a missing url and for wrong content', async () => {
+    for (const reply of [{ status: 404 }, { status: 200, body: Buffer.from('<html>not an image</html>') }, { status: 200, body: Buffer.concat([PNG.subarray(0, 8), Buffer.alloc(5)]) }]) {
+      const { entries } = await run({ [FP]: reply });
+      expect(entries[0].status).toBe('failed');
+      expect(() => requireMedia(1, entries)).toThrow();
+    }
+  });
+
+  it('follows a redirect only to another allowed first-party image and never to GitHub or other hosts', async () => {
+    const other = 'https://roam-game.online/concepts/b.png';
+    const good = await run({ [FP]: { status: 301, location: '/concepts/b.png' }, [other]: { status: 200, body: PNG } });
+    expect(good.entries[0].status).toBe('ok');
+    for (const location of ['https://evil.example.com/a.jpg', 'http://roam-game.online/a.jpg', 'https://169.254.169.254/latest', 'https://roam-game.online/.env', 'https://roam-game.online/a.jpg?k=1', `${ASSET}`]) {
+      const { entries, seen } = await run({ [FP]: { status: 302, location } });
+      expect(entries[0].status, location).toBe('failed');
+      expect(seen, location).toHaveLength(1);
+    }
+  });
+
+  it('does not let a GitHub attachment redirect to the first-party host', async () => {
+    const { entries } = await run({ [ASSET]: { status: 302, location: FP } }, ASSET);
+    expect(entries[0].status).toBe('failed');
+  });
+
+  it('skips non-allowlisted first-party paths without any request', async () => {
+    const { entries, seen } = await run({}, '![x](https://roam-game.online/secrets/key.jpg) ![y](https://roam-game.online/a.jpg?x=1)');
+    expect(entries.map((e) => e.status)).toEqual(['skipped', 'skipped']);
+    expect(seen).toHaveLength(0);
   });
 });
