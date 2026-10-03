@@ -209,21 +209,21 @@ export function onAir(world: World): string[] {
 }
 
 // The vehicle ids each kind of event puts on the radio. A honk, aid and patch work are not radio talk.
-type Talk = (e: GameEvent, playerId: string) => string[];
-const pair = (e: GameEvent): string[] => ('by' in e && 'client' in e ? [e.by, e.client] : []);
-const RADIO_TALK: Partial<Record<GameEvent['t'], Talk>> = {
-  say: (e) => ('speaker' in e ? [e.speaker] : []),
-  call: (e, playerId) => ('with' in e ? [e.with, playerId] : []),
-  plea: (e) => (e.t === 'plea' ? (e.accepted === null ? [e.from] : [e.from, e.to]) : []),
+type Talk = { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>, playerId: string) => string[] };
+const pair = (e: { by: string; client: string }): string[] => [e.by, e.client];
+const RADIO_TALK: Talk = {
+  say: (e) => [e.speaker],
+  call: (e, playerId) => [e.with, playerId],
+  plea: (e) => (e.accepted === null ? [e.from] : [e.from, e.to]),
   escortHired: pair,
   escortRefused: pair,
   towHitched: pair,
-  towOffer: (e) => (e.t === 'towOffer' ? [e.by] : []),
+  towOffer: (e) => [e.by],
 };
 
 // The vehicle ids that talked over the radio in these events.
 export function radioSpeakers(events: readonly GameEvent[], playerId: string): string[] {
-  return [...new Set(events.flatMap((e) => RADIO_TALK[e.t]?.(e, playerId) ?? []))];
+  return [...new Set(events.flatMap((e) => (RADIO_TALK[e.t] as ((e: GameEvent, id: string) => string[]) | undefined)?.(e, playerId) ?? []))];
 }
 
 function hangUpCall(world: World, npc: Vehicle, call: Call): void {

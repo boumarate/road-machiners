@@ -906,6 +906,7 @@ function radioColor(lit: boolean): number {
 function radioHalo(lit: boolean): THREE.Sprite {
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloMap(), color: PAL.radioLight.on, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
   sprite.scale.setScalar(RADIO_HALO);
+  sprite.raycast = () => {}; // a glow is not part of the truck, so clicks pass through it
   sprite.position.set(0, RADIO_TIP, 0);
   sprite.visible = lit;
   return sprite;
