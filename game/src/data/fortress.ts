@@ -38,7 +38,9 @@ export const FORTRESS_SITES: Record<string, FortressSite> = {
       { at: 128, r: 26.75, tower: true },
       { at: 198, r: 25, tower: true },
     ],
-    pit: { margin: 1.5, terraceWidth: 3, stepHeight: 0.75, terraces: 3 },
+    // C1 drops from the rim through three crop terraces to a floor about half the site across, 9 m down. Four 0.6-tile
+    // steps give the three terraces and a 2.4-tile (9.6 m) floor from 10.5 tiles in.
+    pit: { margin: 1.5, terraceWidth: 3, stepHeight: 0.6, terraces: 4 },
   },
   // Turn 9 put a tower 0.91 tiles off the side of the 24 m flush gate at -145.7 degrees. Turns 7.25 to 8.75 clear both.
   nose: { shape: 'circle', turn: 8, style: 'shipMetal' },

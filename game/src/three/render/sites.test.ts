@@ -7,7 +7,7 @@ import { PAL } from '../../render/palette';
 import { guardedSites } from '../../sim/guards';
 import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
-import { fortressGates, insideCurtain } from '../../sim/fortress';
+import { fortressGates, insideCurtain, pitDepth } from '../../sim/fortress';
 import { isFortress, siteGates } from '../../sim/sites';
 import { heightAt, type Terrain } from '../../sim/terrain';
 
@@ -199,6 +199,49 @@ describe('landmark scale', () => {
       while (site !== null && !site.name.startsWith('landmark-')) site = site.parent;
       expect(site, node.name).not.toBeNull();
     }
+  });
+
+  it('stands every Bowl house, tree and crop row on one pit level across its footprint (IV18)', () => {
+    const S = PHYSICS.metersPerTile;
+    const bowl = ALL.find((s) => s.id === 'bowl')!;
+    const counts: Record<string, number> = { 'bowl-houses': 0, 'bowl-trees': 0, 'bowl-crops': 0 };
+    const m = new Matrix4();
+    sites.getObjectByName('landmark-bowl')!.traverse((o) => {
+      const tag = [o.name, o.parent?.name].find((n) => n !== undefined && n in counts);
+      if (!(o instanceof InstancedMesh) || tag === undefined) return;
+      o.updateWorldMatrix(true, false);
+      o.geometry.computeBoundingBox();
+      for (let k = 0; k < o.count; k++) {
+        const box = o.geometry.boundingBox!.clone().applyMatrix4(o.matrixWorld.clone().multiply(o.getMatrixAt(k, m)));
+        const xs = [box.min.x / S, box.max.x / S, (box.min.x + box.max.x) / 2 / S];
+        const ys = [box.min.z / S, box.max.z / S, (box.min.z + box.max.z) / 2 / S];
+        const depths = new Set(xs.flatMap((x) => ys.map((y) => pitDepth(bowl, { x, y }))));
+        expect(depths.size, `${tag} ${k} at ${(xs[2] - bowl.pos.x).toFixed(1)},${(ys[2] - bowl.pos.y).toFixed(1)}`).toBe(1);
+        counts[tag]++;
+      }
+    });
+    for (const [tag, n] of Object.entries(counts)) expect(n, tag).toBeGreaterThan(10);
+  });
+
+  it('turns the Bowl windmill wheel as its one moving part, inside the site over its whole turn (IV20)', () => {
+    const S = PHYSICS.metersPerTile;
+    const bowl = ALL.find((s) => s.id === 'bowl')!;
+    const own = movers.filter(({ node }) => {
+      let p: Object3D | null = node;
+      while (p !== null && p.name !== 'landmark-bowl') p = p.parent;
+      return p !== null;
+    });
+    expect(own.map((m) => m.node.name)).toEqual(['windmill-rotor']);
+    const { node, motion } = own[0];
+    const rest = { position: node.position.clone(), quaternion: node.quaternion.clone() };
+    for (const seconds of [0, 0.75, 1.5, 2.25]) {
+      motion(seconds, node, rest);
+      node.updateMatrix();
+      const box = new Box3().setFromObject(node);
+      for (const x of [box.min.x, box.max.x]) for (const z of [box.min.z, box.max.z]) expect(Math.hypot(x / S - bowl.pos.x, z / S - bowl.pos.y)).toBeLessThan(bowl.radius);
+    }
+    motion(0, node, rest);
+    node.updateMatrix();
   });
 
   it('keeps everything a truck could touch inside the edge of an abandoned site', () => {

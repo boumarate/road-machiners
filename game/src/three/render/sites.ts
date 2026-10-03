@@ -17,6 +17,7 @@ import { angleDiff, segmentDist, type Vec } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
 import type { Motion, SiteMotion } from './site-motion';
+import { buildBowl } from './interiors/bowl';
 
 const S = PHYSICS.metersPerTile;
 type Site = TownDef | SiteLocationDef;
@@ -36,7 +37,7 @@ export type Mover = { node: THREE.Object3D; motion: Motion };
 const MOTION_PHASE_SPAN = 60;
 
 // Site props stay within the site's collision footprint. Every prop is grounded independently.
-class SiteBuilder {
+export class SiteBuilder {
   readonly root = new THREE.Group();
   readonly movers: Mover[] = [];
   private readonly materials = new Map<number, THREE.MeshLambertMaterial>();
@@ -108,14 +109,16 @@ class SiteBuilder {
     return obj;
   }
   // Many copies of one Blender model, each on the ground at its site offset, as instanced meshes.
-  addInstances(name: ModelName, spots: { x: number; z: number; yaw: number }[]): void {
+  addInstances(name: ModelName, spots: { x: number; z: number; yaw: number }[]): THREE.Group {
     const placements = spots.map(({ x, z, yaw }) => {
       const wx = this.site.pos.x + x;
       const wz = this.site.pos.y + z;
       const pos = new THREE.Vector3(wx * S, heightAt(this.terrain, wx, wz) * S, wz * S);
       return new THREE.Matrix4().compose(pos, new THREE.Quaternion().setFromAxisAngle(UP, yaw), new THREE.Vector3(1, 1, 1));
     });
-    this.root.add(instancedModel(name, placements, placements.map(() => 1)));
+    const group = instancedModel(name, placements, placements.map(() => 1));
+    this.root.add(group);
+    return group;
   }
   // A site offset that must stay off every road, or the model would stand in traffic.
   offRoad(x: number, z: number, clearance: number): void {
@@ -156,20 +159,21 @@ class SiteBuilder {
 }
 
 // Whether a box of width w and depth d centered at (x, z) from the site lies inside the curtain, off its walls.
-function fitsCurtain(site: Site, x: number, z: number, w: number, d: number): boolean {
+export function fitsCurtain(site: Site, x: number, z: number, w: number, d: number): boolean {
   return [-1, 1].every((i) => [-1, 1].every((j) => insideCurtain(site, { x: site.pos.x + x + (i * w) / 2, y: site.pos.y + z + (j * d) / 2 })));
 }
 
-// Whether a house may stand at (x, z): inside the curtain, off the open center and off the roads.
+// Whether a Nose house may stand at (x, z): inside the curtain, off the open center and off the roads.
 function isHomeSpot(site: Site, x: number, z: number, limit: number): boolean {
   const layout = REGION.settlement;
   if (Math.hypot(x, z) > limit) return false;
-  if (site.id === 'bowl' ? Math.hypot(x, z) < 9 : Math.abs(x) < 21 && Math.abs(z) < 9) return false;
+  if (Math.abs(x) < 21 && Math.abs(z) < 9) return false;
   if (!fitsCurtain(site, x, z, layout.houseWidth + 0.3, layout.houseDepth + 0.3)) return false;
   const pos = { x: site.pos.x + x, y: site.pos.y + z };
   return !REGION.roads.some((road) => road.some((point, i) => i > 0 && segmentDist(pos, road[i - 1], point) < REGION.roadWidth / 2 + layout.houseWidth));
 }
 
+// Nose's interim interior until its own module replaces it.
 function buildSettlement(b: SiteBuilder, site: Site): void {
   const layout = REGION.settlement;
   const limit = site.radius - layout.houseWidth - 0.3;
@@ -192,17 +196,12 @@ function buildSettlement(b: SiteBuilder, site: Site): void {
     }
   }
   b.root.userData.homes = homes;
-  // The water tower stands in the open center, clear of the pond, the hull and the roads.
-  const tower = site.id === 'bowl' ? { x: -6, z: -6 } : { x: -18, z: 6 };
+  // The water tower stands in the open center, clear of the hull and the roads.
+  const tower = { x: -18, z: 6 };
   b.offRoad(tower.x, tower.z, 1);
   b.addModel('water_tower', tower.x, tower.z);
-  if (site.id === 'bowl') {
-    b.addTank(0, 0, 6, 0.05, PAL.water);
-    for (let row = 0; row < 4; row++) b.addBox(-6 + row * 3, 9, 2, 0.12, 4, PAL.scrub[0]);
-  } else {
-    b.addHull(-3, -1, 22, 10, 0);
-    b.addModel('ship_nose', 12, -1, 0, NOSE_SCALE);
-  }
+  b.addHull(-3, -1, 22, 10, 0);
+  b.addModel('ship_nose', 12, -1, 0, NOSE_SCALE);
 }
 
 type WallStyle = {
@@ -523,20 +522,30 @@ function closeSite(b: SiteBuilder, site: Site, t: Terrain): void {
   }
 }
 
-// Whether every vertex of the object lies inside the site's curtain.
+// Whether every vertex of the object lies inside the site's curtain, for every copy of an instanced mesh.
 function insideSiteCurtain(site: Site, obj: THREE.Object3D): boolean {
-  const v = new THREE.Vector3();
   let inside = true;
   obj.updateMatrixWorld(true);
   obj.traverse((o) => {
-    if (!(o instanceof THREE.Mesh) || !inside) return;
-    const pos = o.geometry.getAttribute('position');
-    for (let i = 0; i < pos.count && inside; i++) {
-      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
-      inside = insideCurtain(site, { x: v.x / S, y: v.z / S });
-    }
+    if (o instanceof THREE.Mesh && inside) inside = copiesOf(o).every((at) => verticesInside(site, o.geometry, at));
   });
   return inside;
+}
+
+// The world matrix of each drawn copy of a mesh: one, or one per instance.
+function copiesOf(o: THREE.Mesh): THREE.Matrix4[] {
+  if (!(o instanceof THREE.InstancedMesh)) return [o.matrixWorld];
+  return Array.from({ length: o.count }, (_, k) => o.matrixWorld.clone().multiply(o.getMatrixAt(k, new THREE.Matrix4())));
+}
+
+function verticesInside(site: Site, geometry: THREE.BufferGeometry, at: THREE.Matrix4): boolean {
+  const v = new THREE.Vector3();
+  const pos = geometry.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(at);
+    if (!insideCurtain(site, { x: v.x / S, y: v.z / S })) return false;
+  }
+  return true;
 }
 
 // A fortress interior was laid out for the whole circle. Every piece moves toward the center by one shared factor, the
@@ -575,7 +584,7 @@ const SITE_DECOR: Record<string, SiteDecor> = {
   'broken-wing': (b) => buildWingSalvage(b),
   'glass-flats': (b) => b.addModel('glass_flats', 0, 0),
   nose: settlement,
-  bowl: settlement,
+  bowl: (b, site) => buildBowl(b, site),
   'burnt-convoy': wrecks,
   podfield: wrecks,
   'ridge-wrecks': wrecks,

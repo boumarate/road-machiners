@@ -90,6 +90,13 @@ const NAMES = [
   'fort_yard_wall',
   'fort_yard_tower',
   'fort_yard_gate',
+  'bowl_house_rust',
+  'bowl_house_red',
+  'bowl_house_grey',
+  'windmill_tower',
+  'windmill_rotor',
+  'stilt_tank',
+  'fruit_tree',
 
   'bumper_front',
   'bumper_rear',
