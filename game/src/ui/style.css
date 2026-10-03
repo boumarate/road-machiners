@@ -372,10 +372,11 @@ body {
   bottom: -1px;
 }
 
+/* The panel stops short of the log above the end turn button; a row that does not fit wraps under the guns. */
 #ui .weapons {
   left: 412px;
   bottom: 14px;
-  max-width: calc(100vw - 542px);
+  max-width: calc(100vw - 718px);
   box-sizing: border-box;
   padding: 6px 8px 8px;
 }
@@ -395,6 +396,7 @@ body {
 }
 .weapons fieldset {
   display: flex;
+  flex-wrap: wrap;
   align-items: stretch;
   gap: 6px;
   border: 0;
@@ -1322,7 +1324,7 @@ body {
 @media (max-width: 1100px) {
   /* Room between the instruments and the narrower log. */
   #ui .weapons {
-    max-width: calc(100vw - 644px);
+    max-width: calc(100vw - 682px);
   }
   #ui .log {
     width: 246px;

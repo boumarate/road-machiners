@@ -173,11 +173,12 @@ const FIELD_LOOK = {
   spikesPerArea: 4, // spikes per square tile of field, on top of baseSpikes
   baseSpikes: 6,
   spike: { radius: 0.07, height: 0.14 }, // tiles
-  sheen: 0.85, // opacity of the oil decal
+  sheen: 0.62, // opacity of the oil decal, so the ground shows through and it reads as a slick, not a pit
+  gloss: { r: 0.32, shift: 0.3, opacity: 0.28 }, // an off-centre sheen spot on the slick, sized and shifted in shares of its radius
   edge: { width: 0.1, opacity: 0.8 }, // the ring at the radius, in tiles
 };
 
-type FieldView = { spikes: THREE.Group | null; fill: GroundBand | null; edge: GroundBand };
+type FieldView = { spikes: THREE.Group | null; fill: GroundBand[]; edge: GroundBand };
 
 class GroundFieldsView {
   readonly root = new THREE.Group();
@@ -192,8 +193,7 @@ class GroundFieldsView {
   }
 
   private drop(id: string, view: FieldView): void {
-    for (const band of [view.fill, view.edge]) {
-      if (!band) continue;
+    for (const band of [...view.fill, view.edge]) {
       this.root.remove(band.mesh);
       band.dispose();
     }
@@ -210,12 +210,15 @@ class GroundFieldsView {
     if (oil) {
       const fill = new GroundBand({ color: PAL.oil.sheen, opacity: FIELD_LOOK.sheen, renderOrder: FIELD_ORDER, overTrucks: false });
       fill.set(terrain, f.pos, 0, f.r - FIELD_LOOK.edge.width);
-      this.root.add(fill.mesh);
-      return { spikes: null, fill, edge };
+      const { r, shift, opacity } = FIELD_LOOK.gloss;
+      const gloss = new GroundBand({ color: PAL.oil.gloss, opacity, renderOrder: FIELD_ORDER + 1, overTrucks: false });
+      gloss.set(terrain, { x: f.pos.x - f.r * shift, y: f.pos.y - f.r * shift }, 0, f.r * r);
+      for (const band of [fill, gloss]) this.root.add(band.mesh);
+      return { spikes: null, fill: [fill, gloss], edge };
     }
     const spikes = this.scatter(terrain, f);
     this.root.add(spikes);
-    return { spikes, fill: null, edge };
+    return { spikes, fill: [], edge };
   }
 
   // Spikes spread evenly over the disk, each at its own lean, standing on the ground.
@@ -336,9 +339,9 @@ const PULSE_LOOK = {
   width: 0.5, // tiles across the ring
   opacity: 0.8, // at the start of the sweep, fading to 0 at its end
   sparks: 10, // per shut-down truck
-  sparkSize: 0.35, // meters across a spark
+  sparkSize: 0.7, // meters across a spark; a sprite, since points on the orthographic camera size in pixels
   sparkReach: 1.4, // meters from the truck's center a spark jumps to
-  sparkHeight: 0.6, // meters above the truck's center the sparks center on
+  sparkHeight: 2.2, // meters above the truck's center the sparks spread up to, so most clear the body and show
 };
 
 type Ring = { band: GroundBand; pos: Vec; r: number; startMs: number };
@@ -348,8 +351,8 @@ class PulseView {
   private readonly rings: Ring[] = [];
   private played = new Set<string>(); // pulse events of the shown turn whose ring has started
   private turn = -1;
-  private readonly sparks = new Map<string, THREE.Points>(); // by vehicle id
-  private readonly sparkMaterial = new THREE.PointsMaterial({ color: PAL.pulse.spark, size: PULSE_LOOK.sparkSize, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  private readonly sparks = new Map<string, THREE.Group>(); // by vehicle id
+  private readonly sparkMaterial = new THREE.SpriteMaterial({ map: createGlowTexture(), color: PAL.pulse.spark, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
 
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number): void {
     this.startRings(world, nowMs);
@@ -390,25 +393,27 @@ class PulseView {
   // Sparks jump to new spots around each drawn truck with shut-down turns ahead, every frame.
   private crackle(world: World, views: ReadonlyMap<string, VehicleView>): void {
     const shut = shutDownViews(world, views);
-    for (const [id, points] of this.sparks) {
+    for (const [id, group] of this.sparks) {
       if (shut.has(id)) continue;
-      this.root.remove(points);
-      points.geometry.dispose();
+      this.root.remove(group);
       this.sparks.delete(id);
     }
     for (const [id, view] of shut) jump(this.sparksOf(id), view.center());
   }
 
-  private sparksOf(id: string): THREE.Points {
+  private sparksOf(id: string): THREE.Group {
     const known = this.sparks.get(id);
     if (known) return known;
-    const geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(PULSE_LOOK.sparks * 3), 3));
-    const points = new THREE.Points(geometry, this.sparkMaterial);
-    points.renderOrder = PULSE_ORDER;
-    points.frustumCulled = false;
-    this.root.add(points);
-    this.sparks.set(id, points);
-    return points;
+    const group = new THREE.Group();
+    for (let i = 0; i < PULSE_LOOK.sparks; i++) {
+      const spark = new THREE.Sprite(this.sparkMaterial);
+      spark.renderOrder = PULSE_ORDER;
+      spark.frustumCulled = false;
+      group.add(spark);
+    }
+    this.root.add(group);
+    this.sparks.set(id, group);
+    return group;
   }
 }
 
@@ -433,12 +438,11 @@ function pulseShown(world: World, e: Extract<GameEvent, { t: 'pulse' }>): boolea
 }
 
 // Scatters the sparks around a truck's center. Render only, so Math.random() is fine: sparks need no repeatable pattern.
-function jump(points: THREE.Points, at: { x: number; y: number; z: number }): void {
-  const position = points.geometry.getAttribute('position');
-  for (let i = 0; i < position.count; i++) {
+function jump(group: THREE.Group, at: { x: number; y: number; z: number }): void {
+  for (const spark of group.children) {
     const a = Math.random() * 2 * Math.PI;
     const r = Math.random() * PULSE_LOOK.sparkReach;
-    position.setXYZ(i, at.x + Math.cos(a) * r, at.y + PULSE_LOOK.sparkHeight * Math.random(), at.z + Math.sin(a) * r);
+    spark.position.set(at.x + Math.cos(a) * r, at.y + PULSE_LOOK.sparkHeight * Math.random(), at.z + Math.sin(a) * r);
+    spark.scale.setScalar(PULSE_LOOK.sparkSize * (0.5 + Math.random()));
   }
-  position.needsUpdate = true;
 }

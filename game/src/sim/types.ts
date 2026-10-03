@@ -160,12 +160,12 @@ export type DustCloud = {
 
 // World effects of utilities. Each lasts turnsLeft more turns and is gone at 0. Positions and radii are in tiles.
 // source is the vehicle id that made it.
-// A smoke cloud spoils aim through it. See src/sim/smoke.ts.
+// A smoke cloud spoils aim through it. See src/sim/hazards.ts.
 export type SmokeCloud = { id: string; source: string; pos: Vec; r: number; turnsLeft: number };
 // A caltrop field hurts each truck that drives through it once; hit lists them. An oil patch cuts wheel grip.
-// See src/sim/ground-fields.ts.
+// See src/sim/hazards.ts.
 export type GroundField = { id: string; kind: 'caltrops' | 'oil'; source: string; pos: Vec; r: number; turnsLeft: number; hit: string[] };
-// A burning flare lights the ground within r at night. See src/sim/flare.ts.
+// A burning flare lights the ground within r at night. See src/sim/hazards.ts.
 export type Flare = { id: string; source: string; pos: Vec; r: number; turnsLeft: number };
 // A harpoon line from a part on one truck to a part on another. length in meters, the anchor distance at the hit.
 // See src/sim/harpoon.ts.
@@ -249,7 +249,7 @@ export type Vehicle = {
   direct: boolean; // drive straight at the order's point instead of routing around obstacles; the player's manual mode
   weaponOrders: Record<string, WeaponOrder>; // key: weapon part id
   utilityOrders: Record<string, UtilityOrder>; // key: utility or claymore part id; this turn's uses
-  shutDown?: { from: number; until: number }; // turns an emitter pulse shuts the truck down, both included; see src/sim/shutdown.ts
+  shutDown?: { from: number; until: number }; // the turns an emitter pulse shuts the truck down, both included; set at the end of the pulse turn and cleared after until; see settleShutdowns in src/sim/utility.ts
   trail: Pose[]; // poses through the last turn, for animation
   brain: NpcBrain | null;
   resources: DriverResources | null;
