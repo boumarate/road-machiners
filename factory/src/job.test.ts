@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { progressNote, runJob } from './job';
+import { appendUsage, readLedger } from './ledger';
 import { markResumed } from './sessions';
 import { EMPTY_STATE, readState, writeState } from './state';
 import type { Ctx, FactoryConfig, JobStage } from './types';
@@ -29,6 +30,22 @@ describe('runJob', () => {
     expect(state.interrupted).toEqual([9]);
     expect(posts).toEqual([]);
     expect(state.failures).toMatchObject([{ stage: 'change', issue: null, error: 'offline' }]);
+    expect(readLedger(ROOT, new Date(0))).toMatchObject([{ kind: 'job', id: 'b', stage: 'change', issue: 9, outcome: 'failed', agents: [] }]);
+  });
+
+  it('writes one ledger line with the agent runs of a job that finished', async () => {
+    rmSync(ROOT, { recursive: true, force: true });
+    mkdirSync(ROOT, { recursive: true });
+    const statePath = join(ROOT, 'state.json');
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), jobs: [{ id: 'dev-1', stage: 'dev', issue: null, pid: 1, startedAt: '2026-01-10T11:00:00Z', log: join(ROOT, 'dev.log') }] });
+    appendUsage(ROOT, 'dev-1', { model: 'sonnet', costUsd: 0.5, minutes: 4 });
+    const ctx = {
+      cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c' } as FactoryConfig, statePath, now: () => new Date('2026-01-10T12:00:00Z'), log: () => undefined,
+      repo: { fetch: async () => undefined, headHash: async () => 'abc1234' },
+      container: { shell: async () => undefined },
+    } as unknown as Ctx;
+    await runJob(ctx, 'dev', null).catch(() => undefined);
+    expect(readLedger(ROOT, new Date(0))).toEqual([{ kind: 'job', id: 'dev-1', stage: 'dev', issue: null, startedAt: '2026-01-10T11:00:00Z', endedAt: '2026-01-10T12:00:00.000Z', outcome: expect.any(String), agents: [{ model: 'sonnet', costUsd: 0.5, minutes: 4 }] }]);
   });
 
   it('clears the queued ship after a failed ship, and reports on the tracking issue', async () => {

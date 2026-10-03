@@ -12,6 +12,7 @@ import { remove } from './stages/remove';
 import { ship } from './stages/ship';
 import { runStage as testing } from './stages/testing';
 import { runStage as triage } from './stages/triage';
+import { recordJob, type JobOutcome } from './ledger';
 import { clearSessions, resumedStage } from './sessions';
 import { readState, updateState } from './state';
 import { QUEUE_OF, type Ctx, type FactoryState, type Job, type JobStage } from './types';
@@ -48,19 +49,29 @@ function ownJob(ctx: Ctx, stage: JobStage, issue: number | null): Job | null {
 // Runs one job to its end. Success or failure, the job's record, its queued command, its issue's interrupted mark and its sessions are cleared, so nothing retries.
 export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null): Promise<void> {
   const job = ownJob(ctx, stage, issue);
+  const entry = ledgerEntry(ctx, job, stage, issue);
+  let outcome: JobOutcome = 'failed';
   // Only the stage that died resumes. Any other job starts new, so sessions left by an earlier job never resume.
   if (!resuming(ctx, stage, issue)) clearSessionsOf(ctx, stage, issue);
   try {
     await dispatch(ctx, stage, issue, job);
+    outcome = 'done';
     ctx.log(stage, issue, 'done');
     await noteProgress(ctx, stage, issue, job, 'finished');
   } catch (error) {
     await reportFailure(ctx, stage, failureIssue(stage, issue, readState(ctx.statePath)), error, job?.log ?? null);
     await noteProgress(ctx, stage, issue, job, 'failed');
   } finally {
+    recordJob(ctx.cfg.home, ctx.now(), entry, outcome);
     clearJob(ctx, stage, issue);
     clearSessionsOf(ctx, stage, issue);
   }
+}
+
+// A job run by hand has no record, so it has no id, its agents record no usage, and it starts now.
+function ledgerEntry(ctx: Ctx, job: Job | null, stage: JobStage, issue: number | null): { id: string | null; stage: JobStage; issue: number | null; startedAt: string } {
+  if (job === null) return { id: null, stage, issue, startedAt: ctx.now().toISOString() };
+  return { id: job.id, stage, issue, startedAt: job.startedAt };
 }
 
 function resuming(ctx: Ctx, stage: JobStage, issue: number | null): boolean {

@@ -79,6 +79,8 @@ export const QUEUE_OF: Record<JobStage, Queue> = {
   // An incident job pushes dev, and two of them at once would pick the same log id.
   approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', change: 'branch', incident: 'branch',
 };
+// Where a committee reply to an approval post sends the card. Answer moves nothing, patch fixes the build in place, redesign goes back to Design.
+export type Route = 'answer' | 'patch' | 'redesign';
 // `error` is the short summary. The full text is in `log`.
 export type Failure = { stage: Stage; issue: number | null; error: string; log: string | null; at: string };
 export type ChangeRequest ={ id: number; text: string; by: string };
