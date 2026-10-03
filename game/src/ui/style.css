@@ -801,6 +801,18 @@ body {
   overflow: auto;
   font-size: 12px;
 }
+/* A screen too short for the hover panel above the radio: the radio steps away while the panel shows. The panel
+   keeps its full height, since the mouse stays on the truck and cannot scroll it. 775px is the panel's top, its
+   min-height, the radio's top above the bottom and the gap: 64 + 340 + 363 + 8. */
+@media (max-height: 775px) {
+  #ui:has(> .info:not([style*="display: none"])) > .radio {
+    visibility: hidden;
+  }
+  /* With the radio away, the panel grows down to the log again. */
+  .info {
+    max-height: calc(100dvh - 64px - 234px - 8px);
+  }
+}
 .info .bar {
   height: 4px;
   background: #454d50;
@@ -1494,6 +1506,15 @@ body {
   .info {
     top: 190px;
     max-height: calc(100dvh - 190px - 385px - 8px);
+  }
+  /* The same step away in the narrow layout, below 190 + 340 + 385 + 8. */
+  @media (max-height: 923px) {
+    #ui:has(> .info:not([style*="display: none"])) > .radio {
+      visibility: hidden;
+    }
+    .info {
+      max-height: calc(100dvh - 190px - 256px - 8px);
+    }
   }
   #ui .modal {
     padding: 20px 16px;

@@ -76,6 +76,25 @@ async function checkRadio(page) {
   for (const other of [m.log, ...m.others]) assert(!doRectsOverlap(m.radio, other), 'Radio must not overlap the log, instruments, contracts or info');
 }
 
+// The hover panel at its smallest never covers the radio. On a screen too short for both, the radio steps away while
+// the panel shows, the panel reaches down to the log, and the radio comes back after.
+async function checkRadioUnderInfo(page, radioStays) {
+  const m = await page.evaluate(() => {
+    const info = document.querySelector('.info');
+    const radio = document.querySelector('.radio');
+    const was = info.style.display;
+    info.style.display = '';
+    const seen = { info: info.getBoundingClientRect().toJSON(), radio: radio.getBoundingClientRect().toJSON(), log: document.querySelector('.log').getBoundingClientRect().toJSON(), shown: getComputedStyle(radio).visibility !== 'hidden' };
+    info.style.display = was;
+    return { ...seen, after: getComputedStyle(radio).visibility !== 'hidden' };
+  });
+  const size = page.viewportSize();
+  assert(m.after, 'The radio must come back once the hover panel hides');
+  assert.equal(m.shown, radioStays, `At ${size.width}x${size.height} the radio must ${radioStays ? 'stay' : 'step away'} under the hover panel`);
+  assert(!doRectsOverlap(m.log, m.info), `At ${size.width}x${size.height} the hover panel must stop above the log`);
+  if (m.shown) assert(!doRectsOverlap(m.radio, m.info), `At ${size.width}x${size.height} the hover panel must not cover the radio`);
+}
+
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   const errors = [];
@@ -117,10 +136,14 @@ try {
     await page.setViewportSize({ width, height });
     await checkRadio(page);
   }
+  for (const [width, height, radioStays] of [[1280, 720, false], [1366, 657, false], [1280, 768, false], [1280, 800, true], [700, 800, false], [700, 940, true]]) {
+    await page.setViewportSize({ width, height });
+    await checkRadioUnderInfo(page, radioStays);
+  }
   assert.deepEqual(errors, [], 'No uncaught page errors');
   await mkdir('.playtest', { recursive: true });
   await page.screenshot({ path: '.playtest/ui-regression.png' });
-  console.log('PASS: hover names, flat surfaces, persistent resources/log, the radio above the log, stable modal frames, movable-item inspection, and laptop/narrow layouts, clock strip, speedometer and action row');
+  console.log('PASS: hover names, flat surfaces, persistent resources/log, the radio above the log and clear of the hover panel, stable modal frames, movable-item inspection, and laptop/narrow layouts, clock strip, speedometer and action row');
 } finally {
   await browser.close();
 }
