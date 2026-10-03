@@ -28,7 +28,7 @@ import { vehicleStats, type MountedWeapon } from './stats';
 import { partDef, type WeaponDef } from '../data/parts';
 import type { Aim, GunState, NpcActivity, PartInstance, ShotRound, Vehicle, VehicleHits, World } from './types';
 import { weatherAt } from './weather';
-import { smokeCrosses } from './smoke';
+import { smokeCrosses } from './hazards';
 import { SMOKE } from '../data/utilities';
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
 
@@ -831,7 +831,7 @@ function noteStray(world: World, s: Shot, e: { rounds: ShotRound[] }): void {
   }
 }
 
-function judgeStray(world: World, shooter: Vehicle, victim: Vehicle, damage: number): void {
+export function judgeStray(world: World, shooter: Vehicle, victim: Vehicle, damage: number): void {
   if (isHostile(world, victim, shooter)) recordAttack(world, shooter, victim);
   else if (victim.brain) sumStray(world, shooter, victim, damage);
 }

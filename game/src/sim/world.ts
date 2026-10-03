@@ -46,6 +46,7 @@ import { applyWear, carryHp } from './wear';
 import { advanceDust } from './detect';
 import { searchStream } from './search';
 import { activateUtilities, advanceUtilityEffects, tickCharges, utilityOrderError } from './utility';
+import { caltropHits } from './hazards';
 import { advanceJobs, startAutoRepair } from './jobs';
 import { advanceEngineHeat } from './engine-heat';
 import { nearestPad } from './sites';
@@ -274,6 +275,7 @@ export function endTurn(
     move(w);
     if (!shopNear(w)) w.player.townPatched = false;
     followTower(w);
+    caltropHits(w);
     applyWear(w);
     advanceEngineHeat(w);
     advanceDust(w);

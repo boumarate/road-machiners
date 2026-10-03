@@ -33,6 +33,8 @@ export const PAL = {
   arcSpent: 0x9a9a94, // firing arc of a gun that is reloading or cooling down
   contact: 0xf4f1ea, // faint white sound waves around a contact
   smoke: 0x1e1b19, // black smoke clouds from smoke utilities and their ground edge
+  caltrops: { spike: 0x8a8a84, edge: 0xc8642a }, // steel spikes, and a rusty orange ring at the field's edge
+  oil: { sheen: 0x0e0d0c, edge: 0x3a3a44 }, // black oil patch with a blue-grey edge, so it reads on dark ground
   dustTrail: 0xe0c49a, // dust streak behind a contact seen by its dust, pale so it shows over fog
   radio: 0x8fe0c8, // crisp scanner blip
   flash: 0xfff0a0,

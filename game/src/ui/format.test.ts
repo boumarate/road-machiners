@@ -145,6 +145,29 @@ describe("utility log", () => {
   });
 });
 
+describe("caltrops log", () => {
+  it("tells the player its wheels took caltrops", () => {
+    const w = emptyWorld();
+    const me = w.player.vehicleId;
+
+    expect(eventText(w, { t: "caltrops", vehicle: me, field: "g1", source: me })).toEqual({ text: "You drive into caltrops. Wheels damaged.", cls: "bad" });
+  });
+
+  it("names a seen truck that drives into the player's caltrops", () => {
+    const w = emptyWorld();
+    const trader = addVehicle(w, "traders", "hauler", [], { x: 33, y: 30 });
+
+    expect(eventText(w, { t: "caltrops", vehicle: trader.id, field: "g1", source: w.player.vehicleId })).toEqual({ text: `${vehicleName(w, trader.id)} drives into caltrops`, cls: "good" });
+  });
+
+  it("logs nothing for a truck out of sight", () => {
+    const w = emptyWorld();
+    const trader = addVehicle(w, "traders", "hauler", [], { x: 200, y: 200 });
+
+    expect(eventText(w, { t: "caltrops", vehicle: trader.id, field: "g1", source: trader.id })).toBeNull();
+  });
+});
+
 describe("collision log", () => {
   it("logs no crash, whether into a standing obstacle or through a fence", () => {
     const w = emptyWorld();

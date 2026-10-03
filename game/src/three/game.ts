@@ -25,7 +25,8 @@ import { applyTurn, type PreparedTurn } from "../phys/turn";
 import { playerVehicle, vehicleById } from "../sim/damage";
 
 import { isStranded, maxTurn, vehicleStats } from "../sim/stats";
-import { clickOrder, parkedVehicles, throttleFor } from "../sim/steering";
+import { clickOrder, throttleFor } from "../sim/steering";
+import { routeBlockers } from "../sim/ai";
 import { route } from "../sim/path";
 import type { Vehicle, World } from "../sim/types";
 import { grayRadius, playerSees, tileOf, visibleTiles } from "../sim/vision";
@@ -68,6 +69,7 @@ import { markError, markVehicle } from "../sim/detect";
 import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
 import { SmokeCloudsView } from "./render/smoke";
+import { GroundFieldsView } from "./render/fields";
 import { UtilityAim } from "./utility-aim";
 import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
@@ -128,6 +130,7 @@ export class Game {
   private readonly contacts = new ContactsView();
   private readonly dust = new DustCloudsView();
   private readonly smoke = new SmokeCloudsView();
+  private readonly fields = new GroundFieldsView();
   private readonly utilityAim = new UtilityAim({ world: () => this.world, apply: (next) => this.apply(next), note: (text) => this.hud.note(this.world, text, "bad") });
   private readonly soundRing = new SoundRingView();
   private readonly path: PathView;
@@ -238,6 +241,7 @@ export class Game {
       this.contacts.root,
       this.dust.root,
       this.smoke.root,
+      this.fields.root,
       this.utilityAim.root,
       this.soundRing.root,
     );
@@ -878,10 +882,7 @@ export class Game {
     const course = order
       ? v.direct
         ? [v.pos, order.dest]
-        : [
-            v.pos,
-            ...route(w, v.pos, order.dest, vehicleStats(w, v).radius, parkedVehicles(w, v.id), v),
-          ]
+        : [v.pos, ...route(w, v.pos, order.dest, vehicleStats(w, v).radius, routeBlockers(w, v), v)]
       : null;
     const first =
       me.order?.kind === "through"
@@ -1110,6 +1111,7 @@ export class Game {
     this.contacts.update(this.world.terrain, this.world.player.contacts, playerVehicle(this.world).pos, this.world.turn, performance.now());
     this.dust.update(this.world, this.world.terrain, performance.now());
     this.smoke.update(this.world, this.world.terrain, performance.now());
+    this.fields.update(this.world, this.world.terrain);
     this.utilityAim.draw(this.world, this.world.terrain, this.hoverGround, !steer);
     const meFrame = this.frames[playerVehicle(this.world).id];
     this.soundRing.update(

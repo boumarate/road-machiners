@@ -754,3 +754,59 @@ describe('stranded trucks', () => {
     expect(dist(me.pos, hauler.pos)).toBeGreaterThan(chassisDef(me.chassisId).radius + chassisDef('hauler').radius);
   });
 });
+
+describe('oil patches', () => {
+  // The player at 30,30 facing +x at 6 tiles per turn, driving by hand toward dest, with oil patches of radius r.
+  function oiled(dest: Vec, patches: Vec[], r = 1.25): World {
+    const w = setDirect(ordered({ kind: 'through', dest }, 6), true);
+    w.fields = patches.map((pos, i) => ({ id: `oil${i}`, kind: 'oil', source: me(w).id, pos, r, turnsLeft: 8, hit: [] }));
+    return w;
+  }
+
+  // Where the truck's body ends the turn, in meters.
+  function endOfTurn(w: World): { x: number; z: number } {
+    const d = buildDrive(w);
+    const r = simulateTurn(d, w);
+    const { pos } = r.frames[me(w).id].at(-1)!;
+    freeDrive(r.next);
+    freeDrive(d);
+    return { x: pos.x, z: pos.z };
+  }
+
+  // Patches every 2 tiles over the rectangle.
+  function slick(x0: number, x1: number, y0: number, y1: number): Vec[] {
+    const out: Vec[] = [];
+    for (let x = x0; x <= x1; x += 2) for (let y = y0; y <= y1; y += 2) out.push({ x, y });
+    return out;
+  }
+
+  it('a truck crossing straight at a steady speed keeps its line', () => {
+    const dest = { x: 80, y: 30 };
+    const dry = endOfTurn(oiled(dest, []));
+
+    const wet = endOfTurn(oiled(dest, slick(30, 40, 30, 30)));
+
+    expect(dry.x).toBeLessThan(40 * PHYSICS.metersPerTile); // the whole turn is on oil
+    expect(Math.abs(wet.z - dry.z)).toBeLessThan(0.5);
+  });
+
+  it('a truck steering hard on oil slides out of its dry line', () => {
+    const dest = { x: 34, y: 40 };
+    const dry = endOfTurn(oiled(dest, []));
+
+    const wet = endOfTurn(oiled(dest, slick(28, 46, 24, 44)));
+
+    expect(Math.hypot(wet.x - dry.x, wet.z - dry.z)).toBeGreaterThan(2);
+  });
+
+  it('overlapping patches cut grip as much as one patch', () => {
+    const dest = { x: 34, y: 40 };
+    const dry = endOfTurn(oiled(dest, []));
+    const one = endOfTurn(oiled(dest, [{ x: 34, y: 32 }], 2));
+
+    const many = endOfTurn(oiled(dest, [{ x: 34, y: 32 }, { x: 34, y: 32 }, { x: 34.5, y: 32 }], 2));
+
+    expect(one).not.toEqual(dry);
+    expect(many).toEqual(one);
+  });
+});

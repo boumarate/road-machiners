@@ -24,7 +24,9 @@ import { angleDiff, bearing, clamp, DEG, dist, type Vec } from '../sim/vec';
 import { bodyOf, type Body } from '../sim/body';
 import { wheelMounts } from './body';
 import { computeClosingSpeed, locateCrashContact, type CrashGeometry } from '../sim/crash-contact';
-import { headingOf, headingQuat, noseRise, upOf, type TurnFrames, type V3, type VehicleFrame } from './frames';
+import { headingOf, headingQuat, noseRise, toPhysCircle, upOf, type Circle, type TurnFrames, type V3, type VehicleFrame } from './frames';
+import { oilPatches } from '../sim/hazards';
+import { OIL } from '../data/utilities';
 
 const S = PHYSICS.metersPerTile;
 const T = PHYSICS.truck;
@@ -250,9 +252,11 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   const frames: TurnFrames = Object.fromEntries(cars.map((c) => [c.v.id, [] as VehicleFrame[]]));
   const contacts = new Contacts(w);
   const landings = new Landings();
+  // Oil patches are fixed for the turn, so they convert once and the steps never read the sim.
+  const oil = oilPatches(w).map((p) => toPhysCircle(p.pos, p.r));
   for (let i = 0; i < steps; i++) {
     const before = new Map(cars.map((c) => [c.v.id, captureImpactMotion(c.body)]));
-    for (const c of cars) driveStep(c, w.terrain);
+    for (const c of cars) driveStep(c, w.terrain, oil);
     for (const c of cars) c.ctl.updateVehicle(DT);
     landings.note(cars, before, i);
     world.step(events);
@@ -501,19 +505,39 @@ function idleTarget(speed: number): number {
 
 // Loose ground gives less grip, so wheels spin instead of converting engine force to speed. A skilled driver
 // loses less of it. Slope needs no separate handling: it already slows or speeds the climb through gravity on
-// the heightfield.
-function applyTerrainGrip(c: Car, terrain: Terrain): void {
+// the heightfield. A wheel whose hub lies over any oil patch keeps OIL.grip of its friction slip and side
+// friction stiffness. Overlapping patches count once.
+function applyTerrainGrip(c: Car, terrain: Terrain, oil: readonly Circle[]): void {
   const p = c.body.translation();
   const type = terrain.types[tileAt(terrain, { x: p.x / S, y: p.z / S })];
   const grip = T.frictionSlip * groundSpeed(c.s, TERRAIN_TYPES[type].speed);
-  for (let i = 0; i < 4; i++) c.ctl.setWheelFrictionSlip(i, grip);
+  const slick = oiledWheels(c, oil);
+  for (let i = 0; i < 4; i++) {
+    const share = slick[i] ? OIL.grip : 1;
+    c.ctl.setWheelFrictionSlip(i, grip * share);
+    c.ctl.setWheelSideFrictionStiffness(i, T.sideFrictionStiffness * share);
+  }
+}
+
+// Whether each wheel's hub, in wheelMounts order, lies over any oil patch.
+function oiledWheels(c: Car, oil: readonly Circle[]): boolean[] {
+  if (oil.length === 0) return [false, false, false, false];
+  const p = c.body.translation();
+  const h = headingOf(c.body.rotation());
+  const cos = Math.cos(h);
+  const sin = Math.sin(h);
+  return wheelMounts(c.b).map((m) => {
+    const x = p.x + cos * m.x - sin * m.z;
+    const z = p.z + sin * m.x + cos * m.z;
+    return oil.some((o) => Math.hypot(x - o.x, z - o.z) <= o.r);
+  });
 }
 
 // One physics step of driving. Steer at the destination and hold the turn's speed. A stop order slows
 // to arrive. A drive-through point counts as passed once close, or once the truck drives forward past
 // it on the last leg, so a wide miss does not circle back. A side click behind the truck still steers.
-function driveStep(c: Car, terrain: Terrain): void {
-  applyTerrainGrip(c, terrain);
+function driveStep(c: Car, terrain: Terrain, oil: readonly Circle[]): void {
+  applyTerrainGrip(c, terrain, oil);
   const speed = forwardSpeed(c.body);
   const command = c.plan.dest && !reached(c) ? commandToward(c, c.plan.dest, speed) : { target: c.plan.target, steerTo: 0 };
   if (c.result.arrived) command.target = 0;

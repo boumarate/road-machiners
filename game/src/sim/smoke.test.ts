@@ -4,7 +4,7 @@ import { SMOKE } from '../data/utilities';
 import { hitOdds } from './combat';
 import { makePart } from './factory';
 import { mountPart } from './inventory';
-import { deploySmoke, smokeCrosses } from './smoke';
+import { deploySmoke, smokeCrosses } from './hazards';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import type { PartInstance, Vehicle, World } from './types';

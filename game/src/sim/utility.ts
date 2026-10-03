@@ -6,7 +6,7 @@ import type { FireBlock } from './combat';
 import { findPart } from './damage';
 import { isKnockedOut } from './defeat';
 import { isMounted, mountedParts } from './grid';
-import { deploySmoke } from './smoke';
+import { deploySmoke, dropField, oilShort, spillOil } from './hazards';
 import type { ChargeState, PartInstance, UtilityOrder, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
@@ -64,8 +64,8 @@ const ARMS: Record<UseKind, (world: World, use: Use) => void> = {
   },
   flare: notBuilt('flare'),
   harpoon: notBuilt('harpoon'),
-  caltrops: notBuilt('caltrops'),
-  oil: notBuilt('oil'),
+  caltrops: (world, { vehicle, part }) => dropField(world, vehicle, 'caltrops', effectOf(part, 'caltrops')),
+  oil: (world, { vehicle, part }) => spillOil(world, vehicle, effectOf(part, 'oil')),
   claymore: notBuilt('claymore'),
   emitter: notBuilt('emitter'),
   crane: passive('crane'),
@@ -140,7 +140,13 @@ export function utilityOrderError(world: World, v: Vehicle, partId: string, orde
   if (order.kind !== wanted) return `${def.name} takes a ${wanted} order`;
   const block = utilityBlock(world, v, part);
   if (block) return `${def.name}: ${block}`;
-  return targetError(world, v, part, order);
+  return costError(world, v, def) ?? targetError(world, v, part, order);
+}
+
+// The oil spiller needs its fuel in the tank.
+function costError(world: World, v: Vehicle, def: PartDef): string | null {
+  if (def.kind !== 'utility' || def.effect.type !== 'oil') return null;
+  return oilShort(world, v, def.effect.fuel) ? `${def.name}: fuel` : null;
 }
 
 function targetError(world: World, v: Vehicle, part: PartInstance, order: UtilityOrder): string | null {

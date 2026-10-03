@@ -482,6 +482,7 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   aidStarted: (e) => [e.giver, e.receiver],
   escortHired: (e) => [e.by, e.client],
   escortRefused: (e) => [e.by, e.client],
+  caltrops: (e) => [e.vehicle],
 };
 
 function unnoticed(world: World, e: GameEvent): boolean {
@@ -557,6 +558,13 @@ function infoText(world: World, e: Extract<GameEvent, { t: 'info' }>): LogLine |
   return e.debug && !world.player.fullLog ? null : { text: e.text, cls: 'dim' };
 }
 
+// Caltrops on the player's wheels read as bad, the player's caltrops on another truck as good, the rest dim.
+function caltropsText(world: World, e: Extract<GameEvent, { t: 'caltrops' }>): LogLine | null {
+  const me = world.player.vehicleId;
+  if (e.vehicle === me) return { text: 'You drive into caltrops. Wheels damaged.', cls: 'bad' };
+  return { text: `${vehicleName(world, e.vehicle)} drives into caltrops`, cls: e.source === me ? 'good' : 'dim' };
+}
+
 // Events whose log line has its own function.
 const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
   activity: activityText,
@@ -569,6 +577,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   stateEnded: stateEndedText,
   empty: () => null, // the HUD shows ammo; the log holds no gun state
   utility: () => null, // the utility row and the world show a use; effects with news log their own events
+  caltrops: caltropsText,
   say: sayText,
   job: jobText,
   weather: weatherText,

@@ -31,6 +31,14 @@ export function toMap(p: V3): Vec {
   return { x: p.x / S, y: p.z / S };
 }
 
+// A circle on the ground in physics space: center x and z and radius, in meters.
+export type Circle = { x: number; z: number; r: number };
+
+// A map circle of radius r tiles, in physics space.
+export function toPhysCircle(p: Vec, r: number): Circle {
+  return { x: p.x * S, z: p.y * S, r: r * S };
+}
+
 // Ground point under a map point, in physics space.
 export function groundPoint(t: Terrain, p: Vec): V3 {
   return toPhys(p, heightAt(t, p.x, p.y));

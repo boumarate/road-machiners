@@ -14,6 +14,7 @@ import { breakProp } from './salvage';
 import { burnFuel, getResources } from './resources';
 import { fuelCap, vehicleStats, type VehicleStats } from './stats';
 import { parkedVehicles, throughSpeed } from './steering';
+import { fieldBlockers } from './hazards';
 import { isOnRope } from './tow';
 import type { MoveOrder, Obstacle, Pose, Vehicle, World } from './types';
 import { bearing, dist, segmentDist, type Vec } from './vec';
@@ -61,8 +62,8 @@ export function advanceFar(w: World, v: Vehicle): void {
   const next = order.kind === 'through' ? throughSpeed(s, v.speed, dist(v.pos, order.dest), order.pace) : Math.min(s.maxSpeed, v.speed + s.accel);
   // Vehicles without a brain have nowhere to store the route, so they plan it every turn.
   const stored = v.brain?.farRoute;
-  // A new route steers around parked vehicles, like the physics driver's.
-  const points = stored && stored.dest.x === order.dest.x && stored.dest.y === order.dest.y ? stored.points : route(w, v.pos, order.dest, full.radius, parkedVehicles(w, v.id), v);
+  // A new route steers around parked vehicles and seen ground fields, like the physics driver's.
+  const points = stored && stored.dest.x === order.dest.x && stored.dest.y === order.dest.y ? stored.points : route(w, v.pos, order.dest, full.radius, [...parkedVehicles(w, v.id), ...fieldBlockers(w, v)], v);
 
   const planned = follow(v.pos, points, (v.speed + next) / 2);
   const block = firstContact(w, v, planned.path, full.radius);

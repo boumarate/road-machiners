@@ -158,10 +158,10 @@ describe('the activation step', () => {
   });
 
   it('hands an accepted order to its effect, which later phases build', () => {
-    const { w, v, part } = withUtility('caltrops');
+    const { w, v, part } = withUtility('emitter');
     v.utilityOrders[part.id] = { kind: 'self' };
 
-    expect(() => activateUtilities(w)).toThrow(/not built: caltrops/);
+    expect(() => activateUtilities(w)).toThrow(/not built: emitter/);
   });
 });
 

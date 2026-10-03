@@ -68,8 +68,8 @@ export class SmokeCloudsView {
   }
 }
 
-// The player sees a cloud when it sees its center or a point of its rim. The player's own cloud always shows.
-function isShown(world: World, c: SmokeCloud): boolean {
+// The player sees an area hazard when it sees its center or a point of its rim. The player's own always shows.
+export function isShown(world: World, c: { source: string; pos: Vec; r: number }): boolean {
   if (c.source === world.player.vehicleId) return true;
   const rim: Vec[] = Array.from({ length: RIM_SAMPLES }, (_, i) => {
     const a = (2 * Math.PI * i) / RIM_SAMPLES;
@@ -113,7 +113,8 @@ function createSmokeTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(canvas);
 }
 
-function hashId(id: string): number {
+// A stable seed from an id, so a hazard's scatter keeps its look from frame to frame.
+export function hashId(id: string): number {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (Math.imul(h, 31) + id.charCodeAt(i)) | 0;
   return Math.abs(h);
