@@ -3,6 +3,7 @@ import type { World } from '../types';
 import { describe, expect, it } from 'vitest';
 import { chassisDef } from '../../data/chassis';
 import { REGION } from '../../data/region';
+import { CONDITION } from '../../data/wear';
 import { playerVehicle } from '../damage';
 import { makePart } from '../factory';
 import { goodsCount, mountedParts } from '../grid';
@@ -77,6 +78,15 @@ describe('botOrders', () => {
     expect(turn.ledger.goodsSold).toBeGreaterThan(0);
     expect(turn.ledger.goodsBought).toBeLessThan(0);
     expect(turn.world.player.money).toBeGreaterThanOrEqual(repairCost(turn.world));
+  });
+
+  it('has a bot in town with a broken junk engine and money to spare carry on', () => {
+    const w = parkedAt('nose');
+    const engine = mountedParts(playerVehicle(w), 'engine')[0];
+    engine.wear = CONDITION.maxWear + 1;
+    engine.hp = 1;
+
+    expect(() => botOrders(w, 'trader')).not.toThrow();
   });
 
   it('has a trader carry its cargo to the known town that pays more for it', () => {

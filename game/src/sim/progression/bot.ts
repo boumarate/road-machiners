@@ -174,8 +174,14 @@ function serviceTrip(o: Orders, style: UpgradeStyle): boolean {
 function serviceInTown(o: Orders, style: UpgradeStyle): void {
   serviceHere(o);
   restoreEngine(o);
-  if (paidFixNeeded(o.world)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money`);
+  if (paidFixNeeded(o.world)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money: ${needsOf(o.world)}`);
   upgradeGear(o, style);
+}
+
+function needsOf(world: World): string {
+  const p = world.player;
+  const me = playerVehicle(world);
+  return `shop ${shopAt(world)}, fuel ${p.fuel}/${fuelCap(me)} for way ${fuelForWayToShop(world).toFixed(1)}, supplies ${p.supplies}/${suppliesCap(me)}, repair ${repairCost(world)}, badly damaged ${mountedParts(me).filter(isBadlyDamaged).map((part) => part.defId).join(' ')}, combat ${inCombat(world, me)}, engine ${mountedParts(me, 'engine').length}`;
 }
 
 function paidFixNeeded(world: World): boolean {
@@ -253,10 +259,12 @@ function needsService(world: World): boolean {
   return lowFuel || lowSupplies || needsRepair(world);
 }
 
-// A badly damaged part the money covers, once the fight is over: repairing under fire pays for the next hit.
+// A badly damaged part the money covers, once the fight is over: repairing under fire pays for the next hit. A junk
+// part no garage can rebuild has no repair, so it adds nothing to the cost.
 function needsRepair(world: World): boolean {
   const me = playerVehicle(world);
-  return mountedParts(me).some(isBadlyDamaged) && repairCost(world) <= world.player.money && !inCombat(world, me);
+  const cost = repairCost(world);
+  return mountedParts(me).some(isBadlyDamaged) && cost > 0 && cost <= world.player.money && !inCombat(world, me);
 }
 
 function isBadlyDamaged(part: PartInstance): boolean {
