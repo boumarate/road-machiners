@@ -19,11 +19,10 @@ import type { RenderScope } from './scope';
 import type { Motion, SiteMotion } from './site-motion';
 import { buildBowl } from './interiors/bowl';
 import { buildDustwell, buildGranary, buildSalvageYard } from './interiors/compounds';
+import { buildNose } from './interiors/nose';
 
 const S = PHYSICS.metersPerTile;
 type Site = TownDef | SiteLocationDef;
-// Nose's 48 m bow from the 12 m cone.
-const NOSE_SCALE = 4;
 // The bridge model's 32 m by 7 m deck is stretched to the sim deck. Its trusses stand 2.4 m over the
 // deck before this height scale.
 const BRIDGE_RISE = 1.5;
@@ -110,12 +109,13 @@ export class SiteBuilder {
     return obj;
   }
   // Many copies of one Blender model, each on the ground at its site offset, as instanced meshes.
-  addInstances(name: ModelName, spots: { x: number; z: number; yaw: number }[]): THREE.Group {
-    const placements = spots.map(({ x, z, yaw }) => {
+  // A spot's scale is uniform, 1 when absent, and its lift is in tiles over the ground, 0 when absent.
+  addInstances(name: ModelName, spots: { x: number; z: number; yaw: number; scale?: number; lift?: number }[]): THREE.Group {
+    const placements = spots.map(({ x, z, yaw, scale = 1, lift = 0 }) => {
       const wx = this.site.pos.x + x;
       const wz = this.site.pos.y + z;
-      const pos = new THREE.Vector3(wx * S, heightAt(this.terrain, wx, wz) * S, wz * S);
-      return new THREE.Matrix4().compose(pos, new THREE.Quaternion().setFromAxisAngle(UP, yaw), new THREE.Vector3(1, 1, 1));
+      const pos = new THREE.Vector3(wx * S, (heightAt(this.terrain, wx, wz) + lift) * S, wz * S);
+      return new THREE.Matrix4().compose(pos, new THREE.Quaternion().setFromAxisAngle(UP, yaw), new THREE.Vector3(scale, scale, scale));
     });
     const group = instancedModel(name, placements, placements.map(() => 1));
     this.root.add(group);
@@ -162,47 +162,6 @@ export class SiteBuilder {
 // Whether a box of width w and depth d centered at (x, z) from the site lies inside the curtain, off its walls.
 export function fitsCurtain(site: Site, x: number, z: number, w: number, d: number): boolean {
   return [-1, 1].every((i) => [-1, 1].every((j) => insideCurtain(site, { x: site.pos.x + x + (i * w) / 2, y: site.pos.y + z + (j * d) / 2 })));
-}
-
-// Whether a Nose house may stand at (x, z): inside the curtain, off the open center and off the roads.
-function isHomeSpot(site: Site, x: number, z: number, limit: number): boolean {
-  const layout = REGION.settlement;
-  if (Math.hypot(x, z) > limit) return false;
-  if (Math.abs(x) < 21 && Math.abs(z) < 9) return false;
-  if (!fitsCurtain(site, x, z, layout.houseWidth + 0.3, layout.houseDepth + 0.3)) return false;
-  const pos = { x: site.pos.x + x, y: site.pos.y + z };
-  return !REGION.roads.some((road) => road.some((point, i) => i > 0 && segmentDist(pos, road[i - 1], point) < REGION.roadWidth / 2 + layout.houseWidth));
-}
-
-// Nose's interim interior until its own module replaces it.
-function buildSettlement(b: SiteBuilder, site: Site): void {
-  const layout = REGION.settlement;
-  const limit = site.radius - layout.houseWidth - 0.3;
-  let homes = 0;
-  for (let x = -limit; x <= limit; x += layout.streetSpacing) {
-    for (let z = -limit; z <= limit; z += layout.streetSpacing) {
-      if (!isHomeSpot(site, x, z, limit)) continue;
-      const h = layout.houseHeights[homes % layout.houseHeights.length];
-      const w = layout.houseWidth;
-      const d = layout.houseDepth;
-      b.addBox(x, z, w, h, d, homes % 3 ? PAL.wall.side : PAL.wall.top);
-      b.addBox(x, z, w + 0.3, 0.12, d + 0.3, homes % 4 ? PAL.rust.top : PAL.metal, h);
-      b.addBox(x, z + d / 2 + 0.02, 0.3, 0.55, 0.03, PAL.wall.dark);
-      for (const dx of [-0.8, 0.8]) {
-        b.addBox(x + dx, z + d / 2 + 0.02, 0.3, 0.3, 0.03, PAL.wall.dark, 0.55);
-        if (h > 1.5) b.addBox(x + dx, z + d / 2 + 0.02, 0.3, 0.3, 0.03, PAL.wall.dark, 1.25);
-      }
-      if (homes % 5 === 0) b.addTank(x - 0.6, z - 0.4, 0.3, 0.55, PAL.metalLight, h + 0.12);
-      homes++;
-    }
-  }
-  b.root.userData.homes = homes;
-  // The water tower stands in the open center, clear of the hull and the roads.
-  const tower = { x: -18, z: 6 };
-  b.offRoad(tower.x, tower.z, 1);
-  b.addModel('water_tower', tower.x, tower.z);
-  b.addHull(-3, -1, 22, 10, 0);
-  b.addModel('ship_nose', 12, -1, 0, NOSE_SCALE);
 }
 
 type WallStyle = {
@@ -544,7 +503,6 @@ type SiteDecor = (b: SiteBuilder, site: Site, t: Terrain) => void;
 
 const wrecks: SiteDecor = (b, site) => buildWrecks(b, site.id);
 const camp: SiteDecor = (b, site) => buildCamp(b, site.id);
-const settlement: SiteDecor = (b, site) => buildSettlement(b, site);
 
 // How each site is dressed, by site id.
 const SITE_DECOR: Record<string, SiteDecor> = {
@@ -556,7 +514,7 @@ const SITE_DECOR: Record<string, SiteDecor> = {
   'green-pit': (b) => buildOasis(b),
   'broken-wing': (b) => buildWingSalvage(b),
   'glass-flats': (b) => b.addModel('glass_flats', 0, 0),
-  nose: settlement,
+  nose: (b, site) => buildNose(b, site),
   bowl: (b, site) => buildBowl(b, site),
   'burnt-convoy': wrecks,
   podfield: wrecks,

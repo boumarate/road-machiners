@@ -481,10 +481,6 @@ export const REGION = {
     multiGateRadius: 12, // tiles; towns and locations at least this large get a gate per road, smaller sites get one
   },
   settlement: {
-    streetSpacing: 5, // 20 m blocks, with houses separated by alleys
-    houseWidth: 2.7, // 10.8 m, against the pickup's 5.2 m length
-    houseDepth: 2.1,
-    houseHeights: [1.1, 1.8],
     gateWidth: 5, // tiles of shut doors where a road meets any site edge
     fenceHeight: 0.8, // 3.2 m of posts and rails
     fenceThickness: 0.15,

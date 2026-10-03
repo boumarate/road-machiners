@@ -1,8 +1,11 @@
-"""The Fallen Sun's detached nose cone, which the town of Nose is built around.
+"""The Fallen Sun's nose (C5): the tapered, plated bow of the colony ship that the town of Nose is built around, with
+its cockpit window band, a side window strip, its first ring frame at the joint and a radar pedestal on top.
 
-The cone is 12 m long with a 4.4 m base radius, matching the old procedural cone of 3 by 1.1 tiles.
-It points +X, tilts up and sinks into the sand so its underside rests on the ground.
-The top reaches about 6.6 m. Scrap shacks and an awning lean against the -Y flank.
+Built at its in-game size on the shared hull profile (ship_hull_kit.py). The origin is on the ground under the joint
+with the next hull section, and the axis runs +X to the blunt tip 44 m away. At the joint the hull is 32 m across with
+its axis 10 m up, sunk 6 m. Toward the tip the bottom line rises on its rock bed (to 3 m over the ground at the tip)
+and the hull narrows on an ogive to a 3.5 m tip radius, so the top line falls toward the tip as in C5. socket_dish
+is the radar_dish spin axis on the pedestal, 22 m along.
 Run: blender --background --python tools/blender/ship_nose.py -- public/models/ship_nose.glb [tmp/ship_nose.png]
 """
 
@@ -12,118 +15,84 @@ import math
 import sys
 from pathlib import Path
 
-from mathutils import Vector
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit import Kit, parse_args  # noqa: E402
-
-# Colors from src/render/palette.ts. soot is darker than any palette color.
-COLORS = {
-    "metal": 0x5A5A58,  # PAL.metal
-    "metal_light": 0x8A8A84,  # PAL.metalLight
-    "rust": 0x8A4A2A,  # PAL.rust.top
-    "rust_side": 0x5E3420,  # PAL.rust.side
-    "wall_side": 0x8E7454,  # PAL.wall.side
-    "roof": 0x5E6A5A,  # PAL.roof[1]
-    "crate": 0x9A7A4A,  # PAL.crate
-    "sand": 0xC9A878,  # PAL.sand[0]
-    "soot": 0x1E1A18,
-}
-SEED = 23
-
-LENGTH = 12.0
-BASE_RADIUS = 4.4
-TIP_RADIUS = 0.5
-SIDES = 12
-TILT = math.radians(-16)  # tip down; a cone lies flat on its side at about -18 degrees
-SINK = 0.9  # how deep the lowest point of the base rim sits below the ground
-AXIS = Vector((math.cos(TILT), 0, math.sin(TILT)))
-BASE = Vector((-LENGTH / 2 * math.cos(TILT), 0, BASE_RADIUS * math.cos(TILT) - SINK))
-ALONG_AXIS = (0, math.pi / 2 - TILT, 0)  # turns a cylinder's local Z onto AXIS
-
-# Bands from base to tip: (start, end, material) as fractions of LENGTH.
-BANDS = (
-    (0.0, 0.06, "rust_side"),
-    (0.06, 0.3, "metal"),
-    (0.3, 0.52, "metal_light"),
-    (0.52, 0.66, "rust_side"),
-    (0.66, 0.86, "metal_light"),
-    (0.86, 1.0, "metal"),
+from ship_hull_kit import (  # noqa: E402
+    COLORS,
+    RADIUS,
+    SIDES,
+    SINK,
+    core,
+    corner,
+    frame,
+    plating,
+    slab,
+    stations,
 )
-WINDOWS = (0.56, 0.63)  # the cockpit window band, raised off the cone
+
+SEED = 23
+LENGTH = 44.0
+TIP_RADIUS = 3.5
+TIP_RISE = 9.0  # the bottom line rises this far from the joint to the tip, quadratically
+# Cockpit: a band of panes on the upper sides, and a windshield over the top, as x ranges in meters.
+COCKPIT = (30.0, 37.0)
+WINDSHIELD = (37.4, 40.6)
+SIDE_STRIP = (17.0, 26.0)  # C5's long lower window strip
+PANE = 1.4  # pane length along the hull
+LIT_SHARE = 0.15
+DISH_AT = 22.0
+PEDESTAL = 2.0  # the pedestal's side and its height over the top plates
 
 
-def radius_at(t: float) -> float:
-    return BASE_RADIUS + (TIP_RADIUS - BASE_RADIUS) * t
+def profile(x: float) -> tuple[float, float]:
+    """(radius, axis height) at x along the nose."""
+    t = min(1.0, max(0.0, x / LENGTH))
+    r = max(TIP_RADIUS, RADIUS * math.sqrt(max(0.0, 1 - t**2.2)))
+    bottom = -SINK + TIP_RISE * t * t
+    return r, bottom + r
 
 
-def frustum(kit: Kit, name: str, t0: float, t1: float, mat: str, grow: float = 0.0) -> None:
-    """One band of the cone between fractions t0 and t1 of its length. grow widens it, for raised rings."""
-    depth = (t1 - t0) * LENGTH
-    center = BASE + AXIS * ((t0 + t1) / 2 * LENGTH)
-    band = kit.cylinder(name, 1.0, depth, tuple(center), mat, rot=ALONG_AXIS, vertices=SIDES)
-    for v in band.data.vertices:
-        r = radius_at(t1 if v.co.z > 0 else t0) + grow
-        v.co.x *= r
-        v.co.y *= r
+def at(x: float) -> tuple[float, float, float]:
+    r, z = profile(x)
+    return (x, r, z)
 
 
-def cone(kit: Kit) -> None:
-    for i, (t0, t1, mat) in enumerate(BANDS):
-        frustum(kit, f"band{i}", t0, t1, mat)
-    # Raised seam rings between the big panels.
-    for i, t in enumerate((0.3, 0.52, 0.66, 0.86)):
-        frustum(kit, f"seam{i}", t - 0.012, t + 0.012, "rust", grow=0.08)
-    frustum(kit, "windows", *WINDOWS, "soot", grow=0.1)
-    for i, t in enumerate(WINDOWS):
-        frustum(kit, f"window_frame{i}", t - 0.008, t + 0.008, "metal", grow=0.16)
-    # The torn base shows a dark interior.
-    kit.cylinder("base_hole", BASE_RADIUS * 0.85, 0.1, tuple(BASE - AXIS * 0.02), "soot", rot=ALONG_AXIS, vertices=SIDES)
-
-
-def shack(kit: Kit, name: str, x: float, y: float, size: tuple[float, float, float], yaw: float) -> None:
-    """A small scrap hut with a slanted tin roof."""
-    w, d, h = size
-    kit.box(name, (w, d, h), (x, y, h / 2), "wall_side", rot=(0, 0, yaw), dent_by=0.05)
-    kit.box(name + "_roof", (w + 0.4, d + 0.4, 0.12), (x, y, h + 0.1), "roof", rot=(math.radians(-8), 0, yaw), dent_by=0.04)
-    kit.box(name + "_door", (0.8, 0.05, 1.4), (x + 0.2 * math.cos(yaw), y - d / 2 * math.cos(yaw) - 0.02, 0.7), "soot", rot=(0, 0, yaw))
-
-
-def town(kit: Kit) -> None:
-    shack(kit, "shack_a", -2.6, -5.3, (2.6, 2.0, 2.2), math.radians(4))
-    shack(kit, "shack_b", 0.6, -4.3, (2.0, 1.8, 1.9), math.radians(-8))
-    kit.box("shack_patch", (1.0, 0.06, 0.9), (-3.0, -6.32, 1.3), "rust", rot=(0, 0, math.radians(4)), dent_by=0.03)
-
-    # Awning on two poles, leaning against the cone near the tip.
-    for i, (x, y) in enumerate(((3.2, -4.2), (5.4, -3.6))):
-        kit.cylinder(f"pole{i}", 0.08, 2.2, (x, y, 1.1), "metal", vertices=5)
-    kit.box("awning", (3.0, 2.2, 0.08), (4.2, -3.0, 2.35), "rust", rot=(math.radians(-14), 0, math.radians(12)), dent_by=0.04)
-
-    for i, (x, y) in enumerate(((2.2, -5.4), (2.9, -5.7), (2.5, -5.5))):
-        kit.box(f"crate{i}", (0.8, 0.8, 0.7), (x, y, 0.35 + (0.7 if i == 2 else 0)), "crate", rot=(0, 0, kit.rng.uniform(0, 1)), dent_by=0.02)
-
-
-def sand(kit: Kit) -> None:
-    """Sand drifts where the cone digs in."""
-    for i, (x, y, r, h) in enumerate(((-4.8, 3.0, 2.6, 1.2), (-5.2, -1.5, 2.6, 1.4), (-2.0, 4.0, 2.6, 0.8), (-4.8, -3.6, 2.4, 1.0), (3.6, -1.4, 2.2, 0.6))):
-        heap = kit.cylinder(f"drift{i}", r, h, (x, y, h / 2 - 0.1), "sand", vertices=7, dent_by=0.12)
-        for v in heap.data.vertices:
-            if v.co.z > 0:
-                v.co.x *= 0.45
-                v.co.y *= 0.45
+def panes(kit: Kit, name: str, x0: float, x1: float, faces: list[int]) -> None:
+    """Dark panes proud of the plates on the given faces, a share of them lit."""
+    count = max(1, round((x1 - x0) / PANE))
+    for k in faces:
+        for i in range(count):
+            a, b = x0 + (x1 - x0) * i / count, x0 + (x1 - x0) * (i + 1) / count
+            lit = kit.rng.random() < LIT_SHARE
+            slab(kit, f"{name}_{k}_{i}", at(a), at(b), corner(k) + 0.03, corner(k + 1) - 0.03, "glow" if lit else "core", lift=0.12, thick=0.3, seam=0.12)
 
 
 def build(kit: Kit) -> None:
-    cone(kit)
-    town(kit)
-    sand(kit)
+    rings = stations(0.0, LENGTH, profile)
+    plating(kit, "plate", rings)
+    core(kit, "core", rings)
+    # The blunt tip: a plated cap over the last ring.
+    x, r, z = rings[-1]
+    kit.cylinder("tip", r + 0.1, 0.8, (x + 0.2, 0, z), "pale", rot=(0, math.pi / 2, 0), vertices=SIDES)
+    kit.cylinder("tip_core", r * 0.6, 0.4, (x + 0.7, 0, z), "grey", rot=(0, math.pi / 2, 0), vertices=SIDES)
+    frame(kit, "frame", 0.7)
+    # Faces 0-2 are the +Y upper side, 4-6 the -Y upper side, 3 the top.
+    panes(kit, "cockpit", *COCKPIT, [0, 1, 5, 6])
+    panes(kit, "windshield", *WINDSHIELD, [1, 2, 3, 4, 5])
+    panes(kit, "strip", *SIDE_STRIP, [0, 6])
+    # A pedestal on the top plates carries the radar dish.
+    r, z = profile(DISH_AT)
+    top = z + r * math.cos(math.pi / SIDES) + 0.1
+    kit.box("pedestal", (PEDESTAL, PEDESTAL, PEDESTAL + 1.0), (DISH_AT, 0, top + PEDESTAL / 2 - 0.5), "steel", dent_by=0.03)
+    kit.box("pedestal_cap", (PEDESTAL + 0.6, PEDESTAL + 0.6, 0.3), (DISH_AT, 0, top + PEDESTAL - 0.15), "frame")
+    kit.socket("dish", (DISH_AT, 0, top + PEDESTAL))
 
 
 def main() -> None:
     args = parse_args()
     kit = Kit(COLORS, SEED)
     build(kit)
-    kit.export("ship_nose", args, view_size=22)
+    kit.export("ship_nose", args, view_size=60)
 
 
 if __name__ == "__main__":

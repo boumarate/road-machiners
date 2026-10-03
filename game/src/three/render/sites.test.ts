@@ -7,7 +7,7 @@ import { PAL } from '../../render/palette';
 import { guardedSites } from '../../sim/guards';
 import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
-import { fortressGates, insideCurtain, pitDepth } from '../../sim/fortress';
+import { fortressFootprint, fortressGates, fortressPieces, insideCurtain, pitDepth } from '../../sim/fortress';
 import { isFortress, siteGates } from '../../sim/sites';
 import { heightAt, type Terrain } from '../../sim/terrain';
 
@@ -43,6 +43,16 @@ describe('landmark scale', () => {
       expect(size.z).toBeGreaterThan(100);
       expect(sites.getObjectByName(`landmark-${id}`)!.userData.homes).toBeGreaterThan(15);
     }
+  });
+
+  it('counts each Nose shelter as a home', () => {
+    const group = sites.getObjectByName('landmark-nose')!;
+    let shelters = 0;
+    group.traverse((o) => {
+      if (o.name === 'nose-shelters') shelters += (o.children[0] as InstancedMesh).count;
+    });
+    expect(shelters).toBeGreaterThanOrEqual(30);
+    expect(group.userData.homes).toBe(shelters);
   });
 
   it('draws no edge for a fortress site, whose curtain is baked (IV7)', () => {
@@ -435,6 +445,105 @@ describe('landmark scale', () => {
       if (o instanceof Mesh) cab.push(...[o.material].flat().map((m) => (m as MeshLambertMaterial).emissive.getHex()));
     });
     expect(cab).toContain(PAL.lamp.on);
+  });
+
+  it('turns the Nose radar dish as its one moving part, inside the curtain over its whole turn (IV8, IV20)', () => {
+    const S = PHYSICS.metersPerTile;
+    const nose = ALL.find((s) => s.id === 'nose')!;
+    const own = movers.filter(({ node }) => {
+      let p: Object3D | null = node;
+      while (p !== null && p.name !== 'landmark-nose') p = p.parent;
+      return p !== null;
+    });
+    expect(own.map((m) => m.node.name)).toEqual(['nose-radar-dish']);
+    const { node, motion } = own[0];
+    const rest = { position: node.position.clone(), quaternion: node.quaternion.clone() };
+    const v = new Vector3();
+    // The 8 s turn passes a quarter turn every 2 s.
+    const turns: number[] = [];
+    for (const seconds of [0, 2, 4, 6]) {
+      motion(seconds, node, rest);
+      node.updateMatrix();
+      node.updateWorldMatrix(true, true);
+      turns.push(node.quaternion.angleTo(rest.quaternion));
+      const outside: string[] = [];
+      node.traverse((o) => {
+        if (!(o instanceof Mesh)) return;
+        const pos = o.geometry.getAttribute('position');
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+          if (!insideCurtain(nose, { x: v.x / S, y: v.z / S })) outside.push(`${(v.x / S - nose.pos.x).toFixed(2)},${(v.z / S - nose.pos.y).toFixed(2)}`);
+        }
+      });
+      expect(outside.slice(0, 3), `dish at ${seconds} s`).toEqual([]);
+    }
+    expect(turns.map((t) => +t.toFixed(3))).toEqual([0, +(Math.PI / 2).toFixed(3), +Math.PI.toFixed(3), +(Math.PI / 2).toFixed(3)]);
+    motion(0, node, rest);
+    node.updateMatrix();
+  });
+
+  it('lays the Nose ship sections where they were authored, clear of both gatehouses', () => {
+    const S = PHYSICS.metersPerTile;
+    const nose = ALL.find((s) => s.id === 'nose')!;
+    const group = sites.getObjectByName('landmark-nose')!;
+    const ship = group.getObjectByName('nose-ship')!;
+    // The nose joint, 10.25 tiles along the ship's southwest axis and 14 tiles back to the northwest, is not pulled in.
+    expect(ship.position.x / S - nose.pos.x).toBeCloseTo(-Math.SQRT1_2 * (10.25 + 14), 4);
+    expect(ship.position.z / S - nose.pos.y).toBeCloseTo(Math.SQRT1_2 * (10.25 - 14), 4);
+    const sections = ship.children.filter((o) => o.name === 'nose-ship-section');
+    expect(sections).toHaveLength(5);
+    const houses = fortressPieces(nose).filter((p) => p.kind === 'gate').map((p) => fortressFootprint(nose, p));
+    expect(houses).toHaveLength(2);
+    const inQuad = (q: { x: number; y: number }[], x: number, y: number) =>
+      q.every((a, i) => {
+        const b = q[(i + 1) % q.length];
+        return (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x) >= 0;
+      }) ||
+      q.every((a, i) => {
+        const b = q[(i + 1) % q.length];
+        return (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x) <= 0;
+      });
+    const v = new Vector3();
+    let inside = 0;
+    let checked = 0;
+    for (const section of sections) {
+      section.updateWorldMatrix(true, true);
+      section.traverse((o) => {
+        if (!(o instanceof Mesh)) return;
+        const pos = o.geometry.getAttribute('position');
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+          checked++;
+          if (houses.some((q) => inQuad(q, v.x / S, v.z / S))) inside++;
+        }
+      });
+    }
+    expect(checked).toBeGreaterThan(1000);
+    expect(inside).toBe(0);
+  });
+
+  it('lights the Nose shelter doorways and the cockpit windows (IV22)', () => {
+    const group = sites.getObjectByName('landmark-nose')!;
+    const glowsIn = (name: string) => {
+      const found: number[] = [];
+      group.traverse((o) => {
+        if (o.name !== name) return;
+        o.traverse((m) => {
+          if (m instanceof Mesh) found.push(...[m.material].flat().map((x) => (x as MeshLambertMaterial).emissive.getHex()));
+        });
+      });
+      return found;
+    };
+    expect(glowsIn('nose-shelters')).toContain(PAL.lamp.on);
+    const nose = group.getObjectByName('nose-ship')!.children[0];
+    const cockpit: number[] = [];
+    const dish = group.getObjectByName('nose-radar-dish')!;
+    nose.traverse((m) => {
+      let inDish = false;
+      for (let p: Object3D | null = m; p !== null; p = p.parent) if (p === dish) inDish = true;
+      if (m instanceof Mesh && !inDish) cockpit.push(...[m.material].flat().map((x) => (x as MeshLambertMaterial).emissive.getHex()));
+    });
+    expect(cockpit).toContain(PAL.lamp.on);
   });
 
   it('keeps everything a truck could touch inside the edge of an abandoned site', () => {
