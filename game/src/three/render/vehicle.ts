@@ -194,7 +194,8 @@ export class VehicleView {
 
   // The silhouette twins, outline meshes and lit lamps keep their look in the dark.
   private keepsLook(o: THREE.Mesh): boolean {
-    return [this.silhouetteMat, this.lampMat, this.radioMat].includes(o.material as THREE.MeshBasicMaterial) || o.userData.outline;
+    const m = o.material;
+    return m === this.silhouetteMat || m === this.lampMat || m === this.radioMat || o.userData.outline;
   }
 
   // glow: the color cab windows add over their lit color.
@@ -903,31 +904,33 @@ function radioColor(lit: boolean): number {
 
 // A soft red glow at the antenna tip, so a bulb a few centimeters wide still shows at game zoom.
 function radioHalo(lit: boolean): THREE.Sprite {
-  const size = 32;
-  const data = new Uint8Array(size * size * 4);
-  for (let i = 0; i < size * size; i++) {
-    const d = Math.hypot((i % size) - size / 2 + 0.5, Math.floor(i / size) - size / 2 + 0.5) / (size / 2);
-    data.set([255, 255, 255, Math.round(255 * Math.max(0, 1 - d) ** 2)], i * 4);
-  }
-  const map = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
-  map.needsUpdate = true;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, color: PAL.radioLight.on, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloMap(), color: PAL.radioLight.on, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
   sprite.scale.setScalar(RADIO_HALO);
   sprite.position.set(0, RADIO_TIP, 0);
   sprite.visible = lit;
   return sprite;
 }
 
-function disposeSprite(sprite: THREE.Sprite): void {
-  sprite.material.map?.dispose();
-  sprite.material.dispose();
+// One soft round falloff shared by every halo, so a rebuild builds no texture.
+let haloTexture: THREE.DataTexture | null = null;
+function haloMap(): THREE.DataTexture {
+  if (haloTexture) return haloTexture;
+  const size = 32;
+  const data = new Uint8Array(size * size * 4);
+  for (let i = 0; i < size * size; i++) {
+    const d = Math.hypot((i % size) - size / 2 + 0.5, Math.floor(i / size) - size / 2 + 0.5) / (size / 2);
+    data.set([255, 255, 255, Math.round(255 * Math.max(0, 1 - d) ** 2)], i * 4);
+  }
+  haloTexture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  haloTexture.needsUpdate = true;
+  return haloTexture;
 }
 
 function disposeChildren(group: THREE.Group): void {
   for (const child of [...group.children]) {
     group.remove(child);
     child.traverse((o) => {
-      if (o instanceof THREE.Sprite) disposeSprite(o);
+      if (o instanceof THREE.Sprite) o.material.dispose(); // the shared halo map stays
       if (o instanceof THREE.Mesh) {
         o.geometry.dispose();
         const mats = Array.isArray(o.material) ? o.material : [o.material];

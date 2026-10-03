@@ -12,6 +12,7 @@ export const RADIO_LIGHT = {
 export class RadioLights {
   private readonly until = new Map<string, number>();
   private noted: World | null = null;
+  private air: { world: World; ids: Set<string> } | null = null; // onAir of the last world asked, once per world
 
   note(world: World, now: number): void {
     for (const [id, end] of this.until) if (end <= now) this.until.delete(id);
@@ -22,8 +23,13 @@ export class RadioLights {
 
   lit(world: World, id: string, now: number): boolean {
     const end = this.until.get(id);
-    if (!onAir(world).includes(id) && (end === undefined || end <= now)) return false;
+    if (!this.onAir(world).has(id) && (end === undefined || end <= now)) return false;
     const phase = (now / RADIO_LIGHT.periodMs + hashStr(id)) % 1;
     return phase < 0.5;
+  }
+
+  private onAir(world: World): Set<string> {
+    if (this.air?.world !== world) this.air = { world, ids: new Set(onAir(world)) };
+    return this.air.ids;
   }
 }
