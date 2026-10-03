@@ -49,6 +49,7 @@ import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D, TruckFx } from "./render/fx";
+import { Ruts } from "./render/ruts";
 import { CollisionCues, collisionSteps, playCrashes, playDryGuns, playShotFx, type CombatHost } from "./volley";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
@@ -131,6 +132,7 @@ export class Game {
   private readonly path: PathView;
   private readonly fx: Fx3D;
   private readonly truckFx: TruckFx;
+  private readonly ruts: Ruts;
   private readonly controls: TruckControls;
   readonly sound: SoundDirector;
   private panelOpen = false; // last frame's panel state, for open and close sounds
@@ -245,6 +247,7 @@ export class Game {
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
     this.truckFx = new TruckFx(this.fx);
+    this.ruts = new Ruts(this.scene);
     this.controls = new TruckControls({ world: () => this.world, apply: (next) => this.apply(next), refreshPlan: () => this.refreshPlan(), doused: () => { this.truckFx.douse(); this.hud.pushEvents(this.world); }, revved: () => this.loops.rev(playerVehicle(this.world).chassisId) });
     this.context = new TruckContext({
       world: () => this.world,
@@ -945,6 +948,7 @@ export class Game {
     const stormy = this.world.weather.some((e) => e.kind === "storm" && dist(at, e.pos) <= e.radius);
     this.stormTint.style.display = stormy ? "" : "none";
     this.fx.tick(dt * speed, this.world);
+    this.ruts.tick(this.world.turn);
     this.playPanelSounds();
     this.updateLoops();
     this.weather.advance(dt);
@@ -1030,6 +1034,7 @@ export class Game {
       view.pose(f, dt);
       view.aim((partId) => this.turretAim((before || v).weaponOrders, f, partId));
       this.truckFx.emit(this.world, display, f, frames !== null, dt);
+      this.ruts.track(this.world, v, f, { seen, playing: frames !== null });
     }
     for (const [id, view] of this.views) {
       if (ids.has(id)) continue;

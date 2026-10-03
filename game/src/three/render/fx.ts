@@ -13,7 +13,7 @@ import { PAL } from '../../render/palette';
 import { bodyOf } from '../../sim/body';
 import { corePart, mountedParts } from '../../sim/grid';
 import { inOverdrive, isStranded, vehicleStats } from '../../sim/stats';
-import { tileAt } from '../../sim/terrain';
+import { tileAt, type Terrain } from '../../sim/terrain';
 import type { Vehicle, World } from '../../sim/types';
 import { maxHp } from '../../sim/wear';
 import type { CameraRig } from './camera';
@@ -555,11 +555,9 @@ export class TruckFx {
     const ground = TERRAIN_TYPES[world.terrain.types[tileAt(world.terrain, v.pos)]];
     // Sim speed is tiles per one-second turn.
     const rate = DUST.perMeter * v.speed * PHYSICS.metersPerTile * ground.dust;
-    const at = toMap(pose.f.pos);
-    for (const [i, m] of wheelMounts(bodyOf(v.chassisId)).entries()) {
-      const off = rotate(m.x, m.z, pose.h);
-      const tire = groundPoint(world.terrain, { x: at.x + off.x / PHYSICS.metersPerTile, y: at.y + off.z / PHYSICS.metersPerTile });
-      const side = Math.sign(m.z);
+    const mounts = wheelMounts(bodyOf(v.chassisId));
+    for (const [i, tire] of tirePoints(world.terrain, v.chassisId, pose.f).entries()) {
+      const side = Math.sign(mounts[i].z);
       const out = { x: -Math.sin(pose.h) * side, y: 0, z: Math.cos(pose.h) * side };
       this.puffs(rate * (i < 2 ? FRONT_DUST : 1), dt, () => this.fx.wheelDust(tire, back, out));
     }
@@ -588,6 +586,16 @@ export class TruckFx {
     }
     return t;
   }
+}
+
+// Each tire's ground contact under a frame's pose, in physics meters and wheelMounts order. Wheel dust and ruts start here.
+export function tirePoints(terrain: Terrain, chassisId: string, f: VehicleFrame): V3[] {
+  const h = headingOf(f.rot);
+  const at = toMap(f.pos);
+  return wheelMounts(bodyOf(chassisId)).map((m) => {
+    const off = rotate(m.x, m.z, h);
+    return groundPoint(terrain, { x: at.x + off.x / PHYSICS.metersPerTile, y: at.y + off.z / PHYSICS.metersPerTile });
+  });
 }
 
 // A chassis-space offset (x forward, z to the side) turned to the truck's heading, in meters.

@@ -785,7 +785,7 @@ export function forwardSpeed(body: RAPIER.RigidBody): number {
 function frameOf(car: RAPIER.DynamicRayCastVehicleController, body: RAPIER.RigidBody, velocityBefore: V3): VehicleFrame {
   const wheels = [];
   for (let i = 0; i < car.numWheels(); i++) {
-    wheels.push({ steer: car.wheelSteering(i) ?? 0, spin: car.wheelRotation(i) ?? 0, suspension: car.wheelSuspensionLength(i) ?? T.suspensionRest });
+    wheels.push({ steer: car.wheelSteering(i) ?? 0, spin: car.wheelRotation(i) ?? 0, suspension: car.wheelSuspensionLength(i) ?? T.suspensionRest, ground: car.wheelIsInContact(i) });
   }
   const t = body.translation();
   const r = body.rotation();
@@ -799,7 +799,7 @@ function frameOf(car: RAPIER.DynamicRayCastVehicleController, body: RAPIER.Rigid
 export function restFrame(w: World, v: Vehicle): VehicleFrame {
   const b = bodyOf(v.chassisId);
   const q = headingQuat(v.heading);
-  const wheels = wheelMounts(b).map(() => ({ steer: 0, spin: 0, suspension: T.suspensionRest }));
+  const wheels = wheelMounts(b).map(() => ({ steer: 0, spin: 0, suspension: T.suspensionRest, ground: true }));
   return { pos: { x: v.pos.x * S, y: rideHeight(w, v), z: v.pos.y * S }, rot: q, acc: { x: 0, y: 0, z: 0 }, wheels };
 }
 
