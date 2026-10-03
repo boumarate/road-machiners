@@ -1,10 +1,12 @@
 // The progression recorder. It plays a bot in the player truck through the real turn pipeline, with every truck on
 // far travel, so no physics runs and nothing crashes. Each practice event becomes a trace line. The player starts
-// with no XP, so the trace holds every XP the run gives.
+// with no XP, so the trace holds every XP the run gives. The bot buys the cheapest affordable rank at the start of
+// each turn, so it plays with the skill effects its XP pays for, like a player does.
 
 import { startKit } from '../../data/start';
 import { TIME } from '../../data/time';
 import { playerVehicle } from '../damage';
+import { buyCheapestRanks } from '../progress';
 import { advanceFar } from '../far';
 import { isTowed } from '../tow';
 import type { GameEvent, World, XpSource } from '../types';
@@ -43,8 +45,9 @@ export function recordTurns(seed: number, archetype: Archetype, turns: number): 
   return stepsFrom(startWorld(seed), `seed ${seed} ${archetype}`, archetype, turns);
 }
 
-// The player's death ends the run early, since no turn runs after it. A stall or any other error fails loud.
-function* stepsFrom(start: World, label: string, archetype: Archetype, turns: number): Generator<RecordStep> {
+// Plays the turns one at a time from a given world. The player's death ends the run early, since no turn runs after
+// it. A stall or any other error fails loud.
+export function* stepsFrom(start: World, label: string, archetype: Archetype, turns: number): Generator<RecordStep> {
   if (!Number.isInteger(turns) || turns <= 0) throw new Error(`A recording needs a positive whole number of turns, got ${turns}`);
   let world = start;
   const watch = new StallWatch(label, world.turn, playerVehicle(world).pos);
@@ -64,8 +67,9 @@ function* stepsFrom(start: World, label: string, archetype: Archetype, turns: nu
 function startWorld(seed: number): World {
   return update(newWorld(seed, startKit('standard'), TEST_MAP), (w) => {
     const p = w.player;
-    for (const skill of Object.keys(p.skills) as (keyof typeof p.skills)[]) {
-      p.skills[skill] = 0;
+    p.xp = 0;
+    for (const skill of Object.keys(p.ranks) as (keyof typeof p.ranks)[]) {
+      p.ranks[skill] = 0;
       p.xpToday[skill] = 0;
     }
     for (const source of Object.keys(p.xpBySource) as XpSource[]) p.xpBySource[source] = 0;
@@ -74,7 +78,7 @@ function startWorld(seed: number): World {
 }
 
 function playTurn(world: World, archetype: Archetype): { next: World; lines: TraceLine[] } {
-  const orders = botOrders(world, archetype);
+  const orders = botOrders(buyCheapestRanks(world), archetype);
   const next = endTurn(orders.world, moveAllFar);
   return { next, lines: [...traceOf(orders.events, orders.world.turn), ...traceOf(next.events, next.turn)] };
 }
