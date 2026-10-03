@@ -32,7 +32,11 @@ cwds() {
     return
   fi
   readlink /proc/self/cwd > /dev/null
-  readlink /proc/[0-9]*/cwd 2> /dev/null || true
+  # One readlink per process, since the server's uutils readlink stops at the first unreadable link, like a root process.
+  local link
+  for link in /proc/[0-9]*/cwd; do
+    readlink "$link" 2> /dev/null || true
+  done
 }
 
 # Succeeds when one of the folders in $2 is $1 or lies inside it.
