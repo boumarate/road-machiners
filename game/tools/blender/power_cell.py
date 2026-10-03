@@ -27,6 +27,9 @@ SEED = 64
 
 def build(kit: Kit) -> None:
     kit.cylinder("can", 0.9, 2.2, (-0.4, 0, 0.9), "metal", rot=(0, math.radians(90), 0), vertices=8, dent_by=0.05)
+    # Glowing bands around the can, so the glow shows from any side.
+    for k, x in enumerate((-1.0, -0.2)):
+        kit.cylinder(f"band_{k}", 0.96, 0.18, (x, 0, 0.9), "ship_glow", rot=(0, math.radians(90), 0), vertices=8)
     kit.cylinder("base", 1.0, 0.3, (-1.6, 0, 0.95), "rust_dark", rot=(0, math.radians(90), 0), vertices=8)
     # The core, exposed where the can split.
     kit.cylinder("core", 0.6, 1.0, (1.0, 0, 0.8), "metal_light", rot=(0, math.radians(90), 0), vertices=8)

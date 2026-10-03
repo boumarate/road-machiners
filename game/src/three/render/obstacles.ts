@@ -274,6 +274,8 @@ export function paintShipGlow(obj: THREE.Object3D): void {
     if (m.name !== 'ship_glow') return;
     m.emissive.setHex(PAL.shipGlow);
     m.emissiveIntensity = SHIP_GLOW.emissive;
+    // A dark base, so lamp light and sun do not wash the cyan out to white.
+    m.color.multiplyScalar(SHIP_GLOW.base);
   });
 }
 
@@ -328,7 +330,7 @@ function syncTrees(fixed: Fixed, obstacles: readonly Obstacle[]): void {
 // across with an 11 m rod, so the light hangs over the rod and reaches across the pit to the hazard's edge and past it.
 const REACTOR_GLOW = { emissive: 2.5, intensity: 160, range: 110, decay: 1.5, height: 10 };
 // Glow strength of a ship debris material named ship_glow, kept under the reactor's.
-const SHIP_GLOW = { emissive: 1.6 };
+const SHIP_GLOW = { emissive: 1.0, base: 0.2 };
 // The glow swells and fades by this share over one period in seconds, slow like a failing core breathing.
 const REACTOR_PULSE = { share: 0.2, period: 5 };
 type Glow = { materials: THREE.MeshLambertMaterial[]; light: THREE.PointLight };
