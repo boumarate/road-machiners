@@ -37,6 +37,7 @@ export const PAL = {
   oil: { sheen: 0x0e0d0c, edge: 0x3a3a44 }, // black oil patch with a blue-grey edge, so it reads on dark ground
   rope: 0xc9b98a, // a harpoon line, pale hemp so it reads against trucks and dark ground
   pulse: { ring: 0x9fd8ff, spark: 0xd8f0ff }, // an emitter pulse's ring and the sparks on a shut-down truck, electric blue
+  flare: { glow: 0xff4a3a, light: 0xff3a2a, edge: 0xd8402e, marker: 0xff6a50 }, // a burning flare, its light, the ring at its edge and the contact blip it gives
   dustTrail: 0xe0c49a, // dust streak behind a contact seen by its dust, pale so it shows over fog
   radio: 0x8fe0c8, // crisp scanner blip
   flash: 0xfff0a0,

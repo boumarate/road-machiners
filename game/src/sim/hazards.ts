@@ -3,11 +3,14 @@
 // no line of fire, so they are not cover, and combat.ts reads smokeCrosses() for the `smoke` spread cause. Ground
 // fields are caltrop fields and oil patches dropped behind a truck. A caltrop field hurts the wheels of each truck that
 // drives through it, once per truck. An oil patch cuts wheel grip in physics, which reads the patches at turn start
-// through oilPatches(). Route planners steer around the fields a driver has seen.
+// through oilPatches(). Route planners steer around the fields a driver has seen. A flare burns over a point: at night
+// it takes the night's halving off sight to the ground inside its light (vision.ts asks litAt()), and its launch and
+// its light show its launcher far off (detect.ts turns flareSightings() into contacts).
 
 import { chassisDef } from '../data/chassis';
+import { PARTS } from '../data/parts';
 import { PHYSICS } from '../data/physics';
-import { CALTROPS } from '../data/utilities';
+import { CALTROPS, FLARE } from '../data/utilities';
 import { bodyOf } from './body';
 import { judgeStray } from './combat';
 import { damagePart } from './damage';
@@ -15,8 +18,9 @@ import { newId } from './factory';
 import { coreParts } from './grid';
 import type { Blocker } from './path';
 import { getResources } from './resources';
-import type { GroundField, Vehicle, World } from './types';
-import { segmentDist, type Vec } from './vec';
+import { sunAt } from './sun';
+import type { Flare, GroundField, Vehicle, World } from './types';
+import { dist, segmentDist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 
 // ---- Smoke clouds. The Sprout and the Smoke mortar make them.
@@ -95,4 +99,53 @@ export function oilPatches(world: World): { pos: Vec; r: number }[] {
 // The fields v's route planner steers around, like parked trucks: those it sees now and those it dropped.
 export function fieldBlockers(world: World, v: Vehicle): Blocker[] {
   return world.fields.filter((f) => f.source === v.id || canVehicleSee(world, v, f.pos)).map((f) => ({ pos: f.pos, r: f.r }));
+}
+
+// ---- Flares. The Flare cannon fires them.
+
+// How a flare burns: the radius in tiles it lights, and its turns.
+export type FlareBurn = { radius: number; turns: number };
+
+// Puts a burning flare on pos, fired by v. No sight of the point is needed.
+export function launchFlare(world: World, v: Vehicle, pos: Vec, burn: FlareBurn): void {
+  world.flares.push({ id: newId(world, 'f'), source: v.id, pos: { ...pos }, r: burn.radius, turnsLeft: burn.turns });
+}
+
+// The flares whose light counts now: every burning flare at night, none by day.
+export function litFlares(world: World): Flare[] {
+  return sunAt(world.turn) ? [] : world.flares;
+}
+
+// Whether a burning flare lights the point at night.
+export function litAt(world: World, p: Vec): boolean {
+  return litFlares(world).some((f) => dist(f.pos, p) <= f.r);
+}
+
+// The turns every flare burns. A flare that still has them all was launched this turn: the activation step fires it
+// after the effects aged, and they age next at the start of the next turn's effects, after the NPCs planned.
+const BURN_TURNS = flareBurnTurns();
+
+function flareBurnTurns(): number {
+  const turns = new Set(Object.values(PARTS).flatMap((d) => (d.kind === 'utility' && d.effect.type === 'flare' ? [d.effect.turns] : [])));
+  if (turns.size !== 1) throw new Error(`Flare parts burn for ${[...turns].join(', ') || 'no'} turns; the launch turn needs one`);
+  return [...turns][0];
+}
+
+// A launcher seen by its flare at night: at the burning flare's point, or at null for the launch flash in the turn it
+// fired, which shows the launcher itself.
+export type FlareSighting = { launcher: Vehicle; at: Vec | null };
+
+// What a viewer sees of other trucks' flares at night: every flare within FLARE.seenRange, and every launch this turn
+// whose launcher lies within it. Hills do not hide a flare in the sky. A flare whose launcher is gone shows nobody.
+export function flareSightings(world: World, viewer: Vehicle): FlareSighting[] {
+  return litFlares(world).flatMap((f) => {
+    const launcher = world.vehicles.find((v) => v.id === f.source);
+    return launcher && launcher.id !== viewer.id ? sightingsOf(viewer, f, launcher) : [];
+  });
+}
+
+function sightingsOf(viewer: Vehicle, f: Flare, launcher: Vehicle): FlareSighting[] {
+  const light = dist(viewer.pos, f.pos) <= FLARE.seenRange ? [{ launcher, at: { ...f.pos } }] : [];
+  const flash = f.turnsLeft === BURN_TURNS && dist(viewer.pos, launcher.pos) <= FLARE.seenRange;
+  return flash ? [...light, { launcher, at: null }] : light;
 }

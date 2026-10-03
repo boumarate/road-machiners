@@ -1,5 +1,5 @@
-// The views of the utility effects that lie in the world: smoke clouds, ground fields, harpoon lines and emitter
-// pulses. HazardViews owns them and updates them each frame. Render only: they read the world and never change it.
+// The views of the utility effects that lie in the world: smoke clouds, ground fields, flares, harpoon lines and
+// emitter pulses. HazardViews owns them and updates them each frame. Render only: they read the world and never change it.
 //
 // Smoke clouds from world.smoke: black puffs that fill each cloud's circle, with a dark ring on the ground at its edge.
 // A cloud does not drift, so the ring is exactly where shots through it start to scatter.
@@ -9,17 +9,23 @@
 //
 // Shown: clouds and fields the player sees any part of, and the player's own.
 //
+// Flares from world.flares: a red glow hanging over its point, a red point light on the ground below and a ring at the
+// edge of its light, drawn while it burns within FLARE.seenRange of the player. A flare in the sky clears the hills.
+// The truck its launch or its light shows is marked by contacts.ts from the player's contacts.
+//
 // Emitter pulses from the turn's pulse events: a ring that sweeps out over the ground to the pulse's radius and
 // fades, where the player sees the user, a truck it hit or the player is involved. Trucks with shut-down turns ahead
 // crackle with sparks while they are drawn.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
+import { FLARE } from '../../data/utilities';
 import { PAL } from '../../render/palette';
 import { hash2, valueNoise } from '../../render/noise';
 import { heightAt, type Terrain } from '../../sim/terrain';
-import type { GameEvent, GroundField, SmokeCloud, World } from '../../sim/types';
-import type { Vec } from '../../sim/vec';
+import type { Flare, GameEvent, GroundField, SmokeCloud, World } from '../../sim/types';
+import { dist, type Vec } from '../../sim/vec';
+import { playerVehicle } from '../../sim/damage';
 import { playerSees } from '../../sim/vision';
 import { pulseEffect, shutDownTurnsLeft } from '../../sim/utility';
 import { HarpoonLinesView } from './lines';
@@ -32,18 +38,20 @@ const S = PHYSICS.metersPerTile;
 export class HazardViews {
   private readonly smoke = new SmokeCloudsView();
   private readonly fields = new GroundFieldsView();
+  private readonly flares = new FlaresView();
   private readonly lines = new HarpoonLinesView();
   private readonly pulses = new PulseView();
   readonly root = new THREE.Group();
 
   constructor() {
-    this.root.add(this.smoke.root, this.fields.root, this.lines.root, this.pulses.root);
+    this.root.add(this.smoke.root, this.fields.root, this.flares.root, this.lines.root, this.pulses.root);
   }
 
   // views: the vehicle views by vehicle id, which the harpoon lines run between and shut-down trucks spark on.
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number): void {
     this.smoke.update(world, terrain, nowMs);
     this.fields.update(world, terrain);
+    this.flares.update(world, terrain, nowMs);
     this.lines.update(world, views);
     this.pulses.update(world, terrain, views, nowMs);
   }
@@ -228,6 +236,96 @@ class GroundFieldsView {
     }
     return group;
   }
+}
+
+// ---- Flares
+
+const FLARE_ORDER = 906; // above smoke (905), below contact markers
+const FLARE_LOOK = {
+  height: 6, // tiles above the ground the flare hangs
+  glow: 3, // tiles across the glow sprite
+  edge: { width: 0.15, opacity: 0.7 }, // the ring at the edge of its light, in tiles
+  light: { intensity: 60, reach: 1.6, decay: 1 }, // reach: the light's range as a share of the flare's radius
+  flicker: { share: 0.25, speed: 6 }, // the glow and the light waver by this share, this many noise cycles a second
+  lastTurn: 0.55, // brightness share in the flare's last turn, so a dying flare reads as ending
+};
+
+type FlareView = { glow: THREE.Sprite; edge: GroundBand };
+
+class FlaresView {
+  readonly root = new THREE.Group();
+  private readonly views = new Map<string, FlareView>();
+  private readonly texture = createGlowTexture();
+  // A change in light count recompiles every material, so the pool only grows, to the most flares shown at once.
+  // Unused lights stay dark.
+  private readonly lights: THREE.PointLight[] = [];
+
+  update(world: World, terrain: Terrain, nowMs: number): void {
+    const shown = new Map(world.flares.filter((f) => flareShown(world, f)).map((f) => [f.id, f]));
+    for (const [id, view] of this.views) if (!shown.has(id)) this.drop(id, view);
+    while (this.lights.length < shown.size) this.addLight();
+    this.lights.forEach((light) => (light.intensity = 0));
+    [...shown.values()].forEach((f, i) => {
+      const view = this.views.get(f.id) ?? this.makeView(terrain, f);
+      this.place(terrain, view, this.lights[i], f, nowMs);
+    });
+  }
+
+  private addLight(): void {
+    const light = new THREE.PointLight(PAL.flare.light, 0, 0, FLARE_LOOK.light.decay);
+    this.lights.push(light);
+    this.root.add(light);
+  }
+
+  private makeView(terrain: Terrain, f: Flare): FlareView {
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.texture, color: PAL.flare.glow, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    glow.renderOrder = FLARE_ORDER;
+    glow.scale.setScalar(FLARE_LOOK.glow * S);
+    glow.position.set(f.pos.x * S, (heightAt(terrain, f.pos.x, f.pos.y) + FLARE_LOOK.height) * S, f.pos.y * S);
+    const edge = new GroundBand({ color: PAL.flare.edge, opacity: FLARE_LOOK.edge.opacity, renderOrder: FLARE_ORDER - 1, overTrucks: false });
+    edge.set(terrain, f.pos, f.r - FLARE_LOOK.edge.width, f.r);
+    this.root.add(glow, edge.mesh);
+    const view = { glow, edge };
+    this.views.set(f.id, view);
+    return view;
+  }
+
+  private drop(id: string, view: FlareView): void {
+    this.root.remove(view.glow, view.edge.mesh);
+    view.glow.material.dispose();
+    view.edge.dispose();
+    this.views.delete(id);
+  }
+
+  // The glow and its light waver together, and dim in the flare's last turn.
+  private place(terrain: Terrain, view: FlareView, light: THREE.PointLight, f: Flare, nowMs: number): void {
+    const wave = 1 - FLARE_LOOK.flicker.share * valueNoise((nowMs / 1000) * FLARE_LOOK.flicker.speed, hashId(f.id) % 97);
+    const bright = wave * (f.turnsLeft <= 1 ? FLARE_LOOK.lastTurn : 1);
+    view.glow.material.opacity = bright;
+    light.intensity = FLARE_LOOK.light.intensity * bright;
+    light.distance = f.r * FLARE_LOOK.light.reach * S;
+    light.position.copy(view.glow.position);
+  }
+}
+
+// A flare shows within FLARE.seenRange of the player, and the player's own always does.
+function flareShown(world: World, f: Flare): boolean {
+  return f.source === world.player.vehicleId || dist(playerVehicle(world).pos, f.pos) <= FLARE.seenRange;
+}
+
+function createGlowTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not create flare texture');
+  // A hot white core that fades out through the sprite's color.
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.25, 'rgba(255,255,255,0.8)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(canvas);
 }
 
 // ---- Emitter pulses

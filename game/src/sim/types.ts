@@ -142,7 +142,7 @@ export type Contact = {
   vehicleId: string;
   center: Vec;
   radius: number;
-  sources: ("sound" | "dust" | "radio" | "beacon" | "mark")[]; // mark: the spotter perk tracks the vehicle
+  sources: ("sound" | "dust" | "radio" | "beacon" | "mark" | "flare")[]; // mark: the spotter perk tracks the vehicle; flare: its flare at night
   loudness: number | null;
 };
 

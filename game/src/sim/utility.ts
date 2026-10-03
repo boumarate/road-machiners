@@ -10,7 +10,7 @@ import { findPart } from './damage';
 import { isKnockedOut } from './defeat';
 import { isMounted, mountedParts } from './grid';
 import { endLines, fireHarpoon, harpoonBlock } from './harpoon';
-import { deploySmoke, dropField, oilShort, spillOil } from './hazards';
+import { deploySmoke, dropField, launchFlare, oilShort, spillOil } from './hazards';
 import type { ChargeState, GameEvent, PartInstance, UtilityOrder, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { wornDef, wornTurns } from './wear';
@@ -65,7 +65,7 @@ const ARMS: Record<UseKind, (world: World, use: Use) => void> = {
     const e = effectOf(part, 'mortar');
     deploySmoke(world, vehicle, pointOf(order), e.radius, e.turns);
   },
-  flare: notBuilt('flare'),
+  flare: (world, { vehicle, part, order }) => launchFlare(world, vehicle, pointOf(order), effectOf(part, 'flare')),
   harpoon: (world, { vehicle, part, order }) => fireHarpoon(world, vehicle, part, truckOf(order)),
   caltrops: (world, { vehicle, part }) => dropField(world, vehicle, 'caltrops', effectOf(part, 'caltrops')),
   oil: (world, { vehicle, part }) => spillOil(world, vehicle, effectOf(part, 'oil')),
