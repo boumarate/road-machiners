@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
 import { PAL } from '../../render/palette';
-import { isTerritory, territoryTracks } from '../../sim/territory';
+import { isTerritory, territoryRoads } from '../../sim/territory';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import type { Vec } from '../../sim/vec';
 import { RenderScope, type SightLimit } from './scope';
@@ -24,7 +24,7 @@ export function addCraterTracks(t: Terrain, root: THREE.Object3D, limit: SightLi
   const scope = new RenderScope(root, t.size, limit, true, false);
   const material = new THREE.MeshLambertMaterial({ color: PAL.rut, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   for (const territory of REGION.locations.filter(isTerritory)) {
-    for (const track of territoryTracks(territory)) {
+    for (const track of territoryRoads(territory).roads.map((road) => road.points)) {
       for (const piece of pieces(samples(track))) {
         const mesh = new THREE.Mesh(rutGeometry(t, piece), material);
         mesh.name = 'crater-track';

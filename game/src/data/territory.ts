@@ -30,8 +30,9 @@ export type DebrisRule = { look: PropKind; count: number; radius: [number, numbe
 export type Patch = { at: Vec; radius: number; debris: DebrisRule[]; spots: number };
 // Rim rocks, chunks of crater wall drawn on an arc of the crater bank. Bearings in radians from map +x toward +y, distances in tiles.
 export type RimRocks = { from: number; to: number; radius: [number, number]; count: number; size: [number, number] };
-// A twin-rut dirt track on the crater floor, a polyline in tiles from the centre. It is only drawn.
-export type Ruts = Vec[];
+// A deck of a wreck in tiles from the territory centre: a straight span width tiles wide, rise height units over the
+// ground at its from and to ends. FALLEN_SUN_DECKS lists them on the map, src/sim/bridge.ts gives their geometry.
+export type WreckDeck = { id: string; from: Vec; to: Vec; width: number; rise: [number, number] };
 // The reactor prop. Its position is also the hazard's centre.
 export type Reactor = { look: PropKind; at: Vec; radius: number; hazard: Hazard | null };
 // An authored farm laid out in its road's frame. Every at and point is tiles from the territory centre, written as
@@ -101,7 +102,13 @@ export type WreckRules = {
   // Floor vertex indices of the territory's basin, from..to, wrapping past the last vertex. The bank of that arc is
   // painted red-brown scree.
   scree: { from: number; to: number } | null;
-  tracks: Ruts[];
+  // Dirt roads, surface 'track': the web inside the outline, and the spurs that leave it. A spur starts on a web road,
+  // crosses the outline and ends on open land outside, where its last spurFade tiles fade out.
+  roads: FarmRoad[];
+  spurs: FarmRoad[];
+  spurFade: number;
+  decks: WreckDeck[];
+  landing: number; // tiles of landing strip past a deck's lip, kept clear of props and other decks
 };
 // A territory is a wreck or a farm.
 export type TerritoryRules = {
@@ -115,18 +122,37 @@ export type TerritoryRules = {
 
 const DEG = Math.PI / 180;
 
-// Debris of the dense field in the concept's lower half: plates, wrecked trucks, junk piles and girders.
+// Debris of the dense field in the concept's lower half, thinned to the second reference's sparse scrap: islands of
+// clean sand with a plate, a wrecked truck and a junk pile or two.
 const DENSE: DebrisRule[] = [
-  { look: 'hullChunk', count: 4, radius: [1, 1.6] },
-  { look: 'hullGantry', count: 1, radius: [0.8, 1.1] },
-  { look: 'carWreck', count: 3, radius: [0.6, 0.8] },
-  { look: 'junk', count: 4, radius: [0.5, 0.8] },
-];
-// The sparse scatter of the concept's upper half.
-const LIGHT: DebrisRule[] = [
-  { look: 'hullChunk', count: 2, radius: [1, 1.6] },
+  { look: 'hullChunk', count: 1, radius: [1, 1.6] },
   { look: 'carWreck', count: 1, radius: [0.6, 0.8] },
+  { look: 'junk', count: 2, radius: [0.5, 0.8] },
 ];
+// The sparse scatter of the concept's upper half: one plate.
+const LIGHT: DebrisRule[] = [{ look: 'hullChunk', count: 1, radius: [1, 1.6] }];
+
+// Dirt road widths in tiles, from the second reference: its roads are 25-32 px wide where the cage's 25 tiles span
+// 280 px. The outer ring is the widest.
+const RING = 3;
+const LANE = 2.5;
+// A dirt road through points in tiles from the territory centre.
+function dirt(width: number, points: (Vec | [number, number])[]): FarmRoad {
+  return { points: points.map((p) => (Array.isArray(p) ? { x: p[0], y: p[1] } : p)), width, surface: 'track' };
+}
+
+// The crash furrow's frame (inferred, as no reference shows it): the axis of TERRAIN.features.furrow in
+// src/data/terrain.ts, in tiles from the Fallen Sun's centre. s runs down the furrow from its head, lat across it
+// toward its west side.
+const FURROW_HEAD: Vec = { x: -15, y: 56 };
+const FURROW_TAIL: Vec = { x: -26.4, y: 98.5 };
+const FURROW_LENGTH = Math.hypot(FURROW_TAIL.x - FURROW_HEAD.x, FURROW_TAIL.y - FURROW_HEAD.y);
+const FURROW_AXIS: Vec = { x: (FURROW_TAIL.x - FURROW_HEAD.x) / FURROW_LENGTH, y: (FURROW_TAIL.y - FURROW_HEAD.y) / FURROW_LENGTH };
+export function inFurrow(s: number, lat: number): Vec {
+  return { x: FURROW_HEAD.x + FURROW_AXIS.x * s - FURROW_AXIS.y * lat, y: FURROW_HEAD.y + FURROW_AXIS.y * s + FURROW_AXIS.x * lat };
+}
+// A yaw that lies across the furrow.
+const ACROSS_FURROW = Math.atan2(FURROW_AXIS.y, FURROW_AXIS.x) - Math.PI / 2;
 
 const ALONG = 0; // a turn that keeps a building's front along the road, toward its north end
 const ACROSS = Math.PI / 2; // a turn that sets a building's front across the road, toward map east: the road for a building on its west side
@@ -168,9 +194,10 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         // Ribcage tube: south end (300,430) to north end (465,335), axis north to south. A 3-tile gap to the hub lets
         // trucks leave its north end.
         { look: 'shipCage', at: { x: 4.4, y: 22.9 }, yaw: -1.61, r: 12.5 },
-        // Upright shards along the spine: (578,250); and (652,400), moved 10 tiles in along the spine to (17,1.5)
-        // because the south-east drum, pulled in from the stretched foreground, took its place.
-        { look: 'hullShard', at: { x: 0.4, y: -9.5 }, yaw: 0.9, r: 1.6 },
+        // Upright shards along the spine: (578,250), moved 3.5 tiles north along the spine line from (0.4,-9.5) so the
+        // second reference's road between it and the hub (690-740 px) fits; and (652,400), moved 10 tiles in along the
+        // spine to (17,1.5) because the south-east drum, pulled in from the stretched foreground, took its place.
+        { look: 'hullShard', at: { x: 1, y: -13 }, yaw: 0.9, r: 1.6 },
         { look: 'hullShard', at: { x: 17, y: 1.5 }, yaw: 2.4, r: 1.6 },
         // Arch shells left of the hub: A (275,222)-(385,228); B (400,212)-(472,214), moved 2 tiles along its axis and 2 north so
         // a truck fits between the two. Both turn 25° toward east, so their dark open ends face the camera as in the
@@ -181,22 +208,31 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         // off the tower.
         { look: 'hullTower', at: { x: -13, y: -18.6 }, yaw: -0.785, r: 1.6 },
         { look: 'hullGantry', at: { x: -24, y: -18.5 }, yaw: 0.133, r: 5.5 },
-        // Huts: the collapsed hut (385,160), moved 4 tiles north-west off the track, and two small huts by the tower (598,140) and (622,132). The shed (258,318).
+        // Huts: the collapsed hut (385,160), moved 4 tiles north-west off the track, and two small huts by the tower
+        // (598,140) and (622,132): the first moved half a tile north from (-13.3,-26.1), off the road north of the
+        // tower, and the second 2.3 tiles south-west from (-12.6,-28.9), so the outer ring passes between it and the
+        // north-east drum. The shed (258,318).
         { look: 'shack', at: { x: -29, y: -10.5 }, yaw: 0.4, r: 2 },
-        { look: 'shack', at: { x: -13.3, y: -26.1 }, yaw: -0.8, r: 1.2 },
-        { look: 'shack', at: { x: -12.6, y: -28.9 }, yaw: -0.6, r: 1.2 },
+        { look: 'shack', at: { x: -13.05, y: -26.6 }, yaw: -0.8, r: 1.2 },
+        { look: 'shack', at: { x: -14.35, y: -27.4 }, yaw: -0.6, r: 1.2 },
         { look: 'shack', at: { x: -13.6, y: 23.2 }, yaw: 0.6, r: 2.5 },
         // Drums: sunk in the north-east wall (690,130)-(755,70); small at the right (918,285), moved 4 tiles out of the
-        // hazard; large at the lower right (765,455)-(955,505), 16 tiles long and moved 6 tiles in from
-        // (39,1.2) so it stays inside the territory.
+        // hazard and then 1.8 tiles in from (31.5,-28.5), so the outer ring passes outside it; large at the lower right
+        // (765,455)-(955,505), 16 tiles long and moved 6 tiles in from (39,1.2) so it stays inside the territory.
         { look: 'hullDrum', at: { x: -8.7, y: -36.6 }, yaw: -1.834, r: 5 },
-        { look: 'hullDrum', at: { x: 31.5, y: -28.5 }, yaw: 0.3, r: 2.5 },
+        { look: 'hullDrum', at: { x: 30.5, y: -27 }, yaw: 0.3, r: 2.5 },
         { look: 'hullDrum', at: { x: 33, y: 5 }, yaw: -0.325, r: 8 },
         // Shard clusters: bottom centre (505,545), moved 2 tiles off the south-east road's end; far left (95,400); and
-        // right (885,385), moved 7 tiles north to (36.5,-19), past the east road's end.
+        // right (885,385), moved 7 tiles north past the east road's end and then 4.5 tiles west from (36.5,-19), off
+        // the east entry's lane and the ring's junction there, between the bow and the small drum where the second
+        // reference has it.
         { look: 'hullShard', at: { x: 27.5, y: 30.5 }, yaw: 0.4, r: 3.5 },
         { look: 'hullShard', at: { x: -11.9, y: 38.7 }, yaw: 2.1, r: 3.5 },
-        { look: 'hullShard', at: { x: 36.5, y: -19 }, yaw: -1, r: 3.5 },
+        { look: 'hullShard', at: { x: 32, y: -19.5 }, yaw: -1, r: 3.5 },
+        // The wing's piers (inferred): two big hull drums lying across the crash furrow under the wing's level span, in
+        // the gouge, so their tops come just under the deck and their ends stick out past both rails.
+        { look: 'hullDrum', at: inFurrow(23.5, 0), yaw: ACROSS_FURROW, r: 6 },
+        { look: 'hullDrum', at: inFurrow(34.5, 0), yaw: ACROSS_FURROW, r: 6 },
       ],
       // Inside hull pieces sight is short and an ambush waits at the open ends, so the rich loot lies there.
       caches: [
@@ -207,7 +243,9 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { at: { x: -21.1, y: 5.1 } }, // inside shell A (325,222)
         { at: { x: -13.8, y: -7.9 } }, // inside shell B (440,215)
         { at: { x: -9.5, y: -1 } }, // west of the hub; the concept's (525,300) lies inside the hub
-        { at: { x: 19.5, y: -2.5 } }, // past the spine's end at the bow's aft break, outside the hazard (590,320)
+        // Past the spine's end at the bow's aft break, outside the hazard (590,320), 2 tiles west of round 3's
+        // (19.5,-2.5), off the east lane where it turns south.
+        { at: { x: 17.5, y: -3.2 } },
         { at: { x: -10.5, y: -22 } }, // behind the tower (560,185)
         { at: { x: 30.8, y: 11 } }, // on the south side of the south-east drum (760,470)
         { at: { x: 10.2, y: 2.1 } }, // beside the spine (590,320)
@@ -221,15 +259,19 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         // The dense field of the concept's lower half.
         { at: { x: -6.5, y: 32.4 }, radius: 10, debris: DENSE, spots: 3 }, // west of the cage (180,400)
         { at: { x: 14, y: 30 }, radius: 9, debris: DENSE, spots: 2 }, // the bottom centre (400,480)
-        { at: { x: 21, y: 21 }, radius: 8.5, debris: DENSE, spots: 2 }, // the lower right (512,445)
-        { at: { x: 34, y: 16 }, radius: 7, debris: LIGHT, spots: 2 }, // south of the large drum (633,465)
-        { at: { x: -24, y: 29 }, radius: 7, debris: LIGHT, spots: 2 }, // the lower left (146,301)
+        // The lower right (512,445), moved 2 tiles west and north from (21,21), so its centre lies within 6 tiles of
+        // the road down the cage's east flank.
+        { at: { x: 19.5, y: 19.5 }, radius: 8.5, debris: DENSE, spots: 2 },
+        // Moved into the furrow from south of the large drum (633,465) and the lower left (146,301), where the crater
+        // flaps' landings now run (inferred): either side of the wing's up-ramp, between it and the flaps' landings.
+        { at: inFurrow(11, -6.4), radius: 5, debris: LIGHT, spots: 2 },
+        { at: inFurrow(11, 6.4), radius: 5, debris: LIGHT, spots: 2 },
         // The sparse scatter of the upper half.
         { at: { x: 28, y: -11 }, radius: 6, debris: LIGHT, spots: 1 }, // below the bow (777,345)
         { at: { x: -6.4, y: -13.7 }, radius: 7, debris: LIGHT, spots: 1 }, // the top centre (560,210)
         { at: { x: 2, y: -27 }, radius: 7, debris: LIGHT, spots: 0 }, // below the north-east drum (709,192)
         // The west scree (180,200): pale plate fragments.
-        { at: { x: -31.9, y: 11.3 }, radius: 9, debris: [{ look: 'hullChunk', count: 12, radius: [0.5, 1] }], spots: 2 },
+        { at: { x: -31.9, y: 11.3 }, radius: 9, debris: [{ look: 'hullChunk', count: 6, radius: [0.5, 1] }], spots: 2 },
       ],
       spotLook: 'shipCache',
       // Field spots roll a scrap-heavy table at road-wreck size. With the 9 caches the Fallen Sun keeps 24 spots.
@@ -243,28 +285,159 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       // The red-brown scree slope of the concept's upper left, from (100,250) to (300,110): the basin's west bank from
       // its south-west vertex at 145° round to the left crag wall at -140°.
       scree: { from: 20, to: 2 },
-      // Twin-rut tracks traced from the concept, bent round the pieces. Each starts or ends at a road end or another
-      // track.
-      tracks: [
-        // From the west road's end north of the shells to the tower and huts: (150,185) (260,172) (395,182) (610,160)
-        [{ x: -38.5, y: 9.6 }, { x: -34.3, y: 8 }, { x: -32, y: 2 }, { x: -28, y: -4 }, { x: -23, y: -10 }, { x: -17, y: -12.5 }, { x: -10.5, y: -13.5 }, { x: -7.5, y: -18 }, { x: -8, y: -24 }],
-        // Down the west side past the shed to the cage's south end: (205,190) (175,265) (230,335) (330,385)
-        [{ x: -34.3, y: 8 }, { x: -31.9, y: 14.8 }, { x: -26.7, y: 21.7 }, { x: -21, y: 25.7 }, { x: -13.3, y: 28.5 }, { x: -6, y: 31 }, { x: 0, y: 36 }, { x: 4.8, y: 37.5 }],
-        // Under the shells to the hub: (175,265) (320,262) (450,250)
-        [{ x: -26.7, y: 21.7 }, { x: -22.8, y: 16.5 }, { x: -16.7, y: 11 }, { x: -10, y: 7.5 }],
-        // A loop round the shed: (330,262) (340,300) (290,345)
-        [{ x: -16.7, y: 11 }, { x: -10.5, y: 14.5 }, { x: -8, y: 19 }, { x: -8.5, y: 25 }, { x: -13.3, y: 28.5 }],
-        // From the cage's south end to the south-east road's end: (390,395) (500,450) (590,520)
-        [{ x: 4.8, y: 37.5 }, { x: 10, y: 39 }, { x: 17, y: 37.5 }, { x: 22.5, y: 32 }, { x: 25, y: 26 }, { x: 31.9, y: 24.1 }],
-        // North past the south-east drum and the spine's end to the east road's end: (680,420) (800,380) (985,425)
-        [{ x: 31.9, y: 24.1 }, { x: 29, y: 17 }, { x: 24, y: 12 }, { x: 22, y: 4 }, { x: 27, y: -4 }, { x: 33, y: -8 }, { x: 38.5, y: -11 }],
-        // Between the hub and the cage's north end to the spine: (600,300) (700,360)
-        [{ x: 22, y: 4 }, { x: 13, y: 5.5 }, { x: 7, y: 8.8 }, { x: 0, y: 9.3 }, { x: -5, y: 9 }, { x: -10, y: 7.5 }],
-        // Along the bow's south flank toward the small drum: (850,345) (935,300)
-        [{ x: 33, y: -8 }, { x: 32, y: -15 }, { x: 31.5, y: -21 }],
-        // North of the hub from the tower to the bow's aft break
-        [{ x: -10.5, y: -13.5 }, { x: -4, y: -12.5 }, { x: 4, y: -12 }, { x: 10, y: -9.5 }],
+      // The dirt road web, traced from the second reference through a homography fitted on the round 3 pieces
+      // (tmp/issue-81/r5/roads.json), then pushed clear of the pieces' low boxes, the caches and the hazard
+      // (tmp/issue-81/r4/layout.md). Each comment names the reference pixels a road was traced through: its first,
+      // middle and last. One ring runs inside the outline, which the three approaches join, and inner roads run through
+      // the gaps between the large pieces, so each stands on an island with road on two sides or more.
+      roads: [
+        // ring-w: reference 3 px (150,232) (131,399) (238,522).
+        dirt(RING, [[-40.7, 13.2], [-38.1, 19.5], [-35.8, 22.7], [-33.4, 27.4], [-30.3, 31], [-25.3, 35.8], [-19, 39.9], [-16.7, 42.7], [-15.6, 43.2], [-12.1, 43.6], [-10.2, 42.9], [-8.6, 42.9], [-3.8, 45.2]]),
+        // ring-sw: reference 3 px (238,522) (271,519) (305,512).
+        dirt(RING, [[-3.8, 45.2], [-0.8, 40.1]]),
+        // ring-s: reference 3 px (305,512) (438,568) (600,600).
+        dirt(RING, [[-0.8, 40.1], [1.8, 39.1], [3.7, 38.9], [14.9, 39.6], [17.5, 39.3], [19.3, 38.6], [24.4, 35.5], [26.2, 35.6], [29.6, 36.4], [31.2, 36.2]]),
+        // ring-se: reference 3 px (600,600) (823,575) (1045,553).
+        dirt(RING, [[31.2, 36.2], [32.5, 33.7], [32.4, 29.2], [32.9, 27.6], [39.1, 20.1], [40, 18.9], [47.3, 9.7], [48, 7.4], [48.2, 1.6]]),
+        // ring-e1: reference 3 px (1045,553) (1078,482) (1080,424).
+        dirt(RING, [[48.2, 1.6], [48.1, -4.1], [47.4, -6.3], [43.3, -11.8], [38.1, -16.4]]),
+        // ring-e2: reference 3 px (1080,424) (1125,429) (1172,430).
+        dirt(RING, [[38.1, -16.4], [40.8, -17.9], [45, -21.1]]),
+        // ring-e3: reference 3 px (1172,430) (1188,399) (1205,378).
+        dirt(RING, [[45, -21.1], [42, -25.9], [40.4, -29.4]]),
+        // ring-e4: reference 3 px (1205,378) (1163,308) (1150,237).
+        dirt(RING, [[40.4, -29.4], [30.9, -33.9], [26.1, -37.2], [25.2, -38.4], [23.8, -41.3], [22.7, -42], [18.9, -43]]),
+        // ring-ne: reference 3 px (1150,237) (1083,228) (1008,245).
+        dirt(RING, [[18.9, -43], [16, -41.9], [14.5, -40.7], [10.8, -33.6]]),
+        // ring-n1: reference 3 px (1008,245) (948,192) (900,197).
+        dirt(RING, [[10.8, -33.6], [5.5, -35.6], [1.6, -36.2], [-0.1, -35.7], [-0.8, -35], [-1.8, -33]]),
+        // ring-n2: reference 3 px (900,197) (859,191) (815,190).
+        dirt(RING, [[-1.8, -33], [-2.3, -31.2], [-3, -30.1], [-4.2, -29.4], [-7.9, -28.5]]),
+        // ring-n3, bent 1.5 tiles south-west round the foot of the north-east drum: reference 3 px (815,190) (812,170)
+        // (810,148).
+        dirt(RING, [[-7.9, -28.5], [-10.8, -28.8], [-13, -30.8], [-13.5, -33.5]]),
+        // ring-n4: reference 3 px (810,148) (769,146) (725,142).
+        dirt(RING, [[-13.5, -33.5], [-19.3, -29.3]]),
+        // ring-n5: reference 3 px (725,142) (622,126) (547,143).
+        dirt(RING, [[-19.3, -29.3], [-23, -28.7], [-25.3, -27.5], [-26.5, -26.4], [-28.4, -23.8], [-31.4, -22.1], [-32.2, -20.7], [-32.5, -19.2]]),
+        // ring-nw: reference 3 px (547,143) (442,159) (345,207).
+        dirt(RING, [[-32.5, -19.2], [-32.9, -17.3], [-34.3, -13.9], [-34.5, -11.9], [-34.3, -9.9], [-33, -6.2], [-35, 0.2]]),
+        // ring-nw2: reference 3 px (345,207) (268,198) (205,198).
+        dirt(RING, [[-35, 0.2], [-37.6, 1.5], [-41.3, 3.9], [-42, 4.9], [-42.1, 6.6]]),
+        // ring-nw3: reference 3 px (205,198) (168,225) (150,232).
+        dirt(RING, [[-42.1, 6.6], [-41.6, 10.2], [-40.7, 13.2]]),
+        // hut-s: reference 3 px (415,187) (472,213) (548,207).
+        dirt(LANE, [[-33, -6.2], [-29.3, -5.6], [-26.5, -6.4], [-24, -8.8], [-22.5, -11.4]]),
+        // gantry-w: reference 3 px (547,143) (546,175) (548,207).
+        dirt(LANE, [[-32.5, -19.2], [-31.6, -16.9], [-29.9, -16], [-27.1, -15.4], [-22.5, -11.4]]),
+        // tower-s: reference 3 px (548,207) (627,228) (703,250).
+        dirt(LANE, [[-22.5, -11.4], [-21.5, -12.7], [-20.1, -13.4], [-14.6, -13.5], [-9.3, -15.4], [-8.9, -15.1], [-7.7, -15.2]]),
+        // tower-e: reference 3 px (725,142) (749,203) (790,243).
+        dirt(LANE, [[-19.3, -29.3], [-17.6, -27.2], [-16.5, -24.5], [-15.1, -23.1], [-10, -24.3], [-7.5, -22.8], [-3.1, -21.1]]),
+        // islet-n: reference 3 px (815,190) (797,229) (790,243).
+        dirt(LANE, [[-7.9, -28.5], [-3.1, -21.1]]),
+        // h-s: reference 3 px (703,250) (746,251) (790,243).
+        dirt(LANE, [[-7.7, -15.2], [-5.6, -17], [-3.1, -21.1]]),
+        // s-j6: reference 3 px (790,243) (835,249) (877,248).
+        dirt(LANE, [[-3.1, -21.1], [1.1, -23.6], [2.9, -25.6]]),
+        // j6-j8: reference 3 px (877,248) (891,224) (900,197).
+        dirt(LANE, [[2.9, -25.6], [-1.8, -33]]),
+        // j6-r: reference 3 px (877,248) (881,270) (885,290).
+        dirt(LANE, [[2.9, -25.6], [8.6, -21.1]]),
+        // bow-n, 0.2 tiles west of the trace to keep out of the hazard: reference 3 px (885,290) (959,273) (1008,245).
+        dirt(LANE, [[8.6, -21.1], [9.4, -23.9], [10.8, -29.5], [11.1, -31.5], [10.8, -33.6]]),
+        // spike-w: reference 3 px (703,250) (717,336) (775,352).
+        dirt(LANE, [[-7.7, -15.2], [-2.5, -8.5], [-1.1, -8], [0.5, -7.9], [4.1, -7], [7.8, -7.3]]),
+        // spine-n: reference 3 px (775,352) (824,313) (885,290).
+        dirt(LANE, [[7.8, -7.3], [7.2, -12.2], [8.6, -21.1]]),
+        // bow-s: reference 3 px (800,400) (940,420) (1080,424).
+        dirt(LANE, [[20.5, -3.5], [20.2, -3.3], [23.2, -4], [25.2, -5], [26.9, -6.3], [28.5, -8.6], [29.9, -12.1], [31.1, -13.4], [38.1, -16.4]]),
+        // hub-n: reference 3 px (497,300) (590,299) (690,300).
+        dirt(LANE, [[-14.6, 2.7], [-12.7, 2.3], [-11.5, 1.5], [-11.7, -1.9], [-11, -2.8], [-7.8, -3.9], [-6.1, -6.2], [-2.5, -8.5]]),
+        // shellA-e: bent east to run 2.8 tiles off the hub's west side (IV11); reference 3 px (497,300) (482,329)
+        // (452,354).
+        dirt(LANE, [[-14.6, 2.7], [-11, 4.5], [-10.5, 8.5], [-10.8, 11.8]]),
+        // shellA-s: reference 3 px (238,330) (350,337) (452,354).
+        dirt(LANE, [[-27.1, 21.1], [-24.2, 19.8], [-17.1, 14.2], [-10.8, 11.8]]),
+        // shed-e: reference 3 px (452,354) (388,396) (308,425).
+        dirt(LANE, [[-10.8, 11.8], [-9.6, 19.7], [-8.7, 22.9], [-8.9, 24.2], [-11.3, 28.9]]),
+        // shed-w: reference 3 px (238,330) (308,425) (305,512).
+        dirt(LANE, [[-27.1, 21.1], [-20.2, 25.7], [-11.3, 28.9], [-7.8, 31.1], [-4.7, 33.7], [-2.4, 36.8], [-0.8, 40.1]]),
+        // d-e: reference 3 px (150,302) (205,320) (238,330).
+        dirt(LANE, [[-35.8, 22.7], [-32.8, 22.4], [-27.1, 21.1]]),
+        // e-f: bent east to run 3 tiles off shell A's west end (IV11); reference 3 px (238,330) (273,253) (345,207).
+        dirt(LANE, [[-27.1, 21.1], [-29, 15.5], [-29.2, 9.5], [-30.2, 4], [-35, 0.2]]),
+        // a-b: reference 3 px (183,128) (194,165) (205,198).
+        dirt(LANE, [[-43.1, 0], [-42.1, 6.6]]),
+        // v-ring: reference 3 px (712,455) (763,522) (790,578).
+        dirt(LANE, [[18.2, 9.2], [22.9, 11.9], [25.2, 13.7], [29.2, 14.5], [33.6, 16.2], [39.1, 20.1]]),
+        // v-bs: rerouted east of the spine shard (17,1.5); reference 3 px (712,455) (751,420) (800,400).
+        dirt(LANE, [[18.2, 9.2], [20, 7], [21.2, 3.5], [20.5, -3.5]]),
+        // shardS-w: bent west to run 2.7 tiles off the cage's east flank (IV11, IV5 for the cage caches); reference 3
+        // px (712,455) (604,475) (555,557).
+        dirt(LANE, [[18.2, 9.2], [14, 13], [12.8, 20], [12.8, 27], [16.5, 30.5], [21, 31.3]]),
+        // sc-ring: reference 3 px (555,557) (548,571) (548,587).
+        dirt(LANE, [[21, 31.3], [24.4, 35.5]]),
+        // cage-w: new: down the cage's west flank, 2.9 tiles off it (IV11; reference 3 has the cage on an island of its
+        // own) (inferred).
+        dirt(LANE, [[-10.8, 11.8], [-5.5, 15], [-4.3, 22], [-4.3, 30], [-3, 36], [-0.8, 40.1]]),
+        // hub-s: new stub between the spine and the cage's north end, to the hub's south side and the spine cache
+        // (IV11, IV5) (inferred).
+        dirt(LANE, [[18.2, 9.2], [13.5, 5.8], [8.5, 6.8]]),
+        // The furrow (inferred: no reference shows it). Lanes down both sides of the wing at 10.25 tiles off its axis,
+        // past the piers' seats, each over a flap at the furrow's head; a road onto each end of the wing.
+        // From the ring's south-west junction (238,522) down the basin bank to the furrow's head, and on to the wing's
+        // up-ramp.
+        dirt(LANE, [[-3.8, 45.2], inFurrow(-6, 0), inFurrow(6.5, 0)]),
+        // The east lane: from the same junction, over flap-furrow-e and down its landing, past the span to the tail.
+        dirt(LANE, [[-3.8, 45.2], inFurrow(-8, -10.25), inFurrow(44, -10.25), inFurrow(50, -6), inFurrow(54, 0)]),
+        // The west lane: from the ring at (-19,39.9), over flap-furrow-w, past the span to the tail.
+        dirt(LANE, [[-19, 39.9], inFurrow(-8, 10.25), inFurrow(44, 10.25), inFurrow(50, 6), inFurrow(54, 0)]),
+        // From the tail onto the wing's down-ramp.
+        dirt(LANE, [inFurrow(54, 0), inFurrow(51.5, 0)]),
       ],
+      // Spurs out past the edge into the wasteland, as the second reference's roads run out of its frame (inferred
+      // ends). Each keeps clear of the region roads and the other sites.
+      spurs: [
+        // North through the cliff notch, east of the north-east drum: the reference's road out of its top at 935-945
+        // px. It ends 6 tiles out, before the land past the notch climbs over a grade of 0.2.
+        dirt(LANE, [[-1.8, -33], [-1.5, -38.5], [-2.2, -45], [-3.8, -51]]),
+        // Out of the furrow's far end, south-south-east down the low ground between two rises.
+        dirt(LANE, [inFurrow(54, 0), [-27.2, 113], [-24.8, 119]]),
+        // South-west off the ring, up the 22-tile bank along the foot of the south-west hill, which climbs too steeply
+        // across it: the reference's road out of its left edge at y 590.
+        dirt(LANE, [[-30.3, 31], [-33, 37], [-33, 44], [-32.8, 52]]),
+        // South off the ring over the 28-tile bank: the reference's road out of its bottom at x 620.
+        dirt(LANE, [[14.9, 39.6], [19.5, 58]]),
+        // South-east off the ring between the south-east road and the east hill: the reference's road out of its bottom
+        // right corner.
+        dirt(LANE, [[40, 18.9], [45.5, 25], [51, 30.5], [54.5, 33.5]]),
+      ],
+      spurFade: 5,
+      // The wing and the flaps (inferred: neither reference shows them).
+      decks: [
+        // Flaps, wing flaps propped up as jump ramps: 5 tiles long and 3 wide, rising from the ground to 0.35 height
+        // units (1.4 m) at the lip. A standard truck leaving one at road speed flies about 4 tiles and lands upright,
+        // its wheels losing less than a breakdown takes; at 0.45 the landing costs more than that
+        // (src/phys/props.test.ts).
+        // Inside the south-west ring, launching east-north-east along it toward the cage.
+        { id: 'fallen-sun-flap-sw', from: { x: -32.9, y: 26 }, to: { x: -28.5, y: 28.4 }, width: 3, rise: [0, 0.35] },
+        // Inside the south-east ring, launching north-east along it toward the east hill.
+        { id: 'fallen-sun-flap-se', from: { x: 32.6, y: 23 }, to: { x: 35.7, y: 19.1 }, width: 3, rise: [0, 0.35] },
+        // On the furrow's two lanes at its head, launching down the furrow beside the wing's up-ramp.
+        { id: 'fallen-sun-flap-furrow-e', from: inFurrow(0, -10.25), to: inFurrow(5, -10.25), width: 3, rise: [0, 0.35] },
+        { id: 'fallen-sun-flap-furrow-w', from: inFurrow(0, 10.25), to: inFurrow(5, 10.25), width: 3, rise: [0, 0.35] },
+        // The torn wing lying along the furrow, 8 tiles wide: an up-ramp from the ground to 1.5 units (6 m) over 8
+        // tiles, a level span over the two piers, and a down-ramp. The span's ends stand just past the gouge's bank on
+        // the furrow floor, so the deck line sits 6 m over that floor and the piers' tops come just under it. The
+        // down-ramp lies on the flat floor at a grade of 0.19; the up-ramp's foot lies on the basin bank, which still
+        // climbs toward the furrow floor there, so the up-ramp is steeper.
+        { id: 'fallen-sun-wing-up', from: inFurrow(6.5, 0), to: inFurrow(14.5, 0), width: 8, rise: [0, 1.5] },
+        { id: 'fallen-sun-wing-span', from: inFurrow(14.5, 0), to: inFurrow(43.5, 0), width: 8, rise: [1.5, 1.5] },
+        { id: 'fallen-sun-wing-down', from: inFurrow(43.5, 0), to: inFurrow(51.5, 0), width: 8, rise: [1.5, 0] },
+      ],
+      // A landing strip runs 12 tiles past each lip: the truck lands about 4 tiles out and rolls on.
+      landing: 12,
     },
     farm: null,
     spotGap: 6,
@@ -458,6 +631,12 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
   },
 };
 
+function fallenSunWreck(): WreckRules {
+  const wreck = TERRITORIES['fallen-sun'].wreck;
+  if (!wreck) throw new Error('The Fallen Sun has no wreck rules');
+  return wreck;
+}
+
 // The Fallen Sun's centre in map tiles, where its location stands.
 function fallenSunCentre(): Vec {
   const site = REGION.locations.find((l) => l.id === 'fallen-sun');
@@ -465,21 +644,9 @@ function fallenSunCentre(): Vec {
   return site.pos;
 }
 
-// The Fallen Sun's decks in tiles from its centre. rise is height units over the ground at the from and to ends.
-//
-// Inferred, as the concept shows no ramps: a flap is a wing flap propped up as a jump ramp, 5 tiles long and 3 wide,
-// rising from the ground to 0.35 height units (1.4 m) at its lip over flat landing ground. A standard truck leaving
-// it at road speed flies about 4 tiles and lands upright, its wheels losing less than a breakdown takes; at 0.45 the
-// landing costs more than that (src/phys/props.test.ts). This flap stands on the open floor west of the hub (concept
-// (386,261)), its low end at (-12,6) facing south-east where the track under the shells meets the hub, with 12 tiles of
-// clear landing past its lip. It is provisional: the full list of the wing and flaps comes with the layout.
-const DECKS: { id: string; from: Vec; to: Vec; width: number; rise: [number, number] }[] = [
-  { id: 'fallen-sun-flap-1', from: { x: -12, y: 6 }, to: { x: -9.2, y: 10.2 }, width: 3, rise: [0, 0.35] },
-];
-
 // The Fallen Sun's decks in map tiles, listed in TERRAIN.features.decks after the road decks. Each is skirted, so
 // nothing drives in under a raised end, and none cuts the ground.
-export const FALLEN_SUN_DECKS: DeckSpec[] = DECKS.map((d) => {
+export const FALLEN_SUN_DECKS: DeckSpec[] = fallenSunWreck().decks.map((d) => {
   const c = fallenSunCentre();
   return { ...d, from: { x: c.x + d.from.x, y: c.y + d.from.y }, to: { x: c.x + d.to.x, y: c.y + d.to.y }, cut: null, skirt: true };
 });

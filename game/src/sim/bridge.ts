@@ -3,13 +3,15 @@
 // Each end stands its rise over the ground (deckEnds() in terrain.ts). Both side rails of each deck block driving,
 // and so does a lip, a raised end that meets no other deck: trucks get on and off only over an end on the ground or
 // a joint with the next deck, and a truck that drives off a lip flies. Whatever lies under a deck is out of reach:
-// a prop box inside a deck outline whose top is under the deck line blocks nothing (underDeck()).
+// a prop box inside a deck outline whose top is under the deck line blocks nothing (underDeck()). A prop stands on the
+// land under a deck, but a wreck a truck left on a deck stands on the deck (propBase()).
 
 import { PHYSICS } from '../data/physics';
 import { REGION } from '../data/region';
 import { TERRAIN, type DeckSpec } from '../data/terrain';
 import type { PosedBox } from './mapgen';
-import { deckHeight, type Terrain } from './terrain';
+import { deckHeight, groundAt, heightAt, type Terrain } from './terrain';
+import type { Obstacle } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 
 // A deck with its derived geometry. axis is the unit vector from the from end to the to end; across is
@@ -96,6 +98,13 @@ export function underDeck(box: PosedBox, base: number, t: Terrain): boolean {
   })));
   if (!corners.every((c) => inOutline(on.deck, c.x, c.y))) return false;
   return box.z1 < (deckHeight(t, on.deck, on.along) - base) * PHYSICS.metersPerTile;
+}
+
+// The height a prop stands on, in height units, which its colliders, its view and underDeck() read. A wreck a truck
+// left stands where the truck stood, on a deck if it died on one. Every other prop stands on the land, so a hull pier
+// under the Fallen Sun's wing stands on the ground below the deck. The bake keeps all other props off decks.
+export function propBase(t: Terrain, o: Obstacle): number {
+  return o.kind === 'wreck' ? heightAt(t, o.pos.x, o.pos.y) : groundAt(t, o.pos.x, o.pos.y);
 }
 
 // For a point between a deck's two ends, however far to the side, that deck and the distance along it,

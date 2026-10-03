@@ -9,10 +9,10 @@ import { boxDistance, propBoxes, propPose, propReach } from '../sim/mapgen';
 import { siteGap } from '../sim/sites';
 import { route } from '../sim/path';
 import { ROAD_INDEX } from '../sim/road-index';
-import { hazardZones, isLootSpot, reactorPos, territoryAt, territoryEntries, territoryOfStock, territoryPieces, territoryTracks, type BakedPiece } from '../sim/territory';
+import { hazardZones, isLootSpot, reactorPos, territoryAt, territoryEntries, territoryOfStock, territoryPieces, type BakedPiece } from '../sim/territory';
 import { groundAt, type BakedProp, type Terrain } from '../sim/terrain';
 import { newWorld } from '../sim/world';
-import { angleDiff, dist, lerp, polylineDist, type Vec } from '../sim/vec';
+import { angleDiff, dist, lerp, type Vec } from '../sim/vec';
 import { TEST_MAP } from '../test/map';
 import { newDraft, tileSteepness, type MapDraft } from './bake';
 import { fillFarm } from './farm';
@@ -127,15 +127,13 @@ describe('the territory layer', () => {
     expect(w.salvage.filter((s) => territoryOfStock(s)?.id === 'fallen-sun')).toHaveLength(24);
   });
 
-  it("keeps every drawn prop off the roads, the tracks, the pieces' boxes and the hazard", () => {
-    const tracks = territoryTracks(t);
+  it("keeps every drawn prop off the roads, the pieces' boxes and the hazard", () => {
     const boxes = pieces.flatMap((p, k) => propBoxes({ id: `piece-${k}`, pos: p.pos, r: p.r, kind: 'landmark', look: p.look, yaw: p.yaw }));
     const drawn = drawnProps();
     expect(drawn.length).toBeGreaterThan(50);
     for (const p of drawn) {
       const reach = REGION.roadWidth / 2 + p.r;
       expect(ROAD_INDEX.nearestWithin(p.pos.x, p.pos.y, reach), p.kind).toBe(Infinity);
-      for (const track of tracks) expect(polylineDist(p.pos, track), `${p.kind} at ${p.pos.x},${p.pos.y}`).toBeGreaterThan(p.r);
       for (const b of boxes) expect(boxDistance(b, p.pos), `${p.kind} at ${p.pos.x},${p.pos.y}`).toBeGreaterThan(p.r);
       expect(dist(p.pos, zone.pos) - p.r, p.kind).toBeGreaterThan(zone.radius);
     }

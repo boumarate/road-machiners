@@ -12,7 +12,7 @@ import { boxDistance, propBoxes, type PosedBox } from '../sim/mapgen';
 import { ROAD_INDEX } from '../sim/road-index';
 import { randRange, type Rng } from '../sim/rng';
 import { siteGap } from '../sim/sites';
-import { isTerritory, reactorPos, territoryCaches, territoryPieces, territoryTracks, type BakedPiece } from '../sim/territory';
+import { isTerritory, reactorPos, territoryCaches, territoryPieces, territoryRoads, type BakedPiece } from '../sim/territory';
 import { groundAt, type BakedProp } from '../sim/terrain';
 import { dist, polylineDist, type Vec } from '../sim/vec';
 import { tileSteepness, type MapDraft } from './bake';
@@ -63,7 +63,7 @@ function fillWreck(draws: Draws, rules: TerritoryRules, wreck: WreckRules, piece
   const caches = territoryCaches(t).map((pos) => prop(wreck.cacheLook, pos, wreck.cacheRadius, 0));
   d.props.push(...caches);
   const pieceBoxes = territoryPieces(t).flatMap((p) => propBoxes(pieceObstacle(p, 'piece')));
-  const g: Ground = { ...draws, rules, wreck, pieces: new Set(pieceProps), pieceBoxes, tracks: territoryTracks(t) };
+  const g: Ground = { ...draws, rules, wreck, pieces: new Set(pieceProps), pieceBoxes, tracks: territoryRoads(t).roads.map((road) => road.points) };
   placeRimRocks(g);
   let spots: BakedProp[] = [...caches];
   for (const patch of wreck.patches) spots = placePatch(g, patch, spots);

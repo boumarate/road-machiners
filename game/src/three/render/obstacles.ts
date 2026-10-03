@@ -9,6 +9,7 @@ import { hashStr } from '../../render/noise';
 import { PAL } from '../../render/palette';
 import { PHYSICS } from '../../data/physics';
 import { propPose, propReach } from '../../sim/mapgen';
+import { propBase } from '../../sim/bridge';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import { hasSalvage, salvageUnits } from '../../sim/salvage';
 import type { BrokenProp, Obstacle, SalvageStock, World } from '../../sim/types';
@@ -228,13 +229,13 @@ function buildObstacle(t: Terrain, o: Obstacle): THREE.Object3D {
 
 function seat(t: Terrain, o: Obstacle): THREE.Group {
   const g = new THREE.Group();
-  g.position.set(o.pos.x * S, heightAt(t, o.pos.x, o.pos.y) * S, o.pos.y * S);
+  g.position.set(o.pos.x * S, propBase(t, o) * S, o.pos.y * S);
   return g;
 }
 
 // A boulder from tools/blender/rock.py, modeled at a 1 m radius. Each rock gets its own tint.
 function rockPlacement(t: Terrain, o: Obstacle): { matrix: THREE.Matrix4; tint: number } {
-  const g = posed(t, propPose(o));
+  const g = posed(propBase(t, o), propPose(o));
   g.updateMatrix();
   return { matrix: g.matrix, tint: 0.9 + hashStr(o.id) * 0.2 };
 }
@@ -242,7 +243,7 @@ function rockPlacement(t: Terrain, o: Obstacle): { matrix: THREE.Matrix4; tint: 
 // Wrecks, settlement buildings and baked landmarks. A building gets a roof color from its id.
 function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   const pose = propPose(o);
-  const g = posed(t, pose);
+  const g = posed(propBase(t, o), pose);
   const obj = model(pose.model);
   if (pose.model === 'building') paintRoof(obj, o.id);
   g.add(obj);

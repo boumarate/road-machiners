@@ -14,8 +14,8 @@ import { coreParts } from '../sim/grid';
 import { vehicleStats } from '../sim/stats';
 import { maxHp } from '../sim/wear';
 import { deckAt, deckById } from '../sim/bridge';
-import { heightAt } from '../sim/terrain';
-import { dist, type Vec } from '../sim/vec';
+import { groundAt, heightAt } from '../sim/terrain';
+import { dist, segmentDist, type Vec } from '../sim/vec';
 import { propPose, propShape } from '../sim/mapgen';
 import { emptyWorld } from '../sim/testkit';
 import type { LandmarkLook, Obstacle, World } from '../sim/types';
@@ -348,9 +348,16 @@ describe('a Fallen Sun flap', () => {
   type JumpTurn = { landing: Landing | null; upright: boolean; air: number };
 
   // The baked map's world with only the player truck, at road speed on the run-up, driving carelessly straight over
-  // the flap and on across the landing.
+  // the flap and on across the landing. The run-up, the flap and the landing are levelled to the ground at the flap's
+  // low end and cleared of props, as the bake leaves a flap's landing strip: the flat landing the rise is tuned for.
   function jump(turns: number): { w: World; hp: Map<string, number>; after: JumpTurn[]; hits: string[]; lipSpeed: number } {
     let w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const [start, end] = [on(-12), on(flap.length + 36)];
+    const onRun = (p: Vec, margin: number) => segmentDist(p, start, end) < flap.width / 2 + margin;
+    const level = groundAt(w.terrain, flap.from.x, flap.from.y);
+    const row = w.terrain.size + 1;
+    w.terrain = { ...w.terrain, heights: w.terrain.heights.map((h, k) => (onRun({ x: k % row, y: Math.floor(k / row) }, 6) ? level : h)) };
+    w.obstacles = w.obstacles.filter((o) => o.kind === 'site' || !onRun(o.pos, 10));
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     me(w).pos = on(-6);
     me(w).heading = Math.atan2(flap.axis.y, flap.axis.x);

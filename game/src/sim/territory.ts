@@ -4,7 +4,8 @@
 
 import { REGION, type TerritoryDef } from '../data/region';
 import { SALVAGE, type LootTable } from '../data/salvage';
-import { TERRITORIES, type FarmRules, type Hazard, type SpotTable, type TerritoryRules, type WreckRules } from '../data/territory';
+import { TERRITORIES, type FarmRoad, type FarmRules, type Hazard, type SpotTable, type TerritoryRules, type WreckRules } from '../data/territory';
+import { deckById } from './bridge';
 import { isTerritory, siteEdgeCrossings, siteGap } from './sites';
 import { randInt } from './rng';
 import type { LandmarkLook, NpcActivity, Obstacle, SalvageStock, Vehicle, World } from './types';
@@ -18,8 +19,11 @@ export type HazardZone = Hazard & { id: string; pos: Vec };
 // An authored hull piece in map tiles.
 export type BakedPiece = { look: LandmarkLook; pos: Vec; yaw: number; r: number };
 
+// A landing strip past a deck's lip, in map tiles: from a, the lip's middle, to b, landing tiles further on, as wide
+// as the deck.
+export type LandingStrip = { a: Vec; b: Vec; width: number };
+
 const TERRITORY_DEFS: readonly TerritoryDef[] = REGION.locations.filter(isTerritory);
-const TRACK_SMOOTHING = 3; // corner-cutting passes over each traced track
 
 export function territoryAt(pos: Vec): TerritoryDef | null {
   return TERRITORY_DEFS.find((t) => siteGap(t, pos) < 0) ?? null;
@@ -102,7 +106,7 @@ export function hazardZones(): HazardZone[] {
   });
 }
 
-// ---- Layout in map tiles. The bake places these, the render draws the tracks and the tests check them.
+// ---- Layout in map tiles. The bake places these, the render draws the roads and the tests check them.
 
 function onMap(t: TerritoryDef, at: Vec): Vec {
   return { x: t.pos.x + at.x, y: t.pos.y + at.y };
@@ -116,22 +120,26 @@ export function territoryCaches(t: TerritoryDef): Vec[] {
   return (TERRITORIES[t.id].wreck?.caches ?? []).map((c) => onMap(t, c.at));
 }
 
-// Each traced track with its corners cut, so it curves like the concept's ruts. The ends stay, so tracks that meet
-// stay joined.
-export function territoryTracks(t: TerritoryDef): Vec[][] {
-  return (TERRITORIES[t.id].wreck?.tracks ?? []).map((track) => cutCorners(track.map((p) => onMap(t, p)), TRACK_SMOOTHING));
+// A wreck's dirt roads in map tiles: the web inside its outline and the spurs that leave it. The bake marks both and
+// the render paints both.
+export function territoryRoads(t: TerritoryDef): { roads: FarmRoad[]; spurs: FarmRoad[] } {
+  const wreck = TERRITORIES[t.id].wreck;
+  const shift = (road: FarmRoad): FarmRoad => ({ ...road, points: road.points.map((p) => onMap(t, p)) });
+  return { roads: (wreck?.roads ?? []).map(shift), spurs: (wreck?.spurs ?? []).map(shift) };
 }
 
-// Chaikin corner cutting, passes times.
-function cutCorners(line: Vec[], passes: number): Vec[] {
-  if (passes === 0) return line;
-  const out: Vec[] = [line[0]];
-  for (let i = 0; i + 1 < line.length; i++) {
-    const [a, b] = [line[i], line[i + 1]];
-    out.push({ x: 0.75 * a.x + 0.25 * b.x, y: 0.75 * a.y + 0.25 * b.y }, { x: 0.25 * a.x + 0.75 * b.x, y: 0.25 * a.y + 0.75 * b.y });
-  }
-  out.push(line[line.length - 1]);
-  return cutCorners(out, passes - 1);
+// The landing strip ahead of each lip of a wreck's decks: from the lip's middle straight on, away from the deck.
+export function landingStrips(t: TerritoryDef): LandingStrip[] {
+  const wreck = TERRITORIES[t.id].wreck;
+  if (!wreck) return [];
+  return wreck.decks.flatMap((spec) => {
+    const deck = deckById(spec.id);
+    return deck.lips.map(([p, q]): LandingStrip => {
+      const a = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+      const ahead = dist(a, deck.to) < dist(a, deck.from) ? 1 : -1;
+      return { a, b: { x: a.x + deck.axis.x * ahead * wreck.landing, y: a.y + deck.axis.y * ahead * wreck.landing }, width: deck.width };
+    });
+  });
 }
 
 // Where the reactor stands, which is also the centre of its hazard.

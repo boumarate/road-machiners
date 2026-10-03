@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { BROKEN_WING, BROKEN_WING_POINT, scalePoint } from '../data/region';
+import { PHYSICS } from '../data/physics';
+import { BROKEN_WING, BROKEN_WING_POINT, REGION, scalePoint } from '../data/region';
 import { START_KITS } from '../data/start';
 import type { DeckSpec } from '../data/terrain';
 import { FALLEN_SUN_DECKS } from '../data/territory';
-import { bridgeCut, buildDecks, crossesRail, deckAt, deckById, DECKS, nearRail } from './bridge';
+import { bridgeCut, buildDecks, crossesRail, deckAt, deckById, DECKS, nearRail, propBase } from './bridge';
+import { blockingBoxes, boxDistance, propBoxes } from './mapgen';
+import { territoryPieces } from './territory';
+import type { Obstacle } from './types';
 import { route, routeLength } from './path';
-import { segmentDist } from './vec';
-import { deckEnds, groundAt, heightAt, isCliff, markHeightAt, tileAt } from './terrain';
+import { dist, segmentDist } from './vec';
+import { deckEnds, deckHeight, groundAt, heightAt, isCliff, markHeightAt, tileAt, type Terrain } from './terrain';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
 
@@ -233,5 +237,53 @@ describe('raised deck ends', () => {
 
     expect(flap.rise[0]).toBe(0);
     expect(crossesRail(before, onto, 0)).toBe(false);
+  });
+});
+
+describe('the height a prop stands on', () => {
+  const t = TEST_MAP.terrain;
+  const span = deckById('fallen-sun-wing-span');
+  const piece = territoryPieces(REGION.locations.find((l) => l.id === 'fallen-sun') as never).find((p) => segmentDist(p.pos, span.from, span.to) < span.width / 2)!;
+  const pier: Obstacle = { id: 'hullDrum-7', kind: 'landmark', look: 'hullDrum', pos: piece.pos, r: piece.r, yaw: piece.yaw };
+  const top = Math.max(...propBoxes(pier).map((b) => b.z1)) / PHYSICS.metersPerTile;
+
+  // The baked map with the ground under the pier sunk into a pit, as its seat in the furrow's gouge levels it, so the
+  // pier's top lies a little under the deck line.
+  function withPit(): Terrain {
+    const on = deckAt(pier.pos.x, pier.pos.y)!;
+    const floor = deckHeight(t, on.deck, on.along) - top - 0.1;
+    const heights = [...t.heights];
+    const reach = Math.max(...propBoxes(pier).map((b) => dist(b.center, pier.pos) + Math.hypot(b.half.x, b.half.y))) + 1;
+    for (let j = Math.floor(pier.pos.y - reach); j <= pier.pos.y + reach; j++) {
+      for (let i = Math.floor(pier.pos.x - reach); i <= pier.pos.x + reach; i++) if (propBoxes(pier).some((box) => boxDistance(box, { x: i, y: j }) < 1)) heights[j * (t.size + 1) + i] = floor;
+    }
+    return { ...t, heights };
+  }
+
+  it('stands a pier under the wing on the ground under the deck, so its boxes under the deck line block nothing', () => {
+    const pit = withPit();
+    const boxes = propBoxes(pier);
+    const blocking = blockingBoxes(pier, pit);
+    const inside = (b: (typeof boxes)[number]) => Math.abs((b.center.y - span.from.y) * span.axis.x - (b.center.x - span.from.x) * span.axis.y) < span.width / 2;
+
+    expect(propBase(pit, pier)).toBe(groundAt(pit, pier.pos.x, pier.pos.y));
+    expect(heightAt(pit, pier.pos.x, pier.pos.y) - propBase(pit, pier)).toBeGreaterThan(top);
+    expect(blocking.length).toBeGreaterThan(0);
+    expect(blocking.length).toBeLessThan(boxes.length);
+    for (const b of boxes.filter(inside)) expect(blocking).not.toContain(b);
+  });
+
+  it('stands a wreck on Canyon Bridge on the bridge, over the canyon', () => {
+    const mid = at(B.length / 2, 0);
+    const wreck: Obstacle = { id: 'wreck-npc-1', kind: 'wreck', pos: mid, r: 0.8 };
+
+    expect(propBase(t, wreck)).toBe(heightAt(t, mid.x, mid.y));
+    expect(propBase(t, wreck)).toBeGreaterThan(groundAt(t, mid.x, mid.y) + 3);
+  });
+
+  it('stands a prop off every deck on the ground, as before', () => {
+    const rock: Obstacle = { id: 'rock3', kind: 'rock', pos: at(B.length / 2, 30), r: 1 };
+
+    expect(propBase(t, rock)).toBe(heightAt(t, rock.pos.x, rock.pos.y));
   });
 });

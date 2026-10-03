@@ -16,7 +16,7 @@ import { groundSpeed, vehicleStats, type VehicleStats } from '../sim/stats';
 import { continueRoute, keepRoute, route, type KeptRoute } from '../sim/path';
 import { backsToDestination, throughSpeed } from '../sim/steering';
 import { routeBlockers } from '../sim/ai';
-import { DECKS, type Deck } from '../sim/bridge';
+import { DECKS, propBase, type Deck } from '../sim/bridge';
 import { deckEnds, groundAt, heightAt, tileAt, type Terrain } from '../sim/terrain';
 import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
 import type { MoveOrder, Obstacle, Vehicle, World } from '../sim/types';
@@ -152,11 +152,11 @@ function syncObstacles(d: Drive, w: World): void {
 }
 
 // A site's boundary blocks as a cylinder of its radius. A prop blocks by its model's boxes at the pose the view
-// draws it: turned by yaw and scaled on the ground height at its position. Boxes that start above truck roofs are
-// left out, so trucks pass under canopies. A box that starts lower than PHYSICS.rockSink reaches that far below the
-// ground, so slopes leave no gap under it.
+// draws it: turned by yaw and scaled, standing at propBase() in src/sim/bridge.ts. Boxes that start above truck
+// roofs are left out, so trucks pass under canopies. A box that starts lower than PHYSICS.rockSink reaches that far
+// below the ground, so slopes leave no gap under it.
 export function obstacleColliders(t: Terrain, o: Obstacle): RAPIER.ColliderDesc[] {
-  const ground = heightAt(t, o.pos.x, o.pos.y) * S;
+  const ground = propBase(t, o) * S;
   if (o.kind === 'site') {
     const half = PHYSICS.rockHeight / 2;
     return [RAPIER.ColliderDesc.cylinder(half, o.r * S).setTranslation(o.pos.x * S, ground + half - PHYSICS.rockSink, o.pos.y * S)];

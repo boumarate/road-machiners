@@ -5,9 +5,9 @@ import SHAPES from '../data/prop-shapes.json';
 import { REGION } from '../data/region';
 import { BREAKABLE } from '../data/rules';
 import { TERRAIN } from '../data/terrain';
-import { heightAt, PROP_KINDS, type BakedMap, type BakedProp, type Terrain } from './terrain';
+import { PROP_KINDS, type BakedMap, type BakedProp, type Terrain } from './terrain';
 import { randInt, randRange } from './rng';
-import { DECKS, underDeck } from './bridge';
+import { DECKS, propBase, underDeck } from './bridge';
 import type { LandmarkLook, Obstacle, World } from './types';
 import { siteGap } from './sites';
 import { angleDiff, bearing, dist, segmentDist, type Vec } from './vec';
@@ -316,7 +316,7 @@ const BLOCKING_BOXES = new WeakMap<Terrain, WeakMap<readonly PosedBox[], readonl
 
 // The boxes of a prop that block a truck: those that start below truck roofs and are not out of reach under a deck
 // (underDeck() in bridge.ts). Higher boxes, like a canopy or the ship wing, leave trucks to pass under. The prop
-// stands where its colliders and its view stand it: at heightAt() of its position.
+// stands where its colliders and its view stand it: at propBase() in bridge.ts.
 export function blockingBoxes(o: Obstacle, t: Terrain): readonly PosedBox[] {
   const boxes = propBoxes(o);
   let byBoxes = BLOCKING_BOXES.get(t);
@@ -326,7 +326,7 @@ export function blockingBoxes(o: Obstacle, t: Terrain): readonly PosedBox[] {
   }
   let low = byBoxes.get(boxes);
   if (!low) {
-    const base = heightAt(t, o.pos.x, o.pos.y);
+    const base = propBase(t, o);
     low = boxes.filter((b) => b.z0 < PHYSICS.truckClearance && !underDeck(b, base, t));
     byBoxes.set(boxes, low);
   }
