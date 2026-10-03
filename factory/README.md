@@ -30,6 +30,10 @@ Each stage runs as its own job process, and jobs run in parallel in five queues.
 - The design queue runs design, up to `FACTORY_DESIGN_WORKERS` at once.
 - The implement queue runs implementation and ad hoc jobs, up to `FACTORY_IMPLEMENT_WORKERS` at once.
 - The test queue runs testing, up to `FACTORY_TEST_WORKERS` at once. Testing builds the game and plays it in a browser, so it needs the most memory.
+
+Each job's containers run on a fixed set of CPUs, its pool. `FACTORY_CPU_LIGHT`, `FACTORY_CPU_IMPLEMENT` and `FACTORY_CPU_TEST` set each pool's share of the server, and each pool gets round(share × cores) whole CPUs, at least 1. Triage, design and branch jobs share the light pool, implement and ad hoc jobs the implement pool, and testing the test pool. On 4 cores that is CPU 0, CPU 1 and CPUs 2-3. A pool never borrows from another, so the factory checks always get their CPUs. Docker pins the containers with `--cpuset-cpus`, which the game's test runner sees, so it starts one worker per CPU it got. A step run by hand is not pinned.
+
+When every error of a failed check run is a timeout, the testing stage reruns the checks with no agent round, up to 3 runs. After 3 such runs the stage fails with "The factory checks timed out 3 times, under load". Other failures get one agent fix round, as before.
 - The branch queue runs approve, remove, ship, incident, the release cut, the candidate, `/dev/` rebuilds and `/change`, one at a time. These move `dev`, `main` or the release.
 
 Every tick checks the running jobs in `jobs` in the state file, then starts each job that fits. Within a queue the order is as follows: hotfix cards, ad hoc tasks, release tasks, then the card furthest along. An issue has at most one job at a time. Each job's containers carry its id as a label, so a timeout kills only that job. Jobs share the host clone and the state file, so each git step and each state update runs under a lock in `$FACTORY_HOME/locks` or next to the state file. A lock of a dead process is taken over.

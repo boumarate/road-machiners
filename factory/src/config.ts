@@ -46,17 +46,28 @@ const KEYS = {
   testWorkers: 'FACTORY_TEST_WORKERS',
   minFreeGb: 'FACTORY_MIN_FREE_GB',
   logDays: 'FACTORY_LOG_DAYS',
+  cpuLight: 'FACTORY_CPU_LIGHT',
+  cpuImplement: 'FACTORY_CPU_IMPLEMENT',
+  cpuTest: 'FACTORY_CPU_TEST',
 } as const satisfies Record<keyof FactoryConfig, string>;
 
 const RELEASE_ONLY = new Set<keyof FactoryConfig>(['itchTarget', 'butlerKey']);
 
-const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes', 'releaseDays', 'maxJobsPerDay', 'triageWorkers', 'designWorkers', 'implementWorkers', 'testWorkers', 'minFreeGb', 'logDays']);
+const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes', 'releaseDays', 'maxJobsPerDay', 'triageWorkers', 'designWorkers', 'implementWorkers', 'testWorkers', 'minFreeGb', 'logDays', 'cpuLight', 'cpuImplement', 'cpuTest']);
 
 export function loadConfig(env: Record<string, string | undefined>): FactoryConfig {
   const missing = Object.entries(KEYS).filter(([field, key]) => !RELEASE_ONLY.has(field as keyof FactoryConfig) && !env[key]?.trim()).map(([, key]) => key);
   if (missing.length) throw new Error(`Factory config is missing ${missing.join(', ')}. See settings.env and .env.example.`);
   const entries = Object.entries(KEYS).map(([field, key]) => [field, read(field as keyof FactoryConfig, key, env[key]?.trim())]);
-  return Object.fromEntries(entries) as FactoryConfig;
+  const cfg = Object.fromEntries(entries) as FactoryConfig;
+  checkCpuShares(cfg);
+  return cfg;
+}
+
+// The pools split the server, so their shares cannot add up to more than all of it.
+function checkCpuShares(cfg: FactoryConfig): void {
+  const sum = cfg.cpuLight + cfg.cpuImplement + cfg.cpuTest;
+  if (sum > 1) throw new Error(`FACTORY_CPU_LIGHT, FACTORY_CPU_IMPLEMENT and FACTORY_CPU_TEST add up to ${sum}. They split the server's CPUs, so they must add up to 1 or less.`);
 }
 
 function read(field: keyof FactoryConfig, key: string, raw: string | undefined): string | number | null {

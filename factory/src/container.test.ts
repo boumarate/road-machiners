@@ -25,6 +25,17 @@ const runCall = (calls: Call[]): Call => calls.find((call) => call.args[0] === '
 const setupCalls = (calls: Call[]): string[] => calls.filter((call) => call !== runCall(calls)).map((call) => call.args.join(' '));
 
 describe('dockerContainer', () => {
+  it('pins agent and shell containers to the job CPUs, and leaves a run by hand unpinned', async () => {
+    const pinned = fakeRun();
+    await dockerContainer(pinned.run, cfg, 'testing-8-x', '2-3').agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'p', log: '/l' });
+    await dockerContainer(pinned.run, cfg, 'testing-8-x', '2-3').shell('/c', 'x', '/l');
+    const runs = pinned.calls.filter((call) => call.args[0] === 'run' && call.args[1] === '--rm');
+    expect(runs.map((call) => call.args.slice(call.args.indexOf('--cpuset-cpus'), call.args.indexOf('--cpuset-cpus') + 2))).toEqual([['--cpuset-cpus', '2-3'], ['--cpuset-cpus', '2-3']]);
+    const free = fakeRun();
+    await dockerContainer(free.run, cfg, null).shell('/c', 'x', '/l');
+    expect(runCall(free.calls).args).not.toContain('--cpuset-cpus');
+  });
+
   it('passes the secrets by env only and mounts only the clone and the npm cache', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'do it', log: '/l.log' });

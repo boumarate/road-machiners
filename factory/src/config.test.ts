@@ -11,7 +11,7 @@ const FULL = {
   FACTORY_STAGE_TIMEOUT_MINUTES: '180', FACTORY_RELEASE_DAYS: '7',
   ITCH_TARGET: 'u/g', BUTLER_API_KEY: 'bk', FACTORY_MAX_JOBS_PER_DAY: '10',
   FACTORY_TRIAGE_WORKERS: '1', FACTORY_DESIGN_WORKERS: '1', FACTORY_IMPLEMENT_WORKERS: '2', FACTORY_TEST_WORKERS: '1', FACTORY_TRIAGE_EFFORT: 'low',
-  FACTORY_MIN_FREE_GB: '5', FACTORY_LOG_DAYS: '14',
+  FACTORY_MIN_FREE_GB: '5', FACTORY_LOG_DAYS: '14', FACTORY_CPU_LIGHT: '0.25', FACTORY_CPU_IMPLEMENT: '0.25', FACTORY_CPU_TEST: '0.5',
 };
 
 describe('loadConfig', () => {
@@ -47,6 +47,12 @@ describe('loadConfig', () => {
 
   it('rejects a bad number', () => {
     expect(() => loadConfig({ ...FULL, FACTORY_MIN_VOTES: 'many' })).toThrow('FACTORY_MIN_VOTES');
+  });
+
+  it('reads the CPU shares and rejects shares that add up to more than the server', () => {
+    const cfg = loadConfig(FULL);
+    expect([cfg.cpuLight, cfg.cpuImplement, cfg.cpuTest]).toEqual([0.25, 0.25, 0.5]);
+    expect(() => loadConfig({ ...FULL, FACTORY_CPU_TEST: '0.7' })).toThrow('add up to 1.2');
   });
 });
 
