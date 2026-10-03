@@ -19,7 +19,7 @@ import { isKnockedOut } from '../defeat';
 import { callVehicle, chooseOption, currentOptions } from '../dialogue';
 import { offeredSurrenderBy } from '../parley';
 import { hashRandom } from '../rng';
-import { affordableBuyCount, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
+import { affordableBuyCount, basicsRepairCost, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairBasics, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
 import { findSpot, freeCells, goodsCount, gridOf, isMounted, itemCells, MOUNT_CELLS, mountedItems, mountedParts, type Spot } from '../grid';
 import { stowSpot, storePart } from '../inventory';
 import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
@@ -180,13 +180,15 @@ function serviceStop(world: World): Site | null {
 }
 
 // A bot in debt can buy no fuel, supplies or load, so it sells cargo, then gear, to clear the debt. The engine
-// comes next, since selling gear for it can leave money for fuel and supplies.
+// comes next, since selling gear for it can leave money for fuel and supplies, then the built-in parts the truck
+// drives on.
 function serviceInTown(o: Orders, style: UpgradeStyle, shop: string): void {
   if (o.world.player.money < 0) {
     sellCargo(o);
     sellGearFor(o, shop, 0);
   }
   restoreEngine(o, shop);
+  restoreBasics(o, shop);
   serviceHere(o);
   if (needsService(o.world)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money: ${needsOf(o.world)}`);
   if (mountedParts(o.me, 'engine').length === 0) return;
@@ -259,6 +261,16 @@ function restoreEngine(o: Orders, shopId: string): void {
   if (!spot) throw new Error(`No free engine mount for a new engine. On the engine cells: ${onEngineCells(o.me)}`);
   o.run((w) => buyStockPart(w, engine.part.id), 'gear');
   mountBought(o, engine.part.id, spot);
+}
+
+// Badly damaged built-in parts get fixed before fuel and supplies, with cargo and then gear sold for the bill, since
+// the truck must drive to earn. The repair waits for the end of a fight.
+function restoreBasics(o: Orders, shopId: string): void {
+  if (inCombat(o.world, o.me) || !mountedParts(o.me, 'core').some(isBadlyDamaged)) return;
+  const cost = basicsRepairCost(o.world);
+  if (o.world.player.money < cost) sellCargo(o);
+  sellGearFor(o, shopId, cost);
+  if (o.world.player.money >= cost) o.run(repairBasics, 'repairs');
 }
 
 function sellGearFor(o: Orders, shopId: string, price: number): void {

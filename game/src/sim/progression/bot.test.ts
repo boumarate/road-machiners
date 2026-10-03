@@ -203,6 +203,21 @@ describe('botOrders', () => {
     expect(turn.world.player.money).toBeGreaterThanOrEqual(0);
   });
 
+  it('has a broke bot in town with a broken transmission sell gear to fix it first', () => {
+    const w = parkedAt('bowl');
+    const me = playerVehicle(w);
+    for (const p of mountedParts(me, 'core')) if (partDef(p.defId).id === 'transmission') p.hp = 0;
+    w.player.money = 0;
+    w.player.fuel = 0;
+
+    const turn = botOrders(w, 'trader');
+
+    const after = playerVehicle(turn.world);
+    expect(mountedParts(after, 'core').every((p) => p.hp === maxHp(p))).toBe(true);
+    expect(turn.ledger.gear).toBeGreaterThan(0);
+    expect(turn.ledger.repairs).toBeLessThan(0);
+  });
+
   // Below the working capital a bot buys no upgrade, but a gun it lost it buys back.
   it('has a hunter that lost its gun buy the cheapest one in town', () => {
     const w = parkedAt('bowl');
