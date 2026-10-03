@@ -50,7 +50,7 @@ import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D, TruckFx } from "./render/fx";
-import { CollisionCues, collisionSteps, playCrashes, playDryGuns, playShotFx, type CombatHost } from "./volley";
+import { CollisionCues, collisionSteps, playCrashes, playDryGuns, playShotFx, playUtilitySounds, type CombatHost } from "./volley";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { playBreaks } from "./render/partDebris";
@@ -708,6 +708,7 @@ export class Game {
     const host = this.combatHost();
     playCrashes(host, this.crashCues, null);
     playDryGuns(host, playShotFx(host));
+    playUtilitySounds(host);
     this.weapons.render();
   }
 

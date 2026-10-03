@@ -80,6 +80,16 @@ const NAMES = [
   'store_jerrycans',
   'store_locker',
 
+  'util_sprout',
+  'util_caltrops',
+  'util_oil',
+  'util_crane',
+  'util_harpoon',
+  'util_mortar',
+  'util_flare',
+  'util_scraper',
+  'util_emitter',
+
   'eng_stock',
   'eng_tuned_v8',
   'eng_flat_four',
@@ -99,6 +109,7 @@ const NAMES = [
   'arm_plate',
   'arm_scrap_sheet',
   'arm_ceramic_tile',
+  'arm_claymore_ram',
 
   'cargo_rack',
   'cargo_trailer_box',

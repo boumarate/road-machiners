@@ -1,7 +1,8 @@
 import { CONFIG } from "../config";
 import { PHYSICS } from "../data/physics";
 import { REGION } from "../data/region";
-import { partDef } from "../data/parts";
+import { partDef, type UtilityEffectType } from "../data/parts";
+import type { CueId } from "../data/sounds";
 import { PAL } from "../render/palette";
 import { GROUND, type TurnResult } from "../phys/drive";
 import { mountedParts } from "../sim/grid";
@@ -105,6 +106,31 @@ export function playDryGuns(host: CombatHost, played: Set<string>): void {
 }
 
 const gunKey = (vehicle: string, weapon: string) => `${vehicle}|${weapon}`;
+
+// Utilities have no cues of their own and borrow the gun cues: a mortar or flare round leaves with the cannon's boom,
+// and an emitter pulse crackles with the sparks of a breaking part. The harpoon sounds as a shot, and a claymore
+// blast as an explosion with its crash. Other utilities play silent.
+const UTILITY_CUES: Partial<Record<UtilityEffectType | "claymore", CueId>> = { mortar: "cannon-fire", flare: "cannon-fire" };
+const PULSE_CUE: CueId = "part-broken";
+
+// What utility sounds read: the turn's events, where each truck is seen, and the cue player.
+export type UtilitySoundHost = Pick<VolleyHost, "eventPoint"> & { world: Pick<World, "events">; sound: Pick<SoundDirector, "at"> };
+
+// Sounds each seen utility launch and emitter pulse of the turn at its user, as the band starts.
+export function playUtilitySounds(host: UtilitySoundHost): void {
+  for (const e of host.world.events) {
+    const use = utilityCueOf(e);
+    const p = use && host.eventPoint(use.vehicle);
+    if (use && p) host.sound.at(use.cue, p, 0);
+  }
+}
+
+function utilityCueOf(e: GameEvent): { cue: CueId; vehicle: string } | null {
+  if (e.t === "pulse") return { cue: PULSE_CUE, vehicle: e.vehicle };
+  if (e.t !== "utility") return null;
+  const cue = UTILITY_CUES[e.effect];
+  return cue ? { cue, vehicle: e.vehicle } : null;
+}
 
 // Plays every shown volley of the turn's shot and guardShot events. The score aims an accent at each volley's first
 // landing. Returns the guns whose volley showed.

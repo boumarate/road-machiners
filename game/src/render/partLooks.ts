@@ -66,7 +66,7 @@ export const PART_MODELS: Record<string, ModelName> = {
   steelPlate: 'arm_plate',
   scrapSheet: 'arm_scrap_sheet',
   ceramicTile: 'arm_ceramic_tile',
-  claymoreRam: 'arm_ram', // stand-in until its own model
+  claymoreRam: 'arm_claymore_ram',
 
   rack: 'cargo_rack',
   trailerBox: 'cargo_trailer_box',
@@ -81,16 +81,15 @@ export const PART_MODELS: Record<string, ModelName> = {
   jerrycans: 'store_jerrycans',
   supplyLocker: 'store_locker',
 
-  // Stand-ins until the utilities get their own models.
-  sprout: 'scanner',
-  caltrops: 'scanner',
-  oilSpiller: 'store_jerrycans',
-  patcherCrane: 'store_locker',
-  harpoon: 'scanner',
-  smokeMortar: 'scanner',
-  flareCannon: 'scanner',
-  scrapersKnife: 'store_locker',
-  emitter: 'store_locker',
+  sprout: 'util_sprout',
+  caltrops: 'util_caltrops',
+  oilSpiller: 'util_oil',
+  patcherCrane: 'util_crane',
+  harpoon: 'util_harpoon',
+  smokeMortar: 'util_mortar',
+  flareCannon: 'util_flare',
+  scrapersKnife: 'util_scraper',
+  emitter: 'util_emitter',
 
   scrap: 'good_scrap',
   salt: 'good_salt',
@@ -297,6 +296,8 @@ export function jagOffset(
 
 const CORE_BREAKS: Partial<Record<string, BreakSignature>> = { wheel: 'air', tank: 'fire' };
 
+// Utilities and the claymore ram break with plain scrap. A broken claymore only disarms, and the oil spiller's
+// fuel stays in the truck's tanks, so neither blasts nor burns.
 export function breakSignature(def: PartDef): BreakSignature | null {
   if (def.kind === 'weapon') return 'ammo';
   if (def.kind === 'core') return CORE_BREAKS[def.role] ?? null;

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Break, Crash, Landing } from "../phys/drive";
 import type { GameEvent } from "../sim/types";
-import { CollisionCues, collisionSteps } from "./volley";
+import type { V3 } from "../phys/frames";
+import { CollisionCues, collisionSteps, playUtilitySounds } from "./volley";
 
 const hit = (a: string, b: string): GameEvent => ({ t: "collision", a, b, hitsA: [], hitsB: [] });
 const crash = (a: string, b: string, step: number) => ({ a, b, impact: 5, step }) as Crash;
@@ -61,5 +62,29 @@ describe("CollisionCues", () => {
     expect(cues.due(6)).toEqual([]);
     expect(cues.due(null)).toEqual([e2, e3]);
     expect(cues.due(null)).toEqual([]);
+  });
+});
+
+describe("playUtilitySounds", () => {
+  const use = (vehicle: string, effect: "mortar" | "flare" | "sprout" | "harpoon" | "claymore"): GameEvent => ({ t: "utility", vehicle, part: `${vehicle}-p`, effect, target: null, point: null });
+  const pulse = (vehicle: string): GameEvent => ({ t: "pulse", vehicle, pos: { x: 0, y: 0 }, hit: [] });
+  const seen: Record<string, V3> = { a: { x: 1, y: 2, z: 3 }, b: { x: 4, y: 5, z: 6 } };
+
+  function played(events: GameEvent[]): { cue: string; p: V3 }[] {
+    const out: { cue: string; p: V3 }[] = [];
+    playUtilitySounds({ world: { events }, eventPoint: (id) => seen[id] ?? null, sound: { at: (cue, p) => out.push({ cue, p }) } });
+    return out;
+  }
+
+  it("plays the cannon cue for a mortar or flare launch and the spark cue for a pulse, at the user", () => {
+    expect(played([use("a", "mortar"), use("b", "flare"), pulse("b")])).toEqual([
+      { cue: "cannon-fire", p: seen.a },
+      { cue: "cannon-fire", p: seen.b },
+      { cue: "part-broken", p: seen.b },
+    ]);
+  });
+
+  it("stays silent for unseen users and for utilities whose sound plays elsewhere or not at all", () => {
+    expect(played([use("hidden", "mortar"), pulse("hidden"), use("a", "sprout"), use("a", "harpoon"), use("a", "claymore")])).toEqual([]);
   });
 });

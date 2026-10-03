@@ -30,6 +30,7 @@ export const PAL = {
   dest: 0xe05030,
   throttle: { brake: 0xe05a3a, hold: 0xf0d060, accelerate: 0x7cc85a },
   select: 0xf0d060,
+  utility: 0xb39a3a, // mustard hints on utility models, the border of a utility card in the inventory
   arcSpent: 0x9a9a94, // firing arc of a gun that is reloading or cooling down
   contact: 0xf4f1ea, // faint white sound waves around a contact
   smoke: 0x1e1b19, // black smoke clouds from smoke utilities and their ground edge
