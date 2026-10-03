@@ -21,6 +21,7 @@ import { callVehicle, chooseOption, currentOptions } from '../sim/dialogue';
 import { TOW } from '../data/tow';
 import { NPCS } from '../data/npcs';
 import { soundRange } from '../sim/detect';
+import { budget } from '../test/budget';
 
 beforeAll(async () => {
   await initPhysics();
@@ -217,7 +218,7 @@ describe('physics turns', () => {
       const skilled = play(setMoveOrder(w, order), 3);
       mudSkill5 = skilled.w;
       freeDrive(skilled.d);
-    }, 30_000); // three physics runs share this hook; the default 10s hook timeout is too tight under load
+    }, budget(30_000)); // three physics runs share this hook; the default 10s hook timeout is too tight under load
 
     it('mud covers less ground than road at the same order', () => {
       expect(me(mudSkill0).pos.x - 30).toBeLessThan(me(roadSkill0).pos.x - 30);
@@ -612,7 +613,7 @@ describe('physics turns', () => {
     const { w } = play(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 12);
     expect(me(w).pos.x).toBeGreaterThan(32);
     expect(me(w).speed).toBeGreaterThan(0.5);
-  }, 90_000); // twelve physics turns take 5s alone and over 30s when the whole suite shares the cores
+  }, budget(90_000)); // twelve physics turns take 5s alone and over 30s when the whole suite shares the cores
 
   it('a click in the hold zone keeps its speed up a hill', () => {
     let w = emptyWorld({ x: 29, y: 30 });
