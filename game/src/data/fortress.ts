@@ -1,21 +1,54 @@
 // Fortress sites: the inhabited sites, walled by baked wall, tower, gatehouse, bastion and inner gate pieces.
 // Lengths are in tiles of 4 m. The piece models are built to these sizes: walls 3 tiles high, and towers,
-// bastions and gatehouses 4 tiles high, so each stands over 3x the tallest truck.
+// bastions and gatehouses at least 3 tiles high, so each stands over 3x the tallest truck.
 
-export type FortressShape = 'circle' | 'square' | 'star';
-export type FortressStyle = 'masonry' | 'shipMetal' | 'scrap';
+export type FortressShape = 'circle' | 'square' | 'star' | 'polygon';
+export type FortressStyle = 'masonry' | 'shipMetal' | 'scrap' | 'patchwork' | 'compound' | 'ring' | 'yard';
+export type FortressKind = 'wall' | 'tower' | 'gate' | 'bastion' | 'inner';
+// A polygon outline corner: at degrees from the site's turn, r tiles from its center, and whether a tower stands on it.
+export type FortressCorner = { at: number; r: number; tower: boolean };
+// A terraced pit dug into the ground inside the curtain. margin tiles in from the curtain line stay at the rim, then
+// the ground steps down stepHeight tiles every terraceWidth tiles, up to terraces steps, to a flat floor.
+export type FortressPit = { margin: number; terraceWidth: number; stepHeight: number; terraces: number };
 // turn rotates the outline in degrees from map +x toward +y. It is tuned so every gate stays clear of the outline
 // corners: mid-side on a square and between towers on a circle. South Lock's one gate stands on a star point.
-export type FortressSite = { shape: FortressShape; turn: number; style: FortressStyle };
+// A polygon reads its corners in order, counterclockwise. A circle has towers unless towers is false.
+export type FortressSite = { shape: FortressShape; turn: number; style: FortressStyle; corners?: readonly FortressCorner[]; towers?: boolean; pit?: FortressPit };
+
+// A gatehouse footprint, width along the wall and depth out of the site, and its height to the parapet.
+export type FortressGate = { width: number; depth: number; height: number };
+// flush: the gatehouse stands in the curtain with its outer face on the curtain line. Otherwise its outer face lies
+// on the site circle, and a barbican joins it back to the curtain where the curtain misses it.
+// gateFlare: how far a gatehouse model's plinth and door detail reach past its outer face. Its face stands this far in.
+// pieces: the pieces the style has models for. Laying any other piece throws.
+export type FortressStyleDef = { flush: boolean; gate: FortressGate; gateFlare: number; pieces: readonly FortressKind[] };
 
 export const FORTRESS_SITES: Record<string, FortressSite> = {
-  bowl: { shape: 'star', turn: 27.5, style: 'masonry' },
-  nose: { shape: 'circle', turn: 9, style: 'shipMetal' },
-  dustwell: { shape: 'square', turn: 45, style: 'masonry' },
+  // An irregular hexagon after the Bowl concept. Each gate is mid-side: the corners either side of it lie at equal
+  // radius and equal angle from its bearing, -64.93 and -24.11 degrees, so its side faces straight out along it.
+  bowl: {
+    shape: 'polygon',
+    turn: 0,
+    style: 'patchwork',
+    corners: [
+      { at: -85.34, r: 26.75, tower: true },
+      { at: -44.52, r: 26.75, tower: true },
+      { at: -3.7, r: 26.75, tower: true },
+      { at: 60, r: 25.5, tower: true },
+      { at: 128, r: 26.75, tower: true },
+      { at: 198, r: 25, tower: true },
+    ],
+    pit: { margin: 1.5, terraceWidth: 3, stepHeight: 0.75, terraces: 3 },
+  },
+  // Turn 9 put a tower 0.91 tiles off the side of the 24 m flush gate at -145.7 degrees. Turns 7.25 to 8.75 clear both.
+  nose: { shape: 'circle', turn: 8, style: 'shipMetal' },
+  dustwell: { shape: 'square', turn: 45, style: 'compound' },
   'green-pit': { shape: 'circle', turn: 8, style: 'masonry' },
   'pump-station': { shape: 'square', turn: 0, style: 'masonry' },
-  granary: { shape: 'circle', turn: 30, style: 'masonry' },
-  'salvage-yard': { shape: 'square', turn: 45, style: 'scrap' },
+  // The 8 m gate is as wide as one of the 15 ring sections. Turn 30 put its ends on two bends, where the next walls
+  // bend out in front of it. At 36 the gate face lies along one section and 6 degrees off the road's bearing.
+  granary: { shape: 'circle', turn: 36, style: 'ring', towers: false },
+  'salvage-yard': { shape: 'square', turn: 45, style: 'yard' },
   'south-lock': { shape: 'star', turn: 4, style: 'masonry' },
   scrapjaw: { shape: 'circle', turn: -10, style: 'scrap' },
   kiln: { shape: 'square', turn: 93, style: 'scrap' },
@@ -30,9 +63,9 @@ export const FORTRESS = {
   towerSize: 1.5, // square tower footprint, 6 m
   bastionBack: 0.4, // a bastion model's tip reaches 6.4 m past its origin. It stands this far back from the corner, so the tip stays in the circle.
   bastionSize: 1.5, // square footprint of a star point bastion, 6 m
-  gate: { width: 5, depth: 2.5, height: 4 }, // gatehouse footprint, width along the wall and depth out of the site, and its 16 m height (fort_kit.py GATE_HEIGHT)
+  // The castle gatehouse of the masonry and scrap styles, 16 m high (fort_kit.py GATE_HEIGHT).
+  gate: { width: 5, depth: 2.5, height: 4 } as FortressGate,
   gunLift: 0.2, // the gate gun's muzzle stands this far over the gatehouse parapet
-  gateFlare: 0.08, // how far a gatehouse model's plinth and door detail reach past its outer face, 0.32 m. Its face stands this far inside the circle.
   innerWidth: 3, // inner gate in the curtain behind a barbican, along the wall. Its depth is wallDepth.
   circleTowerEvery: 5, // circle wall sections between towers
   starPoints: 5,
@@ -40,4 +73,23 @@ export const FORTRESS = {
   // Least gap from a corner to the edge of a gatehouse, or to the ends of a barbican's inner gate and neck walls.
   // A corner may lie deep inside a gatehouse, which then stands in for its tower.
   gateClearance: 1,
+};
+
+const CASTLE: FortressStyleDef = { flush: false, gate: FORTRESS.gate, gateFlare: 0.08, pieces: ['wall', 'tower', 'gate', 'bastion', 'inner'] };
+
+// Each style's gatehouse and pieces. The flush gates follow the concepts C1-C5, and their models reach nothing past
+// their outer face.
+export const FORTRESS_STYLES: Record<FortressStyle, FortressStyleDef> = {
+  masonry: CASTLE,
+  scrap: CASTLE,
+  // C1: an X-braced double gate between two concrete pillars.
+  patchwork: { flush: true, gate: { width: 3, depth: 1.25, height: 3 }, gateFlare: 0, pieces: ['wall', 'tower', 'gate'] },
+  // C2: shut rust doors in a concrete frame.
+  compound: { flush: true, gate: { width: 2, depth: 1, height: 3 }, gateFlare: 0, pieces: ['wall', 'tower', 'gate'] },
+  // C3: a recessed portal in a ring with no towers.
+  ring: { flush: true, gate: { width: 2, depth: 1, height: 3 }, gateFlare: 0, pieces: ['wall', 'gate'] },
+  // C4: rust plate leaves.
+  yard: { flush: true, gate: { width: 2.5, depth: 1, height: 3 }, gateFlare: 0, pieces: ['wall', 'tower', 'gate'] },
+  // C5: shut plank doors between two built-in towers joined by a catwalk. The model is 5.5 m deep in a 6 m footprint.
+  shipMetal: { flush: true, gate: { width: 6, depth: 1.5, height: 4 }, gateFlare: 0, pieces: ['wall', 'tower', 'gate'] },
 };

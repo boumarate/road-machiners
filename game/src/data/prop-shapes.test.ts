@@ -213,8 +213,7 @@ describe('prop shapes', () => {
   it('stands every fortress piece at least 3x the tallest truck (IV4)', () => {
     const tallest = Math.max(...Object.values(TRUCKS).flatMap((t) => t.boxes.map((b) => b.z1)));
     const forts = names.filter((n) => n.startsWith('fort_'));
-    // 26 until the ship bastion and inner gate leave with their last layout user.
-    expect(forts).toHaveLength(26);
+    expect(forts).toHaveLength(24);
     for (const name of forts) {
       expect(Math.max(...SHAPES[name].boxes.map((b) => b.z1)), name).toBeGreaterThanOrEqual(tallest * 3);
     }

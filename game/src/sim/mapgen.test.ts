@@ -6,6 +6,7 @@ import { START_KITS } from '../data/start';
 import { PHYSICS } from '../data/physics';
 import { boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propPose, propReach, propShape, segmentCrossesBox, touchesObstacle } from './mapgen';
 import { ROAD_INDEX } from './road-index';
+import { isFortress } from './sites';
 import type { Obstacle } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
@@ -150,6 +151,14 @@ describe('world from the baked map', () => {
     };
     const overlaps = baked.flatMap((o) => all.filter((other) => other.id !== o.id && overlap(o, other) && !touching(o, other)).map((other) => `${o.id} ${other.id}`));
     expect(overlaps).toEqual([]);
+  });
+
+  it('puts a pond only at an oasis that is no fortress', () => {
+    const ponds = world.obstacles.filter((o) => o.kind === 'water').map((o) => o.id);
+    expect(ponds).not.toContain('pond-dustwell');
+    expect(ponds).not.toContain('pond-green-pit');
+    const open = REGION.locations.filter((l) => l.kind === 'oasis' && !isFortress(l)).map((l) => `pond-${l.id}`);
+    expect(ponds).toEqual(open);
   });
 
   it('rejects a map of another size than the region', () => {

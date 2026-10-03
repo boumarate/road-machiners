@@ -74,8 +74,6 @@ const NAMES = [
   'fort_ship_wall',
   'fort_ship_tower',
   'fort_ship_gate',
-  'fort_ship_bastion',
-  'fort_ship_inner',
   'fort_scrap_wall',
   'fort_scrap_tower',
   'fort_scrap_gate',

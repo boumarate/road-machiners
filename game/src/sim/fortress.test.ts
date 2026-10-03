@@ -1,22 +1,22 @@
 // The baked fortress pieces of the real map: where they stand, what they block, and what is left of the site circle.
 
 import { describe, expect, it } from 'vitest';
-import { FORTRESS, FORTRESS_SITES } from '../data/fortress';
+import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES } from '../data/fortress';
 import { REGION } from '../data/region';
 import { TEST_MAP } from '../test/map';
-import { FORT_MODELS, FORT_PROPS, fortressPieces } from './fortress';
+import { FORT_MODELS, FORT_PROPS, fortressGates, fortressOutline, fortressPieces, pitDepth } from './fortress';
 import { PROP_KINDS } from './terrain';
 import type { Obstacle } from './types';
 import { isDriveObstacle, isBakedObstacle, mapObstacles, propBoxes, propPose } from './mapgen';
 import { isFree } from './spawn';
-import { canUseSite, isFortress, siteGates, sitePads } from './sites';
+import { canUseSite, isFortress, sitePads } from './sites';
 import { discoverSites } from './locations';
 import { refreshVision } from './vision';
 import { cloneWorld } from './world';
 import { playerVehicle } from './damage';
 import { newWorld } from './world';
 import { START_KITS } from '../data/start';
-import { dist } from './vec';
+import { dist, segmentDist, type Vec } from './vec';
 
 const SITES = [...REGION.towns, ...REGION.locations];
 const FORT_SITES = SITES.filter(isFortress);
@@ -29,30 +29,43 @@ function corners(b: { center: { x: number; y: number }; axis: { x: number; y: nu
 
 // The baked pieces of one site: the landmarks of its style's kinds that stand inside its circle.
 function piecesOf(site: (typeof SITES)[number], piece?: 'gate' | 'wall'): Extract<Obstacle, { kind: 'landmark' }>[] {
-  const kinds = Object.values(FORT_PROPS[FORTRESS_SITES[site.id].style]);
+  const kinds: string[] = Object.values(FORT_PROPS[FORTRESS_SITES[site.id].style]);
   return mapObstacles(TEST_MAP).filter((o): o is Extract<Obstacle, { kind: 'landmark' }> => o.kind === 'landmark' && kinds.includes(o.look) && dist(o.pos, site.pos) <= site.radius && (!piece || FORT_MODELS.get(o.look)?.piece === piece));
 }
 
+const styleOf = (site: (typeof SITES)[number]) => FORTRESS_STYLES[FORTRESS_SITES[site.id].style];
+
 // A gatehouse's flat outer face is a chord, so its corners stand a little past the circle that its middle touches.
-function sag(radius: number, o: object): number {
-  return 'look' in o && FORT_MODELS.get(o.look as never)?.piece === 'gate' ? Math.hypot(radius, FORTRESS.gate.width / 2) - radius : 0;
+function sag(site: (typeof SITES)[number], o: object): number {
+  return 'look' in o && FORT_MODELS.get(o.look as never)?.piece === 'gate' ? Math.hypot(site.radius, styleOf(site).gate.width / 2) - site.radius : 0;
 }
 
 describe('fort prop kinds', () => {
   it('names one model per kind, and every kind is a map prop kind (IV14)', () => {
     const kinds = Object.values(FORT_PROPS).flatMap((styles) => Object.values(styles));
-    expect(new Set(kinds).size).toBe(15);
+    expect(new Set(kinds).size).toBe(24);
     for (const kind of kinds) expect(PROP_KINDS).toContain(kind);
-    expect(new Set([...FORT_MODELS.values()].map((m) => m.model)).size).toBe(15);
+    expect(new Set([...FORT_MODELS.values()].map((m) => m.model)).size).toBe(24);
+  });
+
+  it('drops the ship barbican kinds (IV23)', () => {
+    expect(PROP_KINDS).not.toContain('fortShipBastion');
+    expect(PROP_KINDS).not.toContain('fortShipInner');
+    expect(Object.keys(FORT_PROPS.shipMetal).sort()).toEqual(['gate', 'tower', 'wall']);
+    for (const o of mapObstacles(TEST_MAP)) if (o.kind === 'landmark') expect(['fortShipBastion', 'fortShipInner']).not.toContain(o.look);
+  });
+
+  it('gives each style a prop kind for exactly the pieces it builds (IV19)', () => {
+    for (const style of Object.keys(FORTRESS_STYLES) as (keyof typeof FORTRESS_STYLES)[]) expect(Object.keys(FORT_PROPS[style]).sort()).toEqual([...FORTRESS_STYLES[style].pieces].sort());
   });
 
   it('gives each fortress site the models of its style', () => {
     for (const site of FORT_SITES) {
       const style = FORTRESS_SITES[site.id].style;
-      const name = style === 'shipMetal' ? 'ship' : style;
+      const prefix = FORT_MODELS.get(FORT_PROPS[style].wall!)!.model.replace(/wall$/, '');
       const pieces = piecesOf(site);
       expect(pieces.length, site.id).toBe(fortressPieces(site).length);
-      for (const o of pieces) expect(FORT_MODELS.get(o.look)!.model, `${site.id} ${o.id}`).toMatch(new RegExp(`^fort_${name}_`));
+      for (const o of pieces) expect(FORT_MODELS.get(o.look)!.model, `${site.id} ${o.id}`).toBe(`${prefix}${FORT_MODELS.get(o.look)!.piece}`);
     }
   });
 });
@@ -88,21 +101,29 @@ describe('fortress obstacles', () => {
     for (const site of FORT_SITES) {
       const own = piecesOf(site);
       expect(own.length, site.id).toBe(fortressPieces(site).length);
-      for (const o of own) for (const b of propBoxes(o)) for (const c of corners(b)) expect(dist(c, site.pos), `${site.id} ${o.id}`).toBeLessThanOrEqual(site.radius + 0.05 + sag(site.radius, o));
+      for (const o of own) for (const b of propBoxes(o)) for (const c of corners(b)) expect(dist(c, site.pos), `${site.id} ${o.id}`).toBeLessThanOrEqual(site.radius + 0.05 + sag(site, o));
     }
   });
 
-  it('lays each gatehouse model with its outer face on a road gate (IV1)', () => {
+  it('lays each gatehouse model with its outer face on its gate face (IV1)', () => {
     for (const site of FORT_SITES) {
-      const gates = siteGates(site);
+      const gates = fortressGates(site);
       const houses = piecesOf(site, 'gate');
       expect(houses).toHaveLength(gates.length);
-      for (const gate of gates) {
-        const at = houses.find((o) => {
-          const pose = propPose(o);
-          return Math.abs(dist(pose.pos, gate) - FORTRESS.gateFlare) < 0.01;
-        });
-        expect(at, `${site.id} gate at ${gate.x},${gate.y}`).toBeDefined();
+      for (const g of gates) {
+        const at = houses.find((o) => Math.abs(dist(propPose(o).pos, g.face) - styleOf(site).gateFlare) < 0.01);
+        expect(at, `${site.id} gate at ${g.gate.x},${g.gate.y}`).toBeDefined();
+      }
+    }
+  });
+
+  it('puts a castle gate face on its road gate, and a flush one on the curtain inside it', () => {
+    for (const site of FORT_SITES) {
+      for (const g of fortressGates(site)) {
+        expect(g.out.x * g.out.x + g.out.y * g.out.y).toBeCloseTo(1, 9);
+        expect(g.height, site.id).toBe(styleOf(site).gate.height);
+        if (styleOf(site).flush) expect(dist(g.gate, site.pos), site.id).toBeGreaterThan(dist(g.face, site.pos));
+        else expect(dist(g.face, g.gate), site.id).toBeLessThan(1e-9);
       }
     }
   });
@@ -164,5 +185,43 @@ describe('fortress pads', () => {
         expect(w.player.discovered, s.id).toContain(s.id);
       }
     }
+  });
+});
+
+describe('Bowl pit', () => {
+  const bowl = SITES.find((s) => s.id === 'bowl')!;
+  const pit = FORTRESS_SITES.bowl.pit!;
+  const outline = fortressOutline(bowl);
+  const edge = (p: Vec) => Math.min(...outline.map((a, i) => segmentDist(p, a, outline[(i + 1) % outline.length])));
+  // A point d tiles in from the middle of the first gate's side.
+  const inFromGate = (d: number): Vec => {
+    const g = fortressGates(bowl)[0];
+    return { x: g.face.x - g.out.x * d, y: g.face.y - g.out.y * d };
+  };
+
+  it('is level with the rim outside the curtain and within the margin of it', () => {
+    expect(pitDepth(bowl, { x: bowl.pos.x + bowl.radius + 3, y: bowl.pos.y })).toBe(0);
+    expect(pitDepth(bowl, fortressGates(bowl)[0].gate)).toBe(0);
+    expect(pitDepth(bowl, inFromGate(pit.margin - 0.05))).toBe(0);
+  });
+
+  it('steps down one terrace per terrace width', () => {
+    const first = inFromGate(pit.margin + 0.5);
+    const second = inFromGate(pit.margin + pit.terraceWidth + 0.5);
+    expect(edge(first)).toBeCloseTo(pit.margin + 0.5, 6);
+    expect(pitDepth(bowl, first)).toBe(pit.stepHeight);
+    expect(pitDepth(bowl, second)).toBe(2 * pit.stepHeight);
+  });
+
+  it('has a flat floor at its full depth', () => {
+    const floor = pit.terraces * pit.stepHeight;
+    expect(pitDepth(bowl, bowl.pos)).toBe(floor);
+    expect(pitDepth(bowl, { x: bowl.pos.x + 3, y: bowl.pos.y - 2 })).toBe(floor);
+    for (let x = -30; x <= 30; x += 0.5) for (let y = -30; y <= 30; y += 0.5) expect(pitDepth(bowl, { x: bowl.pos.x + x, y: bowl.pos.y + y })).toBeLessThanOrEqual(floor);
+  });
+
+  it('throws for a site with no pit', () => {
+    const dustwell = SITES.find((s) => s.id === 'dustwell')!;
+    expect(() => pitDepth(dustwell, dustwell.pos)).toThrow(/pit/);
   });
 });

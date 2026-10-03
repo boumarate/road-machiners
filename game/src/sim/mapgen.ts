@@ -50,13 +50,14 @@ export function isBakedObstacle(o: Obstacle): boolean {
   return BAKED_ID.test(o.id);
 }
 
-// A circle marks each abandoned site. Wrecks sit at the convoy, a pond at the oasis.
+// A circle marks each abandoned site. Wrecks sit at the convoy, a pond at an oasis that is no fortress: a fortress
+// oasis draws its water inside its curtain.
 function placeSites(): Obstacle[] {
   const S = REGION.sites;
   // A fortress site has no circle: its baked pieces are its walls, and the town houses come from the render.
   const out: Obstacle[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')].filter((s) => !isFortress(s)).map((s) => ({ id: `site-${s.id}`, pos: { ...s.pos }, r: s.radius, kind: 'site' }));
   for (const loc of REGION.locations) {
-    if (loc.kind === 'oasis') out.push({ id: `pond-${loc.id}`, pos: { ...loc.pos }, r: S.pondRadius, kind: 'water' });
+    if (loc.kind === 'oasis' && !isFortress(loc)) out.push({ id: `pond-${loc.id}`, pos: { ...loc.pos }, r: S.pondRadius, kind: 'water' });
     // A fortress yard holds its wrecks inside the curtain, where no truck reaches them.
     if (loc.kind === 'convoy' && !isFortress(loc))
       S.convoyWrecks.forEach((o, i) => out.push({ id: `cw-${loc.id}-${i}`, pos: { x: loc.pos.x + o.x, y: loc.pos.y + o.y }, r: 0.65, kind: 'wreck' }));

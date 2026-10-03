@@ -35,8 +35,6 @@ const PROP_LOOKS = {
   fortShipWall: { color: 0xd8d0b8, shape: 'rail' },
   fortShipTower: { color: 0xb8a888, shape: 'disc' },
   fortShipGate: { color: 0xe05030, shape: 'long' },
-  fortShipBastion: { color: 0xb8a888, shape: 'box' },
-  fortShipInner: { color: 0xe05030, shape: 'long' },
   fortScrapWall: { color: 0xd8d0b8, shape: 'rail' },
   fortScrapTower: { color: 0xb8a888, shape: 'disc' },
   fortScrapGate: { color: 0xe05030, shape: 'long' },
