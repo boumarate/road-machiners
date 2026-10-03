@@ -27,6 +27,7 @@ const PROP_LOOKS = {
   fence: { color: 0xf4ecd0, shape: 'rail' },
   junk: { color: 0xc03890, shape: 'disc' },
   carWreck: { color: 0x2a2a70, shape: 'long' },
+  shipWing: { color: 0xd0d0d0, shape: 'box' },
   hullChunk: { color: 0x909090, shape: 'long' },
   hullRib: { color: 0xb07050, shape: 'box' },
   shipCache: { color: 0x40d040, shape: 'disc' },

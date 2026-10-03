@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { REGION } from "../data/region";
 import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from "../data/terrain";
 import { route } from "./path";
+import { PHYSICS } from "../data/physics";
+import { deckById } from "./bridge";
 import {
+  deckHeight,
+  groundAt,
   heightAt,
   isCliff,
   tileAt,
@@ -12,7 +16,7 @@ import {
 } from "./terrain";
 import { emptyWorld } from "./testkit";
 import { ROAD_INDEX } from "./road-index";
-import { dist, polylineDist, segmentDist } from "./vec";
+import { dist, polylineDist, segmentDist, type Vec } from "./vec";
 import { newWorld } from "./world";
 import { siteGap } from "./sites";
 import type { World } from "./types";
@@ -91,10 +95,10 @@ describe("terrain grid", () => {
     expect(REGION.locations.map((site) => site.name)).toEqual([
       'Old Orchard', 'Dustwell', 'The Granary', 'Burnt Convoy', 'Podfield',
       'Canyon Bridge', 'Glass Flats', 'Green Pit', 'South Lock', 'Ridge Wrecks',
-      'Pump Station', 'Fallen Sun', 'Salvage Yard', 'Scrapjaw Camp', 'Kiln Camp',
+      'Pump Station', 'Fallen Sun', 'Salvage Yard', 'Broken Wing', 'Scrapjaw Camp', 'Kiln Camp',
     ]);
     const sites = [...REGION.towns, ...REGION.locations];
-    expect(new Set(sites.map((site) => site.id)).size).toBe(17);
+    expect(new Set(sites.map((site) => site.id)).size).toBe(18);
     for (const site of sites) {
       expect(site.pos.x).toBeGreaterThan(site.radius);
       expect(site.pos.y).toBeGreaterThan(site.radius);
@@ -117,7 +121,9 @@ describe("terrain grid", () => {
       };
       const p = access(a);
       const q = access(b);
-      return REGION.roads.some((road) => road.some((point) => dist(point, p) < 0.01) && road.some((point) => dist(point, q) < 0.01));
+      const passes = (road: Vec[], at: Vec) => road.some((point) => dist(point, at) < 0.01);
+      // One road links them, or it meets another road that reaches the second, as at a T junction.
+      return REGION.roads.some((road) => passes(road, p) && (passes(road, q) || REGION.roads.some((other) => passes(other, q) && road.some((point) => passes(other, point)))));
     };
     for (const [a, b] of [
       ['bowl', 'orchard'], ['orchard', 'dustwell'], ['dustwell', 'granary'], ['granary', 'burnt-convoy'],
@@ -266,5 +272,44 @@ describe("terrain grid", () => {
       }
       prev = p;
     }
+  });
+});
+
+describe("the Broken Wing deck on the baked map", () => {
+  const t = TEST_MAP.terrain;
+  const W = deckById("broken-wing");
+  const on = (along: number, across: number) => ({
+    x: W.from.x + W.axis.x * along - W.axis.y * across,
+    y: W.from.y + W.axis.y * along + W.axis.x * across,
+  });
+  // Each deck end rests on its ramp, so there the ground meets the slab. The ground falls across the road, so at an
+  // end it stands a little over the deck line on one side. Within this many tiles of an end the ground may stand
+  // in the slab, under the deck model's crumpled end plates, but never above the rail tops along the edges.
+  const END = 4;
+  const thickness = PHYSICS.bridge.deckThickness / PHYSICS.metersPerTile;
+  const rails = PHYSICS.bridge.railHeight / PHYSICS.metersPerTile;
+
+  it("gives the deck line as the height everywhere on the outline", () => {
+    for (let along = 0; along <= W.length; along += 0.5)
+      for (let across = -W.width / 2 + 0.25; across < W.width / 2; across += 0.5) {
+        const p = on(along, across);
+        expect(heightAt(t, p.x, p.y)).toBeCloseTo(deckHeight(t, W, along), 9);
+      }
+  });
+
+  it("stands the deck middle at least 4 m over the ground under it", () => {
+    const mid = on(W.length / 2, 0);
+    expect(heightAt(t, mid.x, mid.y) - groundAt(t, mid.x, mid.y)).toBeGreaterThanOrEqual(4 / PHYSICS.metersPerTile);
+  });
+
+  it("keeps the ground under the outline below the deck slab, so no terrain shows through the deck", () => {
+    for (let along = 0; along <= W.length; along += 0.5)
+      for (let across = -W.width / 2; across <= W.width / 2; across += 0.5) {
+        const p = on(along, across);
+        const line = deckHeight(t, W, along);
+        const ground = groundAt(t, p.x, p.y);
+        const inner = along >= END && along <= W.length - END;
+        expect(ground, `${along},${across}`).toBeLessThanOrEqual(inner ? line - thickness : line + rails);
+      }
   });
 });

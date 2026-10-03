@@ -1,14 +1,17 @@
 // Replay runs a recorded trace through the XP rules. It takes milliseconds, so XP numbers can be tuned without a new
-// recording. Perks and the feedback of skills into behavior are ignored.
+// recording. Perks and the feedback of skills into behavior are ignored. Each activity family keeps its own running
+// total of earned XP, and its curve marks the turn that total covers the cumulative cost of each rank: the pace of a
+// player who spends a family's XP on its own skill.
 
 import { TIME } from '../../data/time';
-import { MAIN_SKILL, MAX_SKILL_LEVEL, SKILL_IDS, TARGET_DAYS, TARGET_TOLERANCE, XP_SOURCES } from '../../data/skills';
-import { accrueXp, levelOf, type SkillProgress } from '../progress';
+import { MAIN_SKILL, MAX_RANK, SKILL_IDS, TARGET_DAYS, TARGET_TOLERANCE, XP_SOURCES } from '../../data/skills';
+import { accrueXp, ranksCoveredBy, type SkillProgress } from '../progress';
 import type { SkillId, XpSource } from '../types';
 import { isArchetype, type Archetype } from './bot';
 import type { RunEnd, TraceLine } from './record';
 
-// levels[i] is the first turn the skill reaches level i + 1, or null if it never does.
+// levels[i] is the first turn the family's earned XP covers rank i + 1, or null if it never does. total is the
+// family's earned XP.
 export type SkillCurve = { levels: (number | null)[]; total: number; perDay: number };
 export type Curve = Record<SkillId, SkillCurve>;
 
@@ -17,15 +20,16 @@ export type Curve = Record<SkillId, SkillCurve>;
 export function replay(trace: readonly TraceLine[], turns: number): Curve {
   requireTurnOrder(trace, turns);
   const progress = freshProgress();
-  const levels = Object.fromEntries(SKILL_IDS.map((id) => [id, new Array<number | null>(MAX_SKILL_LEVEL).fill(null)])) as Record<SkillId, (number | null)[]>;
+  const levels = Object.fromEntries(SKILL_IDS.map((id) => [id, new Array<number | null>(MAX_RANK).fill(null)])) as Record<SkillId, (number | null)[]>;
+  const earned = zeroBySkill();
   for (const line of trace) {
-    const skill = XP_SOURCES[line.source].skill;
-    const before = levelOf(progress.skills[skill]);
-    accrueXp(progress, line.source, line.amount, line.difficulty, line.target, line.turn);
-    for (let level = before + 1; level <= levelOf(progress.skills[skill]); level++) levels[skill][level - 1] = line.turn;
+    const family = XP_SOURCES[line.source].skill;
+    const before = ranksCoveredBy(earned[family]);
+    earned[family] += accrueXp(progress, line.source, line.amount, line.difficulty, line.target, line.turn);
+    for (let rank = before + 1; rank <= ranksCoveredBy(earned[family]); rank++) levels[family][rank - 1] = line.turn;
   }
   const days = turns / TIME.turnsPerDay;
-  return Object.fromEntries(SKILL_IDS.map((id) => [id, { levels: levels[id], total: progress.skills[id], perDay: progress.skills[id] / days }])) as Curve;
+  return Object.fromEntries(SKILL_IDS.map((id) => [id, { levels: levels[id], total: earned[id], perDay: earned[id] / days }])) as Curve;
 }
 
 function requireTurnOrder(trace: readonly TraceLine[], turns: number): void {
@@ -38,9 +42,12 @@ function requireTurnOrder(trace: readonly TraceLine[], turns: number): void {
   }
 }
 
+function zeroBySkill(): Record<SkillId, number> {
+  return { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 };
+}
+
 function freshProgress(): SkillProgress {
-  const zero = (): Record<SkillId, number> => ({ driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 });
-  return { skills: zero(), xpToday: zero(), xpDay: 1, repeats: {} };
+  return { xp: 0, xpToday: zeroBySkill(), xpDay: 1, repeats: {} };
 }
 
 // A trace line read from a trace file. Throws on anything that is not a valid line.
@@ -85,7 +92,7 @@ export function targetMisses(curve: Curve, archetype: Archetype, turns: number):
 function levelMiss(skill: SkillId, level: number, day: number, reached: number | null, turns: number): string[] {
   const at = reached === null ? 'never' : `day ${(reached / TIME.turnsPerDay).toFixed(1)}`;
   const verdict = missVerdict(day * TIME.turnsPerDay, reached, turns);
-  return verdict ? [`${skill} level ${level}: ${at}, target day ${day}, ${verdict}`] : [];
+  return verdict ? [`${skill} rank ${level}: ${at}, target day ${day}, ${verdict}`] : [];
 }
 
 // A level reached before its window is too early. One reached after it, or unreached once the window closed within

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { GEOLOGY, MAPGEN, TERRAIN } from '../data/terrain';
+import { deckById } from '../sim/bridge';
 import { ROAD_INDEX } from '../sim/road-index';
 import { decodeMap, isCliff, tileAt, type BakedMap, type BakedProp } from '../sim/terrain';
 import { siteGap } from '../sim/sites';
 import { dist, segmentDist } from '../sim/vec';
 import { newDraft, rockLayer, type MapDraft } from './bake';
+import { budget } from '../test/budget';
 
 const SIZE = REGION.size;
 const O = REGION.obstacles;
@@ -13,7 +15,7 @@ const SITES = [...REGION.towns, ...REGION.locations];
 
 // Every rock and crag off roads, sites, the bridge deck and the map margin, and apart from every other one.
 function expectClear(rocks: BakedProp[]): void {
-  const bridge = TERRAIN.features.bridge;
+  const bridge = deckById('canyon-bridge');
   for (const rock of rocks) {
     const { x, y } = rock.pos;
     expect(Math.min(x, y, SIZE - x, SIZE - y)).toBeGreaterThanOrEqual(O.edgeMargin);
@@ -145,7 +147,7 @@ describe('boulders on the baked map', () => {
 
   it('keeps every boulder clear of roads, sites, the bridge, the margin and other rocks', () => {
     expectClear(boulders);
-  }, 120_000); // checks every boulder against every road and site, slow when the suite runs in parallel
+  }, budget(120_000)); // checks every boulder against every road and site, slow when the suite runs in parallel
 
   it('puts no boulder on a cliff tile', () => {
     const onCliff = boulders.filter((rock) => isCliff(map.terrain, tileAt(map.terrain, rock.pos)));
