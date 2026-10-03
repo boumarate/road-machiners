@@ -38,6 +38,10 @@ GitHub holds every branch. The host clone `$FACTORY_HOME/repo` keeps GitHub's br
 
 Every tick, after intake, the factory deletes each folder in the web root except `dev`, the reserved `concepts` folder of first-party images and the builds of cards now in Approval. It skips this while a testing or branch job runs, since those deploy builds.
 
+Every tick also cleans `$FACTORY_HOME/work`. It deletes the clone of each issue whose card is Done or off the board, each `check-issue-*`, `dev-build` and `release-main`, each `change-*` and `incident-*` that is not queued, and `release-candidate` when no release is open. A clone that stays loses its `node_modules`, since every stage that runs code installs them again. A running job or an interrupted one keeps every clone named for it, packages included. Folders with other names stay, and the tick log names them. Job logs older than `FACTORY_LOG_DAYS` go too, except `tick.log`, `update.log` and the logs that `failures` names.
+
+Every tick writes `$FACTORY_HOME/health` with its time and the free disk space, also while paused. Under `FACTORY_MIN_FREE_GB` free, the tick starts no job. Hermes's incident watch reports low disk, no tick for 20 minutes and a pause older than an hour.
+
 When `dev` on GitHub moves past the commit `/dev/` serves, the next free tick rebuilds `/dev/`. So a merge made outside the factory also reaches the dev link. A failed build records its commit in `devFailed` in the state file. The tick skips that commit until `dev` moves again, and Hermes gets the incident.
 
 The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public-driven jobs in any 24 hours. Triage, design, implementation, testing and the release cut count. Approve, change and ad hoc jobs do not. Hotfix jobs count, but they run at the cap too. The first time the cap blocks work, the committee chat gets one notice with the count and the time the next slot frees.
@@ -48,7 +52,7 @@ Triage, design, implementation and testing each comment on their issue when they
 
 A failed or timed-out stage labels its issue `factory-stuck` and records the failure in `failures` in the state file for a day. The factory posts nothing about it, and neither about a tick crash. Hermes's incident watch sees both. Hermes fixes what it can and comments on the issue. It posts in the chat only when the committee must act or decide. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
 
-Hermes manages the factory. A watch job wakes it when an issue gets stuck or the tick crashes. It reads the logs, the state and the chat, then fixes the incident or asks the committee. It has a shell with `gh`, `git` and `jq` as the bot account, and it can edit the factory home. While it edits state, it pauses the factory with the file `$FACTORY_HOME/paused`, and every tick skips.
+Hermes manages the factory. A watch job wakes it when an issue gets stuck, the tick crashes or the server health file shows a problem. It reads the logs, the state and the chat, then fixes the incident or asks the committee. It has a shell with `gh`, `git` and `jq` as the bot account, and it can edit the factory home. While it edits state, it pauses the factory with the file `$FACTORY_HOME/paused`, and every tick skips.
 
 A job whose process dies resumes once. This covers a crash, a memory kill or a reboot. Each issue keeps its agents' Claude Code sessions in `$FACTORY_HOME/sessions/issue-N`, mounted at the agent's `~/.claude/projects`. The tick removes the dead job's containers, puts its issue in `interrupted` in the state file and frees its daily cap slot. The next tick starts the same stage. Each agent round with a saved session continues it with `--resume` and a short note, and `.factory/` outputs stay. Merges, checks and publishing run again. A second death or a timeout fails the job as usual. A dead branch job, like approve or ship, always fails. A job's end clears the sessions and the mark.
 

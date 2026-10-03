@@ -1,5 +1,7 @@
 import { join } from 'node:path';
+import { sweepLogs, sweepWork } from './cleanup';
 import { removeStaleBuilds } from './deploy';
+import { freeGb } from './health';
 import { failureIssue, pruneFailures, reportFailure } from './fail';
 import { intake } from './intake';
 import { pruneCaptions } from './post-status';
@@ -238,6 +240,17 @@ function cleanBuilds(ctx: Ctx, cards: Card[]): void {
   removeStaleBuilds(ctx.cfg.webRoot, new Set(keep), (msg) => ctx.log('tick', null, msg));
 }
 
+// Deletes finished work clones and old job logs. Running jobs and resumable clones stay, see sweepWork.
+function cleanWork(ctx: Ctx, cards: Card[]): void {
+  const state = readState(ctx.statePath);
+  const swept = sweepWork(join(ctx.cfg.home, 'work'), state, cards);
+  for (const name of swept.removed) ctx.log('tick', null, `removed work clone ${name}`);
+  if (swept.stripped.length > 0) ctx.log('tick', null, `removed packages of idle clones ${swept.stripped.join(', ')}`);
+  if (swept.unknown.length > 0) ctx.log('tick', null, `left unknown work folders ${swept.unknown.join(', ')}`);
+  const logs = sweepLogs(join(ctx.cfg.home, 'logs'), state, ctx.now(), ctx.cfg.logDays);
+  if (logs.length > 0) ctx.log('tick', null, `removed ${logs.length} job logs older than ${ctx.cfg.logDays} days`);
+}
+
 // Tells the committee once per cap window that the cap holds work back. The flag clears when the cap frees.
 async function noteCap(ctx: Ctx, cards: Card[], devHead: string | null): Promise<void> {
   const state = readState(ctx.statePath);
@@ -255,14 +268,17 @@ async function noteCap(ctx: Ctx, cards: Card[], devHead: string | null): Promise
   updateState(ctx.statePath, (s) => ({ ...s, capNoticed: true }));
 }
 
-// One tick: check the running jobs, run intake, clean old builds, then start every job that fits. `deps` defaults to the real process control.
+// One tick: check the running jobs, run intake, clean old builds, clones and logs, then start every job that fits while the disk has room. `deps` defaults to the real process control.
 export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS): Promise<void> {
   for (const job of readState(ctx.statePath).jobs) await checkJob(ctx, job, deps);
   await intake(ctx);
   const cards = await releaseAnswered(ctx, await ctx.github.cards());
   cleanBuilds(ctx, cards);
+  cleanWork(ctx, cards);
   updateState(ctx.statePath, pruneCaptions);
   updateState(ctx.statePath, pruneFailures(ctx.now()));
+  const free = freeGb(ctx.cfg.home);
+  if (free < ctx.cfg.minFreeGb) return ctx.log('tick', null, `disk low: ${free} GB free, under ${ctx.cfg.minFreeGb} GB, starts nothing`);
   await ctx.repo.fetch();
   const devHead = await ctx.repo.headHash('dev');
   await noteCap(ctx, cards, devHead);

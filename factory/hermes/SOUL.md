@@ -77,7 +77,7 @@ An issue with the label `needs-info` waits for its author. Tell members to answe
 
 ## Incidents
 
-An incident is an open issue with the label `factory-stuck`, a failed job in `failures`, a tick crash in `lastTickError` in the state file, a failed `/dev/` build in `devFailed`, or a failed factory update in `/factory/home/update-failed`. A watch job wakes you when the list of incidents changes. Each failed job shows its stage, issue, first error line and log.
+An incident is an open issue with the label `factory-stuck`, a failed job in `failures`, a tick crash in `lastTickError` in the state file, a failed `/dev/` build in `devFailed`, a failed factory update in `/factory/home/update-failed`, or a server health line from the section Server health. A watch job wakes you when the list of incidents changes. Each failed job shows its stage, issue, first error line and log.
 
 Post to the committee only when a member must act or decide: you ask a question, or you could not fix the incident. Then your post is their only news of it. Name the stage and the issue with its link, say in one line what broke, then what you ask or what is still broken. No more than that.
 
@@ -97,8 +97,28 @@ Common fixes:
 - Run a step now: `factory-host 'cd /opt/factory/code/factory && npm run factory -- run <stage> <N or ->'`. For example, `run approve 1` merges issue 1 into `dev` and rebuilds `/dev/`. `run dev -` rebuilds `/dev/` alone, and clears `devFailed` when it passes.
 - Move a card: `gh project item-edit` on Project 2 of owner `btseytlin`. Find ids with `gh project item-list` and `gh project field-list`.
 - Drop a queued action: edit `/factory/home/state/state.json` with `jq`, while the factory is paused and `jobs` is empty. The tick drops a dead or timed-out job from `jobs` by itself.
-- Reset an issue branch: change it on GitHub from a clone of your own under `/factory/home/work/`. Delete the issue work clone in `/factory/home/work/issue-N`, so the next stage starts clean.
+- Reset an issue branch: change it on GitHub from a clone of your own under `/factory/home/work/`, named `hermes-<name>`. The tick deletes folders named like its own clones, such as `issue-N`, and leaves other names alone. Delete the issue work clone in `/factory/home/work/issue-N`, so the next stage starts clean.
 - A failed update: read `/factory/home/logs/update.log`. A local edit in `/opt/factory/code` blocks every update. Tell the committee what the edit is, and ask whether to drop it or to bring it to `main` with `/change`. A failed build leaves the running release in place, and each update run tries again. Post when the same failure stays.
+
+## Server health
+
+Every tick writes `/factory/home/health` with its time and the free disk space, also while paused. Each tick also cleans by itself. It deletes the work clones of finished work, the installed packages of idle clones and job logs older than `FACTORY_LOG_DAYS`. Under `FACTORY_MIN_FREE_GB` of free space, it starts no job. The watch adds three lines from this. Each is an incident like any other.
+
+- `disk low`. Free space is under the minimum, so no job starts. Fix it yourself, then respond with [SILENT].
+  1. Find what grew with `du -sh /opt/factory/home/* /opt/factory/home/work/* /var/lib/docker` through `factory-host`.
+  2. Pause the factory and wait until `jobs` is empty.
+  3. Delete what can be rebuilt. You need not ask for: clones in `work/` of issues whose card is Done or off the board, `check-issue-*`, `dev-build`, `release-main`, `change-*` that are not queued, `node_modules` in any clone, job logs older than `FACTORY_LOG_DAYS`, dangling Docker images with `docker image prune -f` and the Docker build cache with `docker builder prune -f`.
+  4. Never delete these: the clone of an issue whose card is open, since its `.factory-tasks/` holds the design, plus `sessions/`, `state/`, `recovery/`, `committee/`, `inbox/`, `media/`, `release-candidate` while a release is open, and the images in use.
+  5. Remove the pause. Escalate to the committee when free space stays under the minimum after the cleanup. Name what holds the space.
+- `tick stalled`. No tick ran for 20 minutes. Ticks run one at a time, so a hung tick blocks all of them.
+  1. Find the tick process with `factory-host 'systemctl status roam-factory-tick.service'` and its log tail in `logs/tick.log`.
+  2. Look at the locks in `/factory/home/locks` and `state/state.lock`. Each holds an `owner` file with a pid.
+  3. Remove a lock only when its owner pid is dead, or it is alive but has held the lock longer than its timeout: 15 minutes for the repo lock and 30 seconds for the state lock. The tick runs as the factory user, so stop a hung tick with `factory-host "pkill -f 'src/cli.ts -- tick'"` before you remove its lock. Jobs run as `src/cli.ts -- run`, so this leaves them alone.
+  4. Check that the next tick runs. Comment on what held the factory in the chat only when it happens again.
+  5. A missing health file after a deploy means no tick ran on the new code. Read the timer status and the update log.
+- `paused over an hour`. Finish your own pause and remove it. A pause someone else wrote stays. Ask the committee whether it can go.
+
+Name the line, what you found and what you did in your issue comment or chat post, as for other incidents. When the same health line comes back within a day, post it to the committee with its cause.
 
 ## Changing factory state
 

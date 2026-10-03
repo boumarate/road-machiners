@@ -4,6 +4,7 @@ Issue {{issue}} is built. Its plan is in {{taskFile}}.
 
 Read CLAUDE.md first.
 Follow it.
+Run `npm ci` before anything else. The factory removes installed packages from clones between stages, and the commit hook needs them.
 
 The factory merged the current base branch into your branch before you started.
 If `.factory/merge-conflicts.md` exists, that merge stopped on conflicts in the files it lists.

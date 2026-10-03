@@ -5,6 +5,7 @@ Issue {{issue}} is built. Its plan is in {{taskFile}}.
 The factory found problems on your branch.
 Read CLAUDE.md first.
 Follow it.
+Run `npm ci` before anything else. The factory removes installed packages from clones between stages, and the commit hook needs them.
 
 If `.factory/check-failure.md` exists, the factory ran its own checks and they failed.
 The end of the check log is in that file.
