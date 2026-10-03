@@ -1,6 +1,7 @@
 // The factory command line. Usage: npm run factory -- <tick | run <stage> <issue|-> | intake>
 import { readEnvFiles } from './config';
 import { realContext } from './context';
+import { writeHealth } from './health';
 import { drainInbox } from './inbox';
 import { intake } from './intake';
 import { runJob } from './job';
@@ -22,6 +23,7 @@ async function main(args: string[]): Promise<void> {
   const codeDir = process.cwd();
   const [command, stage, issue] = args;
   if (command === 'tick') {
+    writeHealth(ctx.cfg.home, ctx.cfg.minFreeGb, ctx.now());
     const paused = pausedReason(ctx.cfg.home);
     if (paused !== null) {
       ctx.log('tick', null, `paused: ${paused}`);

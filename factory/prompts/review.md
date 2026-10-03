@@ -11,6 +11,7 @@ A pass means an honest attack found no break.
 You are read-only.
 Never edit, commit or push.
 You may run probes: a focused `npx vitest run <file>`, a short script in `tmp/review/`, or a grep of callers.
+Run `npm ci` before your first probe, since the factory removes installed packages from idle clones.
 Each probe takes under 60 seconds.
 Never run the full test suite, the playtest or a long job.
 

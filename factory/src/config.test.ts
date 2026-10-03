@@ -11,6 +11,7 @@ const FULL = {
   FACTORY_STAGE_TIMEOUT_MINUTES: '180', FACTORY_RELEASE_DAYS: '7',
   ITCH_TARGET: 'u/g', BUTLER_API_KEY: 'bk', FACTORY_MAX_JOBS_PER_DAY: '10',
   FACTORY_TRIAGE_WORKERS: '1', FACTORY_DESIGN_WORKERS: '1', FACTORY_IMPLEMENT_WORKERS: '2', FACTORY_TEST_WORKERS: '1', FACTORY_TRIAGE_EFFORT: 'low',
+  FACTORY_MIN_FREE_GB: '5', FACTORY_LOG_DAYS: '14',
 };
 
 describe('loadConfig', () => {
@@ -25,6 +26,7 @@ describe('loadConfig', () => {
     expect(cfg.sfxMaxGenerations).toBe(6);
     expect([cfg.triageWorkers, cfg.designWorkers, cfg.implementWorkers, cfg.testWorkers]).toEqual([1, 1, 2, 1]);
     expect(cfg.triageEffort).toBe('low');
+    expect([cfg.minFreeGb, cfg.logDays]).toEqual([5, 14]);
   });
 
   it('names every missing key', () => {

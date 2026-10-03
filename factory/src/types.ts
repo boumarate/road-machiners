@@ -36,6 +36,8 @@ export type FactoryConfig = {
   designWorkers: number; // jobs of the design queue that run at once
   implementWorkers: number; // jobs of the implement queue that run at once
   testWorkers: number; // jobs of the test queue that run at once
+  minFreeGb: number; // under this much free disk, a tick starts no job
+  logDays: number; // job logs older than this go
 };
 
 export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string };
