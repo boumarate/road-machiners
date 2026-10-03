@@ -201,7 +201,7 @@ function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: 
   const spawned: string[][] = [];
   const github = { cards: async () => cards, candidates: async () => [], addLabel: async (n: number, l: string) => { labels.push(`${n}:${l}`); }, comments: async () => comments, removeLabel: async (n: number, l: string) => { removed.push(`${n}:${l}`); } };
   const telegram = { sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; } };
-  const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', stageTimeoutMinutes: 30, replyRouteMinutes: 15, ...CFG };
+  const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', stageTimeoutMinutes: 30, replyRouteMinutes: 15, minFreeGb: 0.001, logDays: 14, ...CFG };
   const repo = { fetch: async () => {},headHash: async (branch: string) => { if (branch !== 'dev') throw new Error(`unexpected branch ${branch}`); return devHead; } };
   const ctx = { cfg, github, telegram, repo, statePath, now: () => NOW, log: () => undefined } as unknown as Ctx;
   const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, removeContainers: async (_run, id) => { killed.push(`containers ${id}`); }, spawn: (args, _cwd, _log, id) => { spawned.push([...args, id]); return 77; } };
@@ -230,6 +230,22 @@ describe('tick', () => {
     expect(h.killed).toEqual([]);
     expect(args(h)).toEqual([['design', '8']]);
     expect(readState(h.ctx.statePath).jobs.map((j) => [j.issue, j.pid])).toEqual([[5, 42], [8, 77]]);
+  });
+
+  it('starts no job while free disk is under the minimum, and still cleans', async () => {
+    const h = harness(null, true, [card(8, 'Design'), card(9, 'Done')]);
+    mkdirSync(join(h.ctx.cfg.home, 'work', 'issue-9'), { recursive: true });
+    h.ctx.cfg.minFreeGb = Number.MAX_SAFE_INTEGER;
+    await tick(h.ctx, '/code', h.deps);
+    expect(h.spawned).toEqual([]);
+    expect(existsSync(join(h.ctx.cfg.home, 'work', 'issue-9'))).toBe(false);
+  });
+
+  it('keeps the clone of a running job and removes the clone of a Done card', async () => {
+    const h = harness(job('2026-01-10T11:50:00Z', 'checks', 5), true, [card(5, 'Done'), card(9, 'Done')]);
+    for (const name of ['issue-5', 'check-issue-5', 'issue-9']) mkdirSync(join(h.ctx.cfg.home, 'work', name), { recursive: true });
+    await tick(h.ctx, '/code', h.deps);
+    expect(['issue-5', 'check-issue-5', 'issue-9'].map((name) => existsSync(join(h.ctx.cfg.home, 'work', name)))).toEqual([true, true, false]);
   });
 
   it('reports a dead job that stayed in state, without an issue for a change', async () => {
