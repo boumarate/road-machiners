@@ -19,9 +19,21 @@ NPCs spawn with equipment sampled from weighted tables for their role: a chassis
 
 Idle drivers mostly fight manageable hostiles and flee stronger ones. A healthy driver busy with work mostly keeps on when a hostile appears that is not aimed at it or a nearby faction mate. A shot at a driver or a nearby faction mate, hit or miss, prompts a decision to fight back, flee or rarely keep on. Damaged NPCs react to visible hostiles before starting repairs. A driver counts as weak when its cab or its truck as a whole is badly broken, or when it cannot drive. One broken wheel is not enough. A weak driver mostly flees or begs. A driver judges force by the target's nearby visible group against its own nearby visible group.
 
-Scavenging is a timed search. The truck parks at a stock and searches for turns in proportion to what the stock holds, with a progress bar. A finished search opens the stock beside the truck's grid, and the player drags in what they want. What they leave stays at the site for later. NPC scavengers take everything that fits.
+NPCs carry and use utilities by the player's rules. At spawn each truck may roll one utility for its type. Scavengers, roamers and convoys favor the patcher crane, and scavengers and vultures the scraper's knife. Lawmen carry flare cannons and harpoons, and convoy guards flare cannons and smoke mortars. Only a heavy or loaded merc rolls an emitter. Each turn a driver picks its utility orders:
 
-Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. The whole map holds loot worth well under the upgrade ladder. Each day a site regains a small share of a fresh roll, up to its table's highs, so an emptied site takes about two weeks to fill. Destroyed NPCs leave a wreck with the same kind of stock. One truck at a time searches a wreck or a pile, and any other truck waits or leaves, while a site stays open to everyone. Their mounted parts join it at the HP they had, and their built-in parts turn into parts good worth a share of the chassis value. A looted road wreck goes after a few days, and a new road wreck appears elsewhere on a road. Both happen beyond the player's gray vision, so the road wreck count stays the same.
+- Sprout: an attacker is in sight, and the driver flees a fight or its cab is below half.
+- Caltrops and Oil spiller: the driver flees with a hostile in sight behind it within 10 tiles.
+- Smoke mortar: a fleeing driver shells the midpoint between itself and its nearest attacker in sight.
+- Harpoon: its fight target drives away from it.
+- Flare cannon: at night, a driver investigating a contact lights the contact.
+- Emitter: in combat, every truck it sees in range is hostile, and there is at least one.
+- Claymore ram: the driver has chosen to ram.
+
+The harpoon and the emitter, like an opening shot, are never used inside a town's guard.
+
+Scavenging is a timed search. The truck parks at a stock and searches for turns in proportion to what still lies hidden there, with a progress bar. Each turn turns up some of the hidden loot, see [Economy](economy.md). A finished search opens the stock beside the truck's grid, and the player drags in what they want. What they leave stays at the site for later. NPC scavengers take the revealed loot that fits.
+
+Landmark and convoy sites hold finite stock rolled at world creation and hidden until searched: goods, parts and sometimes a spare mountable part. The whole map holds loot worth well under the upgrade ladder. Each day a site regains a small share of a fresh roll as hidden loot, up to its table's highs, so an emptied site takes about two weeks to fill. Destroyed NPCs leave a wreck with the same kind of stock. One truck at a time searches a wreck or a pile, and any other truck waits or leaves, while a site stays open to everyone. Their mounted parts join it at the HP they had, and their built-in parts turn into parts good worth a share of the chassis value. A looted road wreck goes after a few days, and a new road wreck appears elsewhere on a road. Both happen beyond the player's gray vision, so the road wreck count stays the same.
 
 Handed-over cargo and dumped items go on a ground pile. Drops close together join one pile. A pile disappears when empty or after two days. Any collector can take from it. A pile handed to an NPC is that NPC's claim until it has taken it, gives up or 60 turns pass. The claimant warns others off. An NPC that backs off leaves it alone. A refusal, or a take in the claimant's sight, starts a fight.
 

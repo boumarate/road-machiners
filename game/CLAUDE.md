@@ -45,7 +45,7 @@ Game settings live in `src/config.ts`. Copy `.env.example` to `.env` for sound g
 - Sim functions take state and return new state. Rendering reads state and never changes rules.
 - `src/sim/world.ts` runs the turn pipeline. Commands go through `update()`, which clones the world and mutates the draft.
 - `src/data/` holds all balance numbers and content. Sim code reads numbers from there, never inline.
-- All sim randomness goes through `src/sim/rng.ts` with state in the world. Shops draw from `world.marketRng` and driver names from `world.nameRng`, so they never shift other randomness. Render and audio may use `Math.random()` or `src/render/noise.ts`.
+- All sim randomness goes through `src/sim/rng.ts` with state in the world. Shops draw from `world.marketRng`, driver names from `world.nameRng` and search reveals from `world.searchRng`, so they never shift other randomness. Render and audio may use `Math.random()` or `src/render/noise.ts`.
 - `src/phys/` runs vehicle movement in Rapier and plugs into the turn pipeline. The path preview runs the same physics as the turn.
 - `src/three/` holds the 3D game, with `game.ts` wiring input, sim, physics, view and UI. `src/three/render/` holds the 3D views, `src/render/` the palette, painters and part looks, and `src/ui/` the HTML panels.
 - `src/mapgen/` bakes the map offline. The game only reads the map file.
@@ -62,6 +62,7 @@ One owner per concept. Use these and do not decide the same thing elsewhere:
 - `talkOf()` in `src/sim/dialogue.ts` is the one place talk reads traits.
 - `propPose()` in `src/sim/mapgen.ts` gives each prop's turn and scale.
 - `src/sim/body.ts` is the only conversion between grid cells and meters.
+- `src/sim/utility.ts` owns utility charge, orders, the activation step and the emitter shutdown. Each utility effect's world object has one owner: `hazards.ts` for smoke, ground fields and flares, `harpoon.ts` and `claymore.ts`.
 - Timed deals between two trucks are states in `src/sim/states.ts`. New group work adds a state kind, not a goal.
 - A `stall` event is always a bug.
 - Truck meshes own stencil bit `TRUCK_BIT` and props `PROP_BIT`. Other views must not write them.
