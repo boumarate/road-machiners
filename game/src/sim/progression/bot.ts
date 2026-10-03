@@ -20,7 +20,7 @@ import { callVehicle, chooseOption, currentOptions } from '../dialogue';
 import { offeredSurrenderBy } from '../parley';
 import { hashRandom } from '../rng';
 import { affordableBuyCount, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
-import { findSpot, freeCells, goodsCount, gridOf, isMounted, MOUNT_CELLS, mountedParts, type Spot } from '../grid';
+import { findSpot, freeCells, goodsCount, gridOf, isMounted, itemCells, MOUNT_CELLS, mountedParts, type Spot } from '../grid';
 import { stowSpot, storePart } from '../inventory';
 import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
 import { SHOPS } from '../../data/market';
@@ -45,12 +45,13 @@ export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'hunter'
 type Goal = Exclude<Archetype, 'markov'>;
 const GOALS_PLAYED: readonly Goal[] = ['trader', 'scavenger', 'hunter', 'fastTrader'];
 
-const VALUE_GEAR: UpgradeStyle = { skip: [], chassis: 'value' };
+// Traders and scavengers earn with cargo room, so their gear never takes it.
+const CARGO_GEAR: UpgradeStyle = { skip: [], chassis: 'value', keepRoom: true };
 const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
-  trader: VALUE_GEAR,
-  scavenger: VALUE_GEAR,
-  hunter: VALUE_GEAR,
-  fastTrader: { skip: ['armor'], chassis: 'speed' },
+  trader: CARGO_GEAR,
+  scavenger: CARGO_GEAR,
+  hunter: { skip: [], chassis: 'value', keepRoom: false },
+  fastTrader: { skip: ['armor'], chassis: 'speed', keepRoom: true },
 };
 
 // markovTurns is how many turns the markov bot keeps one goal. It is required for that bot and ignored by the others.
@@ -211,9 +212,16 @@ function restoreEngine(o: Orders): void {
   if (!engine) return;
   if (!engineSpot(o.me, engine.defId) && hasCargo(o.world, o.me)) sellCargo(o);
   const spot = engineSpot(o.me, engine.defId);
-  if (!spot) throw new Error('No free engine mount for a new engine');
+  if (!spot) throw new Error(`No free engine mount for a new engine. On the engine cells: ${onEngineCells(o.me)}`);
   o.run((w) => buyStockPart(w, engine.id), 'gear');
   mountBought(o, engine.id, spot);
+}
+
+function onEngineCells(v: Vehicle): string {
+  const g = gridOf(v);
+  const onEngine = (it: GridItem) => itemCells(it).some((c) => MOUNT_CELLS.engine.includes(g.cells[c.y]?.[c.x] ?? '.'));
+  const names = v.items.filter(onEngine).map((it) => (it.kind === 'part' ? `${it.part.defId} hp ${it.part.hp}${isMounted(v.chassisId, it) ? ' mounted' : ''}` : `good ${it.good}`));
+  return names.length > 0 ? names.join(', ') : 'nothing';
 }
 
 function engineSpot(v: Vehicle, defId: string): Spot | null {
@@ -320,7 +328,7 @@ function scavengerGoal(o: Orders): void {
 type Purchase = { town: TownDef; good: string; count: number; profit: number };
 
 // The trader sells what it carries in the known town that pays most for it, then buys the good with the most profit
-// between known towns that it can afford above its upkeep reserve. With no such trade it drives to find a new town.
+// between known towns that it can afford above its upkeep reserve and repair bill. With no such trade it drives to find a new town.
 // Returns false when it has nothing to do: no affordable trade and every town known.
 function trade(o: Orders): boolean {
   if (hasCargo(o.world, o.me) && !sellAtMarket(o)) return true;
@@ -357,8 +365,9 @@ function bestMarket(world: World): TownDef {
   return byDistance(world, knownTowns(world)).reduce((best, town) => (profit(town) > profit(best) ? town : best));
 }
 
+// The money for a full repair stays out of the load, so a trader leaves town with a sound truck.
 function bestPurchase(world: World): Purchase | null {
-  const spend = world.player.money - getUpkeepReserve(playerVehicle(world));
+  const spend = world.player.money - getUpkeepReserve(playerVehicle(world)) - repairCost(world);
   const towns = knownTowns(world);
   const options = towns.flatMap((source) => towns.filter((t) => t.id !== source.id).flatMap((market) => GOOD_IDS.map((good) => purchase(world, { source, market, good, spend }))));
   return options.reduce<Purchase | null>((best, p) => (p.count > 0 && p.profit > (best?.profit ?? 0) ? p : best), null);

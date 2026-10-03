@@ -10,6 +10,9 @@ import { addGoods, removeAllGoods } from '../inventory';
 import { nearestPad, nearestTown } from '../sites';
 import { isStranded } from '../stats';
 import { addVehicle, emptyWorld, npcBrain, startCombat } from '../testkit';
+import { repairCost } from '../economy';
+import { getUpkeepReserve } from '../npc-decisions';
+import { maxHp } from '../wear';
 import { botOrders } from './bot';
 
 function town(id: string) {
@@ -55,6 +58,25 @@ describe('botOrders', () => {
 
     expect(Object.keys(goodsCount(playerVehicle(turn.world)))).toEqual(['salt']);
     expect(turn.world.player.money).toBeLessThan(w.player.money);
+  });
+
+  // It arrives broke with a damaged truck and electronics both towns pay well for, so service repairs nothing before
+  // the sale here, and salt is the load to buy after it.
+  it('has a trader keep the repair bill out of the load it buys after a sale', () => {
+    const w = saltGlut(parkedAt('nose'));
+    w.shops.nose.pressure.electronics = PRESSURE_MAX;
+    w.shops.bowl.pressure.electronics = PRESSURE_MAX;
+    addGoods(w, playerVehicle(w), 'electronics', 6);
+    w.player.costBasis.electronics = 1;
+    w.player.money = 0;
+    for (const part of mountedParts(playerVehicle(w))) part.hp = Math.floor(maxHp(part) / 4);
+    expect(repairCost(w)).toBeGreaterThan(getUpkeepReserve(playerVehicle(w)));
+
+    const turn = botOrders(w, 'trader');
+
+    expect(turn.ledger.goodsSold).toBeGreaterThan(0);
+    expect(turn.ledger.goodsBought).toBeLessThan(0);
+    expect(turn.world.player.money).toBeGreaterThanOrEqual(repairCost(turn.world));
   });
 
   it('has a trader carry its cargo to the known town that pays more for it', () => {

@@ -10,7 +10,7 @@ import { startKit } from '../../data/start';
 import { partDef, type PartKind } from '../../data/parts';
 import { playerVehicle } from '../damage';
 import { buyChassis, buyStockPart, chassisTradeIn, partTradePrice, sellPart } from '../economy';
-import { goodsCount, mountedItems, type Spot } from '../grid';
+import { freeCells, goodsCount, mountedItems, type Spot } from '../grid';
 import { installSpot, moveItem, spareParts, storePart, takeFromStorage } from '../inventory';
 import { shopAt, shopState } from '../market';
 import { getUpkeepReserve } from '../npc-decisions';
@@ -53,8 +53,9 @@ const WORKING_CAPITAL = startKit('standard').money;
 // Kinds no bot uses: built-in parts cannot be traded, and no bot reads a scanner.
 const NEVER: readonly PartKind[] = ['core', 'scanner'];
 
-// skip names the part kinds a bot also leaves alone. chassis is what a better chassis means to the bot.
-export type UpgradeStyle = { skip: readonly PartKind[]; chassis: 'value' | 'speed' };
+// skip names the part kinds a bot also leaves alone. chassis is what a better chassis means to the bot. keepRoom
+// marks a bot that lives off its cargo: it takes no part that leaves less room for goods.
+export type UpgradeStyle = { skip: readonly PartKind[]; chassis: 'value' | 'speed'; keepRoom: boolean };
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;
 type Option = { gain: number; cost: number; take: (o: Orders) => void };
@@ -73,7 +74,7 @@ function bestOption(o: Orders, style: UpgradeStyle): Option | null {
   if (style.chassis === 'speed' && chassis) return chassis;
   const wanted = (c: Candidate) => !isJunk(c.part) && ![...NEVER, ...style.skip].includes(partDef(c.part.defId).kind);
   const parts = candidates(o, shop).filter(wanted);
-  const options = parts.flatMap((c) => partOption(o, c)).filter((option) => option.cost <= spend);
+  const options = parts.flatMap((c) => partOption(o, c, style.keepRoom)).filter((option) => option.cost <= spend);
   return strongest(chassis ? [chassis, ...options] : options);
 }
 
@@ -108,15 +109,29 @@ function candidates(o: Orders, shop: string): Candidate[] {
 }
 
 // Mounting the candidate, with the weakest mounted part of its kind sold first when no mount is free. Nothing when
-// the part would not mount or adds nothing.
-function partOption(o: Orders, c: Candidate): Option[] {
-  if (installSpot(o.me, probe(c.part))) return [{ gain: quality(c.part), cost: c.price, take: (orders) => mount(orders, c, null) }];
+// the part would not mount or adds nothing, or, with keepRoom, when it leaves less room for goods.
+function partOption(o: Orders, c: Candidate, keepRoom: boolean): Option[] {
+  const fits = (v: Vehicle) => {
+    const spot = installSpot(v, probe(c.part));
+    return spot !== null && !(keepRoom && roomAfter(v, c.part, spot) < goodsRoom(o.me));
+  };
+  if (installSpot(o.me, probe(c.part))) return fits(o.me) ? [{ gain: quality(c.part), cost: c.price, take: (orders) => mount(orders, c, null) }] : [];
   const weakest = weakestOfKind(o.me, partDef(c.part.defId).kind);
   if (!weakest || quality(c.part) <= quality(weakest.part)) return [];
-  const without = { ...o.me, items: o.me.items.filter((it) => it.id !== weakest.id) };
-  if (!installSpot(without, probe(c.part))) return [];
+  if (!fits({ ...o.me, items: o.me.items.filter((it) => it.id !== weakest.id) })) return [];
   const resale = partTradePrice(o.world, o.me, weakest.part, 'sell');
   return [{ gain: quality(c.part) - quality(weakest.part), cost: c.price - resale, take: (orders) => mount(orders, c, weakest) }];
+}
+
+// The cells goods could use if the truck carried none.
+function goodsRoom(v: Vehicle): number {
+  return freeCells({ ...v, items: v.items.filter((it) => it.kind === 'part') });
+}
+
+// A spare that moves onto the mount frees the cells it held.
+function roomAfter(v: Vehicle, part: PartInstance, spot: Spot): number {
+  const items = v.items.filter((it) => !(it.kind === 'part' && it.part.id === part.id));
+  return goodsRoom({ ...v, items: [...items, { ...probe(part), ...spot }] });
 }
 
 function weakestOfKind(v: Vehicle, kind: PartKind): PartItem | null {
