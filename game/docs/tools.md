@@ -28,7 +28,9 @@ Details of the `npm run` commands and debug tools. Run them from `game/`.
 
 ## Browser checks
 
-Drive the game with a Playwright script in `tmp/`. Launch Chromium with `--use-angle=metal --enable-gpu --ignore-gpu-blocklist`, so it renders on the real GPU. SwiftShader renders on the CPU at 10 to 20 fps, so its frame rate says nothing about the game. The game is on `window.__ROAM__` in dev. Its world is `__ROAM__.state`. To set up a situation, clone that world, edit it, and pass it to `apply()`. `debugScreenOf(x, y)` gives the screen point of a map point on the ground, for clicks.
+Drive the game with a Playwright script in `tmp/`. Launch Chromium with `--use-angle=metal --enable-gpu --ignore-gpu-blocklist`, so it renders on the real GPU. SwiftShader renders on the CPU at 10 to 20 fps, so its frame rate says nothing about the game. The game is on `window.__ROAM__` in dev. Its world is `__ROAM__.state`. To set up a situation, clone that world, edit it, and pass it to `apply()`. `debugScreenOf(x, y)` gives the screen point of a map point on the ground, for clicks. `debugView(x, y, zoom)` centers the camera on a map point at a zoom.
+
+The game camera has a fixed bearing, so a shot of a face it does not show needs the camera turned from the script. The rig sets the camera at its fixed offset every frame, so wrap the instance's `tick` on `__ROAM__.rig`: call the original, then move `rig.camera.position` around `rig.center` to the bearing and elevation wanted at the same distance, and `lookAt(rig.center)`. The turn is script-only and never touches game code.
 
 ## Debugging
 

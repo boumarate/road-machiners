@@ -1,6 +1,6 @@
 # Art pipeline
 
-Static props, obstacles, landmarks and truck parts are low-poly Blender models. Settlement houses, ruins, water and some hull sections are built from Three.js shapes in code. Models placed many times are drawn as instanced meshes, one per terrain chunk: rocks in `src/three/render/obstacles.ts`, and dead trees in `TreeInstances` in `src/three/render/trees.ts`, since a grove holds hundreds of trees. The ground is one painted canvas texture over the whole map, and a shader draws roads and pads on it. Pebbles and scrub are instanced 3D models from `src/three/render/scatter.ts`.
+Static props, obstacles, landmarks and truck parts are low-poly Blender models. Ruins, water and some hull sections are built from Three.js shapes in code. Models placed many times are drawn as instanced meshes, one per terrain chunk: rocks in `src/three/render/obstacles.ts`, and dead trees in `TreeInstances` in `src/three/render/trees.ts`, since a grove holds hundreds of trees. The ground is one painted canvas texture over the whole map, and a shader draws roads and pads on it. Pebbles and scrub are instanced 3D models from `src/three/render/scatter.ts`.
 
 Some models come from Blender scripts in `tools/blender/`. Blender is installed with `brew install --cask blender`. Each script writes a `.glb` into `public/models/`, and both are committed. Rebuild one with `blender --background --python tools/blender/<name>.py -- public/models/<name>.glb tmp/<name>.png`. The second path is an optional preview render from the game camera angle.
 
@@ -61,4 +61,19 @@ Each truck is one base model per chassis plus shared kit parts on its inventory 
 
 ## Fortress kit
 
-`tools/blender/fort_kit.py` holds the shared parts for `fort_<style>_<piece>.py`: three styles (masonry, ship metal, scrap) of five pieces (wall, tower, gate, bastion, inner). Walls stand 3 tiles tall and the other pieces 4, over 3x the tallest truck. The wall model is 2 tiles long and the game stretches it along its length only, so keep its detail repeatable along that axis. Sizes live in `FORTRESS` in `src/data/fortress.ts`. Run `npm run models:shapes` after a change, as for any prop.
+Each inhabited site is walled by fort pieces, one model per style and piece, named `fort_<style>_<piece>.glb`. A style is a material and a site's look, so the five sites remade from their concepts each have their own kit file, and work on one never touches another's.
+
+- `tools/blender/fort_kit.py` builds the masonry and scrap styles in five pieces each: wall, tower, gate, bastion and inner gate. It also holds the geometry helpers the other kits import: `extrude`, `plate`, `frame`, `rect` and `SKIRT`. Its gatehouse stands out on the site circle, and a barbican joins it back to the curtain.
+- `fort_patchwork_kit.py` (Bowl), `fort_compound_kit.py` (Dustwell), `fort_ring_kit.py` (Granary), `fort_yard_kit.py` (Salvage Yard) and `fort_ship_kit.py` (Nose) each build their style's wall, gate and, except for the towerless ring, tower. Each `fort_<style>_<piece>.py` script calls its kit's `run(piece)`.
+- These five styles have flush gates: the gatehouse stands in the curtain with its outer face on the curtain line, and nothing reaches past that face. Each style's gate size lives in `FORTRESS_STYLES` in `src/data/fortress.ts`, and a test checks it against the gate model's height.
+- Every wall is 8 m long, under 3 m deep and 12 m tall, over 3x the tallest truck. The game stretches it along its length only, so keep its detail repeatable along that axis. Towers keep a 6 m footprint. Each kit's docstring states each piece's size and origin.
+- Gate lamps, guns and banners are not part of any gate model. The gate furniture in `src/three/render/sites.ts` owns them.
+
+Nose's colony-ship wreck is four sections, `ship_nose`, `ship_hull_ring`, `ship_hull_ribs` and `ship_hull_stern`. They share one loft profile and plate colors from `tools/blender/ship_hull_kit.py`, so their joints meet.
+
+Two material rules serve the site interiors:
+
+- A material named `glow` keeps its color as emissive, so lit windows and lamps show at night with no point lights. `toLambert()` in `src/three/render/models.ts` applies it.
+- A moving part, such as a windmill rotor, pumpjack beam, crane upper, crane grab or radar dish, is its own model with its origin at its pivot. It attaches at a `socket_<part>` on its base model (`Kit.socket()`), and `SiteMotion` moves it.
+
+Run `npm run models:shapes` after a change, as for any prop.
