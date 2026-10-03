@@ -468,14 +468,21 @@ function hunterGoal(o: Orders): void {
   collectOrHunt(o);
 }
 
-// Demands the weakest foe in sight stand down when it is broken, or else drives at it, or at the nearest one heard.
-// True when this turn's command went to a foe.
+// Demands the weakest foe in sight stand down when it is broken, or else drives at it, or at the nearest one heard. A
+// foe in sight more dangerous than the bot is left alone, as defend leaves it. True when this turn's command went to a
+// foe.
 function engageFoe(o: Orders): boolean {
-  const foe = weakestFoe(o.world);
-  if (foe && demandYield(o, foe)) return true;
-  const spot = foe?.pos ?? heardFoe(o.world);
-  if (spot) driveTo(o, spot);
-  return spot !== null;
+  const seen = weakestFoe(o.world);
+  if (seen) return engageSeen(o, seen);
+  const heard = heardFoe(o.world);
+  if (heard) driveTo(o, heard);
+  return heard !== null;
+}
+
+function engageSeen(o: Orders, foe: Vehicle): boolean {
+  if (dangerOf(o.world, foe) > ownDanger(o.world, o.me)) return false;
+  if (!demandYield(o, foe)) driveTo(o, foe.pos);
+  return true;
 }
 
 // ---- Stripping knocked-out trucks.

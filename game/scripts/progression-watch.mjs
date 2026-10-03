@@ -12,7 +12,7 @@ const USAGE = 'Usage: npm run progression:watch -- --archetype <a> --seed <n> --
 
 // Events with no vehicle field are the player's own.
 const OWN = new Set(['money', 'contract', 'death', 'knockout', 'wake', 'skillUp', 'supply', 'townPatch', 'scrapPatch', 'searched', 'discover']);
-const QUIET = new Set(['practice', 'activity', 'arrived', 'spawn', 'despawn', 'shot', 'info', 'weather']);
+const QUIET = new Set(['practice', 'activity', 'arrived', 'spawn', 'despawn', 'info', 'weather']);
 
 const flags = readFlags(process.argv.slice(2).filter((a) => a !== '--'));
 if (!isArchetype(flags.archetype ?? '')) throw new Error(`Unknown archetype ${flags.archetype}. ${USAGE}`);
@@ -26,7 +26,7 @@ for (const step of recordTurns(seed, flags.archetype, to, options)) {
   const w = step.world;
   if (w.turn < from) continue;
   const v = playerVehicle(w);
-  const events = w.events.filter((e) => touchesPlayer(e, v.id)).map(describe);
+  const events = w.events.filter((e) => touchesPlayer(e, v.id)).map((e) => describe(w, e));
   const contracts = w.player.contracts.map((c) => `${c.kind}:${c.good ?? ''}${c.units}>${c.to}`).join(',') || '-';
   const hp = mountedParts(v).map((p) => Math.round((100 * p.hp) / maxHp(p))).join('/');
   const state = `$${w.player.money} nw ${Math.round(netWorth(w))} ${v.chassisId} goods ${JSON.stringify(goodsCount(v))} free ${freeCells(v)} contracts ${contracts} order ${v.order?.kind ?? '-'} hp ${hp}`;
@@ -37,11 +37,19 @@ for (const step of recordTurns(seed, flags.archetype, to, options)) {
 function touchesPlayer(e, me) {
   if (QUIET.has(e.t)) return false;
   if (OWN.has(e.t)) return true;
-  return Object.values(e).includes(me);
+  return JSON.stringify(e).includes(`"${me}"`);
 }
 
-function describe(e) {
+// A truck id with its driver template and chassis, such as v76:raider-gunwagon/gunwagon.
+function truck(w, id) {
+  const v = w.vehicles.find((x) => x.id === id);
+  return v ? `${id}:${v.brain?.templateId ?? 'player'}/${v.chassisId}` : id;
+}
+
+function describe(w, e) {
   if (e.t === 'say') return `say ${e.speaker}: ${e.text}`;
+  if (e.t === 'shot') return `shot ${truck(w, e.shooter)}>${truck(w, e.target)} ${e.weapon} hits ${e.rounds.filter((r) => r.hit).length}/${e.rounds.length}`;
+  if (e.t === 'guardShot') return `guardShot ${e.site}>${e.target} hits ${e.rounds.filter((r) => r.hit).length}/${e.rounds.length}`;
   if (e.t === 'money') return `money ${e.amount} ${e.reason}`;
   if (e.t === 'contract') return `contract ${e.outcome} ${e.contract.kind}`;
   const { t, ...rest } = e;
