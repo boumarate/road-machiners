@@ -1,6 +1,7 @@
 import { chassisDef } from '../data/chassis';
 import { GOODS } from '../data/goods';
 import { GEAR_LEVELS, GEAR_LEVEL_IDS, MAX_GUN_SLOWDOWN, NPC_UPKEEP, type CargoRoll, type GearLevel, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
+import { NPC_UTILITY_PARTS, type UtilityRoll } from '../data/npc-utilities';
 import { partDef, type EngineDef, type PartKind } from '../data/parts';
 import { CONDITION } from '../data/wear';
 import { everyGunFires } from './armor';
@@ -50,6 +51,23 @@ function validatePartPool(pool: Weighted<string | null>[], kind: PartKind, requi
     if (entry.value === null && !required) continue;
     if (entry.value === null || partDef(entry.value).kind !== kind) throw new Error(`NPC pool requires ${kind} parts`);
   }
+}
+
+// The template's utility pool. Every template must have one.
+function utilityPoolOf(template: NpcTemplate): UtilityRoll[] {
+  const pool = NPC_UTILITY_PARTS[template.id];
+  if (!pool) throw new Error(`NPC template ${template.id} has no utility pool`);
+  return pool;
+}
+
+function validateUtilityPool(pool: UtilityRoll[]): void {
+  validatePartPool(pool, 'utility', false);
+  for (const { levels } of pool) for (const level of levels ?? []) if (!GEAR_LEVEL_IDS.includes(level)) throw new Error(`Unknown gear level ${level}`);
+}
+
+// The utility rolls open to the gear level: those with no level list, and those that name it.
+function utilityRollsAt(pool: UtilityRoll[], gear: GearLevel): Weighted<string | null>[] {
+  return pool.filter((entry) => !entry.levels || entry.levels.includes(gear));
 }
 
 function validateWearTable(wear: Weighted<number>[]): void {
@@ -271,20 +289,22 @@ function addSpareParts(world: World, rng: Rng, table: NpcLoadoutTable, level: Le
   return added;
 }
 
-// Rolls the chassis with its engine and main gun, then one utility part, then extra guns and armor toward the
-// gear level's targets. The utility part comes first, so a full deck of guns never crowds out a hauler's cargo part.
-// Each part fits the level's budget and the rated mass at pristine wear.
-function chooseVehicle(probe: World, rng: Rng, template: NpcTemplate, chassisId: string | null, level: Level): Vehicle {
+// Rolls the chassis with its engine and main gun, then one cargo part and one utility part, then extra guns and armor
+// toward the gear level's targets. The cargo and utility parts come first, so a full deck of guns never crowds out a
+// hauler's cargo part or a driver's utility. Each part fits the level's budget and the rated mass at pristine wear.
+function chooseVehicle(probe: World, rng: Rng, template: NpcTemplate, chassisId: string | null, gear: GearLevel): Vehicle {
   const table = template.loadout;
+  const level = GEAR_LEVELS[gear];
   const budget = table.budget * level.budget;
-  // The required build and the utility part get at least the template budget, so a poor roll still drives, shoots
-  // and hauls. The level budget limits the extra guns and armor.
+  // The required build and the cargo and utility parts get at least the template budget, so a poor roll still drives,
+  // shoots and hauls. The level budget limits the extra guns and armor.
   const required = Math.max(budget, table.budget);
   const chassis = chassisId === null ? table.chassis : table.chassis.filter((entry) => entry.value === chassisId);
   const chassisChoices = chassis.map((entry) => ({ value: armedChoices(probe, template, entry.value, required), weight: entry.weight })).filter((entry) => entry.value.length > 0);
   if (!chassisChoices.length) throw new Error(`No valid required NPC loadout for ${template.id}`);
   let v = withFreshIds(probe, chooseRequiredParts(rng, table, sampleWeighted(rng, chassisChoices)));
   v = chooseOptionalPart(probe, rng, v, required, table.cargoPart);
+  v = chooseOptionalPart(probe, rng, v, required, utilityRollsAt(utilityPoolOf(template), gear));
   v = addGuns(probe, rng, table, level, v, budget);
   return addArmor(probe, rng, table, level, v, budget);
 }
@@ -367,13 +387,14 @@ function armoredCells(v: Vehicle): number {
 export function generateNpcLoadout(world: World, template: NpcTemplate, chassisId: string | null = null, level: GearLevel | null = null): NpcLoadout {
   const table = template.loadout;
   validateTable(table);
+  validateUtilityPool(utilityPoolOf(template));
   // Probes may allocate IDs, but only the completed selection advances the real world's RNG.
   const probe = { ...world };
   const rng = { rngState: world.rngState };
   // Wear and spares draw from the market stream, so they never shift the main stream's decisions.
   const wearRng = { rngState: world.marketRng.rngState };
   const gear = level ?? sampleWeighted(rng, table.levels);
-  const v = chooseVehicle(probe, rng, template, chassisId, GEAR_LEVELS[gear]);
+  const v = chooseVehicle(probe, rng, template, chassisId, gear);
   rollWear(probe, wearRng, table, GEAR_LEVELS[gear], v);
   const { spares, carried } = chooseCargo(probe, rng, wearRng, table, GEAR_LEVELS[gear], v);
   world.rngState = rng.rngState;

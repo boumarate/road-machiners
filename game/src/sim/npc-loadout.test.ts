@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from 'vitest';
+import { NPC_UTILITY_PARTS, type UtilityRoll } from '../data/npc-utilities';
 import { CHASSIS } from '../data/chassis';
 import { GEAR_LEVELS, MAX_GUN_SLOWDOWN, MIN_NPC_SPEED_SHARE, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
 import { PARTS, partDef } from '../data/parts';
@@ -410,4 +411,67 @@ describe('armed choice cache', () => {
     template.loadout.minGuns = 1;
     expect(guns()).toEqual(['mg']);
   });
+});
+
+// Swaps a template's utility pool until the test ends.
+function withUtilityPool(templateId: string, pool: UtilityRoll[]): void {
+  const saved = NPC_UTILITY_PARTS[templateId];
+  NPC_UTILITY_PARTS[templateId] = pool;
+  onTestFinished(() => { NPC_UTILITY_PARTS[templateId] = saved; });
+}
+
+describe('NPC utility parts', () => {
+  const utilitiesOf = (parts: { defId: string }[]) => parts.filter((p) => partDef(p.defId).kind === 'utility').map((p) => p.defId);
+
+  it('rejects a utility pool that names a part of another kind', () => {
+    withUtilityPool('merc', [{ value: 'mg', weight: 1 }, { value: null, weight: 1 }]);
+
+    expect(() => generateNpcLoadout(emptyWorld(), NPCS.merc)).toThrow(/utility/);
+  });
+
+  it('rejects a template with no utility pool', () => {
+    const template: NpcTemplate = { ...structuredClone(NPCS.merc), id: 'nobody' };
+
+    expect(() => generateNpcLoadout(emptyWorld(), template)).toThrow(/no utility pool/);
+  });
+
+  it.each(Object.values(NPCS))('mounts at most one utility on $id, from its own pool', (template) => {
+    const pool = NPC_UTILITY_PARTS[template.id].map((entry) => entry.value);
+    for (let seed = 1; seed <= 16; seed++) {
+      const utilities = utilitiesOf(generateNpcLoadout({ ...fixture, rngState: seed }, template).parts);
+      expect(utilities.length, `seed ${seed}`).toBeLessThanOrEqual(1);
+      for (const id of utilities) expect(pool, `seed ${seed}`).toContain(id);
+    }
+  });
+
+  it('mounts the utilities its pool offers over many rolls', () => {
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 40; seed++) for (const id of utilitiesOf(generateNpcLoadout({ ...fixture, rngState: seed }, NPCS.scavenger).parts)) seen.add(id);
+
+    expect([...seen].sort()).toEqual(['patcherCrane', 'scrapersKnife']);
+  });
+
+  it('rolls the emitter only at the heavy and loaded gear levels', () => {
+    // The merc's own emitter roll, made near certain. Few merc decks keep a 2x2 spot free beside the main gun.
+    const emitter = NPC_UTILITY_PARTS.merc.find((entry) => entry.value === 'emitter');
+    if (!emitter) throw new Error('Mercs roll no emitter');
+    withUtilityPool('merc', [{ ...emitter, weight: 1000 }, { value: null, weight: 0.001 }]);
+    const template = NPCS.merc;
+    const emitters = (level: GearLevel) => {
+      let count = 0;
+      for (let seed = 1; seed <= 40; seed++) count += utilitiesOf(generateNpcLoadout({ ...fixture, rngState: seed }, template, null, level).parts).filter((id) => id === 'emitter').length;
+      return count;
+    };
+
+    expect(emitters('standard')).toBe(0);
+    expect(emitters('heavy')).toBeGreaterThan(0);
+    expect(emitters('loaded')).toBeGreaterThan(0);
+  }, 120_000);
+
+  it('mounts the claymore ram on some gunwagons', () => {
+    let rams = 0;
+    for (let seed = 1; seed <= 40; seed++) rams += generateNpcLoadout({ ...fixture, rngState: seed }, NPCS.gunwagon).parts.filter((p) => p.defId === 'claymoreRam').length;
+
+    expect(rams).toBeGreaterThan(0);
+  }, 120_000);
 });

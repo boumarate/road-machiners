@@ -3,6 +3,12 @@
 import { RULES } from './rules';
 import { TERRAIN } from './terrain';
 
+// When an NPC uses its utility parts; see src/sim/npc-utility.ts.
+export const NPC_UTILITY = {
+  dropReach: 10, // tiles behind a fleeing driver within which a seen hostile makes it drop caltrops or oil
+  sproutCab: 0.5, // share of its cab's max HP below which a driver with an attacker in sight smokes up
+};
+
 export const NPC_BEHAVIOR = {
   // Turns a driver may go without progress before it gives up its top goal. Progress is a new tile, a job turn or a
   // new top goal. A crawling truck changes tile every turn, and every timed deal lapses in 60 turns or less, so 100

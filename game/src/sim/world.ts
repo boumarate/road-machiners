@@ -18,6 +18,7 @@ import { fitStores } from './resources';
 import { generateObstacles, obstacleReach } from './mapgen';
 import type { BakedMap } from './terrain';
 import { planNpcOrders } from './ai';
+import { assignUtilityOrders } from './npc-utility';
 import { applyGodMode } from './cheats';
 import { assignAutoOrders, dropMagazine, fireWeapons, isHostile, noteEngagements, resolveDestroyed, settleAims } from './combat';
 import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from './defeat';
@@ -288,6 +289,7 @@ export function endTurn(
     refreshVision(w);
     raiseCalls(w);
     assignAutoOrders(w);
+    assignUtilityOrders(w);
     settleAims(w);
     activateUtilities(w);
     tickCharges(w);

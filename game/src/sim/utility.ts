@@ -17,7 +17,7 @@ import { dist, type Vec } from './vec';
 import { wornDef, wornTurns } from './wear';
 
 // What a part does when used: a utility effect, or arming a claymore ram.
-type UseKind = UtilityEffectType | 'claymore';
+export type UseKind = UtilityEffectType | 'claymore';
 
 // The order each use takes. A passive utility takes none.
 const ORDER_KIND: Record<UseKind, UtilityOrder['kind'] | null> = {
@@ -90,7 +90,7 @@ function pointOf(order: UtilityOrder): Vec {
 }
 
 // The use of a part that has a charge: its utility effect, or arming for a claymore ram. Throws for any other part.
-function useKindOf(def: PartDef): UseKind {
+export function useKindOf(def: PartDef): UseKind {
   if (def.kind === 'utility') return def.effect.type;
   if (def.kind === 'armor' && def.claymore) return 'claymore';
   throw new Error(`${def.name} is not a utility`);

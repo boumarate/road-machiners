@@ -184,11 +184,13 @@ const STALL_WEAR: Weighted<number>[] = [
   { value: 4, weight: 1 },
 ];
 
-// Every non-core part, equal weight, for the two general-stock garages.
+// Every non-core part for the two general-stock garages, equal weight except the rare ones.
 const NON_CORE_PART_IDS = Object.values(PARTS)
   .filter((def) => def.kind !== 'core')
   .map((def) => def.id);
-const GARAGE_PARTS: Weighted<string>[] = NON_CORE_PART_IDS.map((id) => ({ value: id, weight: 1 }));
+// The emitter is ship tech: a garage shelf holds one about a fifth as often as any other part.
+const RARE_PART_WEIGHT: Record<string, number> = { emitter: 0.2 };
+const GARAGE_PARTS: Weighted<string>[] = NON_CORE_PART_IDS.map((id) => ({ value: id, weight: RARE_PART_WEIGHT[id] ?? 1 }));
 
 export type PartStockTable = { parts: Weighted<string>[]; wear: Weighted<number>[] };
 
@@ -264,7 +266,10 @@ export const SHOPS: Record<string, ShopDef> = {
     goods: ['scrap', 'parts', 'tools'],
     priceFactor: PRICE_FACTOR,
     partStock: {
-      parts: (['plates', 'steelPlate', 'cage', 'scrapPanels', 'scrapSheet', 'ram', 'plowRam', 'mg', 'shotgun', 'rack', 'panniers'] as const).map((id) => ({ value: id, weight: 1 })),
+      parts: ([
+        'plates', 'steelPlate', 'cage', 'scrapPanels', 'scrapSheet', 'ram', 'plowRam', 'mg', 'shotgun', 'rack', 'panniers',
+        'caltrops', 'oilSpiller', 'scrapersKnife', 'patcherCrane', 'claymoreRam',
+      ] as const).map((id) => ({ value: id, weight: 1 })),
       wear: STALL_WEAR,
     },
     stockSize: [2, 4],
@@ -284,7 +289,7 @@ export const SHOPS: Record<string, ShopDef> = {
     goods: ['grain', 'salt', 'textiles'],
     priceFactor: PRICE_FACTOR,
     partStock: {
-      parts: (['rack', 'panniers', 'flatbed', 'scrapPanels', 'scrapSheet', 'cage', 'supplyLocker'] as const).map((id) => ({ value: id, weight: 1 })),
+      parts: (['rack', 'panniers', 'flatbed', 'scrapPanels', 'scrapSheet', 'cage', 'supplyLocker', 'patcherCrane'] as const).map((id) => ({ value: id, weight: 1 })),
       wear: STALL_WEAR,
     },
     stockSize: [2, 4],
@@ -304,7 +309,7 @@ export const SHOPS: Record<string, ShopDef> = {
     goods: ['batteries', 'scrap', 'parts'],
     priceFactor: PRICE_FACTOR,
     partStock: {
-      parts: (['stockEngine', 'flatFour', 'workhorseDiesel', 'scanner', 'plates', 'jerrycans'] as const).map((id) => ({ value: id, weight: 1 })),
+      parts: (['stockEngine', 'flatFour', 'workhorseDiesel', 'scanner', 'plates', 'jerrycans', 'oilSpiller', 'flareCannon'] as const).map((id) => ({ value: id, weight: 1 })),
       wear: STALL_WEAR,
     },
     stockSize: [2, 4],

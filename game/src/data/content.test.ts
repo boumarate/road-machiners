@@ -5,6 +5,7 @@ import { EFFORT, SHOPS, type ItemKind } from "./market";
 import { goodBasePrice } from "../sim/market";
 import { PARTS, type PartDef, type PartKind, type WeaponDef } from "./parts";
 import { REGION } from "./region";
+import { SALVAGE, type LootTable } from "./salvage";
 import { bodyOf } from "../sim/body";
 import {
   buyChassis,
@@ -230,6 +231,26 @@ describe("utilities", () => {
   it("gives a reload to every active utility and none to the crane and the scraper", () => {
     const passive = utilities.filter((def) => def.reload === null).map((def) => def.effect.type).sort();
     expect(passive).toEqual(["crane", "scraper"]);
+  });
+
+  it("stocks every utility in a stall or garage and drops it as field loot", () => {
+    const stalls = Object.values(SHOPS).filter((shop) => shop.kind === "stall");
+    const tables = Object.values(SALVAGE).filter((entry): entry is LootTable => typeof entry === "object" && "spareParts" in entry);
+    for (const def of utilities) {
+      expect(Object.values(SHOPS).some((shop) => shop.partStock.parts.some((e) => e.value === def.id)), def.id).toBe(true);
+      expect(tables.some((table) => table.spareParts.includes(def.id)), `${def.id} is in no loot table`).toBe(true);
+    }
+    expect(stalls.some((shop) => shop.partStock.parts.some((e) => e.value === "claymoreRam"))).toBe(true);
+  });
+
+  it("keeps the emitter rare: weight 0.2 in garages, and loot only from landmarks", () => {
+    const garages = Object.values(SHOPS).filter((shop) => shop.kind === "garage");
+    for (const shop of garages) {
+      expect(shop.partStock.parts.find((e) => e.value === "emitter")?.weight, shop.id).toBe(0.2);
+      expect(shop.partStock.parts.find((e) => e.value === "sprout")?.weight, shop.id).toBe(1);
+    }
+    const holders = Object.entries(SALVAGE).filter(([, entry]) => typeof entry === "object" && "spareParts" in entry && entry.spareParts.includes("emitter"));
+    expect(holders.map(([id]) => id)).toEqual(["landmark"]);
   });
 
   it("keeps the claymore ram an armor ram with a claymore", () => {
