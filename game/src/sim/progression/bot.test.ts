@@ -8,11 +8,12 @@ import { CONDITION } from '../../data/wear';
 import { playerVehicle } from '../damage';
 import { makePart } from '../factory';
 import { goodsCount, mountedParts } from '../grid';
-import { addGoods, removeAllGoods } from '../inventory';
+import { addGoods, removeAllGoods, stowPart } from '../inventory';
+import { siteOf } from '../market';
 import { nearestPad, nearestTown } from '../sites';
 import { isStranded } from '../stats';
 import { addVehicle, emptyWorld, npcBrain, startCombat } from '../testkit';
-import { repairCost } from '../economy';
+import { partTradePrice, repairCost } from '../economy';
 import { getUpkeepReserve } from '../npc-decisions';
 import { maxHp } from '../wear';
 import { botOrders } from './bot';
@@ -204,6 +205,24 @@ describe('botOrders', () => {
     expect(mountedParts(me, 'engine')).toHaveLength(1);
     expect(mountedParts(me).filter((p) => !['core', 'engine'].includes(partDef(p.defId).kind)).length).toBeLessThan(gearBefore);
     expect(turn.world.player.money).toBeGreaterThanOrEqual(0);
+  });
+
+  // A stall buys spares but takes no part off the truck, so the mounted gear stays. It hands a bought engine over
+  // loose, and the scout has no free cargo spot that holds one.
+  it('has a broke truck without an engine at a stall keep its mounted gear', () => {
+    const yard = siteOf('salvage-yard');
+    const w = withoutEngine(parkedAt('bowl'));
+    const me = playerVehicle(w);
+    me.pos = nearestPad(yard, yard.pos);
+    w.player.money = 0;
+    w.shops['salvage-yard'].stock = [makePart(w, 'stockEngine', 0)];
+    expect(stowPart(w, me, makePart(w, 'heavyMg', 0))).toBe(true);
+    expect(partTradePrice(w, me, makePart(w, 'heavyMg', 0), 'sell')).toBeGreaterThan(partTradePrice(w, me, w.shops['salvage-yard'].stock[0], 'buy'));
+    const mountedBefore = mountedParts(me).map((p) => p.id);
+
+    const turn = botOrders(w, 'trader');
+
+    expect(mountedParts(playerVehicle(turn.world)).map((p) => p.id)).toEqual(mountedBefore);
   });
 
   it('has a broke stranded truck crawl on with its goal instead of waiting in town', () => {

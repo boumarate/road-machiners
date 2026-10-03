@@ -23,7 +23,7 @@ import { affordableBuyCount, buyGood, buyStockPart, buySupply, partTradePrice, g
 import { findSpot, freeCells, goodsCount, gridOf, isMounted, itemCells, MOUNT_CELLS, mountedItems, mountedParts, type Spot } from '../grid';
 import { stowSpot, storePart } from '../inventory';
 import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
-import { SHOPS } from '../../data/market';
+import { shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
 import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
 import { getUpkeepReserve, isWeak, ownDanger, perceiveDanger } from '../npc-decisions';
@@ -196,32 +196,41 @@ function needsOf(world: World): string {
 // sent the bot back to a shop that had none, again and again.
 function nearestEngineShop(world: World): Site | null {
   const pos = playerVehicle(world).pos;
-  const budget = world.player.money + gearForSale(world).reduce((sum, g) => sum + g.price, 0);
-  const stocked = SHOP_SITES.filter((s) => stockEngine(world, s.id, budget) !== null);
+  const stocked = SHOP_SITES.filter((s) => stockEngine(world, s.id, engineBudget(world, s.id)) !== null);
   return stocked.reduce<Site | null>((best, s) => (!best || dist(pos, s.pos) < dist(pos, best.pos) ? s : best), null);
 }
 
-// The cheapest engine a shop stocks within the budget.
+// The cheapest engine a shop stocks within the budget. A stall hands a bought part over loose, so there it must fit
+// the truck once the goods and spares are sold.
 function stockEngine(world: World, shopId: string, budget: number): { part: PartInstance; price: number } | null {
   const me = playerVehicle(world);
-  const engines = shopState(world, shopId).stock.filter((p) => partDef(p.defId).kind === 'engine')
+  const stripped = { ...me, items: me.items.filter((it) => it.kind === 'part' && isMounted(me.chassisId, it)) };
+  const takes = (part: PartInstance) => shopDef(shopId).kind === 'garage' || stowSpot(stripped, { id: 'engine-probe', x: 0, y: 0, rot: 0, kind: 'part', part }) !== null;
+  const engines = shopState(world, shopId).stock.filter((p) => partDef(p.defId).kind === 'engine' && takes(p))
     .map((part) => ({ part, price: partTradePrice(world, me, part, 'buy') }))
     .filter((e) => e.price <= budget)
     .sort((a, b) => a.price - b.price);
   return engines[0] ?? null;
 }
 
-// A part the bot may sell, with its price: spares and stored parts first, then mounted gear, each cheapest first.
-// Built-in parts never sell.
-type GearSale = { part: PartInstance; itemId: string | null; price: number };
+function engineBudget(world: World, shopId: string): number {
+  return world.player.money + gearForSale(world, shopId).reduce((sum, g) => sum + g.price, 0);
+}
 
-function gearForSale(world: World): GearSale[] {
+// A part the bot may sell at a shop, with its price: spares first, then stored parts, then mounted gear, each
+// cheapest first. Every shop buys spares. Only a garage, which stands in a town, buys stored and mounted parts.
+// Built-in parts never sell. A mounted part goes into garage storage before the sale, as a player unmounts it.
+type GearSale = { part: PartInstance; mountedItem: string | null; price: number };
+
+function gearForSale(world: World, shopId: string): GearSale[] {
   const me = playerVehicle(world);
-  const sale = (part: PartInstance, itemId: string | null) => ({ part, itemId, price: partTradePrice(world, me, part, 'sell') });
+  const sale = (part: PartInstance, mountedItem: string | null) => ({ part, mountedItem, price: partTradePrice(world, me, part, 'sell') });
   const byPrice = (a: GearSale, b: GearSale) => a.price - b.price;
-  const loose = [...spareItems(me).map((s) => sale(partOf(me, s.partId), s.itemId)), ...world.player.storage.map((part) => sale(part, null))].sort(byPrice);
-  const mounted = mountedItems(me).filter((it) => partDef(it.part.defId).kind !== 'core' && partDef(it.part.defId).kind !== 'engine').map((it) => sale(it.part, it.id)).sort(byPrice);
-  return [...loose, ...mounted];
+  const spares = spareItems(me).map((s) => sale(partOf(me, s.partId), null)).sort(byPrice);
+  if (shopDef(shopId).kind !== 'garage') return spares;
+  const stored = world.player.storage.map((part) => sale(part, null)).sort(byPrice);
+  const mounted = mountedItems(me).filter((it) => !['core', 'engine'].includes(partDef(it.part.defId).kind)).map((it) => sale(it.part, it.id)).sort(byPrice);
+  return [...spares, ...stored, ...mounted];
 }
 
 function partOf(v: Vehicle, partId: string): PartInstance {
@@ -234,22 +243,21 @@ function partOf(v: Vehicle, partId: string): PartInstance {
 // gear, cheapest first, until the money covers the engine.
 function restoreEngine(o: Orders, shopId: string): void {
   if (mountedParts(o.me, 'engine').length > 0) return;
-  const budget = o.world.player.money + gearForSale(o.world).reduce((sum, g) => sum + g.price, 0);
-  const engine = stockEngine(o.world, shopId, budget);
+  const engine = stockEngine(o.world, shopId, engineBudget(o.world, shopId));
   if (!engine) return;
   if (o.world.player.money < engine.price || !engineSpot(o.me, engine.part.defId)) sellCargo(o);
-  sellGearFor(o, engine.price);
+  sellGearFor(o, shopId, engine.price);
   const spot = engineSpot(o.me, engine.part.defId);
   if (!spot) throw new Error(`No free engine mount for a new engine. On the engine cells: ${onEngineCells(o.me)}`);
   o.run((w) => buyStockPart(w, engine.part.id), 'gear');
   mountBought(o, engine.part.id, spot);
 }
 
-function sellGearFor(o: Orders, price: number): void {
-  for (const g of gearForSale(o.world)) {
+function sellGearFor(o: Orders, shopId: string, price: number): void {
+  for (const g of gearForSale(o.world, shopId)) {
     if (o.world.player.money >= price) return;
-    const itemId = g.itemId;
-    if (itemId) o.run((w) => storePart(w, itemId));
+    const mounted = g.mountedItem;
+    if (mounted) o.run((w) => storePart(w, mounted));
     o.run((w) => sellPart(w, g.part.id), 'gear');
   }
 }
@@ -619,13 +627,10 @@ function hasCargo(world: World, v: Vehicle): boolean {
   return Object.keys(cargoForSale(world, v)).length > 0 || spareItems(v).length > 0;
 }
 
-// Sells the goods for sale, and sells spare parts through garage storage.
+// Sells the goods for sale and the spare parts. Every shop buys both.
 function sellCargo(o: Orders): void {
   for (const [good, n] of Object.entries(cargoForSale(o.world, o.me))) o.run((w) => sellGood(w, good, n), 'goodsSold');
-  for (const { itemId, partId } of spareItems(o.me)) {
-    o.run((w) => storePart(w, itemId));
-    o.run((w) => sellPart(w, partId), 'lootSales');
-  }
+  for (const { partId } of spareItems(o.me)) o.run((w) => sellPart(w, partId), 'lootSales');
 }
 
 // ---- Driving.
