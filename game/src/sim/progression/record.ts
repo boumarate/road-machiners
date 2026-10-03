@@ -9,7 +9,7 @@ import { TIME } from '../../data/time';
 import type { Tier } from '../../data/market';
 import { isHostile } from '../combat';
 import { playerVehicle } from '../damage';
-import { chassisTradeIn } from '../economy';
+import { chassisTradeIn, repairCost } from '../economy';
 import { advanceFar, clearFarRoutes } from '../far';
 import { setHeadless } from '../fidelity';
 import { freeCells, goodsCount, mountedParts } from '../grid';
@@ -21,7 +21,7 @@ import { isTowed } from '../tow';
 import type { GameEvent, NpcActivity, Vehicle, World, XpSource } from '../types';
 import { dist, type Vec } from '../vec';
 import { canVehicleSee } from '../vision';
-import { partValue } from '../wear';
+import { maxHp, partValue } from '../wear';
 import { endTurn, newWorld, update } from '../world';
 import { botOrders, parkedOnPurpose, type Archetype, type BotOptions } from './bot';
 import { emptyLedger, LEDGER_KEYS, type BotTurn, type Ledger } from './orders';
@@ -243,11 +243,29 @@ function cargoValue(v: Vehicle): number {
   return Object.entries(goodsCount(v)).reduce((sum, [good, n]) => sum + goodValue(good) * n, 0);
 }
 
-// Cash plus every part, good and truck the player holds, in the truck or in garage storage. Core parts and the chassis
-// are valued together by chassisTradeIn, so they are not added again.
-export function netWorth(world: World): number {
+// What the player holds, split by kind. The chassis is its trade-in once repaired, less the whole repair bill, gear
+// damage included. The game's own trade-in scales with core HP, so a dented cab would swing net worth by most of the
+// chassis value while a repair of a tenth of that fixes it.
+export type Worth = { money: number; cargo: number; gear: number; storage: number; chassis: number };
+
+export function worthOf(world: World): Worth {
   const v = playerVehicle(world);
-  return world.player.money + storageValue(world) + cargoValue(v) + nonCoreTruckValue(v) + chassisTradeIn(world);
+  return { money: world.player.money, cargo: cargoValue(v), gear: nonCoreTruckValue(v), storage: storageValue(world), chassis: repairedTradeIn(world) - repairCost(world) };
+}
+
+function repairedTradeIn(world: World): number {
+  return chassisTradeIn(update(world, (w) => {
+    for (const p of mountedParts(playerVehicle(w), 'core')) p.hp = maxHp(p);
+  }));
+}
+
+// Cash plus every part, good and truck the player holds, in the truck or in garage storage.
+export function netWorth(world: World): number {
+  return worthTotal(worthOf(world));
+}
+
+export function worthTotal(w: Worth): number {
+  return w.money + w.cargo + w.gear + w.storage + w.chassis;
 }
 
 // The best tier among the mounted parts that are not built in, or 1 with none.
@@ -275,6 +293,7 @@ export type DayRow = {
   deaths: number;
   stalls: number; // NPC stall events, only nonzero in a run that tolerates them
   ledger: Ledger; // money moved that day by key: negative is spent, positive earned
+  worth: Worth; // net worth by kind at the end of the row
 };
 
 type Counts = Pick<DayRow, 'fightsWon' | 'knockouts' | 'gearLost' | 'deaths' | 'stalls' | 'ledger'>;
@@ -311,7 +330,8 @@ export class DayTally {
   // The row for the day that just ended, and a fresh count for the next day.
   close(day: number, world: World): DayRow {
     const me = playerVehicle(world);
-    const row = { day, turns: this.turns, money: world.player.money, netWorth: netWorth(world), tier: gearTier(me), chassis: me.chassisId, ...this.counts };
+    const worth = worthOf(world);
+    const row = { day, turns: this.turns, money: world.player.money, netWorth: worthTotal(worth), worth, tier: gearTier(me), chassis: me.chassisId, ...this.counts };
     this.counts = noCounts();
     this.turns = 0;
     return row;

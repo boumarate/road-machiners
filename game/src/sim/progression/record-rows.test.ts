@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { playerVehicle } from '../damage';
+import { repairCost } from '../economy';
+import { mountedParts } from '../grid';
+import { emptyWorld } from '../testkit';
+import { maxHp } from '../wear';
+import { update } from '../world';
 import { emptyLedger } from './orders';
-import { fightTotals, ledgerTotals, tierDays, wageByTier, type DayRow } from './record';
+import { fightTotals, ledgerTotals, netWorth, tierDays, wageByTier, worthOf, worthTotal, type DayRow } from './record';
 
 const row = (day: number, netWorth: number, tier: DayRow['tier'], extra: Partial<DayRow> = {}): DayRow => ({
-  day, turns: day === 0 ? 0 : 450, money: 0, netWorth, tier, chassis: 'scout', fightsWon: 0, knockouts: 0, gearLost: 0, deaths: 0, stalls: 0, ledger: emptyLedger(), ...extra,
+  day, turns: day === 0 ? 0 : 450, money: 0, netWorth, tier, chassis: 'scout', fightsWon: 0, knockouts: 0, gearLost: 0, deaths: 0, stalls: 0, ledger: emptyLedger(),
+  worth: { money: 0, cargo: 0, gear: 0, storage: 0, chassis: netWorth }, ...extra,
 });
 
 describe('wageByTier', () => {
@@ -40,6 +47,22 @@ describe('fightTotals', () => {
     const rows = [row(1, 0, 1, { fightsWon: 2, knockouts: 1 }), row(2, 0, 1, { fightsWon: 1, gearLost: 3, deaths: 1 })];
 
     expect(fightTotals(rows)).toEqual({ fightsWon: 3, knockouts: 1, gearLost: 3, deaths: 1, stalls: 0 });
+  });
+});
+
+describe('netWorth', () => {
+  it('counts damage to the truck at its repair bill', () => {
+    const w = emptyWorld({ x: 100, y: 100 });
+    const before = worthOf(w);
+    const damaged = update(w, (draft) => {
+      for (const p of mountedParts(playerVehicle(draft))) p.hp = Math.ceil(maxHp(p) / 2);
+    });
+
+    const after = worthOf(damaged);
+
+    expect(after.chassis).toBe(before.chassis - repairCost(damaged));
+    expect(after.chassis).toBeGreaterThan(before.chassis / 2);
+    expect(netWorth(damaged)).toBe(worthTotal(after));
   });
 });
 

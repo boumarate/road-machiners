@@ -133,8 +133,16 @@ export function parseDayRow(value: unknown): DayRow {
   const row = asRecord(value);
   for (const key of ROW_NUMBERS) if (typeof row[key] !== 'number') throw new Error(`Bad economy row ${JSON.stringify(value)}: ${key} is not a number`);
   if (!isLedger(row.ledger)) throw new Error(`Bad economy row ${JSON.stringify(value)}: ledger lacks a key`);
+  if (!isWorth(row.worth)) throw new Error(`Bad economy row ${JSON.stringify(value)}: worth lacks a key`);
   if (typeof row.chassis !== 'string') throw new Error(`Bad economy row ${JSON.stringify(value)}: chassis is not a string`);
   return row as unknown as DayRow;
+}
+
+export const WORTH_KEYS = ['money', 'cargo', 'gear', 'storage', 'chassis'] as const;
+
+function isWorth(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  return WORTH_KEYS.every((key) => typeof (value as Record<string, unknown>)[key] === 'number');
 }
 
 function isLedger(value: unknown): boolean {

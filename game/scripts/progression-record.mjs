@@ -4,18 +4,26 @@
 // Each run is a child process. A run an error stops ends with {"end":"error","turn":N,"message":...}.
 // Usage: npm run progression:record -- --archetypes trader,hunter --seeds 1,2,3 --turns 2000
 // The markov archetype also needs --markov-turns <k>, the turns it keeps one goal.
+// --out <dir> writes the traces to another directory. --patch <file> imports a module before any sim code loads. The
+// module changes data numbers in place, such as DISTANCE_PREMIUM.perTile, so a run with the patch is the B side of an
+// A/B test. A value a data file derives from another at load time does not follow the patch, so patch it as well. The
+// header line records the patch file.
 import { spawn } from 'node:child_process';
 import { closeSync, mkdirSync, openSync, renameSync, writeSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { TIME } from '../src/data/time.ts';
-import { isArchetype } from '../src/sim/progression/bot.ts';
-import { recordTurns } from '../src/sim/progression/record.ts';
+import { resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const OUT_DIR = 'tmp/progression';
-const USAGE = 'Usage: npm run progression:record -- --archetypes <a,b> --seeds <1,2> --turns <n> [--markov-turns <k>] [--tolerate-stalls true]';
+const argv = process.argv.slice(2).filter((a) => a !== '--');
+const patchAt = argv.indexOf('--patch');
+if (patchAt >= 0) await import(pathToFileURL(resolve(argv[patchAt + 1])).href);
+const { TIME } = await import('../src/data/time.ts');
+const { isArchetype } = await import('../src/sim/progression/bot.ts');
+const { recordTurns } = await import('../src/sim/progression/record.ts');
 
-const args = parseArgs(process.argv.slice(2).filter((a) => a !== '--'));
-if (args.job) recordOne(args.job, args.turns, args.options);
+const USAGE = 'Usage: npm run progression:record -- --archetypes <a,b> --seeds <1,2> --turns <n> [--markov-turns <k>] [--tolerate-stalls true] [--out <dir>] [--patch <file>]';
+
+const args = parseArgs(argv);
+if (args.job) recordOne(args.job, args.turns, args.options, args.place);
 else await recordAll(args);
 
 function parseArgs(argv) {
@@ -23,9 +31,10 @@ function parseArgs(argv) {
   const turns = Number(flags.turns);
   if (!Number.isInteger(turns) || turns <= 0) throw new Error(`--turns must be a positive whole number. ${USAGE}`);
   const options = parseOptions(flags);
-  if (flags.job) return { job: parseJob(flags.job), turns, options: requireMarkov([parseJob(flags.job).archetype], options) };
+  const place = { out: flags.out ?? 'tmp/progression', patch: flags.patch ?? null };
+  if (flags.job) return { job: parseJob(flags.job), turns, place, options: requireMarkov([parseJob(flags.job).archetype], options) };
   const runs = parseRuns(flags);
-  return { ...runs, turns, options: requireMarkov(runs.archetypes, options) };
+  return { ...runs, turns, place, options: requireMarkov(runs.archetypes, options) };
 }
 
 // The markov bot keeps a goal for --markov-turns turns. Every other bot ignores it.
@@ -84,24 +93,25 @@ function parseJob(text) {
 }
 
 // Runs go one at a time, so a batch never loads more than one core.
-async function recordAll({ archetypes, seeds, turns, options }) {
+async function recordAll({ archetypes, seeds, turns, options, place }) {
   const jobs = archetypes.flatMap((archetype) => seeds.map((seed) => ({ archetype, seed })));
   console.log(`Recording ${jobs.length} runs of ${turns} turns, one at a time`);
   const failed = [];
   for (const job of jobs) {
-    const code = await runChild(job, turns, options);
+    const code = await runChild(job, turns, options, place);
     if (code !== 0) failed.push(`${job.archetype}-${job.seed}`);
   }
   if (failed.length > 0) throw new Error(`Runs failed: ${failed.join(', ')}`);
-  console.log(`Wrote ${jobs.length} traces to ${OUT_DIR}/`);
+  console.log(`Wrote ${jobs.length} traces to ${place.out}/`);
 }
 
-function runChild({ archetype, seed }, turns, options) {
+function runChild({ archetype, seed }, turns, options, place) {
   const viteNode = fileURLToPath(new URL('../node_modules/.bin/vite-node', import.meta.url));
   const script = fileURLToPath(import.meta.url);
   const markov = options.markovTurns === undefined ? [] : ['--markov-turns', String(options.markovTurns)];
   const tolerate = options.tolerateStalls ? ['--tolerate-stalls', 'true'] : [];
-  const child = spawn(viteNode, [script, '--', '--job', `${archetype}:${seed}`, '--turns', String(turns), ...markov, ...tolerate], { stdio: 'inherit' });
+  const patch = place.patch === null ? [] : ['--patch', place.patch];
+  const child = spawn(viteNode, [script, '--', '--job', `${archetype}:${seed}`, '--turns', String(turns), '--out', place.out, ...patch, ...markov, ...tolerate], { stdio: 'inherit' });
   return new Promise((resolve, reject) => {
     child.on('error', reject);
     child.on('exit', (code) => resolve(code));
@@ -109,13 +119,13 @@ function runChild({ archetype, seed }, turns, options) {
 }
 
 // Writes one trace, turn by turn, into a part file that becomes the trace only when the run finishes.
-function recordOne({ archetype, seed }, turns, options) {
+function recordOne({ archetype, seed }, turns, options, place) {
   const name = `${archetype}-${seed}`;
-  const path = `${OUT_DIR}/${name}.jsonl`;
-  mkdirSync(OUT_DIR, { recursive: true });
+  const path = `${place.out}/${name}.jsonl`;
+  mkdirSync(place.out, { recursive: true });
   const fd = openSync(`${path}.part`, 'w');
   const started = Date.now();
-  writeSync(fd, `${JSON.stringify({ archetype, seed, turns, ...options })}\n`);
+  writeSync(fd, `${JSON.stringify({ archetype, seed, turns, ...options, patch: place.patch })}\n`);
   const progress = { count: 0, end: null, lastTurn: 1 };
   try {
     writeSteps(fd, name, recordTurns(seed, archetype, turns, options), progress);

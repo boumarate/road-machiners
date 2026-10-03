@@ -3,44 +3,119 @@
 // wage per turn at each gear tier, the day each tier is first held, and the fight and loss counts.
 // Days show the median over seeds and the min-max range. A level some seeds never reach shows how many seeds reached it.
 // Usage: npm run progression:report [-- <dir>], with tmp/progression as the default dir.
+// With two dirs, npm run progression:report -- <a> <b> prints only the A/B comparison: each bot's summary on both sides
+// and the change in money per day by ledger key. Record both sides on the same seeds and turns.
 import { createReadStream, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { MAX_SKILL_LEVEL, SKILL_IDS } from '../src/data/skills.ts';
 import { TIME } from '../src/data/time.ts';
-import { parseRun, replay, targetMisses } from '../src/sim/progression/replay.ts';
+import { parseRun, replay, targetMisses, WORTH_KEYS } from '../src/sim/progression/replay.ts';
 import { LEDGER_KEYS } from '../src/sim/progression/orders.ts';
 import { fightTotals, ledgerTotals, TIERS, tierDays, wageByTier } from '../src/sim/progression/record.ts';
 
-const DIR = process.argv.slice(2).find((a) => a !== '--') ?? 'tmp/progression';
+const dirs = process.argv.slice(2).filter((a) => a !== '--');
+if (dirs.length > 2) throw new Error('Pass one dir to report on, or two to compare');
+const sides = [];
+for (const dir of dirs.length > 0 ? dirs : ['tmp/progression']) sides.push(await readDir(dir));
+if (sides.length === 1) printFull(sides[0]);
+else printCompare(sides, dirs);
 
-const files = readdirSync(DIR).filter((f) => f.endsWith('.jsonl')).sort();
-if (files.length === 0) throw new Error(`No traces in ${DIR}/. Run npm run progression:record first.`);
-const runs = [];
-for (const file of files) runs.push(await readRun(`${DIR}/${file}`));
+async function readDir(dir) {
+  const files = readdirSync(dir).filter((f) => f.endsWith('.jsonl')).sort();
+  if (files.length === 0) throw new Error(`No traces in ${dir}/. Run npm run progression:record first.`);
+  const runs = [];
+  for (const file of files) runs.push(await readRun(`${dir}/${file}`));
+  return runs;
+}
 
-const archetypes = [...new Set(runs.map((r) => r.archetype))];
-for (const archetype of archetypes) printArchetype(archetype, runs.filter((r) => r.archetype === archetype));
-printSummary(archetypes);
+function namesOf(runs) {
+  return [...new Set(runs.map((r) => r.archetype))];
+}
+
+function printFull(runs) {
+  for (const archetype of namesOf(runs)) printArchetype(archetype, runs.filter((r) => r.archetype === archetype));
+  printSummary(runs);
+}
 
 // One line per bot: how its runs ended, what it earned per turn against the trader, and what it lost.
-function printSummary(names) {
-  const gains = Object.fromEntries(names.map((a) => [a, runs.filter((r) => r.archetype === a && r.rows.length > 1).map(gainPerTurn)]));
-  const trader = gains.trader?.length ? median(gains.trader) : null;
-  const rows = [['bot', 'runs', 'ended early', 'net worth/turn', 'vs trader', 'last day', 'knockouts', 'gear lost']];
-  for (const a of names) rows.push(summaryRow(a, gains[a], trader));
+function printSummary(runs) {
+  const rows = [['bot', 'runs', 'ended early', 'profit/turn', 'net worth/turn', 'vs trader', 'last day', 'knockouts', 'gear lost']];
+  for (const a of namesOf(runs)) rows.push(summaryRow(runs, a));
   console.log('\nSummary');
   printTable(rows);
 }
 
-function summaryRow(archetype, gains, trader) {
+// Each bot's summary on side A, then side B, then the change in money per day by ledger key.
+function printCompare([a, b], [dirA, dirB]) {
+  requireSameRuns(a, b);
+  console.log(`A is ${dirA}, B is ${dirB}`);
+  const rows = [['bot', 'side', 'runs', 'ended early', 'profit/turn', 'net worth/turn', 'vs trader', 'last day', 'knockouts', 'gear lost']];
+  for (const name of namesOf(a)) {
+    const [, ...rowA] = summaryRow(a, name);
+    const [, ...rowB] = summaryRow(b, name);
+    rows.push([name, 'A', ...rowA], ['', 'B', ...rowB]);
+  }
+  console.log('');
+  printTable(rows);
+  const ledger = [['money per day B-A', ...LEDGER_KEYS]];
+  for (const name of namesOf(a)) {
+    const perDay = (runs) => ledgerPerDay(runs.filter((r) => r.archetype === name && r.rows.length > 0));
+    const [pa, pb] = [perDay(a), perDay(b)];
+    ledger.push([name, ...LEDGER_KEYS.map((key) => (pb[key] - pa[key]).toFixed(0))]);
+  }
+  console.log('');
+  printTable(ledger);
+  if (sameNetWorth(a, b)) console.log('\nBoth sides end every run on the same net worth. The patch changed nothing these runs read.');
+}
+
+function sameNetWorth(a, b) {
+  const ends = (runs) => runs.map((r) => `${r.archetype}-${r.seed}:${r.rows.at(-1)?.netWorth}`).sort().join(',');
+  return ends(a) === ends(b);
+}
+
+// An A/B comparison means something only on the same bots, seeds and run length.
+function requireSameRuns(a, b) {
+  const key = (runs) => runs.map((r) => `${r.archetype}-${r.seed}`).sort().join(',');
+  if (key(a) !== key(b)) throw new Error(`The two sides hold different runs: ${key(a)} against ${key(b)}`);
+}
+
+// The median over runs of money moved per in-game day by ledger key.
+function ledgerPerDay(runs) {
+  const each = runs.map((r) => {
+    const days = r.rows.reduce((sum, row) => sum + row.turns, 0) / TIME.turnsPerDay;
+    const totals = ledgerTotals(r.rows);
+    return Object.fromEntries(LEDGER_KEYS.map((key) => [key, totals[key] / days]));
+  });
+  return Object.fromEntries(LEDGER_KEYS.map((key) => [key, median(each.map((e) => e[key]))]));
+}
+
+function summaryRow(runs, archetype) {
+  const gainsOf = (name) => runs.filter((r) => r.archetype === name && r.rows.length > 1).map(gainPerTurn);
+  const gains = gainsOf(archetype);
+  const traderGains = gainsOf('trader');
+  const trader = traderGains.length ? median(traderGains) : null;
   const group = runs.filter((r) => r.archetype === archetype);
   const early = group.filter((r) => r.death !== null || r.error !== null).length;
   const totals = group.map((r) => fightTotals(r.rows));
   const ends = group.filter((r) => r.rows.length > 0).map((r) => r.rows[r.rows.length - 1]);
-  const gain = gains.length ? spread(gains, (n) => n.toFixed(2)) : '-';
-  const ratio = trader && gains.length ? (median(gains) / trader).toFixed(2) : '-';
-  const lastDay = ends.length ? spread(ends.map((row) => row.day), String) : '-';
-  return [archetype, String(group.length), String(early), gain, ratio, lastDay, spread(totals.map((t) => t.knockouts), String), spread(totals.map((t) => t.gearLost), String)];
+  const profits = group.filter((r) => r.rows.length > 1).map(profitPerTurn);
+  // A ratio against a trader that lost net worth would read upside down.
+  const ratio = trader > 0 && gains.length ? (median(gains) / trader).toFixed(2) : '-';
+  const lastDay = spreadOrDash(ends.map((row) => row.day), String);
+  const money = (n) => n.toFixed(2);
+  return [archetype, String(group.length), String(early), spreadOrDash(profits, money), spreadOrDash(gains, money), ratio, lastDay, spread(totals.map((t) => t.knockouts), String), spread(totals.map((t) => t.gearLost), String)];
+}
+
+function spreadOrDash(values, format) {
+  return values.length ? spread(values, format) : '-';
+}
+
+// Money earned per turn by the work itself: every ledger key but gear bought and sold. Goods still aboard at the end
+// count as spent.
+function profitPerTurn(run) {
+  const totals = ledgerTotals(run.rows);
+  const turns = run.rows.reduce((sum, row) => sum + row.turns, 0);
+  return LEDGER_KEYS.filter((key) => key !== 'gear').reduce((sum, key) => sum + totals[key], 0) / turns;
 }
 
 // Net worth gained per turn over the whole run.
@@ -119,7 +194,12 @@ function printNetWorth(group) {
   const last = Math.max(...group.map((r) => r.rows[r.rows.length - 1].day));
   const days = [0, 1, 3, 5, 10, 15, 20, 30].filter((d) => d <= last);
   const rows = [['day', ...days.map(String)]];
-  rows.push(['net worth', ...days.map((d) => spreadOrNone(group.map((r) => r.rows.find((row) => row.day === d)?.netWorth ?? null), (n) => n.toFixed(0)))]);
+  const cell = (d, pick) => spreadOrNone(group.map((r) => {
+    const row = r.rows.find((x) => x.day === d);
+    return row ? pick(row) : null;
+  }), (n) => n.toFixed(0));
+  rows.push(['net worth', ...days.map((d) => cell(d, (row) => row.netWorth))]);
+  for (const key of WORTH_KEYS) rows.push([`  ${key}`, ...days.map((d) => cell(d, (row) => row.worth[key]))]);
   console.log('');
   printTable(rows);
 }
