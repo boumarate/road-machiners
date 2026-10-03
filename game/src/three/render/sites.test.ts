@@ -302,6 +302,69 @@ describe('landmark scale', () => {
     expect(lamp.emissive.getHex()).toBe(PAL.lamp.on);
   });
 
+  it('runs the Granary sacks up the conveyor as its one moving part, inside the curtain over the whole loop (IV8, IV20)', () => {
+    const S = PHYSICS.metersPerTile;
+    const granary = ALL.find((s) => s.id === 'granary')!;
+    const own = movers.filter(({ node }) => {
+      let p: Object3D | null = node;
+      while (p !== null && p.name !== 'landmark-granary') p = p.parent;
+      return p !== null;
+    });
+    expect(own.map((m) => m.node.name)).toEqual(['granary-sacks']);
+    const { node, motion } = own[0];
+    expect(node.children).toHaveLength(4);
+    // The sacks ride on top of the belt, not under it.
+    node.updateWorldMatrix(true, false);
+    expect(new Vector3(0, 1, 0).transformDirection(node.matrixWorld).y).toBeGreaterThan(0.7);
+    const rest = { position: node.position.clone(), quaternion: node.quaternion.clone() };
+    const v = new Vector3();
+    // 4 sacks on a belt about 12 m long ride one 3 m spacing per loop at 0.6 m/s, so a loop is about 5 s.
+    const heights: number[] = [];
+    for (const seconds of [0, 2.4, 4.9]) {
+      motion(seconds, node, rest);
+      node.updateMatrix();
+      node.updateWorldMatrix(true, true);
+      heights.push(node.position.y);
+      const outside: string[] = [];
+      node.traverse((o) => {
+        if (!(o instanceof Mesh)) return;
+        const pos = o.geometry.getAttribute('position');
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+          if (!insideCurtain(granary, { x: v.x / S, y: v.z / S })) outside.push(`${(v.x / S - granary.pos.x).toFixed(2)},${(v.z / S - granary.pos.y).toFixed(2)}`);
+        }
+      });
+      expect(outside.slice(0, 3), `sacks at ${seconds} s`).toEqual([]);
+    }
+    // The sacks climb the belt through the loop.
+    expect(heights[1]).toBeGreaterThan(heights[0] + 0.5);
+    expect(heights[2]).toBeGreaterThan(heights[1] + 0.5);
+    motion(0, node, rest);
+    node.updateMatrix();
+  });
+
+  it('stands four silos, an elevator, two shelters with a lit lamp and four grain bins inside the Granary', () => {
+    const group = sites.getObjectByName('landmark-granary')!;
+    const count = (name: string) => {
+      let n = 0;
+      group.traverse((o) => {
+        if (o.name === name) n++;
+      });
+      return n;
+    };
+    expect(count('granary-silo')).toBe(4);
+    expect(count('granary-elevator')).toBe(1);
+    expect(count('granary-belt')).toBe(1);
+    expect(count('granary-shelter')).toBe(2);
+    expect(count('granary-bin')).toBe(4);
+    const shelter = group.getObjectByName('granary-shelter')!;
+    const glowing: number[] = [];
+    shelter.traverse((o) => {
+      if (o instanceof Mesh) glowing.push(...[o.material].flat().map((m) => (m as MeshLambertMaterial).emissive.getHex()));
+    });
+    expect(glowing).toContain(PAL.lamp.on);
+  });
+
   it('keeps everything a truck could touch inside the edge of an abandoned site', () => {
     const S = PHYSICS.metersPerTile;
     const reach = 1; // tiles above the ground a truck body reaches

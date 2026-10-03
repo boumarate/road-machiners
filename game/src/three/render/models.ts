@@ -100,6 +100,9 @@ const NAMES = [
   'pumpjack_base',
   'pumpjack_beam',
   'storage_tank',
+  'grain_silo',
+  'grain_elevator',
+  'lean_to',
 
   'bumper_front',
   'bumper_rear',

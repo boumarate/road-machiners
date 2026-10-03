@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { hoist, rock, SiteMotion, slew, spin, type Motion } from './site-motion';
+import { hoist, rock, SiteMotion, slew, spin, travel, type Motion } from './site-motion';
 
 const X = new THREE.Vector3(1, 0, 0);
 const Y = new THREE.Vector3(0, 1, 0);
@@ -36,6 +36,14 @@ describe('site motion', () => {
     expectMatrix(after(rock(X, 0.3, 6), 6), REST);
     expectMatrix(after(slew(0.6, 14), 14), REST);
     expectMatrix(after(hoist(2, 8), 8), REST);
+    expectMatrix(after(travel(new THREE.Vector3(2, 1, 0), 4), 4), REST);
+  });
+
+  it('travels a part along its offset at an even speed, then jumps back to start again', () => {
+    const at = (seconds: number) => new THREE.Vector3().setFromMatrixPosition(after(travel(new THREE.Vector3(2, 1, 0), 4), seconds)).toArray();
+    expect(at(1)).toEqual([1.5, 2.25, 3].map((v) => expect.closeTo(v, 6)));
+    expect(at(3)).toEqual([2.5, 2.75, 3].map((v) => expect.closeTo(v, 6)));
+    expect(at(5)).toEqual([1.5, 2.25, 3].map((v) => expect.closeTo(v, 6)));
   });
 
   it('spins a part a quarter turn in a quarter period', () => {
@@ -98,5 +106,6 @@ describe('site motion', () => {
     expect(() => rock(X, 0.3, Infinity)).toThrow(/period/);
     expect(() => slew(0.6, -1)).toThrow(/period/);
     expect(() => hoist(2, Number.NaN)).toThrow(/period/);
+    expect(() => travel(X, 0)).toThrow(/period/);
   });
 });

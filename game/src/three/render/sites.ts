@@ -18,7 +18,7 @@ import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
 import type { Motion, SiteMotion } from './site-motion';
 import { buildBowl } from './interiors/bowl';
-import { buildDustwell } from './interiors/dustwell';
+import { buildDustwell, buildGranary } from './interiors/compounds';
 
 const S = PHYSICS.metersPerTile;
 type Site = TownDef | SiteLocationDef;
@@ -379,13 +379,6 @@ function dressGate(b: SiteBuilder, site: Site, fort: FortGate, guarded: boolean)
   b.addBox(pole.x, pole.z, 0.12, SET.gatePoleHeight - height, 0.12, PAL.trunk, height + lift(pole.x, pole.z), -a);
   const flag = at(-depth / 2 + 0.5, width / 2 - 0.6);
   b.addBox(flag.x, flag.z, 0.05, 1, 0.8, PAL.rust.top, SET.gatePoleHeight - 1.1 + lift(flag.x, flag.z), -a);
-}
-
-function buildGranary(b: SiteBuilder): void {
-  // Silos at the 1.1-tile radius of the old tanks. Their sheds face the loading ruin.
-  for (let x = -3; x <= 3; x += 3) b.addModel('silo', x, -1, -Math.PI / 2, (1.1 * S) / 2.5);
-  b.addRuin(0, 2.8, 6, 2.2);
-  for (let i = 0; i < 8; i++) b.addBox(-2.5 + (i % 4) * 0.65, 2 + Math.floor(i / 4) * 0.65, 0.5, 0.45, 0.5, PAL.crate);
 }
 
 function buildPump(b: SiteBuilder): void {

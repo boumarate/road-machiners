@@ -1,4 +1,4 @@
-// Moving scenery parts: windmill rotors, pumpjack beams, cranes, conveyors and radar dishes. Motion is render-only
+// Moving scenery parts: windmill rotors, pumpjack beams, cranes, conveyor loads and radar dishes. Motion is render-only
 // and runs on real time, like the weather, so no rule reads it. Each part is a node whose origin is its pivot.
 
 import * as THREE from 'three';
@@ -72,5 +72,15 @@ export function hoist(range: number, period: number): Motion {
   return (seconds, node, rest) => {
     node.position.copy(rest.position);
     node.position.y += (range * (1 - Math.cos(phaseAt(seconds, period)))) / 2;
+  };
+}
+
+// Moves from the rest pose by offset, in the parent's frame, at an even speed over each period, then jumps back to
+// the rest pose, as loads ride a belt. Evenly spaced loads one offset apart then read as an endless stream.
+export function travel(offset: THREE.Vector3, period: number): Motion {
+  checkPeriod(period);
+  return (seconds, node, rest) => {
+    const share = seconds / period - Math.floor(seconds / period);
+    node.position.copy(rest.position).addScaledVector(offset, share);
   };
 }
