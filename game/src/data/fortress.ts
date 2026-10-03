@@ -30,7 +30,8 @@ export const FORTRESS = {
   towerSize: 1.5, // square tower footprint, 6 m
   bastionBack: 0.4, // a bastion model's tip reaches 6.4 m past its origin. It stands this far back from the corner, so the tip stays in the circle.
   bastionSize: 1.5, // square footprint of a star point bastion, 6 m
-  gate: { width: 5, depth: 2.5 }, // gatehouse footprint, width along the wall and depth out of the site
+  gate: { width: 5, depth: 2.5, height: 4 }, // gatehouse footprint, width along the wall and depth out of the site, and its 16 m height (fort_kit.py GATE_HEIGHT)
+  gunLift: 0.2, // the gate gun's muzzle stands this far over the gatehouse parapet
   gateFlare: 0.08, // how far a gatehouse model's plinth and door detail reach past its outer face, 0.32 m. Its face stands this far inside the circle.
   innerWidth: 3, // inner gate in the curtain behind a barbican, along the wall. Its depth is wallDepth.
   circleTowerEvery: 5, // circle wall sections between towers

@@ -492,7 +492,7 @@ export const REGION = {
     wreckHeight: 0.9, // 3.6 m of piled car wrecks
     wreckThickness: 1,
     wreckSegment: 1.1, // about one car length
-    guardTowerHeight: 2.6, // tiles; the height a gate gun sights from
+    gatePoleHeight: 5.5, // 22 m, so a gate shows from across the fog edge
     lampHeight: 1.6, // 6.4 m gate lamp posts, lower on the higher walls and towers
   },
   // The player starts off the north trunk road, which leaves Bowl toward Old Orchard, facing the road. The road

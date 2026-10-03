@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { Box3, InstancedMesh, Matrix4, Mesh, Vector3, type Object3D } from 'three';
+import { Box3, InstancedMesh, Matrix4, Mesh, Vector3, type MeshLambertMaterial, type Object3D } from 'three';
 import { loadModels } from './models';
-import { buildSites } from './sites';
+import { buildSites, gateGunPoint } from './sites';
+import { FORTRESS } from '../../data/fortress';
+import { PAL } from '../../render/palette';
+import { guardedSites } from '../../sim/guards';
 import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
 import { insideCurtain } from '../../sim/fortress';
@@ -83,6 +86,7 @@ describe('landmark scale', () => {
       const hill = sloped.getObjectByName(`landmark-${site.id}`)!.children;
       expect(hill.length, site.id).toBe(flat.length);
       hill.forEach((child, i) => {
+        if (child.userData.gateFurniture) return;
         const ground = heightAt(slope, child.position.x / PHYSICS.metersPerTile, child.position.z / PHYSICS.metersPerTile) * PHYSICS.metersPerTile;
         expect(child.position.y - ground, `${site.id} child ${i}`).toBeCloseTo(flat[i].position.y, 4);
       });
@@ -95,7 +99,7 @@ describe('landmark scale', () => {
     for (const site of ALL.filter(isFortress)) {
       const bad: string[] = [];
       sites.getObjectByName(`landmark-${site.id}`)!.traverse((o) => {
-        if (!(o instanceof Mesh)) return;
+        if (!(o instanceof Mesh) || o.userData.gateFurniture) return;
         o.updateWorldMatrix(true, false);
         const pos = o.geometry.getAttribute('position');
         const copies = o instanceof InstancedMesh ? o.count : 1;
@@ -112,6 +116,53 @@ describe('landmark scale', () => {
         }
       });
       expect(bad.slice(0, 5), `${site.id}: ${bad.length} outside`).toEqual([]);
+    }
+  });
+
+  it('hangs two lit lamps within one gate width of every gate (IV11, IV7)', () => {
+    const S = PHYSICS.metersPerTile;
+    for (const site of ALL) {
+      const lit: Vector3[] = [];
+      sites.getObjectByName(`landmark-${site.id}`)!.traverse((o) => {
+        if (o instanceof Mesh && (o.material as MeshLambertMaterial).color.getHex() === PAL.lamp.on) lit.push(o.position.clone());
+      });
+      for (const gate of siteGates(site)) {
+        const near = lit.filter((p) => Math.hypot(p.x / S - gate.x, p.z / S - gate.y) <= FORTRESS.gate.width);
+        expect(near.length, `${site.id} gate at ${gate.x.toFixed(0)},${gate.y.toFixed(0)}`).toBeGreaterThanOrEqual(2);
+      }
+    }
+  });
+
+  it('sights the gate gun over the gate point at the gatehouse top (IV12)', () => {
+    const flat = { size: 1, heights: [0, 0, 0, 0], types: ['hardpan'] } as Terrain;
+    const p = gateGunPoint(flat, { x: 0.5, y: 0.5 });
+    expect(p.y).toBeCloseTo((FORTRESS.gate.height + FORTRESS.gunLift) * PHYSICS.metersPerTile, 5);
+    expect(p.x).toBeCloseTo(0.5 * PHYSICS.metersPerTile, 5);
+  });
+
+  it('puts the gate gun of each guarded gate at the gun point, and no gun at the other sites (IV12)', () => {
+    const S = PHYSICS.metersPerTile;
+    const guarded = guardedSites();
+    const flat = { size: 1, heights: [0, 0, 0, 0], types: ['hardpan'] } as Terrain;
+    for (const site of ALL.filter(isFortress)) {
+      const metal: Mesh[] = [];
+      sites.getObjectByName(`landmark-${site.id}`)!.traverse((o) => {
+        if (o instanceof Mesh && o.userData.gateFurniture && (o.material as MeshLambertMaterial).color.getHex() === PAL.metal && o.geometry.parameters.width === 0.8 * S) metal.push(o);
+      });
+      if (!guarded.includes(site)) {
+        expect(metal, site.id).toHaveLength(0);
+        continue;
+      }
+      expect(metal, site.id).toHaveLength(siteGates(site).length);
+      for (const gate of siteGates(site)) {
+        const muzzle = gateGunPoint(flat, gate);
+        const gun = metal.find((o) => Math.hypot(o.position.x - muzzle.x, o.position.z - muzzle.z) <= 0.8 * S)!;
+        const half = new Vector3(0.4 * S, 0, 0).applyQuaternion(gun.quaternion);
+        const ends = [gun.position.clone().add(half), gun.position.clone().sub(half)];
+        const far = Math.min(...ends.map((e) => Math.hypot(e.x - muzzle.x, e.z - muzzle.z)));
+        expect(far, `${site.id} muzzle`).toBeLessThanOrEqual(0.3);
+        expect(gun.position.y - muzzle.y, `${site.id} height`).toBeLessThanOrEqual(0.3);
+      }
     }
   });
 

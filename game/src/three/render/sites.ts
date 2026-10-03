@@ -3,14 +3,17 @@
 
 import * as THREE from 'three';
 import { REGION, type SiteLocationDef, type SiteEdge, type TownDef } from '../../data/region';
+import { FORTRESS } from '../../data/fortress';
 import { insideCurtain } from '../../sim/fortress';
+import { guardedSites } from '../../sim/guards';
+import { groundPoint, type V3 } from '../../phys/frames';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
 import { isFortress, siteGates } from '../../sim/sites';
 import { deckById, type Deck } from '../../sim/bridge';
 import { deckEnds, heightAt, type Terrain } from '../../sim/terrain';
-import { angleDiff, segmentDist } from '../../sim/vec';
+import { angleDiff, segmentDist, type Vec } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
 
@@ -204,6 +207,8 @@ const EDGE_STYLES: Record<SiteEdge, WallStyle> = {
   fence: { height: SET.fenceHeight, thickness: SET.fenceThickness, segment: SET.fenceSegment, ragged: false, fence: true, colors: [PAL.trunk], postColor: PAL.trunk, doorColor: PAL.metal },
   wrecks: { height: SET.wreckHeight, thickness: SET.wreckThickness, segment: SET.wreckSegment, ragged: true, fence: false, colors: [PAL.rust.side, PAL.metal, PAL.rust.dark], postColor: PAL.rust.dark, doorColor: PAL.metal },
 };
+const LAMP_REACH = 0.3; // tiles a gate lamp bracket stands out of the gatehouse face
+const GUN_LENGTH = 0.8; // tiles of gate gun barrel
 const SINK = 0.3; // tiles each edge piece reaches below the ground, so slopes leave no gap under it
 const DOOR_THICKNESS = 0.4; // door leaves as a share of the wall thickness
 
@@ -308,8 +313,53 @@ function addLamp(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void 
   const top = Math.max(SET.lampHeight, style.height * 1.4);
   const q = onEdge(ring, a, style.thickness);
   b.addBox(q.x, q.z, 0.18, top + SINK, 0.18, PAL.metal, -SINK, -a);
-  b.addBox(q.x, q.z, 0.2, 0.35, 0.6, PAL.metal, top, -a);
-  b.addBox(q.x, q.z, 0.24, 0.22, 0.45, PAL.lamp.on, top + 0.06, -a);
+  addLampHead(b, q.x, q.z, top, -a);
+}
+
+// The housing and the lit lamp on top of a post or a gate bracket.
+function addLampHead(b: SiteBuilder, x: number, z: number, top: number, yaw: number): void {
+  b.addBox(x, z, 0.2, 0.35, 0.6, PAL.metal, top, yaw);
+  b.addBox(x, z, 0.24, 0.22, 0.45, PAL.lamp.on, top + 0.06, yaw);
+}
+
+// Where a fortress gate's gun sights from, in meters: over the gate point at the gatehouse parapet.
+export function gateGunPoint(t: Terrain, gate: Vec): V3 {
+  const g = groundPoint(t, gate);
+  return { x: g.x, y: g.y + (FORTRESS.gate.height + FORTRESS.gunLift) * S, z: g.z };
+}
+
+// The gatehouse models carry no furniture. Each gate gets two lamps on brackets either side of the arch, below the
+// parapet, and at guarded sites a gun on the parapet with a banner pole behind it. Offsets are from the gate point.
+function dressGates(b: SiteBuilder, site: Site): void {
+  const guarded = guardedSites().includes(site);
+  const first = b.root.children.length;
+  const at = (gate: Vec, out: number, side: number) => {
+    const a = Math.atan2(gate.y - site.pos.y, gate.x - site.pos.x);
+    return { a, x: gate.x - site.pos.x + Math.cos(a) * out - Math.sin(a) * side, z: gate.y - site.pos.y + Math.sin(a) * out + Math.cos(a) * side };
+  };
+  for (const gate of siteGates(site)) {
+    for (const side of [-1, 1]) {
+      const p = at(gate, LAMP_REACH, (side * FORTRESS.gate.width) / 4);
+      const bracket = at(gate, LAMP_REACH / 2, (side * FORTRESS.gate.width) / 4);
+      b.addBox(bracket.x, bracket.z, LAMP_REACH, 0.12, 0.12, PAL.metal, SET.lampHeight - 0.12, -p.a);
+      addLampHead(b, p.x, p.z, SET.lampHeight, -p.a);
+    }
+    if (!guarded) continue;
+    // The barrel ends at the gun point, and its mount stands behind it.
+    const parapet = FORTRESS.gate.height;
+    const lift = (x: number, z: number) => b.groundAt(gate.x - site.pos.x, gate.y - site.pos.y) - b.groundAt(x, z);
+    const barrel = at(gate, -GUN_LENGTH / 2, 0);
+    b.addBox(barrel.x, barrel.z, GUN_LENGTH, 0.14, 0.14, PAL.metal, parapet + FORTRESS.gunLift - 0.07 + lift(barrel.x, barrel.z), -barrel.a);
+    const mount = at(gate, -GUN_LENGTH, 0);
+    b.addBox(mount.x, mount.z, 0.5, FORTRESS.gunLift, 0.5, PAL.metal, parapet + lift(mount.x, mount.z), -mount.a);
+    const pole = at(gate, -FORTRESS.gate.depth / 2, FORTRESS.gate.width / 2 - 0.6);
+    const base = parapet + lift(pole.x, pole.z);
+    b.addBox(pole.x, pole.z, 0.12, SET.gatePoleHeight - parapet, 0.12, PAL.trunk, base, -pole.a);
+    const flag = at(gate, -FORTRESS.gate.depth / 2 + 0.5, FORTRESS.gate.width / 2 - 0.6);
+    b.addBox(flag.x, flag.z, 0.05, 1, 0.8, PAL.rust.top, SET.gatePoleHeight - 1.1 + lift(flag.x, flag.z), -flag.a);
+  }
+  // Furniture stands on the gatehouses, which are part of the curtain, so it is no interior piece.
+  for (const piece of b.root.children.slice(first)) piece.userData.gateFurniture = true;
 }
 
 
@@ -446,8 +496,13 @@ function buildCamp(b: SiteBuilder, id: string): void {
 
 // Fortress sites stand behind baked curtain pieces and need no edge of their own, only an interior inside them.
 function closeSite(b: SiteBuilder, site: Site, t: Terrain): void {
-  if (isFortress(site)) pullInside(site, b.root, t);
-  else addWall(b, site, edgeStyle(site));
+  if (isFortress(site)) {
+    pullInside(site, b.root, t);
+    dressGates(b, site);
+  } else {
+    if (guardedSites().includes(site)) throw new Error(`Guarded site ${site.id} has no fortress`);
+    addWall(b, site, edgeStyle(site));
+  }
 }
 
 // Whether every vertex of the object lies inside the site's curtain.
