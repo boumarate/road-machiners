@@ -52,16 +52,16 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   const item = await ctx.github.issue(issue);
   const base = baseBranchFor(ctx, item.labels);
-  const approval = readApproval(home);
   const build = await ctx.repo.headHash(BRANCH(issue));
-  const evidence = readEvidence(home, build);
+  // An approved card merges with no post, so only a card that will be posted needs the approval and the evidence. They are read before the checks, so a bad manifest fails fast.
+  const approver = approvedAlready(ctx, issue, item.labels);
+  const shown = approver === null ? { approval: readApproval(home), evidence: readEvidence(home, build) } : null;
   // Timeouts alone rerun here. A real failure goes to verify for one fix round. Three timeouts throw with the phase kept, so a retry runs the checks again.
   const failure = await checkPatiently(ctx, issue, base, build);
   if (failure !== null) return failed(ctx, issue, home, phase, failure);
   const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
-  const approver = approvedAlready(ctx, issue, item.labels);
-  if (approver === null) await post(ctx, issue, approval, evidence, url, base);
+  if (shown !== null) await post(ctx, issue, shown.approval, shown.evidence, url, base);
   clearPhase(ctx, issue);
   await ctx.github.move(issue, 'Approval');
   if (approver !== null) queueMerge(ctx, issue, approver);
@@ -89,7 +89,7 @@ function clearPhase(ctx: Ctx, issue: number): void {
 
 // Who approved the card before this round, or null when it needs a committee post.
 // Cleanup tasks on the release branch skip the post, since the committee plays them in the candidate.
-// A card approved before a conflict sent it back here keeps its approval.
+// A card approved after its preview, or before a conflict sent it back here, keeps its approval.
 function approvedAlready(ctx: Ctx, issue: number, labels: string[]): string | null {
   if (labels.includes(RELEASE_TASK_LABEL) && labels.includes(MAINTENANCE_LABEL)) return 'the factory';
   return readState(ctx.statePath).approvedResolving[String(issue)] ?? null;
@@ -194,7 +194,7 @@ export function approvalCaption(title: string, url: string, link: string, pr: st
   // A hotfix skips dev and the release, so its post opens with a warning the committee cannot miss.
   const warning = base === HOTFIX_BASE ? '⚠️ HOTFIX. Approve merges into main and ships to players at once. Play it with care.\n\n' : '';
   const head = `${warning}${title}\n\nPlay: ${url}\nIssue: ${link}\nPR: ${pr}`;
-  const action = base === HOTFIX_BASE ? 'Approve ships this hotfix to main and itch.io at once.' : `Approve merges into ${base}.`;
+  const action = base === HOTFIX_BASE ? 'Approve ships this hotfix to main and itch.io at once.' : `Approve runs the review and full testing, then merges into ${base}.`;
   const tail = `${action} Deny closes the issue. A reply to this post sends feedback to design.`;
   const room = CAPTION_LIMIT - head.length - tail.length - '\n\n'.repeat(3).length - 'How to try: '.length;
   const [description, howToTry] = fitBoth(approval.description, approval.howToTry, room);

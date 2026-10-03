@@ -297,10 +297,58 @@ describe('testing stage', () => {
     await expect(runChecks(fakeCtx(() => undefined), 7)).rejects.toThrow('not ready for checks, its test phase is none');
   });
 
+  describe('test modes', () => {
+    // The first line of each agent prompt names its round.
+    let rounds: string[] = [];
+    const agent = (run: AgentRun): void => {
+      rounds.push(run.prompt.split('\n')[0]);
+      if (!run.prompt.startsWith('This is the hardening round')) writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' }));
+    };
+    beforeEach(() => { rounds = []; });
+
+    it('previews a new card with the test round only, no review, then posts it', async () => {
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual(['This is the testing stage of the ROAM factory.']);
+      expect(calls.some((call) => call.startsWith('review'))).toBe(false);
+      expect(calls.some((call) => call.startsWith('photo'))).toBe(true);
+      expect(queued()).toEqual({});
+    });
+
+    it('hardens an approved card with the review and no evidence, then queues its merge with no post', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual(['This is the hardening round of the testing stage of the ROAM factory.']);
+      expect(calls.filter((call) => call.startsWith('review'))).toHaveLength(1);
+      expect(existsSync(`${home}/work/issue-7/game/.factory/approval.json`)).toBe(false);
+      expect(calls.some((call) => call.startsWith('photo'))).toBe(false);
+      expect(queued()).toEqual({ 7: 'Ann' });
+    });
+
+    it('hardens a hotfix and reviews it before the test round that shows it, then posts it', async () => {
+      labels = ['hotfix'];
+      await runStage(fakeCtx(agent), 7);
+      expect(rounds).toEqual(['This is the hardening round of the testing stage of the ROAM factory.', 'This is the testing stage of the ROAM factory.']);
+      expect(calls.findIndex((call) => call.startsWith('review'))).toBeLessThan(calls.indexOf('checks'));
+      expect(calls.some((call) => call.startsWith('photo'))).toBe(true);
+    });
+
+    it('asks a hardening fix round for no evidence', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
+      const prompts: string[] = [];
+      await runStage(fakeCtx((run) => { prompts.push(run.prompt); agent(run); }, 1), 7);
+      expect(prompts[1]).toContain('second round');
+      expect(prompts[1]).toContain('No post follows this round');
+      expect(prompts[1]).not.toContain('evidence.json');
+      expect(queued()).toEqual({ 7: 'Ann' });
+    });
+  });
+
   describe('review round', () => {
     const outputs = (run: AgentRun): void => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' }));
+    // The review runs in the hardening round, after the committee approved the preview.
+    beforeEach(() => writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } }));
 
-    it('runs /code-review once on the design model after the test round and before the checks', async () => {
+    it('runs /code-review once on the design model after the hardening round and before the checks', async () => {
       await runStage(fakeCtx(outputs), 7);
       expect(calls.filter((call) => call.startsWith('review'))).toEqual(['review opus /code-review']);
       expect(calls.indexOf('review opus /code-review')).toBeLessThan(calls.indexOf('checks'));
@@ -342,6 +390,7 @@ describe('testing stage', () => {
       expect(calls).not.toContain('checks');
       expect(calls).not.toContain('move 7 Approval');
       expect(existsSync(`${home}/work/issue-7/game/.factory/review-findings.md`)).toBe(false);
+      expect(readState(`${home}/state.json`).approvedResolving).toEqual({});
     });
 
     it('throws instead of a second redesign when the card already came back from the review once', async () => {
@@ -381,7 +430,7 @@ describe('testing stage', () => {
     await runStage(ctx, 7);
     expect(new Set(bases)).toEqual(new Set(['prepare release/2026-09-29', 'fetch','merge release/2026-09-29', 'isMerged base0001', 'diff release/2026-09-29']));
     expect(calls.find((call) => call.startsWith('openPullRequest'))).toContain('openPullRequest factory/issue-7 release/2026-09-29 #7 Big horn');
-    expect(calls.find((call) => call.startsWith('photo'))).toContain('Approve merges into release/2026-09-29.');
+    expect(calls.find((call) => call.startsWith('photo'))).toContain('Approve runs the review and full testing, then merges into release/2026-09-29.');
     expect(queued()).toEqual({});
   });
 

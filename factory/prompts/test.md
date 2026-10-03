@@ -13,9 +13,10 @@ Keep what both sides meant, not just one side.
 Then commit the merge with `git commit --no-edit`.
 The factory fails the stage if the merge is left unfinished.
 
-Run up:uverify on {{taskFile}}.
-Fix what it finds.
-Commit the fixes on the current branch.
+This round gets the change ready to show to the committee. They play it and approve it, send feedback or deny it.
+Check that the feature works for a player: play it end to end in the browser, as the task file describes it.
+Fix what breaks it or blocks it, and commit the fixes on the current branch.
+Do not review the code, fix nitpicks or optimize here. That runs after the committee approves, if they do.
 
 This machine has no GPU and is slow. Keep checks focused.
 

@@ -32,13 +32,25 @@ function forgetPosts(ctx: Ctx, issue: number, dropPending: boolean): void {
 export async function approve(ctx: Ctx, issue: number, by: string): Promise<void> {
   await requireApproval(ctx, issue);
   const item = await ctx.github.issue(issue);
-  const message = await mergeOrResolve(ctx, issue, item.title, by, baseBranchFor(ctx, item.labels));
+  const base = baseBranchFor(ctx, item.labels);
+  if (base !== HOTFIX_BASE && !(String(issue) in readState(ctx.statePath).approvedResolving)) return harden(ctx, issue, by, base);
+  const message = await mergeOrResolve(ctx, issue, item.title, by, base);
   if (message === null) return;
   await ctx.github.move(issue, 'Done');
   forgetPosts(ctx, issue, true);
   rmSync(workDir(ctx, issue), { recursive: true, force: true });
   rmSync(`${ctx.cfg.home}/work/check-issue-${issue}`, { recursive: true, force: true });
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, message);
+}
+
+// The committee approved a preview, which had no review yet. The card goes back to Testing to harden under the same approver,
+// and the checks after it queue the merge with no new post. A hotfix hardened before its post, so it merges at once instead.
+async function harden(ctx: Ctx, issue: number, by: string, base: string): Promise<void> {
+  forgetPosts(ctx, issue, true);
+  updateState(ctx.statePath, (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [String(issue)]: by } }));
+  await ctx.github.comment(issue, `Approved by ${by} in the committee chat. The review, the fixes and the full testing run now. Then the factory merges it into ${base} by itself, with no new post.`);
+  await ctx.github.move(issue, 'Testing');
+  ctx.log('approve', issue, `approved by ${by}, back to Testing to harden`);
 }
 
 // Parallel work moves the base on after testing, so the branch may conflict with it. That is routine work, not an incident.

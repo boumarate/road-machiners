@@ -49,6 +49,22 @@ function fakeCtx(): Ctx {
 }
 
 describe('approve', () => {
+  // The queued merge of a hardened card. The committee approved its preview, and the hardening round and its checks passed.
+  beforeEach(() => writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'bob' } }));
+
+  it('sends an approved preview back to Testing to harden, with no merge and no chat post', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: {} });
+    await approve(fakeCtx(), 7, 'bob');
+    expect(calls).toEqual([
+      'comment 7 Approved by bob in the committee chat. The review, the fixes and the full testing run now. Then the factory merges it into dev by itself, with no new post.',
+      'move 7 Testing',
+    ]);
+    const state = readState(`${home}/state.json`);
+    expect(state.approvedResolving).toEqual({ 7: 'bob' });
+    expect(state.approvalPosts).toEqual({ 200: 8 });
+    expect(state.pendingApprovals).toEqual({});
+  });
+
   it('merges, pushes, labels a release candidate without closing, moves to Done and clears state', async () => {
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
@@ -68,7 +84,7 @@ describe('approve', () => {
 
   it('merges a release task into the release branch, skips the dev deploy and keeps dev as it is', async () => {
     labels = ['release-task'];
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [7, 9] }, pendingShip: 'ann', builds: { 7: 'aaa1111' } });
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [7, 9] }, pendingShip: 'ann', builds: { 7: 'aaa1111' }, approvedResolving: { 7: 'bob' } });
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
       'fetch ',
@@ -129,6 +145,7 @@ describe('approve', () => {
 
   it('fails loud on a conflict of main into dev after a hotfix, which the agent cannot resolve', async () => {
     labels = ['hotfix'];
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: {} });
     const ctx = fakeCtx();
     ctx.repo.merge = async (steps: MergeStep[]) => {
       const step = steps.find((item) => item.branch === 'main');

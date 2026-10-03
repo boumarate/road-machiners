@@ -1,4 +1,5 @@
 import { rmSync, writeFileSync } from 'node:fs';
+import { updateState } from '../state';
 import { BRANCH, GAME_DIR, INCIDENT_LOG, OUT_DIR, REVIEW_HEADING, TASK_FILE, type Ctx } from '../types';
 import { BASE_BRANCH, agentHome, fillPrompt, fitComment, readOutput, runAgent, workDir } from './common';
 
@@ -48,6 +49,12 @@ export async function reviewGate(ctx: Ctx, issue: number, base: string, fixRound
   if (redesigned) throw new Error(`The review failed the change twice again after a redesign.\n${again.text}`);
   const intro = 'The review failed this change twice. A fix round did not clear it, so the flaw is in the design. Revise the design to remove the root cause behind these findings, not to patch each one.';
   await ctx.github.comment(issue, `${REVIEW_HEADING}\n\n${intro}\n\n${fitComment(again.text, 'the review round log')}`);
+  // A redesign changes what the committee approved, so the approval goes and the new build gets its own post.
+  updateState(ctx.statePath, (state) => {
+    const approvedResolving = { ...state.approvedResolving };
+    delete approvedResolving[String(issue)];
+    return { ...state, approvedResolving };
+  });
   await ctx.github.move(issue, 'Design');
   return false;
 }
