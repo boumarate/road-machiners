@@ -8,7 +8,8 @@ import { createInterface } from 'node:readline';
 import { MAX_SKILL_LEVEL, SKILL_IDS } from '../src/data/skills.ts';
 import { TIME } from '../src/data/time.ts';
 import { parseRun, replay, targetMisses } from '../src/sim/progression/replay.ts';
-import { fightTotals, TIERS, tierDays, wageByTier } from '../src/sim/progression/record.ts';
+import { LEDGER_KEYS } from '../src/sim/progression/orders.ts';
+import { fightTotals, ledgerTotals, TIERS, tierDays, wageByTier } from '../src/sim/progression/record.ts';
 
 const DIR = 'tmp/progression';
 
@@ -70,6 +71,16 @@ function printEconomy(group) {
   }
   console.log('');
   printTable(ends);
+  printLedger(withRows);
+}
+
+// Money moved per in-game day by key, over seeds. Negative is spent, positive earned.
+function printLedger(group) {
+  const totals = group.map((r) => ({ days: r.rows.reduce((sum, row) => sum + row.turns, 0) / TIME.turnsPerDay, ledger: ledgerTotals(r.rows) }));
+  const rows = [['money per day', ...LEDGER_KEYS]];
+  rows.push(['median', ...LEDGER_KEYS.map((key) => spread(totals.map((t) => t.ledger[key] / t.days), (n) => n.toFixed(0)))]);
+  console.log('');
+  printTable(rows);
 }
 
 function spreadOrNone(values, format) {

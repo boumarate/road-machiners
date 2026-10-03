@@ -24,6 +24,7 @@ import { canVehicleSee } from '../vision';
 import { partValue } from '../wear';
 import { endTurn, newWorld, update } from '../world';
 import { botOrders, parkedOnPurpose, type Archetype, type BotOptions } from './bot';
+import { emptyLedger, LEDGER_KEYS, type BotTurn, type Ledger } from './orders';
 import { TEST_MAP } from '../../test/map';
 
 // One practice event. turn is the world turn it happened on; a run of N turns ends on world turn N + 1.
@@ -80,7 +81,7 @@ function* playSteps(start: World, label: string, archetype: Archetype, turns: nu
     const before = world;
     const played = inContext(label, before, () => playTurn(before, archetype, options));
     world = played.next;
-    tally.note(played.after, world, played.events);
+    tally.note(played.after, world, played.events, played.ledger);
     const dead = world.player.state === 'dead';
     const closed = dayEnds(before, world, i === turns - 1 || dead) ? [tally.close(clockOf(before.turn).day, world)] : [];
     const rows = [...carried, ...closed];
@@ -112,7 +113,15 @@ function startWorld(seed: number): World {
 }
 
 // after is the world the bot's commands left, and events everything raised on the way to next.
-type PlayedTurn = { after: World; next: World; lines: TraceLine[]; events: GameEvent[] };
+type PlayedTurn = { after: World; next: World; lines: TraceLine[]; events: GameEvent[]; ledger: Ledger };
+
+// The money the turn moved by itself, after the bot's commands: contract pay, else tow, patch and escort fees.
+function turnLedger(orders: BotTurn, next: World): Ledger {
+  const ledger = { ...orders.ledger };
+  const moved = next.player.money - orders.world.player.money;
+  ledger[next.events.some((e) => e.t === 'contract') ? 'contracts' : 'fees'] += moved;
+  return ledger;
+}
 
 function playTurn(world: World, archetype: Archetype, options: BotOptions): PlayedTurn {
   const orders = botOrders(world, archetype, options);
@@ -121,7 +130,8 @@ function playTurn(world: World, archetype: Archetype, options: BotOptions): Play
   failOnStall(next, goals);
   failOnDryMajority(next);
   const events = [...orders.events, ...next.events];
-  return { after: orders.world, next, lines: [...traceOf(orders.events, orders.world.turn), ...traceOf(next.events, next.turn)], events };
+  const lines = [...traceOf(orders.events, orders.world.turn), ...traceOf(next.events, next.turn)];
+  return { after: orders.world, next, lines, events, ledger: turnLedger(orders, next) };
 }
 
 // Adds the seed, archetype, turn and truck position to any error of the turn.
@@ -217,10 +227,9 @@ function vehicleLine(w: World, v: Vehicle): string {
 
 // ---- What the player holds, in money.
 
-function nonCoreMountedValue(v: Vehicle): number {
-  return mountedParts(v)
-    .filter((p) => partDef(p.defId).kind !== 'core')
-    .reduce((sum, p) => sum + partValue(p), 0);
+// Every part on the truck that is not built in, mounted or loose in the grid.
+function nonCoreTruckValue(v: Vehicle): number {
+  return v.items.reduce((sum, it) => (it.kind === 'part' && partDef(it.part.defId).kind !== 'core' ? sum + partValue(it.part) : sum), 0);
 }
 
 function storageValue(world: World): number {
@@ -231,11 +240,11 @@ function cargoValue(v: Vehicle): number {
   return Object.entries(goodsCount(v)).reduce((sum, [good, n]) => sum + goodValue(good) * n, 0);
 }
 
-// Cash plus every part, good and truck the player holds. Core parts and the chassis are valued together by
-// chassisTradeIn, so they are not added again through mountedParts.
+// Cash plus every part, good and truck the player holds, in the truck or in garage storage. Core parts and the chassis
+// are valued together by chassisTradeIn, so they are not added again.
 export function netWorth(world: World): number {
   const v = playerVehicle(world);
-  return world.player.money + storageValue(world) + cargoValue(v) + nonCoreMountedValue(v) + chassisTradeIn(world);
+  return world.player.money + storageValue(world) + cargoValue(v) + nonCoreTruckValue(v) + chassisTradeIn(world);
 }
 
 // The best tier among the mounted parts that are not built in, or 1 with none.
@@ -261,11 +270,12 @@ export type DayRow = {
   knockouts: number;
   gearLost: number;
   deaths: number;
+  ledger: Ledger; // money moved that day by key: negative is spent, positive earned
 };
 
-type Counts = Pick<DayRow, 'fightsWon' | 'knockouts' | 'gearLost' | 'deaths'>;
+type Counts = Pick<DayRow, 'fightsWon' | 'knockouts' | 'gearLost' | 'deaths' | 'ledger'>;
 
-const noCounts = (): Counts => ({ fightsWon: 0, knockouts: 0, gearLost: 0, deaths: 0 });
+const noCounts = (): Counts => ({ fightsWon: 0, knockouts: 0, gearLost: 0, deaths: 0, ledger: emptyLedger() });
 
 // Mounted parts the player does not carry from the factory: the gear a robber strips.
 function gearIds(world: World): Set<string> {
@@ -278,9 +288,10 @@ export class DayTally {
 
   // Counts one turn. `after` is the world the bot left, `next` the world the turn ended on, so the gear the turn
   // took is the difference between them and the bot's own refits never count.
-  note(after: World, next: World, events: readonly GameEvent[]): void {
+  note(after: World, next: World, events: readonly GameEvent[], ledger: Ledger): void {
     const me = after.player.vehicleId;
     this.turns++;
+    for (const key of LEDGER_KEYS) this.counts.ledger[key] += ledger[key];
     for (const e of events) this.countEvent(e, me);
     const kept = gearIds(next);
     for (const id of gearIds(after)) if (!kept.has(id)) this.counts.gearLost++;
@@ -329,7 +340,14 @@ export function tierDays(rows: readonly DayRow[]): Record<Tier, number | null> {
   return { 1: first(1), 2: first(2), 3: first(3) };
 }
 
-export type FightTotals = Counts;
+export type FightTotals = Pick<Counts, 'fightsWon' | 'knockouts' | 'gearLost' | 'deaths'>;
+
+// The money each ledger key moved over the whole run: negative is spent, positive earned.
+export function ledgerTotals(rows: readonly DayRow[]): Ledger {
+  const total = emptyLedger();
+  for (const row of rows) for (const key of LEDGER_KEYS) total[key] += row.ledger[key];
+  return total;
+}
 
 export function fightTotals(rows: readonly DayRow[]): FightTotals {
   const sum = (pick: (r: DayRow) => number) => rows.reduce((total, r) => total + pick(r), 0);

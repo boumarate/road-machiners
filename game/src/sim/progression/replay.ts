@@ -6,6 +6,7 @@ import { MAIN_SKILL, MAX_SKILL_LEVEL, SKILL_IDS, TARGET_DAYS, TARGET_TOLERANCE, 
 import { accrueXp, levelOf, type SkillProgress } from '../progress';
 import type { SkillId, XpSource } from '../types';
 import { isArchetype, type Archetype } from './bot';
+import { LEDGER_KEYS } from './orders';
 import type { DayRow, RunEnd, TraceLine } from './record';
 
 // levels[i] is the first turn the skill reaches level i + 1, or null if it never does.
@@ -123,8 +124,14 @@ const ROW_NUMBERS = ['day', 'turns', 'money', 'netWorth', 'tier', 'fightsWon', '
 export function parseDayRow(value: unknown): DayRow {
   const row = asRecord(value);
   for (const key of ROW_NUMBERS) if (typeof row[key] !== 'number') throw new Error(`Bad economy row ${JSON.stringify(value)}: ${key} is not a number`);
+  if (!isLedger(row.ledger)) throw new Error(`Bad economy row ${JSON.stringify(value)}: ledger lacks a key`);
   if (typeof row.chassis !== 'string') throw new Error(`Bad economy row ${JSON.stringify(value)}: chassis is not a string`);
   return row as unknown as DayRow;
+}
+
+function isLedger(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  return LEDGER_KEYS.every((key) => typeof (value as Record<string, unknown>)[key] === 'number');
 }
 
 function parseHeader(value: unknown, label: string): Pick<Run, 'archetype' | 'seed' | 'turns'> {

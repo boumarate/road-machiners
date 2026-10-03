@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { fightTotals, tierDays, wageByTier, type DayRow } from './record';
+import { emptyLedger } from './orders';
+import { fightTotals, ledgerTotals, tierDays, wageByTier, type DayRow } from './record';
 
 const row = (day: number, netWorth: number, tier: DayRow['tier'], extra: Partial<DayRow> = {}): DayRow => ({
-  day, turns: day === 0 ? 0 : 450, money: 0, netWorth, tier, chassis: 'scout', fightsWon: 0, knockouts: 0, gearLost: 0, deaths: 0, ...extra,
+  day, turns: day === 0 ? 0 : 450, money: 0, netWorth, tier, chassis: 'scout', fightsWon: 0, knockouts: 0, gearLost: 0, deaths: 0, ledger: emptyLedger(), ...extra,
 });
 
 describe('wageByTier', () => {
@@ -39,5 +40,14 @@ describe('fightTotals', () => {
     const rows = [row(1, 0, 1, { fightsWon: 2, knockouts: 1 }), row(2, 0, 1, { fightsWon: 1, gearLost: 3, deaths: 1 })];
 
     expect(fightTotals(rows)).toEqual({ fightsWon: 3, knockouts: 1, gearLost: 3, deaths: 1 });
+  });
+});
+
+describe('ledgerTotals', () => {
+  it('adds each key over the rows', () => {
+    const spent = (fuel: number, goodsSold: number) => ({ ...emptyLedger(), fuel, goodsSold });
+    const rows = [row(1, 0, 1, { ledger: spent(-30, 100) }), row(2, 0, 1, { ledger: spent(-20, 50) })];
+
+    expect(ledgerTotals(rows)).toMatchObject({ fuel: -50, goodsSold: 150, repairs: 0 });
   });
 });

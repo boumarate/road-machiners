@@ -10,7 +10,7 @@ import { PARTS, partDef } from '../../data/parts';
 import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
 import { CONDITION, ENGINE_HEAT } from '../../data/wear';
-import { TOPICS } from '../../data/dialogue';
+import { TOPICS, type TopicId } from '../../data/dialogue';
 import { maxHp, partValue } from '../wear';
 import { inCombat, isHostile } from '../combat';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder } from '../world';
@@ -64,13 +64,13 @@ export function isArchetype(value: string): value is Archetype {
 // The player's commands for this turn. A knocked-out or towed player gets none, and turns still run.
 export function botOrders(world: World, archetype: Archetype, options: BotOptions = {}): BotTurn {
   const o = new Orders(world);
-  answerCall(o);
+  const goal = goalOf(world, archetype, options);
+  answerCall(o, goal === 'hunter' ? HUNTER_REPLIES : DEFENDER_REPLIES);
   if (playerCanAct(o.world)) {
-    const goal = goalOf(o.world, archetype, options);
     keepSwitches(o);
     if (!holds(o) && !serviceTrip(o, GEAR_STYLES[goal])) GOALS[goal](o);
   }
-  return { world: o.world, events: o.events };
+  return { world: o.world, events: o.events, ledger: o.ledger };
 }
 
 // Whether the truck stands still for a reason: a job or a patch deal under way, a stop at a town, or a knockout.
@@ -90,14 +90,20 @@ function goalOf(world: World, archetype: Archetype, options: BotOptions): Goal {
 
 // ---- Calls and switches.
 
-// Every open call gets the first reply of each topic. On the hub, the bot hangs up, which is the last option.
-function answerCall(o: Orders): void {
+// Replies that differ from the first one of a topic. Every bot defends against a demand for its cargo. The hunter also
+// refuses a truce and answers a plea for mercy with a demand to be stripped.
+const DEFENDER_REPLIES: Partial<Record<TopicId, string>> = { demand: 'Come and get it.' };
+const HUNTER_REPLIES: Partial<Record<TopicId, string>> = { ...DEFENDER_REPLIES, truceOffer: 'No. We finish this.', mercyPlea: 'Stand down and let me strip your truck.' };
+
+// Every open call gets the first reply of each topic, unless the bot's replies name another. On the hub, the bot hangs
+// up, which is the last option.
+function answerCall(o: Orders, replies: Partial<Record<TopicId, string>> = DEFENDER_REPLIES): void {
   const seen = new Set<string>();
   for (let call = o.world.player.call; call; call = o.world.player.call) {
     const at = `${call.with}:${call.topic}:${call.node}`;
     if (seen.has(at)) throw new Error(`Bot call loops back to ${at}`);
     seen.add(at);
-    const pick = call.topic ? 0 : currentOptions(o.world).length - 1;
+    const pick = call.topic ? Math.max(0, currentOptions(o.world).findIndex((option) => option.text === replies[call.topic!])) : currentOptions(o.world).length - 1;
     o.run((w) => chooseOption(w, pick));
   }
 }
@@ -197,7 +203,7 @@ function restoreEngine(o: Orders): void {
   if (!engineSpot(o.me, engine.defId) && hasCargo(o.me)) sellCargo(o);
   const spot = engineSpot(o.me, engine.defId);
   if (!spot) throw new Error('No free engine mount for a new engine');
-  o.run((w) => buyStockPart(w, engine.id));
+  o.run((w) => buyStockPart(w, engine.id), 'gear');
   mountBought(o, engine.id, spot);
 }
 
@@ -223,10 +229,10 @@ function isBadlyDamaged(part: PartInstance): boolean {
 function serviceHere(o: Orders): void {
   for (const kind of ['fuel', 'supplies'] as const) {
     const n = Math.min(supplyRoom(o.world, kind), Math.floor(o.world.player.money / ECONOMY.supplyPrice[kind]));
-    if (n > 0) o.run((w) => buySupply(w, kind, n));
+    if (n > 0) o.run((w) => buySupply(w, kind, n), kind);
   }
   const cost = repairCost(o.world);
-  if (cost > 0 && cost <= o.world.player.money) o.run(repairAll);
+  if (cost > 0 && cost <= o.world.player.money) o.run(repairAll, 'repairs');
 }
 
 // ---- Goals.
@@ -261,7 +267,7 @@ function trade(o: Orders): boolean {
 
 function buyThere(o: Orders, buy: Purchase): true {
   if (townAt(o.world)?.id !== buy.town.id) driveToSite(o, buy.town);
-  else o.run((w) => buyGood(w, buy.good, buy.count));
+  else o.run((w) => buyGood(w, buy.good, buy.count), 'goodsBought');
   return true;
 }
 
@@ -386,12 +392,12 @@ function weakestFoe(world: World): Vehicle | null {
 // Calls a badly broken foe in sight and demands it stand down, once. A foe that agrees is knocked out where it stands
 // and stripped like any knocked-out truck. True when the call was made.
 function demandYield(o: Orders, foe: Vehicle): boolean {
-  const asks = foe.brain !== undefined && isHostile(o.world, foe, o.me) && isWeak(o.world, foe) && !offeredSurrenderBy(o.world, foe, o.me);
+  const asks = foe.brain !== null && isHostile(o.world, foe, o.me) && isWeak(o.world, foe) && !offeredSurrenderBy(o.world, foe, o.me);
   if (!asks) return false;
   o.run((w) => callVehicle(w, foe.id));
   const ask = currentOptions(o.world).findIndex((option) => option.text === TOPICS.yieldDemand.ask?.text);
   if (ask >= 0) o.run((w) => chooseOption(w, ask));
-  answerCall(o);
+  answerCall(o, HUNTER_REPLIES);
   return true;
 }
 
@@ -486,10 +492,10 @@ function hasCargo(v: Vehicle): boolean {
 
 // Sells the goods for sale, and sells spare parts through garage storage.
 function sellCargo(o: Orders): void {
-  for (const [good, n] of Object.entries(cargoForSale(o.me))) o.run((w) => sellGood(w, good, n));
+  for (const [good, n] of Object.entries(cargoForSale(o.me))) o.run((w) => sellGood(w, good, n), 'goodsSold');
   for (const { itemId, partId } of spareItems(o.me)) {
     o.run((w) => storePart(w, itemId));
-    o.run((w) => sellPart(w, partId));
+    o.run((w) => sellPart(w, partId), 'lootSales');
   }
 }
 

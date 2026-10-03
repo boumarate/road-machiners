@@ -17,15 +17,27 @@ import { getUpkeepReserve } from '../npc-decisions';
 import type { GameEvent, GridItem, PartInstance, Vehicle, World } from '../types';
 import { isJunk, maxHp, partValue } from '../wear';
 
-// The world after the bot's commands, and every event those commands raised.
-export type BotTurn = { world: World; events: GameEvent[] };
+// Where money goes and comes from. Each money-moving command names its key; money the turn moves by itself is
+// 'contracts' for contract rewards and penalties and 'fees' for tow, patch and escort pay.
+export const LEDGER_KEYS = ['fuel', 'supplies', 'repairs', 'gear', 'goodsBought', 'goodsSold', 'lootSales', 'contracts', 'fees', 'other'] as const;
+export type LedgerKey = (typeof LEDGER_KEYS)[number];
+export type Ledger = Record<LedgerKey, number>;
+
+export const emptyLedger = (): Ledger => Object.fromEntries(LEDGER_KEYS.map((k) => [k, 0])) as Ledger;
+
+// The world after the bot's commands, every event those commands raised, and the money each moved.
+export type BotTurn = { world: World; events: GameEvent[]; ledger: Ledger };
 
 export class Orders {
   readonly events: GameEvent[] = [];
+  readonly ledger = emptyLedger();
   constructor(public world: World) {}
 
-  run(command: (w: World) => World): void {
+  // A command that moves money names where it goes: a purchase counts as spending, a sale as income.
+  run(command: (w: World) => World, key: LedgerKey = 'other'): void {
+    const before = this.world.player.money;
     this.world = command(this.world);
+    this.ledger[key] += this.world.player.money - before;
     this.events.push(...this.world.events);
   }
 
@@ -83,14 +95,14 @@ function chassisOptions(o: Orders, style: UpgradeStyle): Option[] {
   return PLAYER_CHASSIS.filter((id) => id !== current.id).flatMap((id) => {
     const def = chassisDef(id);
     const gain = style.chassis === 'speed' ? def.maxSpeed - current.maxSpeed : def.value - current.value;
-    return gain > 0 ? [{ gain, cost: def.value - chassisTradeIn(o.world), take: (orders: Orders) => orders.run((w) => buyChassis(w, id)) }] : [];
+    return gain > 0 ? [{ gain, cost: def.value - chassisTradeIn(o.world), take: (orders: Orders) => orders.run((w) => buyChassis(w, id), 'gear') }] : [];
   });
 }
 
 // ---- Parts.
 
 function candidates(o: Orders, shop: string): Candidate[] {
-  const stock = shopState(o.world, shop).stock.map((part) => ({ part, price: partTradePrice(o.world, o.me, part, 'buy'), acquire: (orders: Orders) => orders.run((w) => buyStockPart(w, part.id)) }));
+  const stock = shopState(o.world, shop).stock.map((part) => ({ part, price: partTradePrice(o.world, o.me, part, 'buy'), acquire: (orders: Orders) => orders.run((w) => buyStockPart(w, part.id), 'gear') }));
   const spares = [...spareParts(o.me), ...o.world.player.storage].map((part) => ({ part, price: 0, acquire: () => undefined }));
   return [...stock, ...spares];
 }
@@ -118,7 +130,7 @@ function probe(part: PartInstance): PartItem {
 function mount(o: Orders, c: Candidate, replaced: PartItem | null): void {
   if (replaced) {
     o.run((w) => storePart(w, replaced.id));
-    o.run((w) => sellPart(w, replaced.part.id));
+    o.run((w) => sellPart(w, replaced.part.id), 'gear');
   }
   c.acquire(o);
   // A part the truck now holds may stand on the mount it is going to, so its own cells count as free.
