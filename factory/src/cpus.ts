@@ -4,7 +4,8 @@ import type { FactoryConfig, Queue } from './types';
 // node's availableParallelism() follows it, so the game's test runner starts one worker per CPU it got.
 export type Pool = 'light' | 'implement' | 'test';
 
-export const POOL_OF: Record<Queue, Pool> = { triage: 'light', design: 'light', branch: 'light', implement: 'implement', test: 'test' };
+// Verify agents run focused tests like implement agents, so they share that pool, and the test pool stays for the factory's checks.
+export const POOL_OF: Record<Queue, Pool> = { triage: 'light', design: 'light', branch: 'light', implement: 'implement', verify: 'implement', test: 'test' };
 
 const ORDER: Pool[] = ['light', 'implement', 'test'];
 

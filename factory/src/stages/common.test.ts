@@ -40,7 +40,7 @@ describe('runAgent sessions', () => {
   const HOME = 'tmp/factory-common-test';
   // The tick marks the sessions of a job whose process died.
   const markedCtx = (issues: number[]) => {
-    for (const issue of issues) markResumed(HOME, issue, 'testing');
+    for (const issue of issues) markResumed(HOME, issue, 'verify');
     return agentCtx(['bug']);
   };
   beforeEach(() => { rmSync(`${HOME}/sessions`, { recursive: true, force: true }); });
@@ -73,21 +73,21 @@ describe('runAgent sessions', () => {
 
   it('gives a round with no stored session the full prompt, so a later round of a resumed job starts fresh', async () => {
     const first = markedCtx([]);
-    await runAgent(first.ctx, 7, 'testing', 'test', 'p');
+    await runAgent(first.ctx, 7, 'verify', 'test', 'p');
     saved(first.runs[0]);
     const marked = markedCtx([7]);
-    await runAgent(marked.ctx, 7, 'testing', 'test', 'p');
-    await runAgent(marked.ctx, 7, 'testing', 'test-fix', 'fix');
+    await runAgent(marked.ctx, 7, 'verify', 'test', 'p');
+    await runAgent(marked.ctx, 7, 'verify', 'test-fix', 'fix');
     expect(marked.runs.map((run) => [run.session?.resume, run.prompt === RESUME_NOTE])).toEqual([[true, true], [false, false]]);
     expect(marked.runs[1].prompt).toMatch(/^fix\n\n/);
   });
 
   it('starts a fresh round with the full prompt and its skill when the round asks for it, even in a resumed job', async () => {
     const first = markedCtx([]);
-    await runAgent(first.ctx, 7, 'testing', 'review', 'review it', { skill: '/code-review' });
+    await runAgent(first.ctx, 7, 'verify', 'review', 'review it', { skill: '/code-review' });
     saved(first.runs[0]);
     const marked = markedCtx([7]);
-    await runAgent(marked.ctx, 7, 'testing', 'review', 'review it', { skill: '/code-review', fresh: true });
+    await runAgent(marked.ctx, 7, 'verify', 'review', 'review it', { skill: '/code-review', fresh: true });
     expect(marked.runs[0].session?.resume).toBe(false);
     expect(marked.runs[0].session?.id).not.toBe(first.runs[0].session?.id);
     expect(marked.runs[0].skill).toBe('/code-review');
@@ -137,10 +137,10 @@ describe('prepareOutputs', () => {
 
 describe('model routing', () => {
   const cfg = { designModel: 'opus-id', buildModel: 'sonnet-id' };
-  const stages = ['triage', 'design', 'implement', 'testing'] as const;
+  const stages = ['triage', 'design', 'implement', 'verify'] as const;
   const pick = (labels: string[]) => stages.map((stage) => modelFor(cfg, stage, labels));
 
-  it('keeps the baseline with no label: triage Sonnet, design Opus, implementation and testing Sonnet', () => {
+  it('keeps the baseline with no label: triage Sonnet, design Opus, implementation and verify Sonnet', () => {
     expect(pick([])).toEqual(['sonnet-id', 'opus-id', 'sonnet-id', 'sonnet-id']);
   });
 
@@ -148,7 +148,7 @@ describe('model routing', () => {
     expect(pick(['design-sonnet'])).toEqual(['sonnet-id', 'sonnet-id', 'sonnet-id', 'sonnet-id']);
   });
 
-  it('implementation-opus forces Opus for implementation and testing, never triage', () => {
+  it('implementation-opus forces Opus for implementation and verify, never triage', () => {
     expect(pick(['implementation-opus'])).toEqual(['sonnet-id', 'opus-id', 'opus-id', 'opus-id']);
   });
 
@@ -159,9 +159,9 @@ describe('model routing', () => {
   it('runAgent reads the labels at each run, so a manual change counts on the next one', async () => {
     const labels: string[] = ['implementation-opus'];
     const { ctx, runs } = agentCtx(labels);
-    await runAgent(ctx, 7, 'testing', 'test', 'p');
+    await runAgent(ctx, 7, 'verify', 'test', 'p');
     labels.length = 0;
-    await runAgent(ctx, 7, 'testing', 'test', 'p');
+    await runAgent(ctx, 7, 'verify', 'test', 'p');
     expect(runs.map((run) => run.model)).toEqual(['opus-id', 'sonnet-id']);
   });
 });
@@ -175,7 +175,7 @@ describe('runAgent reference images', () => {
   beforeEach(() => { rmSync('tmp/factory-common-test/media', { recursive: true, force: true }); });
 
   it('puts the absolute image paths and the media folder in the prompt of every stage', async () => {
-    for (const stage of ['triage', 'design', 'implement', 'testing'] as const) {
+    for (const stage of ['triage', 'design', 'implement', 'verify'] as const) {
       const { ctx, runs } = agentCtx([], `look ${ASSET}`, [], hosted(200));
       await runAgent(ctx, 7, stage, stage, 'the prompt');
       expect(runs[0].prompt).toMatch(/^the prompt\n\n.*\/work\/\.factory-media\/ref-[0-9a-f]{12}\.png \(png, 2x2,/s);

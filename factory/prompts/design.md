@@ -56,6 +56,8 @@ Committee feedback sits in the issue comments under the heading "## Committee fe
 Read that feedback first.
 It comes before the original request.
 Revise the task file to answer it.
+Feedback "routed as patch" was already applied by a patch, and the Conclusion lists it under "Patches". Keep those changes unless newer feedback says otherwise.
+Comments under "## Committee question" were questions Hermes answered in the chat. They are context, not requirements.
 
 Review findings sit in the issue comments under the heading "## Review findings".
 They mean the review blocked the built change twice.

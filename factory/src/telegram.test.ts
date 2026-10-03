@@ -18,6 +18,20 @@ function fakeFetch(replies: unknown[]): { fetchFn: typeof fetch; calls: Call[] }
 const ok = (id: number) => ({ ok: true, result: { message_id: id } });
 const body = (call: Call) => JSON.parse(call.init.body as string);
 
+describe('botClient sendButtons', () => {
+  it('sends one message with an inline keyboard', async () => {
+    const { fetchFn, calls } = fakeFetch([ok(51)]);
+    expect(await botClient('T', fetchFn).sendButtons('-100', 'review', [[{ text: 'Queue as change', data: 'factory:waste:9' }]])).toBe(51);
+    expect(body(calls[0]!)).toEqual({ chat_id: '-100', text: 'review', reply_markup: { inline_keyboard: [[{ text: 'Queue as change', callback_data: 'factory:waste:9' }]] } });
+  });
+
+  it('refuses a text it would have to split', async () => {
+    const { fetchFn, calls } = fakeFetch([ok(1)]);
+    await expect(botClient('T', fetchFn).sendButtons('c', 'a'.repeat(4097), [[{ text: 'x', data: 'y' }]])).rejects.toThrow('limit is 4096');
+    expect(calls).toEqual([]);
+  });
+});
+
 describe('botClient sendMessage', () => {
   it('posts JSON to the bot endpoint and returns the message id', async () => {
     const { fetchFn, calls } = fakeFetch([ok(41)]);

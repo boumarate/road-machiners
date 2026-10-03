@@ -33,14 +33,14 @@ describe('sweepWork', () => {
   });
 
   it('removes the clones of Done cards, issues off the board, merged changes and finished builds', () => {
-    const root = work('issue-1', 'issue-2', 'adhoc-4', 'check-issue-3', 'change-1790000000000', 'incident-6', 'dev-build', 'release-main', 'release-candidate');
+    const root = work('issue-1', 'issue-2', 'adhoc-4', 'check-issue-3', 'change-1790000000000', 'incident-6', 'dev-build', 'release-main', 'release-candidate', 'waste');
     const swept = sweepWork(root, state(), [card(1, 'Done'), card(3, 'Testing'), card(4, 'Done')]);
-    expect(swept.removed.sort()).toEqual(['adhoc-4', 'change-1790000000000', 'check-issue-3', 'dev-build', 'incident-6', 'issue-1', 'issue-2', 'release-candidate', 'release-main']);
+    expect(swept.removed.sort()).toEqual(['adhoc-4', 'change-1790000000000', 'check-issue-3', 'dev-build', 'incident-6', 'issue-1', 'issue-2', 'release-candidate', 'release-main', 'waste']);
   });
 
   it('keeps every clone a running or interrupted job works in, packages included', () => {
-    const root = work('issue-5', 'check-issue-5', 'issue-7', 'dev-build', 'release-candidate');
-    const swept = sweepWork(root, state({ jobs: [running('testing', 5), running('ship', 20)], interrupted: [7] }), [card(5, 'Done'), card(7, 'Done')]);
+    const root = work('issue-5', 'check-issue-5', 'issue-7', 'dev-build', 'release-candidate', 'waste');
+    const swept = sweepWork(root, state({ jobs: [running('verify', 5), running('ship', 20), running('waste', null)], interrupted: [7] }), [card(5, 'Done'), card(7, 'Done')]);
     expect(swept).toEqual({ removed: ['dev-build'], stripped: [], unknown: [] });
     expect([has(root, 'issue-5/node_modules'), has(root, 'check-issue-5/node_modules'), has(root, 'issue-7/node_modules'), has(root, 'release-candidate/node_modules')]).toEqual([true, true, true, true]);
   });
@@ -91,8 +91,8 @@ describe('sweepLogs', () => {
   });
 
   it('keeps an old log that a failure names', () => {
-    const root = logs(['testing-5-old.log', 20]);
-    const failures = [{ stage: 'testing' as const, issue: 5, error: 'e', log: join(root, 'testing-5-old.log'), at: '' }];
+    const root = logs(['checks-5-old.log', 20]);
+    const failures = [{ stage: 'checks' as const, issue: 5, error: 'e', log: join(root, 'checks-5-old.log'), at: '' }];
     expect(sweepLogs(root, state({ failures }), NOW, 14)).toEqual([]);
   });
 });

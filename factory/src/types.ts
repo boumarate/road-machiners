@@ -2,9 +2,10 @@
 
 export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Approval' | 'Done';
 
-export type CardStage = 'triage' | 'design' | 'implement' | 'testing';
+// Stages that run agents on a card. Verify is the agent half of the Testing column. Patch applies a small committee reply to a built card.
+export type CardStage = 'triage' | 'design' | 'implement' | 'patch' | 'verify';
 export type ReleaseStage = 'release' | 'candidate' | 'ship' | 'remove';
-export type Stage = CardStage | ReleaseStage | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'intake' | 'tick';
+export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste' | 'intake' | 'tick';
 
 export type FactoryConfig = {
   repo: string; // "owner/name" on GitHub
@@ -28,13 +29,16 @@ export type FactoryConfig = {
   committeeChat: string;
   publicChannel: string;
   stageTimeoutMinutes: number;
+  replyRouteMinutes: number; // minutes Hermes has to route a plain approval reply before it becomes a failure
   releaseDays: number;
+  wasteReviewDays: number; // days between waste reviews of the factory
   itchTarget: string | null; // itch.io page as "user/game". Null until set, and then a release fails loud.
   butlerKey: string | null; // BUTLER_API_KEY, only ever in the env of the butler call
   maxJobsPerDay: number; // public-driven agent jobs allowed in any 24 hours
   triageWorkers: number; // jobs of the triage queue that run at once
   designWorkers: number; // jobs of the design queue that run at once
   implementWorkers: number; // jobs of the implement queue that run at once
+  verifyWorkers: number; // jobs of the verify queue that run at once
   testWorkers: number; // jobs of the test queue that run at once
   minFreeGb: number; // under this much free disk, a tick starts no job
   logDays: number; // job logs older than this go
@@ -67,23 +71,27 @@ export type Card = { itemId: string; issue: number; column: Column; labels: stri
 // A job is one detached `factory run` process. `issue` is null for the release cut and a change id for change.
 // Candidate and ship carry the tracking issue, remove the issue of the feature to take out. Dev rebuilds /dev/ and has no issue.
 // An incident job carries the issue of a shipped bug fix.
-export type JobStage = CardStage | ReleaseStage | 'approve' | 'change' | 'adhoc' | 'incident' | 'dev';
+// A waste job reviews the factory itself and has no issue.
+export type JobStage = CardStage | ReleaseStage | 'checks' | 'approve' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste';
 // `id` names the job's containers, so a kill stops only its own.
 export type Job = { id: string; stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
 
 // Jobs run in parallel up to a limit per queue.
 // The branch queue moves dev, main and the release, or rebuilds a shared build, so it runs one job at a time.
-// Triage, design and implement each get their own queue, so a short triage never waits behind a long build.
-// The test queue builds the game and plays it in a browser, which is heavy.
-export type Queue = 'branch' | 'triage' | 'design' | 'implement' | 'test';
+// Triage, design, implement and verify each get their own queue, so a short triage never waits behind a long build.
+// The test queue runs only the factory's checks: it builds the game and plays it in a browser, which loads the CPU. It runs no agent.
+export type Queue = 'branch' | 'triage' | 'design' | 'implement' | 'verify' | 'test';
 // Queues whose jobs only run agents in work clones, with no deploy or branch move.
-export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement'];
+export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement', 'verify'];
 export const QUEUE_OF: Record<JobStage, Queue> = {
-  triage: 'triage', design: 'design', implement: 'implement', adhoc: 'implement',
-  testing: 'test',
+  // The waste review only reads, so it shares the light triage queue.
+  triage: 'triage', waste: 'triage', design: 'design', implement: 'implement', adhoc: 'implement', patch: 'implement', verify: 'verify',
+  checks: 'test',
   // An incident job pushes dev, and two of them at once would pick the same log id.
   approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', change: 'branch', incident: 'branch',
 };
+// Where a committee reply to an approval post sends the card. Answer moves nothing, patch fixes the build in place, redesign goes back to Design.
+export type Route = 'answer' | 'patch' | 'redesign';
 // `error` is the short summary. The full text is in `log`.
 export type Failure = { stage: Stage; issue: number | null; error: string; log: string | null; at: string };
 export type ChangeRequest ={ id: number; text: string; by: string };
@@ -120,7 +128,17 @@ export type FactoryState = {
   devBuild: string | null; // short hash of dev that /dev/ serves
   devFailed: string | null; // short hash of dev whose build failed. The tick skips it until dev moves or Hermes clears it.
   interrupted: number[]; // issues whose job process died and got one resume. The next job on the issue continues its agents' sessions, and its end clears the issue.
+  testPhase: Record<string, TestPhase>; // issue number -> where its Testing card stands. No entry means verify runs next.
+  patching: Record<string, string>; // issue number -> the commit of its last posted build. Its Implementation card runs a patch, not an implementation.
+  unroutedReplies: Record<string, UnroutedReply>; // Telegram message id of a plain approval reply -> what it answered. A route clears it, and a late one becomes a failure.
+  lastWasteReview: string | null; // ISO start of the last waste review. The tick sets it when it first sees it empty, so the first review waits a full period.
 };
+
+export type UnroutedReply = { issue: number; postId: number; text: string; at: string };
+
+// `checks`: verify or a patch is done, the factory checks run next. `fix`: the checks failed once, verify runs the fix round.
+// `checks-after-fix`: the checks run again, and a second failure stops the card.
+export type TestPhase = 'checks' | 'fix' | 'checks-after-fix';
 
 export interface GitHub {
   candidates(labels: string[]): Promise<Issue[]>;
@@ -150,6 +168,7 @@ export type AlbumPhoto = { path: string; caption: string };
 
 export interface Telegram {
   sendMessage(chat: string, text: string, replyTo?: number): Promise<number>;
+  sendButtons(chat: string, text: string, buttons: InlineButton[][]): Promise<number>; // one text message with an inline keyboard
   sendPhoto(chat: string, pngPath: string, caption: string, buttons?: InlineButton[][]): Promise<number>;
   // Sends 1 to 10 photos as one photo or one album, with no buttons, optionally as a reply. Returns the message ids in order.
   sendPhotos(chat: string, photos: AlbumPhoto[], replyTo?: number): Promise<number[]>;
@@ -247,6 +266,7 @@ export const RELEASE_CANDIDATE_LABEL = 'release-candidate'; // approved and merg
 // A fix for a shipped bug. It branches from main, and its approval ships it to main and itch.io at once. Only collaborators set labels, so it needs no votes.
 export const HOTFIX_LABEL = 'hotfix';
 export const ADHOC_LABEL = 'adhoc';
+export const WASTE_LABEL = 'factory-review'; // the record of one weekly waste review
 export const BUG_LABEL = 'bug';
 // An issue triage folded into another issue's card. Its card waits in Done, and the issue closes when the lead ships.
 export const BUNDLED_LABEL = 'bundled';
@@ -258,6 +278,8 @@ export const NEEDS_INFO_LABEL = 'needs-info';
 export const FACTORY_MARK = '<!-- roam-factory -->'; // last line of every factory comment, so a factory comment differs from a member's
 export const QUESTIONS_HEADING = '## Questions from the factory';
 export const FEEDBACK_HEADING = '## Committee feedback';
+// An approval reply routed as an answer. Design reads it as context, never as a change request.
+export const QUESTION_HEADING = '## Committee question';
 export const REVIEW_HEADING = '## Review findings';
 // Agent containers sit on an internal Docker network. The proxy container is their only way out.
 export const AGENT_NETWORK = 'roam-factory-agents';

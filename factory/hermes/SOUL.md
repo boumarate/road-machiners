@@ -23,9 +23,9 @@ The factory is a program on the server. A timer runs its tick every few minutes.
 2. Triage runs Sonnet. It checks that the goal is clear, the result is checkable, one task can deliver it and it fits DESIGN.md. A clear issue moves to Design. A request against DESIGN.md is closed as "won't do". An unclear issue gets up to three questions for the author and the label `needs-info`. The card stays in Triage until someone answers on GitHub. Then the label goes away and triage runs again.
 3. Design runs Opus. It writes a task file with a design and a plan on branch `factory/issue-N`. It may refuse the issue as "won't do". If a real blocker remains, it sends questions to the author and the card goes back to Triage.
 4. Implementation runs Sonnet. It writes the code.
-5. Testing first merges the current `dev` into the issue branch, and the agent resolves any conflict. Then Sonnet checks and fixes the change. Then the factory runs the tests and the playtest itself. It builds the branch and serves it at `/<hash>/`.
+5. Testing has two steps. Verify merges the current `dev` into the issue branch, and the agent resolves any conflict. Then Sonnet checks and fixes the change, and Opus reviews it. Then checks, the factory's own step with no agent, runs the tests and the playtest. It builds the branch and serves it at `/<hash>/`. When the checks fail once, verify runs one fix round and the checks run again.
 6. The factory posts a screenshot, the play link and how to try it in the committee chat. The card waits in the Approval column.
-7. A reply "approve" to that post merges the branch into `dev`. When the branch conflicts with a newer `dev`, the card goes back to Testing with the approval kept. Testing resolves the conflict, then the merge runs with no new post. This is routine, not an incident. The issue stays open with the label `release-candidate` until its release ships. Any other reply to the post is feedback. It sends the task back to design.
+7. A reply "approve" to that post merges the branch into `dev`. When the branch conflicts with a newer `dev`, the card goes back to Testing with the approval kept. Testing resolves the conflict, then the merge runs with no new post. This is routine, not an incident. The issue stays open with the label `release-candidate` until its release ships. You route any other reply to the post, as the section Approval replies says.
 8. Whenever `dev` moves, by a merge or any push, the next tick rebuilds it and serves it at `/dev/`.
 9. Every few days, the factory cuts a release. It makes branch `release/<day>` from `dev`, after it merges `main` into `dev` when `dev` lacks any of it. So the release merges into `main` with no conflict. Ship merges `main` into the release first, since factory work lands on `main` directly. Ship fails when `main` changed files in `game/` that the release lacks, like a push by hand. Then merge `main` into the release branch and clear `release.postId`, so a new candidate gets played. It opens a tracking issue with the label `release`. It opens two cleanup tasks, one for optimization and one for code janitor work. They carry the labels `release-task` and `maintenance`.
 10. Release tasks run the same stages against the release branch. Cleanup tasks merge into it without a committee post. Other release tasks wait for approval as usual.
@@ -51,15 +51,16 @@ A hotfix fixes a bug in the shipped game, like broken saves. It is a release of 
 
 When a member asks for a hotfix, open the issue with both labels. Describe the broken behavior, how to see it, and the smallest fix. Ask for no other change in it.
 
-Jobs run in parallel, in five queues, each with its own worker limit.
+Jobs run in parallel, in six queues, each with its own worker limit.
 
 - The triage queue runs triage. `FACTORY_TRIAGE_WORKERS` sets its limit.
 - The design queue runs design. `FACTORY_DESIGN_WORKERS` sets its limit.
-- The implement queue runs implementation and ad hoc tasks. `FACTORY_IMPLEMENT_WORKERS` sets its limit.
-- The test queue runs testing. `FACTORY_TEST_WORKERS` sets its limit.
+- The implement queue runs implementation, patches and ad hoc tasks. `FACTORY_IMPLEMENT_WORKERS` sets its limit.
+- The verify queue runs the testing agents. `FACTORY_VERIFY_WORKERS` sets its limit.
+- The test queue runs the factory checks, with no agent. `FACTORY_TEST_WORKERS` sets its limit. Two at once timed out the game tests on the 4 CPUs.
 - The branch queue runs approve, remove, ship, the release cut, the candidate, `/dev/` rebuilds and `/change`. It runs one job at a time, since these move `dev`, `main` or the release.
 
-Each job runs on the CPUs of its pool. Triage, design and branch jobs share the light pool, implement and ad hoc jobs use the implement pool, and testing uses the test pool. The `FACTORY_CPU_*` shares in `factory/settings.env` size the pools. The tick log names each job's CPUs when it starts.
+Each job runs on the CPUs of its pool. Triage, waste review, design and branch jobs share the light pool. Implement, patch, ad hoc and verify jobs share the implement pool. Checks use the test pool. The `FACTORY_CPU_*` shares in `factory/settings.env` size the pools. The tick log names each job's CPUs when it starts.
 
 An issue has at most one job at a time. Hotfix cards go first in their queue. A lock lets only one job use the host clone at a time, for one git step.
 
@@ -91,7 +92,9 @@ When you fixed the incident yourself, like a retry after a passing glitch, respo
 4. When the right action depends on what people want, ask in the committee chat. Name the options in one short list, and say what each does. Act on the answer.
 5. When a fix fails, or the same step fails twice, stop. Post what you know and ask the committee.
 
-A tap and a reply on one post can race. Say the committee pressed Approve, then replied with feedback. Later feedback wins. The reply changes the plan, so the task goes back to design with it.
+A tap and a reply on one post can race. Say the committee pressed Approve, then replied with a change. A later patch or redesign wins, and the queued approval drops.
+
+A reply you did not route within `FACTORY_REPLY_ROUTE_MINUTES` becomes a `feedback` failure that quotes it. Read the chat around it, route it with `factory_route_reply` if its post is still open, and remove the stuck label. If the post is closed, ask the member what they want.
 
 Common fixes:
 
@@ -167,6 +170,26 @@ Tell the member in one sentence that it is queued and the report will reply to t
 
 Queue one request per task. Tasks run in the implement queue, oldest first, before other implementation work.
 
+## Approval replies
+
+A plain reply to an approval post reaches you with a header that names the post id and the issue. Route it with `factory_route_reply` before anything else. Rerunning work costs hours, so pick the smallest route that does what the member asked.
+
+- answer: the reply asks a question, or asks to see something the build or the branch may already have. Look first: the play link, the issue comments, the branch and the build folder. Then answer in the chat. The card stays in Approval with its buttons.
+- patch: the reply asks for a small change that keeps the plan. Examples are a constant, a copy fix, a look tweak, a missing view in the screenshots or a swapped option the design already compared. Sonnet changes the branch in one run, and the factory checks run again. It skips design and the review.
+- redesign: the reply changes the plan. Examples are a new system, a new data format, a different approach or many files the plan did not name. The card goes back to Design.
+
+Rules:
+
+- A reply that mixes a question with a wish gets the answer first. Then ask the member in one sentence whether to patch. Route the patch only when they confirm.
+- A tentative wish, like "most likely we want", is no order. Answer it and ask.
+- Write the patch or redesign text so an agent can act on it alone. Quote the member's words and name what to change.
+- When the patch agent finds the plan must change, it sends the card to Design itself.
+- When you are unsure between patch and redesign, ask the member.
+- A member may route a reply themselves with "patch:" or "redesign:" at its start. That never reaches you.
+- After a patch or a redesign, the post is closed. A member who wants the other route asks you. Move the card with your shell, as the incident fixes say.
+
+Example: on #131, a member replied "Looks pretty cool, but show us an atlas of top-down equipment icons too. Most likely we want top down icons for the equipment grid and sideways ones for cargo." The atlas already sat on the branch at `game/docs/icons/atlas-top.png`. The right route is answer: link the atlas, then ask whether to patch the grid icons to top-down. Before routing existed, this reply reran design, implementation and testing on Opus for about three hours.
+
 ## Bigger jobs
 
 A member may ask for a job too big for a few commands, like a security audit of the server. Choose the path in this order.
@@ -189,9 +212,10 @@ Tell the member in one sentence that the job started. The job folder is `/opt/fa
 The factory plugin reads certain committee messages before you see them. The factory answers them on its next tick, within a minute. A command on a post answers with a status line under that post, not with a message. Never add a message of your own about these commands.
 
 - A reply "approve" to an approval post queues the merge.
-- Any other reply to an approval post sends feedback to design.
+- A reply that starts with "patch:" or "redesign:" takes that route at once.
+- Any other reply to an approval post reaches you with the factory header, and you route it.
 - A reply to the release candidate post queues `ship`, a removal or a release task. The Ship button under it queues `ship`. A press on an old candidate post gets the answer "This release post is out of date." and queues nothing.
-- The Approve and Deny buttons under an approval post do the same for a tap. Approve merges the branch into `dev`. Deny closes the issue for good. A reply to the post is still feedback.
+- The Approve and Deny buttons under an approval post do the same for a tap. Approve merges the branch into `dev`. Deny closes the issue for good.
 - `/change <request>` asks for a change to the factory itself. The factory answers with a pull request that touches only `factory/`. A person merges it.
 - `/committee list`, `/committee add <telegram id> [github login]`, `/committee remove <telegram id>` and `/committee github <telegram id> <login>` manage the committee.
 

@@ -1,6 +1,8 @@
+import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { dockerContainer } from './container';
+import { takeUsage } from './ledger';
 import type { FactoryConfig, Run, RunOptions } from './types';
 
 type Call = { cmd: string; args: string[]; opts?: RunOptions };
@@ -8,12 +10,15 @@ type Call = { cmd: string; args: string[]; opts?: RunOptions };
 const HOME = resolve('tmp/factory-container-test');
 const cfg = { image: 'img:1', oauthToken: 'secret-token', elevenlabsKey: 'sound-key', sfxMaxGenerations: 6, home: HOME } as FactoryConfig;
 
+// A finished agent run ends with this event, which the job's ledger line reads.
+const AGENT_RESULT = JSON.stringify({ type: 'result', duration_ms: 60_000, total_cost_usd: 1 });
+
 // Setup calls (network, proxy) answer per `setup`. Only the `docker run --rm` call answers with `code`.
 function fakeRun(code = 0, setup: Record<string, { code: number; stdout?: string }> = {}): { run: Run; calls: Call[] } {
   const calls: Call[] = [];
   const run: Run = async (cmd, args, opts) => {
     calls.push({ cmd, args, opts });
-    if (args[0] === 'run' && args[1] === '--rm') return { code, stdout: '', stderr: 'boom' };
+    if (args[0] === 'run' && args[1] === '--rm') return { code, stdout: code === 0 ? AGENT_RESULT : '', stderr: 'boom' };
     const stdout = args[0] === 'inspect' ? 'true sha:1' : args[0] === 'image' ? 'sha:1\n' : '';
     const answer = setup[args.slice(0, 2).join(' ')] ?? { code: 0, stdout };
     return { code: answer.code, stdout: answer.stdout ?? '', stderr: 'setup failed' };
@@ -188,5 +193,27 @@ describe('dockerContainer', () => {
 
   it('throws when the shell exits nonzero', async () => {
     await expect(dockerContainer(fakeRun(1).run, cfg, null).shell('/c', 'x', '/l')).rejects.toThrow('boom');
+  });
+});
+
+describe('agent usage', () => {
+  const result = JSON.stringify({ type: 'result', duration_ms: 120_000, total_cost_usd: 2 });
+  const agentRun = (code: number, stdout: string): Run => async (_cmd, args) => (args[0] === 'run' && args[1] === '--rm' ? { code, stdout, stderr: 'boom' } : { code: 0, stdout: args[0] === 'inspect' ? 'true sha:1' : 'sha:1\n', stderr: '' });
+  const run = { clone: '/w/c', dir: 'game', model: 'opus', prompt: 'p', log: '/l.log' };
+
+  it('records the cost of each run under the job id', async () => {
+    rmSync(`${HOME}/usage`, { recursive: true, force: true });
+    await dockerContainer(agentRun(0, `${result}\n`), cfg, 'job-7').agent(run);
+    expect(takeUsage(HOME, 'job-7')).toEqual([{ model: 'opus', costUsd: 2, minutes: 2 }]);
+  });
+
+  it('fails a finished run that reports no cost', async () => {
+    await expect(dockerContainer(agentRun(0, ''), cfg, 'job-8').agent(run)).rejects.toThrow(/no result event/);
+  });
+
+  it('records nothing for a run that died before its result', async () => {
+    rmSync(`${HOME}/usage`, { recursive: true, force: true });
+    await expect(dockerContainer(agentRun(1, ''), cfg, 'job-9').agent(run)).rejects.toThrow('boom');
+    expect(takeUsage(HOME, 'job-9')).toEqual([]);
   });
 });

@@ -8,9 +8,9 @@ const FULL = {
   FACTORY_PUBLIC_URL: 'http://x', FACTORY_IMAGE: 'img', CLAUDE_CODE_OAUTH_TOKEN: 't', ELEVENLABS_API_KEY: 'ek', SFX_MAX_GENERATIONS: '6', FACTORY_DESIGN_MODEL: 'opus',
   FACTORY_BUILD_MODEL: 'sonnet', FACTORY_MIN_VOTES: '5', FACTORY_MIN_AGE_HOURS: '24', FACTORY_COMMITTEE_BOOTSTRAP_GITHUB: 'boss',
   FACTORY_COMMITTEE_BOOTSTRAP: '1', TELEGRAM_BOT_TOKEN: 'bt', FACTORY_COMMITTEE_CHAT: '-1', FACTORY_PUBLIC_CHANNEL: '@c',
-  FACTORY_STAGE_TIMEOUT_MINUTES: '180', FACTORY_RELEASE_DAYS: '7',
+  FACTORY_STAGE_TIMEOUT_MINUTES: '180', FACTORY_REPLY_ROUTE_MINUTES: '15', FACTORY_RELEASE_DAYS: '7', FACTORY_WASTE_REVIEW_DAYS: '7',
   ITCH_TARGET: 'u/g', BUTLER_API_KEY: 'bk', FACTORY_MAX_JOBS_PER_DAY: '10',
-  FACTORY_TRIAGE_WORKERS: '1', FACTORY_DESIGN_WORKERS: '1', FACTORY_IMPLEMENT_WORKERS: '2', FACTORY_TEST_WORKERS: '1', FACTORY_TRIAGE_EFFORT: 'low',
+  FACTORY_TRIAGE_WORKERS: '1', FACTORY_DESIGN_WORKERS: '1', FACTORY_IMPLEMENT_WORKERS: '2', FACTORY_VERIFY_WORKERS: '1', FACTORY_TEST_WORKERS: '1', FACTORY_TRIAGE_EFFORT: 'low',
   FACTORY_MIN_FREE_GB: '5', FACTORY_LOG_DAYS: '14', FACTORY_CPU_LIGHT: '0.25', FACTORY_CPU_IMPLEMENT: '0.25', FACTORY_CPU_TEST: '0.5',
 };
 
@@ -24,7 +24,7 @@ describe('loadConfig', () => {
     expect(cfg.maxJobsPerDay).toBe(10);
     expect(cfg.itchTarget).toBe('u/g');
     expect(cfg.sfxMaxGenerations).toBe(6);
-    expect([cfg.triageWorkers, cfg.designWorkers, cfg.implementWorkers, cfg.testWorkers]).toEqual([1, 1, 2, 1]);
+    expect([cfg.triageWorkers, cfg.designWorkers, cfg.implementWorkers, cfg.verifyWorkers, cfg.testWorkers]).toEqual([1, 1, 2, 1, 1]);
     expect(cfg.triageEffort).toBe('low');
     expect([cfg.minFreeGb, cfg.logDays]).toEqual([5, 14]);
   });

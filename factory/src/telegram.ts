@@ -31,6 +31,11 @@ export function botClient(token: string, fetchFn: typeof fetch): Telegram {
       }
       return ids[0]!;
     },
+    // A message with buttons cannot be split, since only one part could carry them.
+    async sendButtons(chat, text, buttons) {
+      if (text.length > MESSAGE_LIMIT) throw new Error(`Telegram message with buttons is ${text.length} chars, the limit is ${MESSAGE_LIMIT}.`);
+      return callForId('sendMessage', JSON.stringify({ chat_id: chat, text, reply_markup: JSON.parse(keyboard(buttons)) }));
+    },
     async sendPhoto(chat, pngPath, caption, buttons) {
       if (caption.length > CAPTION_LIMIT) throw new Error(`Telegram caption is ${caption.length} chars, the limit is ${CAPTION_LIMIT}.`);
       const markup = buttons ? keyboard(buttons) : null;

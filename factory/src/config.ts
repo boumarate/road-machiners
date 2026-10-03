@@ -36,13 +36,16 @@ const KEYS = {
   committeeChat: 'FACTORY_COMMITTEE_CHAT',
   publicChannel: 'FACTORY_PUBLIC_CHANNEL',
   stageTimeoutMinutes: 'FACTORY_STAGE_TIMEOUT_MINUTES',
+  replyRouteMinutes: 'FACTORY_REPLY_ROUTE_MINUTES',
   releaseDays: 'FACTORY_RELEASE_DAYS',
+  wasteReviewDays: 'FACTORY_WASTE_REVIEW_DAYS',
   itchTarget: 'ITCH_TARGET',
   butlerKey: 'BUTLER_API_KEY',
   maxJobsPerDay: 'FACTORY_MAX_JOBS_PER_DAY',
   triageWorkers: 'FACTORY_TRIAGE_WORKERS',
   designWorkers: 'FACTORY_DESIGN_WORKERS',
   implementWorkers: 'FACTORY_IMPLEMENT_WORKERS',
+  verifyWorkers: 'FACTORY_VERIFY_WORKERS',
   testWorkers: 'FACTORY_TEST_WORKERS',
   minFreeGb: 'FACTORY_MIN_FREE_GB',
   logDays: 'FACTORY_LOG_DAYS',
@@ -53,7 +56,7 @@ const KEYS = {
 
 const RELEASE_ONLY = new Set<keyof FactoryConfig>(['itchTarget', 'butlerKey']);
 
-const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes', 'releaseDays', 'maxJobsPerDay', 'triageWorkers', 'designWorkers', 'implementWorkers', 'testWorkers', 'minFreeGb', 'logDays', 'cpuLight', 'cpuImplement', 'cpuTest']);
+const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes', 'replyRouteMinutes', 'releaseDays', 'wasteReviewDays', 'maxJobsPerDay', 'triageWorkers', 'designWorkers', 'implementWorkers', 'verifyWorkers', 'testWorkers', 'minFreeGb', 'logDays', 'cpuLight', 'cpuImplement', 'cpuTest']);
 
 export function loadConfig(env: Record<string, string | undefined>): FactoryConfig {
   const missing = Object.entries(KEYS).filter(([field, key]) => !RELEASE_ONLY.has(field as keyof FactoryConfig) && !env[key]?.trim()).map(([, key]) => key);
