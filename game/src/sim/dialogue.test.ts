@@ -580,11 +580,11 @@ describe('call practice', () => {
     };
     const once = ask(w, npc.id);
     const again = ask(once, npc.id);
-    expect(again.player.skills.social).toBeCloseTo(once.player.skills.social);
+    expect(again.player.xp).toBeCloseTo(once.player.xp);
     const other = addVehicle(again, 'traders', 'scout', [], { x: 30, y: 36 });
     other.brain = npcBrain('trader', other.pos, ['trader']);
     refreshVision(again);
-    expect(ask(again, other.id).player.skills.social).toBeCloseTo(once.player.skills.social + XP_SOURCES.call.weight);
+    expect(ask(again, other.id).player.xp).toBeCloseTo(once.player.xp + XP_SOURCES.call.weight);
   });
 
   it('pays nothing for a call hung up without a topic', () => {

@@ -8,6 +8,7 @@ import { baseGrid, itemCells } from '../../sim/grid';
 import type { GridItem } from '../../sim/types';
 import { loadModels } from './models';
 import { footprint, standingY, weaponStand, wouldFloat } from './vehicle';
+import { budget } from '../../test/budget';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
 await loadModels(async (name) => {
@@ -96,5 +97,5 @@ describe('placing any item on any cell', () => {
       }
     }
     expect(problems).toEqual([]);
-  }, 120_000);
+  }, budget(120_000));
 });
