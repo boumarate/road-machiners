@@ -14,7 +14,8 @@ export const PAL = {
   roadRim: 0xf8a667, // light sand the road edge frays into
   stoneGrey: 0x8a847d, // cool grey stones on road shoulders and in pebble clusters
   padMark: 0xd86a2a, // worn orange paint around site pads, where trucks stop to use a site
-  pebble: 0xb8ab9c, // the main stone of a pebble cluster, a light warm grey
+  pebble: 0x9c7c54,
+  desertStone: 0xb8ab9c, // the main stone of a desert stone cluster, a light warm grey
   scrub: [0x6f6a3a, 0x5d5a32, 0x7c7442],
   brush: [0xa4ac70, 0xb4c084, 0xc8c484], // desert scrub stems: dark core, olive body, dry lit tips
   cactus: { body: 0x8a9450, shade: 0x6e7840 }, // short columnar cacti: lit column, shaded column

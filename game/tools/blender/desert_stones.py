@@ -1,8 +1,9 @@
-"""A few loose stones, scattered on open ground as decoration without collision.
+"""A few loose grey and tan stones from the reference image of issue 129, scattered on open desert as decoration
+without collision.
 
 Sized for a unit reference radius: the stones fit inside a 1 m footprint radius and stand about 0.45 m tall.
 The game scales it uniformly, turns it at random and tints it.
-Run: blender --background --python tools/blender/pebbles.py -- public/models/pebbles.glb [tmp/pebbles.png]
+Run: blender --background --python tools/blender/desert_stones.py -- public/models/desert_stones.glb [tmp/desert_stones.png]
 """
 
 from __future__ import annotations
@@ -16,9 +17,9 @@ from kit import Kit, parse_args  # noqa: E402
 from shapes import taper  # noqa: E402
 
 COLORS = {
-    "pebble": 0x9C7C54,  # PAL.pebble
-    "pebble_pale": 0x9A8A78,  # PAL.rock.top
-    "pebble_dark": 0x6E6254,  # PAL.rock.side
+    "pebble": 0xB8AB9C,  # PAL.desertStone
+    "pebble_pale": 0x8A847D,  # PAL.stoneGrey, a cool grey stone beside the tan ones
+    "pebble_dark": 0xB47F5D,  # PAL.stone.side
 }
 SEED = 17
 
@@ -39,7 +40,7 @@ def main() -> None:
     args = parse_args()
     kit = Kit(COLORS, SEED)
     build(kit)
-    kit.export("pebbles", args, view_size=2.6)
+    kit.export("desert_stones", args, view_size=2.6)
 
 
 if __name__ == "__main__":

@@ -1,19 +1,22 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
+import { PHYSICS } from '../../data/physics';
 import { START_KITS } from '../../data/start';
 import { desertWeight } from '../../render/groundPaint';
 import { ROAD_INDEX } from '../../sim/road-index';
 import type { Vec } from '../../sim/vec';
 import { newWorld } from '../../sim/world';
 import { TEST_MAP } from '../../test/map';
-import { CACTUS_NEAR_ROCK, OBSTACLE_GAP, ROAD_GAP, SHOULDER_TILES, scatterPlacements } from './scatter';
+import { CACTUS_NEAR_ROCK, OBSTACLE_GAP, ROAD_GAP, SHOULDER_TILES, scatterPlacements, type ScatterChunk } from './scatter';
 
 const world = newWorld(1337, START_KITS.standard, TEST_MAP);
 const t = world.terrain;
 const chunks = scatterPlacements(t, world.obstacles);
-const placed = chunks.flatMap((c) => [...c.pebbles, ...c.scrub, ...c.cactus]);
-const scrub = chunks.flatMap((c) => c.scrub);
+const all = (c: ScatterChunk) => [...c.pebbles, ...c.scrub, ...c.desert_stones, ...c.desert_scrub, ...c.cactus];
+const placed = chunks.flatMap(all);
+const scrub = chunks.flatMap((c) => [...c.scrub, ...c.desert_scrub]);
 const cacti = chunks.flatMap((c) => c.cactus);
-const pebbles = chunks.flatMap((c) => c.pebbles);
+const pebbles = chunks.flatMap((c) => [...c.pebbles, ...c.desert_stones]);
 const roadDist = (x: number, y: number) => ROAD_INDEX.nearestWithin(x, y, ROAD_GAP + SHOULDER_TILES);
 const typeAt = (at: Vec) => t.types[Math.floor(at.y) * t.size + Math.floor(at.x)];
 const onShoulder = (at: Vec) => roadDist(at.x, at.y) < ROAD_GAP + SHOULDER_TILES;
@@ -82,14 +85,41 @@ describe('scatterPlacements', () => {
     expect(byRock / rockTiles).toBeGreaterThan(2 * ((cacti.length - byRock) / openTiles));
   });
 
+  it('gives ground without a desert look only small pebbles and dry scrub, as sparse on road shoulders as elsewhere', () => {
+    for (const type of ['field', 'saltCrust'] as const) {
+      const types = t.types.map(() => type);
+      const kept = scatterPlacements({ ...t, types }, []);
+      expect(kept.flatMap((c) => [...c.desert_stones, ...c.desert_scrub, ...c.cactus]), type).toEqual([]);
+      const small = kept.flatMap((c) => c.pebbles);
+      const dry = kept.flatMap((c) => c.scrub);
+      const radius = (p: { matrix: THREE.Matrix4 }) => new THREE.Vector3().setFromMatrixScale(p.matrix).x / PHYSICS.metersPerTile;
+      for (const p of small) expect(radius(p)).toBeLessThanOrEqual(0.045 + 1e-9);
+      for (const p of dry) expect(radius(p)).toBeLessThanOrEqual(0.12 + 1e-9);
+      let shoulderTiles = 0;
+      let openTiles = 0;
+      for (let y = 0; y < t.size; y++) for (let x = 0; x < t.size; x++) {
+        const d = roadDist(x + 0.5, y + 0.5);
+        if (d >= ROAD_GAP + SHOULDER_TILES) openTiles++;
+        else if (d >= ROAD_GAP) shoulderTiles++;
+      }
+      expect(shoulderTiles).toBeGreaterThan(500);
+      const share = (list: { at: Vec }[], shoulder: boolean) =>
+        list.filter((p) => onShoulder(p.at) === shoulder).length / (shoulder ? shoulderTiles : openTiles);
+      for (const [list, chance] of [[small, 0.3], [dry, 0.04]] as const) {
+        expect(share(list, true), type).toBeCloseTo(chance, 1);
+        expect(share(list, false), type).toBeCloseTo(chance, 1);
+      }
+    }
+  });
+
   it('keeps hull plating bare, even on a road shoulder', () => {
     const types = t.types.map(() => 'hull' as const);
-    const bare = scatterPlacements({ ...t, types }, []).flatMap((c) => [...c.pebbles, ...c.scrub, ...c.cactus]);
+    const bare = scatterPlacements({ ...t, types }, []).flatMap(all);
     expect(bare).toEqual([]);
   });
 
   it('places the same scatter on every load', () => {
-    const again = scatterPlacements(t, world.obstacles).flatMap((c) => [...c.pebbles, ...c.scrub, ...c.cactus]);
+    const again = scatterPlacements(t, world.obstacles).flatMap(all);
     expect(again.map((p) => p.matrix.elements)).toEqual(placed.map((p) => p.matrix.elements));
     expect(again.map((p) => p.tint)).toEqual(placed.map((p) => p.tint));
   });

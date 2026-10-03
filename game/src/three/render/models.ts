@@ -28,6 +28,8 @@ const NAMES = [
   'rock',
   'pebbles',
   'scrub',
+  'desert_stones',
+  'desert_scrub',
   'cactus',
   'building',
   'crates',
