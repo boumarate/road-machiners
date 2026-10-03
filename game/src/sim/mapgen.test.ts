@@ -11,6 +11,7 @@ import { dist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
 import { groundAt, PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
+import { budget } from '../test/budget';
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
@@ -368,5 +369,5 @@ describe('Broken Wing on the baked map', () => {
     const points = [...under, ...stretch];
     const on = w.obstacles.filter((o) => o.id !== hoop.id && o.kind !== 'water' && points.some((p) => dist(o.pos, p) <= o.r));
     expect(on.map((o) => o.id)).toEqual([]);
-  }, 60_000);
+  }, budget(60_000));
 });

@@ -1,6 +1,5 @@
 import { chooseOption, currentOptions } from './dialogue';
 import { describe, expect, it } from 'vitest';
-import { XP_TO_REACH } from '../data/skills';
 import { RULES } from '../data/rules';
 import { SPAWN } from '../data/npcs';
 import { REGION } from '../data/region';
@@ -320,11 +319,11 @@ describe('hit odds', () => {
     const base = hitOdds(w, me, mg, buggy, 'body');
     const fast = { ...mg, def: { ...mg.def, round: { ...mg.def.round, speed: mg.def.round.speed * 2 } } };
     expect(hitOdds(w, me, fast, buggy, 'body').chance).toBeGreaterThan(base.chance);
-    w.player.skills.perception = XP_TO_REACH[3];
+    w.player.ranks.perception = 3;
     const skilled = hitOdds(w, me, mg, buggy, 'body');
     expect(skilled.causes.skill).toBeLessThan(0);
     expect(skilled.chance).toBeGreaterThan(base.chance);
-    w.player.skills.perception = 0;
+    w.player.ranks.perception = 0;
     me.speed = 6;
     const shaky = hitOdds(w, me, mg, buggy, 'body');
     expect(shaky.causes.own).toBeGreaterThan(base.causes.own);

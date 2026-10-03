@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
 import { BEACON, TOW } from '../data/tow';
-import { SKILL_EFFECTS, XP_SOURCES, XP_TO_REACH } from '../data/skills';
+import { MAX_RANK, SKILL_EFFECTS, XP_SOURCES } from '../data/skills';
 import { partDef } from '../data/parts';
 import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
@@ -645,8 +645,8 @@ describe('free tow for a broke player', () => {
     expect(towData(playerTow(r.w)!).fee).toBe(0);
   });
 
-  it('never names a paid fee of 0, even at the top social level', () => {
-    expect(TOW.base * (1 - SKILL_EFFECTS.social.towFee * (XP_TO_REACH.length - 1))).toBeGreaterThan(1);
+  it('never names a paid fee of 0, even at the top social rank', () => {
+    expect(TOW.base * (1 - SKILL_EFFECTS.social.towFee * MAX_RANK)).toBeGreaterThan(1);
   });
 });
 
@@ -780,9 +780,9 @@ describe('emergency beacon', () => {
 });
 
 describe('social on tow fees', () => {
-  it('prices the tow lower for a player at level 5', () => {
+  it('prices the tow lower for a player at rank 5', () => {
     const s = stranded();
-    s.w.player.skills.social = XP_TO_REACH[5];
+    s.w.player.ranks.social = 5;
     const w = offered(s);
     const me = playerVehicle(w);
     const town = REGION.towns.find((t) => t.id === 'bowl')!;
@@ -794,7 +794,7 @@ describe('social on tow fees', () => {
 
   it('cuts a capped fee too', () => {
     const s = stranded(FAR, { x: FAR.x + 10, y: FAR.y });
-    s.w.player.skills.social = XP_TO_REACH[5];
+    s.w.player.ranks.social = 5;
     expect(feeOf(offered(s))).toBe(Math.round(TOW.maxFee * (1 - 5 * SKILL_EFFECTS.social.towFee)));
   });
 });

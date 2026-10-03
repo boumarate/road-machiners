@@ -18,7 +18,7 @@ import { dist } from '../../sim/vec';
 import type { V3, VehicleFrame } from '../../phys/frames';
 import type { TurnResult } from '../../phys/drive';
 import { DebrisSim, disposeTree, FLY_REACH, truckBoxes } from './debris';
-import { jag } from './wearMesh';
+import { jag } from './vehicle';
 import { instancedModel, model, socket } from './models';
 import { PartDebris } from './partDebris';
 import type { RenderScope } from './scope';
