@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { playerVehicle } from '../damage';
 import { repairCost } from '../economy';
 import { mountedParts } from '../grid';
-import { emptyWorld } from '../testkit';
+import { partDef } from '../../data/parts';
+import { surrenderTo } from '../parley';
+import { addVehicle, emptyWorld, npcBrain } from '../testkit';
 import { maxHp } from '../wear';
 import { update } from '../world';
 import { emptyLedger } from './orders';
-import { fightTotals, ledgerTotals, netWorth, tierDays, wageByTier, worthOf, worthTotal, type DayRow } from './record';
+import { DayTally, fightTotals, ledgerTotals, netWorth, tierDays, wageByTier, worthOf, worthTotal, type DayRow } from './record';
 
 const row = (day: number, netWorth: number, tier: DayRow['tier'], extra: Partial<DayRow> = {}): DayRow => ({
   day, turns: day === 0 ? 0 : 450, money: 0, netWorth, tier, chassis: 'scout', fightsWon: 0, knockouts: 0, gearLost: 0, deaths: 0, stalls: 0, ledger: emptyLedger(),
@@ -63,6 +65,29 @@ describe('netWorth', () => {
     expect(after.chassis).toBe(before.chassis - repairCost(damaged));
     expect(after.chassis).toBeGreaterThan(before.chassis / 2);
     expect(netWorth(damaged)).toBe(worthTotal(after));
+  });
+});
+
+describe('DayTally', () => {
+  it('counts gear a surrender hands to a robber as lost, and gear the bot sells as kept', () => {
+    const start = emptyWorld({ x: 100, y: 100 });
+    const robber = addVehicle(start, 'raiders', 'buggy', ['mg'], { x: 104, y: 100 });
+    robber.brain = npcBrain('buggy', robber.pos, ['raider']);
+    const gear = () => mountedParts(playerVehicle(start)).filter((p) => partDef(p.defId).kind !== 'core').length;
+    expect(gear()).toBeGreaterThan(0);
+    const robbed = update(start, (w) => surrenderTo(w, playerVehicle(w), w.vehicles.find((v) => v.id === robber.id)!));
+    const sold = update(start, (w) => {
+      const me = playerVehicle(w);
+      me.items = me.items.filter((it) => it.kind !== 'part' || partDef(it.part.defId).kind === 'core');
+    });
+
+    const robbedTally = new DayTally();
+    robbedTally.note(start, robbed, [], emptyLedger());
+    const soldTally = new DayTally();
+    soldTally.note(start, sold, [], emptyLedger());
+
+    expect(robbedTally.close(1, robbed).gearLost).toBeGreaterThan(0);
+    expect(soldTally.close(1, sold).gearLost).toBe(0);
   });
 });
 

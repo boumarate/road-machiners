@@ -33,7 +33,7 @@ describe('the hunter against one weak raider', () => {
     for (let turn = 0; turn < 40; turn++) {
       const played = botOrders(w, 'hunter');
       const next = endTurn(played.world, moveAllFar);
-      tally.note(played.world, next, [...played.events, ...next.events], played.ledger);
+      tally.note(w, next,[...played.events, ...next.events], played.ledger);
       w = next;
     }
 

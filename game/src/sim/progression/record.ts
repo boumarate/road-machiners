@@ -83,7 +83,7 @@ function* playSteps(start: World, label: string, archetype: Archetype, turns: nu
     const before = world;
     const played = inContext(label, before, () => playTurn(before, archetype, options));
     world = played.next;
-    tally.note(played.after, world, played.events, played.ledger);
+    tally.note(before, world, played.events, played.ledger);
     const dead = world.player.state === 'dead';
     const closed = dayEnds(before, world, i === turns - 1 || dead) ? [tally.close(clockOf(before.turn).day, world)] : [];
     const rows = [...carried, ...closed];
@@ -114,8 +114,8 @@ function startWorld(seed: number): World {
   });
 }
 
-// after is the world the bot's commands left, and events everything raised on the way to next.
-type PlayedTurn = { after: World; next: World; lines: TraceLine[]; events: GameEvent[]; ledger: Ledger };
+// events is everything the bot's commands and the turn raised on the way to next.
+type PlayedTurn = { next: World; lines: TraceLine[]; events: GameEvent[]; ledger: Ledger };
 
 // The money the turn moved by itself, after the bot's commands: contract pay, else tow, patch and escort fees.
 function turnLedger(orders: BotTurn, next: World): Ledger {
@@ -133,7 +133,7 @@ function playTurn(world: World, archetype: Archetype, options: BotOptions): Play
   failOnDryMajority(next);
   const events = [...orders.events, ...next.events];
   const lines = [...traceOf(orders.events, orders.world.turn), ...traceOf(next.events, next.turn)];
-  return { after: orders.world, next, lines, events, ledger: turnLedger(orders, next) };
+  return { next, lines, events, ledger: turnLedger(orders, next) };
 }
 
 // Adds the seed, archetype, turn and truck position to any error of the turn.
@@ -305,19 +305,27 @@ function gearIds(world: World): Set<string> {
   return new Set(mountedParts(playerVehicle(world)).filter((p) => partDef(p.defId).kind !== 'core').map((p) => p.id));
 }
 
+// Parts lying in loot piles and stocks or held by other trucks.
+function takenIds(world: World): Set<string> {
+  const others = world.vehicles.filter((v) => v.id !== world.player.vehicleId).flatMap((v) => v.items);
+  const held = others.flatMap((it) => (it.kind === 'part' ? [it.part.id] : []));
+  return new Set([...held, ...world.salvage.flatMap((s) => s.parts.map((p) => p.id))]);
+}
+
 export class DayTally {
   private counts = noCounts();
   private turns = 0;
 
-  // Counts one turn. `after` is the world the bot left, `next` the world the turn ended on, so the gear the turn
-  // took is the difference between them and the bot's own refits never count.
-  note(after: World, next: World, events: readonly GameEvent[], ledger: Ledger): void {
-    const me = after.player.vehicleId;
+  // Counts one turn. `before` is the world the turn started on and `next` the one it ended on. Lost gear is mounted
+  // gear that ended in a loot pile or on another truck: a robbery, whether a knockout or a surrender handed it over.
+  // The bot's own sales and refits never land there.
+  note(before: World, next: World, events: readonly GameEvent[], ledger: Ledger): void {
+    const me = before.player.vehicleId;
     this.turns++;
     for (const key of LEDGER_KEYS) this.counts.ledger[key] += ledger[key];
     for (const e of events) this.countEvent(e, me);
-    const kept = gearIds(next);
-    for (const id of gearIds(after)) if (!kept.has(id)) this.counts.gearLost++;
+    const taken = takenIds(next);
+    for (const id of gearIds(before)) if (taken.has(id)) this.counts.gearLost++;
   }
 
   private countEvent(e: GameEvent, me: string): void {
