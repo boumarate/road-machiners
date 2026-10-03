@@ -1,6 +1,7 @@
 // Obstacle placement: the baked map's props, then seeded site props and road wrecks.
 
-import { FORTRESS, FORTRESS_SITES } from '../data/fortress';
+import { FORTRESS } from '../data/fortress';
+import { FORT_MODELS, type FortModel } from './fortress';
 import { PHYSICS } from '../data/physics';
 import SHAPES from '../data/prop-shapes.json';
 import { REGION } from '../data/region';
@@ -14,10 +15,6 @@ import type { LandmarkLook, Obstacle, World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 
 const O = REGION.obstacles;
-// Fortress piece kinds, which a baked map puts where the site circle used to stand. Their ids carry site and piece.
-const FORT_KIND_LIST: readonly PropKind[] = ['fortWall', 'fortTower', 'fortGate', 'fortBastion', 'fortInner'];
-const FORT_KINDS: ReadonlySet<PropKind> = new Set(FORT_KIND_LIST);
-
 // Baked props come first and never change in play, so a save leaves them out and a load puts them back in
 // the same place in the list.
 export function generateObstacles(world: World, map: BakedMap): Obstacle[] {
@@ -42,13 +39,12 @@ export function mapObstacles(map: BakedMap): Obstacle[] {
 
 function propObstacle(p: BakedProp, k: number): Obstacle {
   if (p.kind === 'rock') return { id: `rock${k}`, pos: { ...p.pos }, r: p.r, kind: 'rock' };
-  const id = p.kind === 'pole' || FORT_KINDS.has(p.kind) ? `${p.kind}-${p.group}-${p.step}` : `${p.kind}-${k}`;
+  const id = p.kind === 'pole' ? `${p.kind}-${p.group}-${p.step}` : `${p.kind}-${k}`;
   return { id, pos: { ...p.pos }, r: p.r, kind: 'landmark', look: p.kind, yaw: p.yaw };
 }
 
 // Ids mapObstacles makes. No other obstacle id takes these forms.
-const GROUPED = ['pole', ...FORT_KIND_LIST];
-const BAKED_ID = new RegExp(`^(rock\\d+|(${GROUPED.join('|')})-\\d+-\\d+|(${PROP_KINDS.filter((k) => k !== 'rock' && !GROUPED.includes(k)).join('|')})-\\d+)$`);
+const BAKED_ID = new RegExp(`^(rock\\d+|pole-\\d+-\\d+|(${PROP_KINDS.filter((k) => k !== 'rock' && k !== 'pole').join('|')})-\\d+)$`);
 
 export function isBakedObstacle(o: Obstacle): boolean {
   return BAKED_ID.test(o.id);
@@ -134,10 +130,9 @@ export type PropPose = { model: PropModel; pos: Vec; yaw: number; scale: PropSca
 // One box of a model's collision shape, in model meters: x forward, y sideways, z up.
 export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
 
-type FortLook = 'fortWall' | 'fortTower' | 'fortGate' | 'fortBastion' | 'fortInner';
+type FortLook = Extract<PropKind, `fort${string}`>;
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'hull_rib' | 'crates' | 'reactor' | 'hull_wall' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | FortModel;
-type FortModel = `fort_${'masonry' | 'ship' | 'scrap'}_${'wall' | 'tower' | 'gate' | 'bastion' | 'inner'}`;
 
 const M = PHYSICS.metersPerTile;
 const TURN = Math.PI * 2;
@@ -204,25 +199,17 @@ export function propShape(model: string): readonly ShapeBox[] {
   return boxes;
 }
 
-// A fortress piece is the model of its site's style. Its group is the site's place in the towns and locations.
-const FORT_PIECES: Record<FortLook, string> = { fortWall: 'wall', fortTower: 'tower', fortGate: 'gate', fortBastion: 'bastion', fortInner: 'inner' };
-const FORT_STYLES = { masonry: 'masonry', shipMetal: 'ship', scrap: 'scrap' } as const;
-
-function landmarkModel(o: Landmark): PropModel {
-  const look = o.look;
-  if (!(look in FORT_PIECES)) return LANDMARK_MODELS[look as Exclude<LandmarkLook, FortLook>];
-  const group = Number(o.id.split('-')[1]);
-  const site = [...REGION.towns, ...REGION.locations][group];
-  const def = site === undefined ? undefined : FORTRESS_SITES[site.id];
-  if (def === undefined) throw new Error(`Fortress piece ${o.id} belongs to no fortress site`);
-  return `fort_${FORT_STYLES[def.style]}_${FORT_PIECES[look as FortLook]}` as FortModel;
+function landmarkModel(look: LandmarkLook): PropModel {
+  const model = FORT_MODELS.get(look)?.model ?? LANDMARK_MODELS[look as Exclude<LandmarkLook, FortLook>];
+  if (model === undefined) throw new Error(`Landmark look ${look} has no model`);
+  return model;
 }
 
 // A landmark faces its baked yaw. A pole turns a quarter more, so its crossbar lies across its line.
 function landmarkPose(o: Landmark): PropPose {
-  const model = landmarkModel(o);
+  const model = landmarkModel(o.look);
   const pos = { ...o.pos };
-  if (o.look === 'fortWall') return { model, pos, yaw: o.yaw, scale: { x: o.r / FORTRESS.wallLength * 2, y: 1, z: 1 } };
+  if (FORT_MODELS.get(o.look)?.piece === 'wall') return { model, pos, yaw: o.yaw, scale: { x: o.r / FORTRESS.wallLength * 2, y: 1, z: 1 } };
   const yaw = o.look === 'pole' ? o.yaw + Math.PI / 2 : o.yaw;
   if (model === 'building') return { model, pos, yaw, scale: buildingScale(o) };
   const radius = MODEL_RADIUS[model];

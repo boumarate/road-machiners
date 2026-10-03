@@ -28,7 +28,7 @@
 
 ## Fortresses
 
-- `src/mapgen/fortress.ts` runs last in the bake. For each site in `FORTRESS_SITES` (`src/data/fortress.ts`) it lays a closed curtain, circle, square or star, of `fortWall`, `fortTower`, `fortGate`, `fortBastion` and `fortInner` props. Prop group is the site's index in towns then locations, and step is the piece index.
+- `src/mapgen/fortress.ts` runs last in the bake. For each site in `FORTRESS_SITES` (`src/data/fortress.ts`) it lays a closed curtain, circle, square or star, of props named for the site's style and the piece, 15 kinds such as `fortMasonryWall` and `fortShipGate`. `FORT_PROPS` in `src/sim/fortress.ts` is the one table of them, and gives each kind its model. Fort props take the ordinary `<kind>-<index>` id.
 - Each gatehouse's outer face sits on the site circle at a `siteGates()` point, so gates, pads, guards and tows work as before. `site.radius` is only the layout bound.
 - A fortress site has no `site-<id>` circle obstacle. The pieces collide through their `prop-shapes.json` boxes in Rapier, the nav grid and sight. A wall stretches along its length to `2r`.
 - `isFortress()` in `src/sim/sites.ts` names these sites. `isFree()` rejects the ground inside one, and discovery looks as far out as a pad is long, since the walls hide the inside.

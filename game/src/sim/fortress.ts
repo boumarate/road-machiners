@@ -10,12 +10,29 @@
 // Where the gatehouse lies wholly outside the curtain, a barbican joins it back: two neck walls and an inner gate
 // in the curtain.
 
-import { FORTRESS, FORTRESS_SITES, type FortressSite } from '../data/fortress';
+import { FORTRESS, FORTRESS_SITES, type FortressSite, type FortressStyle } from '../data/fortress';
 import { siteGates, type Site } from './sites';
+import type { PropKind } from './terrain';
 import { bearing, DEG, dist, segmentDist, type Vec } from './vec';
 
 export type FortressKind = 'wall' | 'tower' | 'gate' | 'bastion' | 'inner';
 // r is half the piece's length along its model +x. For a wall that is half its stretched length.
+// The one table of a fort piece's prop kind. The map file stores the kind, and the kind names the piece's model.
+export type FortModel = `fort_${'masonry' | 'ship' | 'scrap'}_${FortressKind}`;
+export const FORT_PROPS: Record<FortressStyle, Record<FortressKind, PropKind>> = {
+  masonry: { wall: 'fortMasonryWall', tower: 'fortMasonryTower', gate: 'fortMasonryGate', bastion: 'fortMasonryBastion', inner: 'fortMasonryInner' },
+  shipMetal: { wall: 'fortShipWall', tower: 'fortShipTower', gate: 'fortShipGate', bastion: 'fortShipBastion', inner: 'fortShipInner' },
+  scrap: { wall: 'fortScrapWall', tower: 'fortScrapTower', gate: 'fortScrapGate', bastion: 'fortScrapBastion', inner: 'fortScrapInner' },
+};
+const FORT_STYLE_NAMES: Record<FortressStyle, 'masonry' | 'ship' | 'scrap'> = { masonry: 'masonry', shipMetal: 'ship', scrap: 'scrap' };
+
+// The model name of each fort prop kind, and the piece it is. Built once, since no map says more than the kind.
+export const FORT_MODELS: ReadonlyMap<PropKind, { model: FortModel; piece: FortressKind }> = new Map(
+  (Object.keys(FORT_PROPS) as FortressStyle[]).flatMap((style) =>
+    (Object.keys(FORT_PROPS[style]) as FortressKind[]).map((piece) => [FORT_PROPS[style][piece], { model: `fort_${FORT_STYLE_NAMES[style]}_${piece}` as FortModel, piece }] as const),
+  ),
+);
+
 export type FortressPiece = { kind: FortressKind; pos: Vec; yaw: number; r: number };
 
 // An outline corner and the piece that stands on it. Plain circle corners carry none.

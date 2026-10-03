@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { FORTRESS, FORTRESS_SITES } from '../data/fortress';
 import { REGION } from '../data/region';
 import { TEST_MAP } from '../test/map';
-import { fortressPieces } from './fortress';
+import { FORT_MODELS, FORT_PROPS, fortressPieces } from './fortress';
+import { PROP_KINDS } from './terrain';
+import type { Obstacle } from './types';
 import { isDriveObstacle, isBakedObstacle, mapObstacles, propBoxes, propPose } from './mapgen';
 import { isFree } from './spawn';
 import { canUseSite, isFortress, siteGates, sitePads } from './sites';
@@ -25,10 +27,35 @@ function corners(b: { center: { x: number; y: number }; axis: { x: number; y: nu
   return [-1, 1].flatMap((i) => [-1, 1].map((j) => ({ x: b.center.x + b.axis.x * b.half.x * i - b.axis.y * b.half.y * j, y: b.center.y + b.axis.y * b.half.x * i + b.axis.x * b.half.y * j })));
 }
 
+// The baked pieces of one site: the landmarks of its style's kinds that stand inside its circle.
+function piecesOf(site: (typeof SITES)[number], piece?: 'gate' | 'wall'): Extract<Obstacle, { kind: 'landmark' }>[] {
+  const kinds = Object.values(FORT_PROPS[FORTRESS_SITES[site.id].style]);
+  return mapObstacles(TEST_MAP).filter((o): o is Extract<Obstacle, { kind: 'landmark' }> => o.kind === 'landmark' && kinds.includes(o.look) && dist(o.pos, site.pos) <= site.radius && (!piece || FORT_MODELS.get(o.look)?.piece === piece));
+}
+
 // A gatehouse's flat outer face is a chord, so its corners stand a little past the circle that its middle touches.
 function sag(radius: number, o: object): number {
-  return 'look' in o && o.look === 'fortGate' ? Math.hypot(radius, FORTRESS.gate.width / 2) - radius : 0;
+  return 'look' in o && FORT_MODELS.get(o.look as never)?.piece === 'gate' ? Math.hypot(radius, FORTRESS.gate.width / 2) - radius : 0;
 }
+
+describe('fort prop kinds', () => {
+  it('names one model per kind, and every kind is a map prop kind (IV14)', () => {
+    const kinds = Object.values(FORT_PROPS).flatMap((styles) => Object.values(styles));
+    expect(new Set(kinds).size).toBe(15);
+    for (const kind of kinds) expect(PROP_KINDS).toContain(kind);
+    expect(new Set([...FORT_MODELS.values()].map((m) => m.model)).size).toBe(15);
+  });
+
+  it('gives each fortress site the models of its style', () => {
+    for (const site of FORT_SITES) {
+      const style = FORTRESS_SITES[site.id].style;
+      const name = style === 'shipMetal' ? 'ship' : style;
+      const pieces = piecesOf(site);
+      expect(pieces.length, site.id).toBe(fortressPieces(site).length);
+      for (const o of pieces) expect(FORT_MODELS.get(o.look)!.model, `${site.id} ${o.id}`).toMatch(new RegExp(`^fort_${name}_`));
+    }
+  });
+});
 
 describe('fortress obstacles', () => {
   it('has the ten inhabited sites as fortresses', () => {
@@ -59,8 +86,7 @@ describe('fortress obstacles', () => {
 
   it('puts every posed box inside its site circle (IV1)', () => {
     for (const site of FORT_SITES) {
-      const group = SITES.indexOf(site);
-      const own = mapObstacles(TEST_MAP).filter((o) => o.kind === 'landmark' && o.look.startsWith('fort') && o.id.split('-')[1] === String(group));
+      const own = piecesOf(site);
       expect(own.length, site.id).toBe(fortressPieces(site).length);
       for (const o of own) for (const b of propBoxes(o)) for (const c of corners(b)) expect(dist(c, site.pos), `${site.id} ${o.id}`).toBeLessThanOrEqual(site.radius + 0.05 + sag(site.radius, o));
     }
@@ -68,9 +94,8 @@ describe('fortress obstacles', () => {
 
   it('lays each gatehouse model with its outer face on a road gate (IV1)', () => {
     for (const site of FORT_SITES) {
-      const group = SITES.indexOf(site);
       const gates = siteGates(site);
-      const houses = mapObstacles(TEST_MAP).filter((o) => o.kind === 'landmark' && o.look === 'fortGate' && o.id.split('-')[1] === String(group));
+      const houses = piecesOf(site, 'gate');
       expect(houses).toHaveLength(gates.length);
       for (const gate of gates) {
         const at = houses.find((o) => {
@@ -83,7 +108,7 @@ describe('fortress obstacles', () => {
   });
 
   it('stretches a wall along its length, so its boxes span the section', () => {
-    const walls = mapObstacles(TEST_MAP).filter((o) => o.kind === 'landmark' && o.look === 'fortWall');
+    const walls = mapObstacles(TEST_MAP).filter((o) => o.kind === 'landmark' && FORT_MODELS.get(o.look)?.piece === 'wall');
     expect(walls.length).toBeGreaterThan(100);
     for (const o of walls) {
       const pose = propPose(o);

@@ -28,7 +28,7 @@ export function bakeMap(seed: number): MapDraft {
   d = timed('territories', () => territoryLayer(seed, d));
   d = timed('ground', () => groundLayer(seed, d));
   d = timed('rocks', () => rockLayer(seed, d));
-  return timed('fortresses', () => fortressLayer(seed, d));
+  return timed('fortresses', () => fortressLayer(d));
 }
 
 function timed(layer: string, run: () => MapDraft): MapDraft {

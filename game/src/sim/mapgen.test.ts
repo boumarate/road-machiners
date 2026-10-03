@@ -1,3 +1,4 @@
+import { FORT_MODELS } from './fortress';
 import { describe, expect, it } from 'vitest';
 import { BROKEN_WING, BROKEN_WING_POINT, REGION } from '../data/region';
 import { TERRITORIES } from '../data/territory';
@@ -20,7 +21,7 @@ function mapWith(props: BakedProp[]): BakedMap {
   return { ...TEST_MAP, props };
 }
 
-const isFortPiece = (o: Obstacle) => o.kind === 'landmark' && o.look.startsWith('fort');
+const isFortPiece = (o: Obstacle) => o.kind === 'landmark' && FORT_MODELS.has(o.look);
 
 describe('baked map obstacles', () => {
   it('turns rocks into rock obstacles and other props into landmarks, with ids by prop order', () => {
