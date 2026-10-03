@@ -3,6 +3,7 @@ import type { World } from '../types';
 import { describe, expect, it } from 'vitest';
 import { chassisDef } from '../../data/chassis';
 import { REGION } from '../../data/region';
+import { partDef } from '../../data/parts';
 import { CONDITION } from '../../data/wear';
 import { playerVehicle } from '../damage';
 import { makePart } from '../factory';
@@ -175,7 +176,8 @@ describe('botOrders', () => {
       const me = playerVehicle(w);
       me.pos = { x: me.pos.x + 8, y: me.pos.y };
       w.player.money = 2000;
-      w.shops.bowl.stock = engineInStock ? [makePart(w, 'stockEngine', 0)] : [];
+      for (const shop of Object.values(w.shops)) shop.stock = shop.stock.filter((p) => partDef(p.defId).kind !== 'engine');
+      if (engineInStock) w.shops.bowl.stock.push(makePart(w, 'stockEngine', 0));
       w.player.contracts.push({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units: 1, to: 'nose', reward: 300, deadline: 5000, window: 5000, rush: false, tier: 1 });
       addGoods(w, me, 'salt', 1);
       return botOrders(w, 'trader').world;
@@ -188,6 +190,20 @@ describe('botOrders', () => {
 
     expect(dest(stocked)).toEqual(toward(stocked, 'bowl'));
     expect(dest(bare)).toEqual(toward(bare, 'nose'));
+  });
+
+  it('has a broke truck without an engine sell gear in town to buy one', () => {
+    const w = withoutEngine(parkedAt('bowl'));
+    w.player.money = 0;
+    w.shops.bowl.stock = [makePart(w, 'stockEngine', 0)];
+    const gearBefore = mountedParts(playerVehicle(w)).filter((p) => !['core', 'engine'].includes(partDef(p.defId).kind)).length;
+
+    const turn = botOrders(w, 'trader');
+
+    const me = playerVehicle(turn.world);
+    expect(mountedParts(me, 'engine')).toHaveLength(1);
+    expect(mountedParts(me).filter((p) => !['core', 'engine'].includes(partDef(p.defId).kind)).length).toBeLessThan(gearBefore);
+    expect(turn.world.player.money).toBeGreaterThanOrEqual(0);
   });
 
   it('has a broke stranded truck crawl on with its goal instead of waiting in town', () => {
