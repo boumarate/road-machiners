@@ -5,9 +5,9 @@ import SHAPES from '../data/prop-shapes.json';
 import { REGION } from '../data/region';
 import { BREAKABLE } from '../data/rules';
 import { TERRAIN } from '../data/terrain';
-import { PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
+import { heightAt, PROP_KINDS, type BakedMap, type BakedProp, type Terrain } from './terrain';
 import { randInt, randRange } from './rng';
-import { DECKS } from './bridge';
+import { DECKS, underDeck } from './bridge';
 import type { LandmarkLook, Obstacle, World } from './types';
 import { siteGap } from './sites';
 import { angleDiff, bearing, dist, segmentDist, type Vec } from './vec';
@@ -310,16 +310,25 @@ export function propBoxes(o: Obstacle): readonly PosedBox[] {
   return posedShape(o).boxes;
 }
 
-const BLOCKING_BOXES = new WeakMap<readonly PosedBox[], readonly PosedBox[]>();
+// Blocking boxes per terrain and posed box list. World clones share posed boxes and their terrain, so each list is
+// filtered once per terrain.
+const BLOCKING_BOXES = new WeakMap<Terrain, WeakMap<readonly PosedBox[], readonly PosedBox[]>>();
 
-// The boxes of a prop that block a truck: those that start below truck roofs. Higher boxes, like a canopy or the
-// ship wing, leave trucks to pass under. World clones share posed boxes, so each list is filtered once.
-export function blockingBoxes(o: Obstacle): readonly PosedBox[] {
+// The boxes of a prop that block a truck: those that start below truck roofs and are not out of reach under a deck
+// (underDeck() in bridge.ts). Higher boxes, like a canopy or the ship wing, leave trucks to pass under. The prop
+// stands where its colliders and its view stand it: at heightAt() of its position.
+export function blockingBoxes(o: Obstacle, t: Terrain): readonly PosedBox[] {
   const boxes = propBoxes(o);
-  let low = BLOCKING_BOXES.get(boxes);
+  let byBoxes = BLOCKING_BOXES.get(t);
+  if (!byBoxes) {
+    byBoxes = new WeakMap();
+    BLOCKING_BOXES.set(t, byBoxes);
+  }
+  let low = byBoxes.get(boxes);
   if (!low) {
-    low = boxes.filter((b) => b.z0 < PHYSICS.truckClearance);
-    BLOCKING_BOXES.set(boxes, low);
+    const base = heightAt(t, o.pos.x, o.pos.y);
+    low = boxes.filter((b) => b.z0 < PHYSICS.truckClearance && !underDeck(b, base, t));
+    byBoxes.set(boxes, low);
   }
   return low;
 }

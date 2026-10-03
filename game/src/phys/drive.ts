@@ -61,8 +61,8 @@ export type Drive = {
   decks: DeckColliders[]; // one per deck in DECKS, in order
 };
 
-// Collider handles of one deck and its two rails.
-export type DeckColliders = { deck: number; rails: number[] };
+// Collider handles of one deck, its two rails and its lips.
+export type DeckColliders = { deck: number; rails: number[]; lips: number[] };
 
 export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry; step: number }; // b is a vehicle id, an obstacle id, 'edge', 'rail' or 'ground'; impact in m/s
 export type Break = { prop: string; vehicle: string; step: number }; // a breakable prop the vehicle smashed through at this physics step
@@ -161,7 +161,7 @@ export function obstacleColliders(t: Terrain, o: Obstacle): RAPIER.ColliderDesc[
     const half = PHYSICS.rockHeight / 2;
     return [RAPIER.ColliderDesc.cylinder(half, o.r * S).setTranslation(o.pos.x * S, ground + half - PHYSICS.rockSink, o.pos.y * S)];
   }
-  return blockingBoxes(o).map((b) => {
+  return blockingBoxes(o, t).map((b) => {
     const bottom = b.z0 < PHYSICS.rockSink ? Math.min(b.z0, -PHYSICS.rockSink) : b.z0;
     const desc = RAPIER.ColliderDesc.cuboid(b.half.x * S, (b.z1 - bottom) / 2, b.half.y * S);
     desc.setTranslation(b.center.x * S, ground + (b.z1 + bottom) / 2, b.center.y * S);
@@ -362,7 +362,7 @@ function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf:
 
 // The name of what a truck hit: a vehicle id, an obstacle id, a rail or the map edge.
 function crashTarget(other: number, owner: Map<number, string>, obstacleOf: Map<number, string>, d: Drive): string {
-  return owner.get(other) ?? obstacleOf.get(other) ?? (d.decks.some((c) => c.rails.includes(other)) ? RAIL : EDGE);
+  return owner.get(other) ?? obstacleOf.get(other) ?? (d.decks.some((c) => c.rails.includes(other) || c.lips.includes(other)) ? RAIL : EDGE);
 }
 
 function captureCrash(physics: RAPIER.World, state: World, before: Map<string, ImpactMotion>, pair: { a: string; b: string; first: number; other: number }, va: ImpactMotion): Omit<Crash, 'step'> | null {
@@ -809,6 +809,8 @@ function addDecks(world: RAPIER.World, w: World): DeckColliders[] {
 
 // A deck, its top on the deck line from sim/terrain.ts, and a rail along each edge. A skirted deck's
 // rails reach down past the lowest ground along them, so a truck on the ground cannot get under the deck.
+// Each lip is a skirt wall across its end, from the deck line down past the lowest ground along it: nothing stands
+// over the deck line there, so a truck drives off the lip and flies, and nothing drives in under it.
 function addDeck(world: RAPIER.World, w: World, deck: Deck): DeckColliders {
   const B = PHYSICS.bridge;
   const { from, axis } = deck;
@@ -818,6 +820,7 @@ function addDeck(world: RAPIER.World, w: World, deck: Deck): DeckColliders {
   // Yaw turns local +x onto the deck axis, then pitch about local z raises the to end.
   const yaw = headingQuat(Math.atan2(axis.y, axis.x));
   const rot = { x: yaw.y * Math.sin(pitch / 2), y: yaw.y * Math.cos(pitch / 2), z: yaw.w * Math.sin(pitch / 2), w: yaw.w * Math.cos(pitch / 2) };
+  const along = { x: Math.cos(pitch) * axis.x, y: Math.sin(pitch), z: Math.cos(pitch) * axis.y };
   const up = { x: -Math.sin(pitch) * axis.x, y: Math.cos(pitch), z: -Math.sin(pitch) * axis.y };
   const across = { x: -axis.y, z: axis.x };
   const mid = {
@@ -825,22 +828,36 @@ function addDeck(world: RAPIER.World, w: World, deck: Deck): DeckColliders {
     y: ((h0 + h1) / 2) * S,
     z: (from.y + (axis.y * deck.length) / 2) * S,
   };
-  // A box whose top face center sits `lift` meters along the deck's up from the deck line, `side` meters across.
-  const box = (halfWidth: number, halfHeight: number, side: number, lift: number) => {
-    const c = lift - halfHeight;
-    const desc = RAPIER.ColliderDesc.cuboid(length / 2, halfHeight, halfWidth)
-      .setTranslation(mid.x + up.x * c + across.x * side, mid.y + up.y * c, mid.z + up.z * c + across.z * side)
+  // A box half.along, half.up and half.across meters each way in the deck's frame, whose top face center sits
+  // at.lift meters along the deck's up from the deck line, at.side meters across and at.along meters along from
+  // the deck's middle.
+  const box = (half: { along: number; up: number; across: number }, at: { along: number; lift: number; side: number }) => {
+    const c = at.lift - half.up;
+    const desc = RAPIER.ColliderDesc.cuboid(half.along, half.up, half.across)
+      .setTranslation(
+        mid.x + along.x * at.along + up.x * c + across.x * at.side,
+        mid.y + along.y * at.along + up.y * c,
+        mid.z + along.z * at.along + up.z * c + across.z * at.side,
+      )
       .setRotation(rot);
     return world.createCollider(desc).handle;
   };
   const halfWidth = (deck.width * S) / 2;
-  const deckBox = box(halfWidth, B.deckThickness / 2, 0, 0);
+  const deckBox = box({ along: length / 2, up: B.deckThickness / 2, across: halfWidth }, { along: 0, lift: 0, side: 0 });
   const rails = deck.rails.map(([a, b], i) => {
     const side = (i === 0 ? -1 : 1) * halfWidth;
     const depth = deck.skirt ? skirtDepth(w.terrain, a, b, h0, h1) : 0;
-    return box(B.railThickness / 2, (B.railHeight + depth) / 2, side, B.railHeight);
+    return box({ along: length / 2, up: (B.railHeight + depth) / 2, across: B.railThickness / 2 }, { along: 0, lift: B.railHeight, side });
   });
-  return { deck: deckBox, rails };
+  const lips = deck.lips.map(([a, b]) => {
+    // The lip lies at the from or the to end; its wall stands just inside the end.
+    const atTo = (a.x - from.x) * axis.x + (a.y - from.y) * axis.y > deck.length / 2;
+    const h = atTo ? h1 : h0;
+    const depth = skirtDepth(w.terrain, a, b, h, h);
+    const end = (atTo ? 1 : -1) * (length / 2 - B.railThickness / 2);
+    return box({ along: B.railThickness / 2, up: depth / 2, across: halfWidth }, { along: end, lift: 0, side: 0 });
+  });
+  return { deck: deckBox, rails, lips };
 }
 
 // Meters a skirted rail reaches below the deck line: down to PHYSICS.rockSink under the lowest ground

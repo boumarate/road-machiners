@@ -67,15 +67,16 @@ export function groundAt(t: Terrain, x: number, y: number): number {
   return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
 }
 
-// Deck surface height at a distance along it: a straight line between the ground at both ends.
+// Deck surface height at a distance along it: a straight line between its two end heights.
 export function deckHeight(t: Terrain, deck: Deck, along: number): number {
   const [from, to] = deckEnds(t, deck);
   return from + (to - from) * (along / deck.length);
 }
 
-// Ground height at the deck's from and to ends.
+// Deck line height at the deck's from and to ends: the ground there plus the end's rise. The only source of a
+// deck's end heights, so decks that meet end to end with one rise meet at one height.
 export function deckEnds(t: Terrain, deck: Deck): [number, number] {
-  return [groundAt(t, deck.from.x, deck.from.y), groundAt(t, deck.to.x, deck.to.y)];
+  return [groundAt(t, deck.from.x, deck.from.y) + deck.rise[0], groundAt(t, deck.to.x, deck.to.y) + deck.rise[1]];
 }
 
 // Height change per tile along x and y. A tile centered on the deck takes the deck's grade.

@@ -3,6 +3,7 @@
 
 import { PHYSICS } from "./physics";
 import { BROKEN_WING, BROKEN_WING_POINT, MAP_SCALE, REGION, scalePoint } from "./region";
+import { FALLEN_SUN_DECKS } from "./territory";
 import type { Vec } from "../sim/vec";
 
 export type TerrainTypeId =
@@ -68,7 +69,9 @@ export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
 // A straight road deck. width is tiles between its two rails. cut, when set, removes the road's
 // flattening in the gap under the deck: abutment is tiles of causeway left under each deck end, and ramp
 // tiles over which the cut ground falls away. skirt makes the physics rails reach down past the lowest
-// ground beside the deck, so trucks on open ground cannot drive in under it.
+// ground beside the deck, so trucks on open ground cannot drive in under it. rise is height units over the ground at
+// the from and to ends: 0 rests an end on the ground, and a raised end that meets no other deck is a lip a truck
+// drives off and flies from. A deck with a raised end is skirted.
 export type DeckSpec = {
   id: string;
   from: Vec;
@@ -76,6 +79,7 @@ export type DeckSpec = {
   width: number;
   cut: { abutment: number; ramp: number } | null;
   skirt: boolean;
+  rise: [number, number];
 };
 
 // Canyon Bridge: the road's causeway is cut away under the deck, so the canyon runs below it.
@@ -86,6 +90,7 @@ const CANYON_BRIDGE: DeckSpec = {
   width: 8, // the widest truck keeps its clearance from both rails
   cut: { abutment: 1, ramp: 1.5 },
   skirt: false,
+  rise: [0, 0],
 };
 
 // The Broken Wing deck: the wing's top, with the road on it. The road's flattening stays under it, so the graded
@@ -98,6 +103,7 @@ const WING_DECK: DeckSpec = {
   width: REGION.roadWidth, // as wide as the road, from the concept art: about 4 truck lengths
   cut: null,
   skirt: true,
+  rise: [0, 0],
 };
 
 // A raised bowl: a crater with its depth turned to height, cut by the same rule. Roads do not flatten it, and road
@@ -157,8 +163,8 @@ export const TERRAIN = {
       bank: TRENCH.bank,
       depth: TRENCH.depth,
     },
-    // Straight road decks, each between two road points. See src/sim/bridge.ts.
-    decks: [CANYON_BRIDGE, WING_DECK] as readonly DeckSpec[],
+    // Straight decks: the road decks, each between two road points, then the Fallen Sun's. See src/sim/bridge.ts.
+    decks: [CANYON_BRIDGE, WING_DECK, ...FALLEN_SUN_DECKS] as readonly DeckSpec[],
     // Broken Wing's hoop: the wing's torn root bent up over the road, a baked prop at its built size. Its feet stand
     // beside the road and its boxes over the road start high, so trucks pass under it. pos and yaw come from
     // BROKEN_WING, and r is the model's bake circle in tiles: 26.5 m.

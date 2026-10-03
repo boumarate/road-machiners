@@ -10,7 +10,8 @@
 import type { PropKind } from '../sim/terrain';
 import type { LandmarkLook } from '../sim/types';
 import type { Vec } from '../sim/vec';
-import { onOrchardRoad } from './region';
+import { onOrchardRoad, REGION } from './region';
+import type { DeckSpec } from './terrain';
 
 export { onOrchardRoad };
 
@@ -453,3 +454,29 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
     reactor: null,
   },
 };
+
+// The Fallen Sun's centre in map tiles, where its location stands.
+function fallenSunCentre(): Vec {
+  const site = REGION.locations.find((l) => l.id === 'fallen-sun');
+  if (!site) throw new Error('The Fallen Sun location is missing from REGION');
+  return site.pos;
+}
+
+// The Fallen Sun's decks in tiles from its centre. rise is height units over the ground at the from and to ends.
+//
+// Inferred, as the concept shows no ramps: a flap is a wing flap propped up as a jump ramp, 5 tiles long and 3 wide,
+// rising from the ground to 0.35 height units (1.4 m) at its lip over flat landing ground. A standard truck leaving
+// it at road speed flies about 4 tiles and lands upright, its wheels losing less than a breakdown takes; at 0.45 the
+// landing costs more than that (src/phys/props.test.ts). This flap stands on the open floor west of the hub (concept
+// (386,261)), its low end at (-12,6) facing south-east where the track under the shells meets the hub, with 12 tiles of
+// clear landing past its lip. It is provisional: the full list of the wing and flaps comes with the layout.
+const DECKS: { id: string; from: Vec; to: Vec; width: number; rise: [number, number] }[] = [
+  { id: 'fallen-sun-flap-1', from: { x: -12, y: 6 }, to: { x: -9.2, y: 10.2 }, width: 3, rise: [0, 0.35] },
+];
+
+// The Fallen Sun's decks in map tiles, listed in TERRAIN.features.decks after the road decks. Each is skirted, so
+// nothing drives in under a raised end, and none cuts the ground.
+export const FALLEN_SUN_DECKS: DeckSpec[] = DECKS.map((d) => {
+  const c = fallenSunCentre();
+  return { ...d, from: { x: c.x + d.from.x, y: c.y + d.from.y }, to: { x: c.x + d.to.x, y: c.y + d.to.y }, cut: null, skirt: true };
+});

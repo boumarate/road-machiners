@@ -1,11 +1,12 @@
 import { START_KITS } from "../data/start";
 import { describe, expect, it } from "vitest";
 import { REGION } from "../data/region";
-import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from "../data/terrain";
+import { TERRAIN, TERRAIN_TYPES, type DeckSpec, type TerrainTypeId } from "../data/terrain";
 import { route } from "./path";
 import { PHYSICS } from "../data/physics";
-import { deckById } from "./bridge";
+import { buildDecks, deckById } from "./bridge";
 import {
+  deckEnds,
   deckHeight,
   groundAt,
   heightAt,
@@ -21,7 +22,7 @@ import { newWorld } from "./world";
 import { siteGap } from "./sites";
 import type { World } from "./types";
 import { TEST_MAP } from "../test/map";
-import { TERRITORIES } from "../data/territory";
+import { FALLEN_SUN_DECKS, TERRITORIES } from "../data/territory";
 
 // Several tests below read the start world without changing it (destinations, canyon shape,
 // cliff checks), so they share one.
@@ -311,5 +312,46 @@ describe("the Broken Wing deck on the baked map", () => {
         const inner = along >= END && along <= W.length - END;
         expect(ground, `${along},${across}`).toBeLessThanOrEqual(inner ? line - thickness : line + rails);
       }
+  });
+});
+
+describe("deck end heights", () => {
+  const t = TEST_MAP.terrain;
+
+  it("rests both ends of a deck with no rise on the ground, as Canyon Bridge and the Broken Wing deck always did", () => {
+    for (const id of ["canyon-bridge", "broken-wing"]) {
+      const deck = deckById(id);
+      expect(deckEnds(t, deck)).toEqual([groundAt(t, deck.from.x, deck.from.y), groundAt(t, deck.to.x, deck.to.y)]);
+    }
+  });
+
+  it("raises each end of a deck by its rise over the ground there", () => {
+    const flap = deckById(FALLEN_SUN_DECKS[0].id);
+    const [from, to] = deckEnds(t, flap);
+
+    expect(from).toBeCloseTo(groundAt(t, flap.from.x, flap.from.y) + flap.rise[0], 12);
+    expect(to).toBeCloseTo(groundAt(t, flap.to.x, flap.to.y) + flap.rise[1], 12);
+    expect(flap.rise[1]).toBeGreaterThan(0);
+  });
+
+  it("puts the flap's lip, its raised end, at the rise over the ground everywhere across the deck", () => {
+    const flap = deckById(FALLEN_SUN_DECKS[0].id);
+    const lip = flap.length - 1e-6;
+    for (let across = -flap.width / 2 + 0.1; across < flap.width / 2; across += 0.4) {
+      const p = { x: flap.from.x + flap.axis.x * lip - flap.axis.y * across, y: flap.from.y + flap.axis.y * lip + flap.axis.x * across };
+      expect(heightAt(t, p.x, p.y)).toBeCloseTo(groundAt(t, flap.to.x, flap.to.y) + flap.rise[1], 5);
+    }
+  });
+
+  it("keeps the height continuous across a joint where two raised ends meet", () => {
+    // A ramp, a span and a ramp end to end, on the baked map's uneven ground.
+    const spec = (id: string, x0: number, x1: number, rise: [number, number]): DeckSpec => ({ id, from: { x: x0, y: 200 }, to: { x: x1, y: 205 }, width: 8, cut: null, skirt: true, rise });
+    const [up, span, down] = buildDecks([spec("up", 100, 108, [0, 1.5]), { ...spec("span", 108, 130, [1.5, 1.5]), from: { x: 108, y: 205 }, to: { x: 130, y: 205 } }, { ...spec("down", 130, 138, [1.5, 0]), from: { x: 130, y: 205 }, to: { x: 138, y: 205 } }]);
+
+    expect(deckEnds(t, up)[1]).toBe(deckEnds(t, span)[0]);
+    expect(deckEnds(t, span)[1]).toBe(deckEnds(t, down)[0]);
+    expect(deckHeight(t, up, up.length)).toBeCloseTo(deckHeight(t, span, 0), 12);
+    expect(deckHeight(t, span, span.length)).toBeCloseTo(deckHeight(t, down, 0), 12);
+    expect(deckEnds(t, up)[1]).toBeCloseTo(groundAt(t, 108, 205) + 1.5, 12);
   });
 });

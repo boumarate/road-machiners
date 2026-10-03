@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { BROKEN_WING, BROKEN_WING_POINT, scalePoint } from '../data/region';
 import { START_KITS } from '../data/start';
-import { bridgeCut, crossesRail, deckAt, deckById, DECKS, nearRail } from './bridge';
+import type { DeckSpec } from '../data/terrain';
+import { FALLEN_SUN_DECKS } from '../data/territory';
+import { bridgeCut, buildDecks, crossesRail, deckAt, deckById, DECKS, nearRail } from './bridge';
 import { route, routeLength } from './path';
 import { segmentDist } from './vec';
 import { deckEnds, groundAt, heightAt, isCliff, markHeightAt, tileAt } from './terrain';
@@ -15,14 +17,14 @@ const at = (along: number, across: number) => ({
 });
 
 describe('the deck list', () => {
-  it('holds Canyon Bridge first, with the geometry it had as the one bridge, then the Broken Wing deck', () => {
+  it('holds Canyon Bridge first, with the geometry it had as the one bridge, then the Broken Wing deck, then the Fallen Sun decks', () => {
     const from = scalePoint({ x: 97.9, y: 75.1 });
     const to = scalePoint({ x: 101.5, y: 71.5 });
     const length = Math.hypot(to.x - from.x, to.y - from.y);
     const axis = { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
     const off = { x: -axis.y * 4, y: axis.x * 4 };
 
-    expect(DECKS.map((d) => d.id)).toEqual(['canyon-bridge', 'broken-wing']);
+    expect(DECKS.map((d) => d.id)).toEqual(['canyon-bridge', 'broken-wing', ...FALLEN_SUN_DECKS.map((d) => d.id)]);
     expect(DECKS[0]).toEqual({
       id: 'canyon-bridge',
       from,
@@ -30,6 +32,8 @@ describe('the deck list', () => {
       width: 8,
       cut: { abutment: 1, ramp: 1.5 },
       skirt: false,
+      rise: [0, 0],
+      lips: [],
       axis,
       length,
       rails: [
@@ -57,6 +61,8 @@ describe('the Broken Wing deck', () => {
     expect(W.width).toBe(6);
     expect(W.cut).toBeNull();
     expect(W.skirt).toBe(true);
+    expect(W.rise).toEqual([0, 0]);
+    expect(W.lips).toEqual([]);
   });
 
   it('is the deck under every point of its outline, and no deck holds a point beside or past it', () => {
@@ -161,5 +167,71 @@ describe('Canyon Bridge', () => {
     expect(points.at(-1)).toEqual(deck);
     for (let i = 1; i < points.length; i++) expect(crossesRail(points[i - 1], points[i], 0)).toBe(false);
     expect(routeLength(floor, points.slice(1))).toBeGreaterThan(B.length / 2);
+  });
+});
+
+// A test deck along +x from (x0, 50) to (x1, 50), 4 tiles wide.
+const spec = (id: string, x0: number, x1: number, rise: [number, number]): DeckSpec => ({ id, from: { x: x0, y: 50 }, to: { x: x1, y: 50 }, width: 4, cut: null, skirt: true, rise });
+
+describe('raised deck ends', () => {
+  it('makes a raised end that meets no other deck a lip across the deck, from rail end to rail end', () => {
+    const [flap] = buildDecks([spec('flap', 10, 15, [0, 0.6])]);
+
+    expect(flap.lips).toEqual([[{ x: 15, y: 48 }, { x: 15, y: 52 }]]);
+  });
+
+  it('makes both ends lips when both are raised, and no lip at an end on the ground', () => {
+    const [both, ground] = buildDecks([spec('both', 10, 15, [0.5, 0.5]), spec('ground', 30, 35, [0, 0])]);
+
+    expect(both.lips).toEqual([[{ x: 10, y: 48 }, { x: 10, y: 52 }], [{ x: 15, y: 48 }, { x: 15, y: 52 }]]);
+    expect(ground.lips).toEqual([]);
+  });
+
+  it('makes no lip at a joint, where a raised end meets the end of the next deck', () => {
+    const chain = buildDecks([spec('up', 10, 18, [0, 1.5]), spec('span', 18, 40, [1.5, 1.5]), spec('down', 40, 48, [1.5, 0])]);
+
+    for (const deck of chain) expect(deck.lips, deck.id).toEqual([]);
+  });
+
+  it('makes a lip where two raised ends lie more than a thousandth of a tile apart', () => {
+    const [up, span] = buildDecks([spec('up', 10, 18, [0, 1.5]), spec('span', 18.01, 40, [1.5, 0])]);
+
+    expect(up.lips).toEqual([[{ x: 18, y: 48 }, { x: 18, y: 52 }]]);
+    expect(span.lips).toEqual([[{ x: 18.01, y: 48 }, { x: 18.01, y: 52 }]]);
+  });
+
+  it('fails loudly on a deck end sunk below the ground', () => {
+    expect(() => buildDecks([spec('sunk', 10, 15, [0, -0.2])])).toThrow('Deck sunk has a negative rise');
+  });
+
+  it('skirts every deck with a raised end, so nothing drives in under it', () => {
+    const raised = DECKS.filter((d) => d.rise.some((r) => r !== 0));
+
+    expect(raised.length).toBeGreaterThan(0);
+    for (const deck of raised) expect(deck.skirt, deck.id).toBe(true);
+  });
+
+  it('gives the Fallen Sun flap a lip at its raised end that blocks like a rail', () => {
+    const flap = deckById(FALLEN_SUN_DECKS[0].id);
+    expect(flap.lips).toHaveLength(1);
+    const [a, b] = flap.lips[0];
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const past = { x: mid.x + flap.axis.x * 0.5, y: mid.y + flap.axis.y * 0.5 };
+    const before = { x: mid.x - flap.axis.x * 2, y: mid.y - flap.axis.y * 2 };
+    const beyond = { x: mid.x + flap.axis.x * 4, y: mid.y + flap.axis.y * 4 };
+
+    // Half a tile past the lip's middle lies 1.5 tiles from either rail, but within reach of the lip.
+    expect(flap.rails.every(([c, d]) => segmentDist(past, c, d) > 1)).toBe(true);
+    expect(nearRail(past.x, past.y, 1)).toBe(true);
+    expect(crossesRail(before, beyond, 0)).toBe(true);
+  });
+
+  it('gives the low end of the flap no lip, so a truck drives onto it there', () => {
+    const flap = deckById(FALLEN_SUN_DECKS[0].id);
+    const before = { x: flap.from.x - flap.axis.x * 3, y: flap.from.y - flap.axis.y * 3 };
+    const onto = { x: flap.from.x + flap.axis.x * 2, y: flap.from.y + flap.axis.y * 2 };
+
+    expect(flap.rise[0]).toBe(0);
+    expect(crossesRail(before, onto, 0)).toBe(false);
   });
 });
