@@ -29,6 +29,7 @@ import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
 import { scrapPatch } from './economy';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
 import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
+import { spillDeadRows } from './spill';
 import { timed } from '../perf';
 import { noteHurt, resolveNpcActivities, watchStalls } from './npc-activities';
 import { advanceStates } from './states';
@@ -269,6 +270,7 @@ export function endTurn(
     if (!shopNear(w)) w.player.townPatched = false;
     followTower(w);
     applyWear(w);
+    spillDeadRows(w);
     advanceEngineHeat(w);
     advanceDust(w);
     clearPiles(w);
@@ -283,6 +285,7 @@ export function endTurn(
     fireGuards(w);
     consumeSupplies(w);
     applyHazards(w);
+    spillDeadRows(w);
     scrapPatch(w);
     healPlayer(w);
     leakFuel(w);

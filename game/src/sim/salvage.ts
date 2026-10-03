@@ -231,6 +231,11 @@ export function dumpOnPile(world: World, vehicle: Vehicle, item: GridItem): Salv
   return dropOnPile(world, vehicle, [item], `dump-${vehicle.id}-${world.turn}`);
 }
 
+// Drops what lay on a broken cargo part's dead rows.
+export function spillOnPile(world: World, vehicle: Vehicle, items: GridItem[]): SalvageStock {
+  return dropOnPile(world, vehicle, items, `spill-${vehicle.id}-${world.turn}`);
+}
+
 // The items a handover drops: `goodsShare` of each good, rounded up, and every loose part.
 function cargoItems(vehicle: Vehicle, goodsShare: number): GridItem[] {
   if (!(goodsShare >= 0 && goodsShare <= 1)) throw new Error(`Cargo share ${goodsShare} is not in [0, 1]`);
