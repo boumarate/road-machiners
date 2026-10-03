@@ -604,6 +604,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 4px;
 }
 .knob-cell {
   display: flex;
@@ -1476,6 +1477,10 @@ body {
   }
   .radio-lcd {
     font-size: 10px;
+  }
+  /* Small enough that the four knob labels keep apart on the narrow radio. */
+  .knob-cell {
+    font-size: 7px;
   }
   #ui .contracts {
     bottom: 393px;
