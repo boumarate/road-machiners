@@ -1,11 +1,12 @@
-// The small walled compounds' interiors: Dustwell (C2) and the Granary (C3), each a few machines and sheds inside a
-// short curtain. Salvage Yard (C4) joins them next.
+// The small walled compounds' interiors: Dustwell (C2), the Granary (C3) and the Salvage Yard (C4), each a few
+// machines and sheds inside a short curtain.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../../data/physics';
 import { FACTION_COLORS, PAL } from '../../../render/palette';
+import { hash2 } from '../../../render/noise';
 import { model, socket } from '../models';
-import { rock, travel } from '../site-motion';
+import { hoist, rock, slew, travel } from '../site-motion';
 import type { SiteBuilder } from '../sites';
 
 // Dustwell's interior (C2): a water pumpjack along the back-left wall with its beam rocking, two tall storage tanks in
@@ -30,12 +31,14 @@ const SQUAT = { x: -0.1, z: 1.9, height: 0.42 }; // height: share of the tall ta
 // The reused scrap shack, 1.5x so it reads as C2's shed, its door (+X) turned to face the yard (+z). C2's shed stands
 // just behind the gate, but the 12 m east wall hides everything there lower than about 5 m from the camera, so it
 // stands two tiles further in, in front of the tanks, where its roof shows over the walls.
-const SHED = { x: 0.3, z: -0.3, yaw: -Math.PI / 2, scale: 1.5 };
-// The lit doorway fills the shack's door gap (tools/blender/shack.py), in tiles after the shed's scale.
+const SHED = { x: 0.3, z: -0.3, yaw: -Math.PI / 2 };
+// A shed is the scrap shack at this scale. Its lit doorway fills the shack's door gap (tools/blender/shack.py), in
+// tiles after the scale.
+const SHED_SCALE = 1.5;
 const SHED_DOOR = {
-  reach: (2.03 * SHED.scale) / 4 + 0.01, // just out of the door plane, 2.03 m along the shack's +X
-  width: (0.9 * SHED.scale) / 4 - 0.04, // inside the 0.9 m gap
-  height: (1.8 * SHED.scale) / 4 - 0.05, // under the 1.8 m lintel
+  reach: (2.03 * SHED_SCALE) / 4 + 0.01, // just out of the door plane, 2.03 m along the shack's +X
+  width: (0.9 * SHED_SCALE) / 4 - 0.04, // inside the 0.9 m gap
+  height: (1.8 * SHED_SCALE) / 4 - 0.05, // under the 1.8 m lintel
 };
 const SHED_LAMP = { reach: 0.12, size: 0.14, lift: 0.66 }; // tiles: a lantern hung over the door, out from the door plane
 const PIPE = { size: 0.08, lift: 0.12, support: 0.6 }; // tiles; supports every `support` tiles
@@ -44,7 +47,7 @@ export function buildDustwell(b: SiteBuilder): void {
   addPumpjack(b);
   for (const tank of TANKS) b.addModel('storage_tank', tank.x, tank.z).name = 'dustwell-tank';
   b.addModel('storage_tank', SQUAT.x, SQUAT.z, 0.6, new THREE.Vector3(1, SQUAT.height, 1)).name = 'dustwell-tank';
-  addShed(b);
+  addShed(b, 'dustwell', SHED);
   addPipes(b);
 }
 
@@ -59,13 +62,17 @@ function addPumpjack(b: SiteBuilder): void {
   b.addMover(beam, rock(new THREE.Vector3(0, 0, 1), STROKE.amplitude, STROKE.period));
 }
 
-// The shed with its doorway lit, as C2's shed glows at the door.
-function addShed(b: SiteBuilder): void {
-  b.addModel('shack', SHED.x, SHED.z, SHED.yaw, SHED.scale).name = 'dustwell-shed';
-  b.addBox(SHED.x, SHED.z + SHED_DOOR.reach, SHED_DOOR.width, SHED_DOOR.height, 0.02, PAL.lamp.on).name = 'dustwell-shed-door';
-  const lamp = SHED.z + SHED_DOOR.reach + SHED_LAMP.reach;
-  b.addBox(SHED.x, lamp - SHED_LAMP.reach / 2, 0.03, 0.03, SHED_LAMP.reach, PAL.metal, SHED_LAMP.lift + SHED_LAMP.size);
-  b.addBox(SHED.x, lamp, SHED_LAMP.size, SHED_LAMP.size, SHED_LAMP.size, PAL.lamp.on, SHED_LAMP.lift).name = 'dustwell-shed-lamp';
+// A shed with its doorway lit, as C2's and C4's sheds glow at the door. Its door (the shack's +X) faces along yaw.
+function addShed(b: SiteBuilder, site: string, shed: { x: number; z: number; yaw: number }): void {
+  b.addModel('shack', shed.x, shed.z, shed.yaw, SHED_SCALE).name = `${site}-shed`;
+  const out = { x: Math.cos(shed.yaw), z: -Math.sin(shed.yaw) };
+  const at = (reach: number) => ({ x: shed.x + out.x * reach, z: shed.z + out.z * reach });
+  const door = at(SHED_DOOR.reach);
+  b.addBox(door.x, door.z, 0.02, SHED_DOOR.height, SHED_DOOR.width, PAL.lamp.on, 0, shed.yaw).name = `${site}-shed-door`;
+  const bracket = at(SHED_DOOR.reach + SHED_LAMP.reach / 2);
+  b.addBox(bracket.x, bracket.z, SHED_LAMP.reach, 0.03, 0.03, PAL.metal, SHED_LAMP.lift + SHED_LAMP.size, shed.yaw);
+  const lamp = at(SHED_DOOR.reach + SHED_LAMP.reach);
+  b.addBox(lamp.x, lamp.z, SHED_LAMP.size, SHED_LAMP.size, SHED_LAMP.size, PAL.lamp.on, SHED_LAMP.lift, shed.yaw).name = `${site}-shed-lamp`;
 }
 
 // A header pipe on low supports from the wellhead east past both tank outlets, with a stub up to each outlet.
@@ -227,4 +234,89 @@ function addBin(b: SiteBuilder, x: number, z: number): void {
     b.addBox(x, z + s * (half - BINS.plank / 2), BINS.size, BINS.wall, BINS.plank, PAL.trunk);
   }
   b.addBox(x, z, BINS.size - 2 * BINS.plank, BINS.fill, BINS.size - 2 * BINS.plank, GRAIN, BINS.wall - BINS.fill - 0.03).name = 'granary-bin';
+}
+
+// The Salvage Yard's interior (C4): a slewing crane on a round turret at the back, holding a car in its grab, crushed
+// wrecks stacked along the walls, a tall tank, a white container, a lit work shed and a stripped jeep.
+//
+// Offsets are site tiles: x is map x, z is map y. The gate faces north (-z), away from the default camera at +x +y, so
+// "back" from the gate is south. The 12 m walls hide everything below about 5 m in the half nearest each camera, so
+// the shed and most stacks stand in the west half, which both the default camera and C4's view (from the northeast)
+// see.
+
+// The crane at the back center. Its boom rests pointing west-northwest (yaw) and slews +-35 degrees on a 14 s cycle,
+// so the grab stays over the yard. The grab hoists 2 m twice per slew.
+const CRANE = { x: 0.1, z: 1.3, yaw: (160 * Math.PI) / 180 };
+const SLEW = { amplitude: (35 * Math.PI) / 180, period: 14 };
+const HOIST = { range: 2, period: 7 };
+// Meters from the boom tip down to the hook at rest: crane_upper's 3.2 m fixed lines and crane_grab's 2 m slack lines.
+const HANG = 5.2;
+// The tank stands in the northwest corner, the back corner from the default camera and the right one in C4's view.
+const TANK = { x: -2.0, z: -2.0 };
+const CONTAINER = { x: -1.85, z: 2.55, yaw: 0, length: 1.5, width: 0.6, height: 0.65, ribs: 6 };
+// The shed's door faces east, which both cameras see. West of the middle and off the diagonals behind the near corner
+// towers, it shows from both above about 1 m.
+const YARD_SHED = { x: -1.55, z: -0.1, yaw: 0 };
+// Crushed wrecks stacked flat along the walls, each slab a car pressed to 0.5 m.
+const STACKS = [
+  { x: -2.55, z: 0.95, yaw: Math.PI / 2, layers: 6 },
+  { x: -1.3, z: 1.75, yaw: 0.25, layers: 5 },
+  { x: 0.6, z: -2.0, yaw: 0, layers: 4 },
+];
+const SLAB = { length: 1.05, height: 0.12, width: 0.45, shift: 0.04, twist: 0.08 };
+const SLAB_COLORS = [PAL.rust.top, PAL.rust.side, PAL.rust.dark, PAL.metal, FACTION_COLORS.convoys.side];
+const JEEP = { x: 1.3, z: -0.3, yaw: 0.5 };
+const WRECKS = [{ x: 1.5, z: 0.9, yaw: 1.9 }];
+const YARD_PROPS = [
+  { name: 'crates', x: 1.5, z: -1.6, yaw: 0.3 },
+  { name: 'drums', x: -0.3, z: -1.2, yaw: 1.2 },
+] as const;
+
+export function buildSalvageYard(b: SiteBuilder): void {
+  addCrane(b);
+  b.addModel('storage_tank', TANK.x, TANK.z).name = 'salvage-tank';
+  addContainer(b);
+  addShed(b, 'salvage', YARD_SHED);
+  for (const stack of STACKS) addScrapStack(b, stack);
+  b.addModel('wreck', JEEP.x, JEEP.z, JEEP.yaw).name = 'salvage-jeep';
+  for (const w of WRECKS) b.addModel('wreck', w.x, w.z, w.yaw).name = 'salvage-wreck';
+  for (const p of YARD_PROPS) b.addModel(p.name, p.x, p.z, p.yaw);
+}
+
+// The turret, the upper on the slew socket and the grab hanging from the boom tip, each part on its own motion.
+function addCrane(b: SiteBuilder): void {
+  const base = b.addModel('crane_base', CRANE.x, CRANE.z, CRANE.yaw);
+  base.name = 'salvage-crane';
+  const upper = model('crane_upper');
+  upper.name = 'crane-upper';
+  upper.position.copy(socket('crane_base', 'slew'));
+  base.add(upper);
+  const grab = model('crane_grab');
+  grab.name = 'crane-grab';
+  grab.position.copy(socket('crane_upper', 'hook'));
+  grab.position.y -= HANG;
+  upper.add(grab);
+  b.addMover(upper, slew(SLEW.amplitude, SLEW.period));
+  b.addMover(grab, hoist(HOIST.range, HOIST.period));
+}
+
+// A white shipping container with corrugation ribs down its long sides.
+function addContainer(b: SiteBuilder): void {
+  const { x, z, yaw, length, width, height, ribs } = CONTAINER;
+  b.addBox(x, z, length, height, width, FACTION_COLORS.convoys.top, 0, yaw).name = 'salvage-container';
+  const along = { x: Math.cos(yaw), z: -Math.sin(yaw) };
+  for (let i = 0; i < ribs; i++) {
+    const t = ((i + 0.5) / ribs - 0.5) * length;
+    b.addBox(x + along.x * t, z + along.z * t, 0.03, height - 0.04, width + 0.03, FACTION_COLORS.convoys.side, 0.02, yaw);
+  }
+}
+
+// Slabs piled with a little shift and twist each, so the stack reads as crushed cars rather than one block.
+function addScrapStack(b: SiteBuilder, stack: { x: number; z: number; yaw: number; layers: number }): void {
+  for (let k = 0; k < stack.layers; k++) {
+    const jitter = (salt: number) => hash2(k * 7 + salt, Math.round(stack.x * 100 + stack.z * 10)) - 0.5;
+    const color = SLAB_COLORS[Math.floor((jitter(3) + 0.5) * SLAB_COLORS.length)];
+    const slab = b.addBox(stack.x + jitter(1) * SLAB.shift, stack.z + jitter(2) * SLAB.shift, SLAB.length, SLAB.height, SLAB.width, color, k * SLAB.height, stack.yaw + jitter(4) * SLAB.twist);
+    if (k === 0) slab.name = 'salvage-stack';
+  }
 }

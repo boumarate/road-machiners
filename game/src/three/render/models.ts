@@ -103,6 +103,9 @@ const NAMES = [
   'grain_silo',
   'grain_elevator',
   'lean_to',
+  'crane_base',
+  'crane_upper',
+  'crane_grab',
 
   'bumper_front',
   'bumper_rear',

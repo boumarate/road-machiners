@@ -365,6 +365,78 @@ describe('landmark scale', () => {
     expect(glowing).toContain(PAL.lamp.on);
   });
 
+  it('slews the Salvage Yard crane and hoists its grab, inside the curtain at rest and at both ends of the slew (IV8, IV20)', () => {
+    const S = PHYSICS.metersPerTile;
+    const yard = ALL.find((s) => s.id === 'salvage-yard')!;
+    const own = movers.filter(({ node }) => {
+      let p: Object3D | null = node;
+      while (p !== null && p.name !== 'landmark-salvage-yard') p = p.parent;
+      return p !== null;
+    });
+    expect(own.map((m) => m.node.name)).toEqual(['crane-upper', 'crane-grab']);
+    const [upper, grab] = own;
+    expect(grab.node.parent).toBe(upper.node);
+    const rests = own.map(({ node }) => ({ position: node.position.clone(), quaternion: node.quaternion.clone() }));
+    const v = new Vector3();
+    // The 14 s slew is at rest at 0 s and at its ends at 3.5 s and 10.5 s. The 7 s hoist is at its top at both ends.
+    const turns: number[] = [];
+    const lifts: number[] = [];
+    for (const seconds of [0, 3.5, 10.5]) {
+      own.forEach(({ node, motion }, i) => {
+        motion(seconds, node, rests[i]);
+        node.updateMatrix();
+      });
+      upper.node.updateWorldMatrix(true, true);
+      turns.push(upper.node.quaternion.angleTo(rests[0].quaternion));
+      lifts.push(grab.node.position.y - rests[1].position.y);
+      const outside: string[] = [];
+      upper.node.traverse((o) => {
+        if (!(o instanceof Mesh)) return;
+        const pos = o.geometry.getAttribute('position');
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+          if (!insideCurtain(yard, { x: v.x / S, y: v.z / S })) outside.push(`${o.name} ${(v.x / S - yard.pos.x).toFixed(2)},${(v.z / S - yard.pos.y).toFixed(2)}`);
+        }
+      });
+      expect(outside.slice(0, 3), `crane at ${seconds} s`).toEqual([]);
+    }
+    expect(turns[0]).toBeCloseTo(0, 5);
+    expect(turns[1]).toBeCloseTo((35 * Math.PI) / 180, 3);
+    expect(turns[2]).toBeCloseTo((35 * Math.PI) / 180, 3);
+    expect(lifts[0]).toBeCloseTo(0, 5);
+    expect(lifts[1]).toBeCloseTo(2, 3);
+    own.forEach(({ node, motion }, i) => {
+      motion(0, node, rests[i]);
+      node.updateMatrix();
+    });
+  });
+
+  it('stands a crane, stacked wrecks, a tall tank, a container, a jeep and a shed with a lit doorway inside the Salvage Yard (IV22)', () => {
+    const group = sites.getObjectByName('landmark-salvage-yard')!;
+    const named = (name: string) => {
+      const found: Object3D[] = [];
+      group.traverse((o) => {
+        if (o.name === name) found.push(o);
+      });
+      return found;
+    };
+    expect(named('salvage-crane')).toHaveLength(1);
+    expect(named('salvage-stack').length).toBeGreaterThanOrEqual(3);
+    expect(named('salvage-tank')).toHaveLength(1);
+    expect(named('salvage-container')).toHaveLength(1);
+    expect(named('salvage-jeep')).toHaveLength(1);
+    expect(named('salvage-shed')).toHaveLength(1);
+    const door = named('salvage-shed-door');
+    expect(door).toHaveLength(1);
+    const lamp = (door[0] as Mesh).material as MeshLambertMaterial;
+    expect(lamp.emissive.getHex()).toBe(PAL.lamp.on);
+    const cab: number[] = [];
+    named('crane-upper')[0].traverse((o) => {
+      if (o instanceof Mesh) cab.push(...[o.material].flat().map((m) => (m as MeshLambertMaterial).emissive.getHex()));
+    });
+    expect(cab).toContain(PAL.lamp.on);
+  });
+
   it('keeps everything a truck could touch inside the edge of an abandoned site', () => {
     const S = PHYSICS.metersPerTile;
     const reach = 1; // tiles above the ground a truck body reaches

@@ -18,7 +18,7 @@ import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
 import type { Motion, SiteMotion } from './site-motion';
 import { buildBowl } from './interiors/bowl';
-import { buildDustwell, buildGranary } from './interiors/compounds';
+import { buildDustwell, buildGranary, buildSalvageYard } from './interiors/compounds';
 
 const S = PHYSICS.metersPerTile;
 type Site = TownDef | SiteLocationDef;
@@ -443,16 +443,7 @@ function buildOasis(b: SiteBuilder): void {
 }
 
 function buildWrecks(b: SiteBuilder, id: string): void {
-  if (id === 'salvage-yard') {
-    for (const x of [-3, 0, 3]) {
-      b.addBox(x, -2, 2.3, 1.2, 2, PAL.rust.side);
-      b.addBox(x, -2, 2.6, 0.12, 2.4, PAL.metalLight, 1.3);
-      for (let i = 0; i < 3; i++) b.addBox(x, 1 + i * 0.8, 1.5, 0.5, 0.6, i % 2 ? PAL.metal : PAL.rust.top);
-    }
-    b.addBox(-3, 1, 0.25, 4, 0.25, PAL.metal);
-    b.addBox(-1.5, 1, 3.2, 0.22, 0.22, PAL.metal, 3.8);
-    b.addModel('crates', 4.8, 1.8, 0.3);
-  } else if (id === 'podfield') {
+  if (id === 'podfield') {
     for (let i = 0; i < 7; i++) {
       const a = i * 2.4;
       const pod = b.addShape(new THREE.CapsuleGeometry(0.45 * S, 1.1 * S, 2, 6), PAL.metalLight, Math.cos(a) * 3.4, Math.sin(a) * 3.4, 0.65);
@@ -570,7 +561,7 @@ const SITE_DECOR: Record<string, SiteDecor> = {
   'burnt-convoy': wrecks,
   podfield: wrecks,
   'ridge-wrecks': wrecks,
-  'salvage-yard': wrecks,
+  'salvage-yard': (b) => buildSalvageYard(b),
   scrapjaw: camp,
   kiln: camp,
 };
