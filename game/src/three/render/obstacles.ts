@@ -246,6 +246,7 @@ function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   const obj = model(pose.model);
   if (pose.model === 'building') paintRoof(obj, o.id);
   g.add(obj);
+  paintShipGlow(obj);
   if (pose.model === 'reactor') lightCore(obj, g);
   return g;
 }
@@ -265,6 +266,15 @@ function lightCore(reactor: THREE.Object3D, g: THREE.Group): void {
   g.add(light);
   const glow: Glow = { materials, light };
   g.userData.glow = glow;
+}
+
+// Ship debris glows cold cyan, steadily and with no light, so it never reads as the reactor's pulsing hazard.
+export function paintShipGlow(obj: THREE.Object3D): void {
+  eachMaterial(obj, (m) => {
+    if (m.name !== 'ship_glow') return;
+    m.emissive.setHex(PAL.shipGlow);
+    m.emissiveIntensity = SHIP_GLOW.emissive;
+  });
 }
 
 function paintRoof(house: THREE.Object3D, id: string): void {
@@ -317,6 +327,8 @@ function syncTrees(fixed: Fixed, obstacles: readonly Obstacle[]): void {
 // Glow strength, light strength, reach and fade in meters, and the light's height above the ground. The core is 24 m
 // across with an 11 m rod, so the light hangs over the rod and reaches across the pit to the hazard's edge and past it.
 const REACTOR_GLOW = { emissive: 2.5, intensity: 160, range: 110, decay: 1.5, height: 10 };
+// Glow strength of a ship debris material named ship_glow, kept under the reactor's.
+const SHIP_GLOW = { emissive: 1.6 };
 // The glow swells and fades by this share over one period in seconds, slow like a failing core breathing.
 const REACTOR_PULSE = { share: 0.2, period: 5 };
 type Glow = { materials: THREE.MeshLambertMaterial[]; light: THREE.PointLight };
