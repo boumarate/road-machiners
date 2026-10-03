@@ -1,8 +1,8 @@
 """Shared builders for the fortress pieces: wall, tower, gatehouse, star bastion point and inner gate.
 
 Each fort_<style>_<piece>.py script calls run(style, piece). The style picks the palette and the face detail:
-masonry has stone blocks and crenellations, ship has riveted hull plates, round towers and hazard bands, and scrap
-has rusted patch sheets and jagged sheet teeth on top.
+masonry has stone blocks and crenellations, and scrap has rusted patch sheets and jagged sheet teeth on top.
+The other styles build their pieces in their own fort_<style>_kit.py files, which reuse this file's geometry helpers.
 
 Sizes match the FORTRESS reference numbers in src/data/fortress.ts, with one tile = 4 m (AS4):
 - wall: one straight section 8.0 m along X (FORTRESS.wallLength, 2 tiles), centered on the origin, 12 m tall,
@@ -65,18 +65,6 @@ STYLES: dict[str, dict[str, int]] = {
         "accent": 0x8A3A2A,  # PAL.roof[2], banner red
         "soot": 0x1E1A18,
     },
-    "ship": {
-        "body": 0x8A8A84,  # PAL.metalLight
-        "shade": 0x5A5A58,  # PAL.metal
-        "dark": 0x3E4248,  # FACTION_COLORS.mercs.cabSide, the seams between plates
-        "light": 0xB8B8B0,  # FACTION_COLORS.convoys.top
-        "trim": 0x5E6038,  # FACTION_COLORS.nose.top, olive hull paint
-        "door": 0x86867E,  # FACTION_COLORS.convoys.side
-        "door_dark": 0x3E4248,  # FACTION_COLORS.mercs.cabSide
-        "iron": 0x5A6068,  # FACTION_COLORS.mercs.cab
-        "accent": 0xF0D060,  # PAL.select, hazard yellow
-        "soot": 0x1E1A18,
-    },
     "scrap": {
         "body": 0x8A4A2A,  # PAL.rust.top
         "shade": 0x5E3420,  # PAL.rust.side
@@ -93,7 +81,6 @@ STYLES: dict[str, dict[str, int]] = {
 
 SEEDS = {
     ("masonry", "wall"): 101, ("masonry", "tower"): 102, ("masonry", "gate"): 103, ("masonry", "bastion"): 104, ("masonry", "inner"): 105,
-    ("ship", "wall"): 201, ("ship", "tower"): 202, ("ship", "gate"): 203, ("ship", "bastion"): 204, ("ship", "inner"): 205,
     ("scrap", "wall"): 301, ("scrap", "tower"): 302, ("scrap", "gate"): 303, ("scrap", "bastion"): 304, ("scrap", "inner"): 305,
 }
 
@@ -188,19 +175,6 @@ def skin(kit: Kit, style: str, name: str, edge: tuple[XY, XY], z0: float, z1: fl
                 u += blen
             z += course
             row += 1
-    elif style == "ship":
-        # Hull plates in bands, with the dark core showing in the seams.
-        band, z, row = 2.2, z0, 0
-        count = max(1, round(length / 2.6))
-        w = length / count
-        while z + 0.6 <= z1:
-            h = min(band, z1 - z)
-            for i in range(count):
-                roll = kit.rng.random()
-                mat = "trim" if roll < 0.12 else "shade" if roll < 0.35 else "body"
-                plate(kit, f"{name}_plate{row}_{i}", edge, (i + 0.5) * w, z + h / 2, w - 0.16, h - 0.16, 0.05, mat)
-            z += band
-            row += 1
     elif style == "scrap":
         # Patch sheets of every color on a jittered grid, tilted and battered, welded over a rusty core.
         mats = ("body", "body", "body", "shade", "dark", "iron", "light", "trim", "accent")
@@ -228,11 +202,6 @@ def band(kit: Kit, style: str, name: str, edge: tuple[XY, XY], z: float) -> None
     length = frame(*edge)[0]
     if style == "masonry":
         plate(kit, f"{name}_course", edge, length / 2, z, length, 0.3, 0.09, "trim")
-    elif style == "ship":
-        plate(kit, f"{name}_hazard", edge, length / 2, z, length, 0.7, 0.07, "soot")
-        count = max(2, int(length / 1.1))
-        for i in range(count):
-            plate(kit, f"{name}_chevron{i}", edge, (i + 0.5) * length / count, z, 0.42, 0.42, 0.09, "accent", tilt=math.pi / 4)
     elif style == "scrap":
         plate(kit, f"{name}_rail", edge, length / 2, z, length, 0.22, 0.08, "iron", tilt=kit.rng.uniform(-0.02, 0.02))
     else:
@@ -250,15 +219,6 @@ def crown(kit: Kit, style: str, name: str, edge: tuple[XY, XY], z: float, top: f
         for i in range(count):
             plate(kit, f"{name}_merlon{i}", edge, (i + 0.5) * step, (breast + top) / 2, min(1.1, step * 0.6), top - breast, 0.5, "body", depth=0.25)
             plate(kit, f"{name}_cap{i}", edge, (i + 0.5) * step, top - 0.08, min(1.1, step * 0.6) + 0.1, 0.16, 0.6, "light", depth=0.25)
-    elif style == "ship":
-        coaming = z + (top - z) * 0.4
-        plate(kit, f"{name}_coaming", edge, length / 2, (z + coaming) / 2, length, coaming - z, 0.6, "light", depth=0.3)
-        count = max(2, round(length / 2.0) + 1)
-        for i in range(count):
-            u = 0.15 + i * (length - 0.3) / (count - 1)
-            plate(kit, f"{name}_post{i}", edge, u, (coaming + top) / 2, 0.14, top - coaming, 0.14, "shade", depth=0.3)
-        plate(kit, f"{name}_rail", edge, length / 2, top - 0.08, length, 0.16, 0.16, "accent", depth=0.3)
-        plate(kit, f"{name}_rail_mid", edge, length / 2, (coaming + top) / 2, length, 0.1, 0.1, "shade", depth=0.3)
     elif style == "scrap":
         u = 0.0
         i = 0
@@ -284,9 +244,6 @@ def slits(kit: Kit, style: str, name: str, edge: tuple[XY, XY], heights: list[fl
             u = (i + 0.5) * length / count
             if style == "masonry":
                 plate(kit, f"{name}_slit{row}_{i}", edge, u, z, 0.3, 1.5, 0.07, "soot")
-            elif style == "ship":
-                plate(kit, f"{name}_port_rim{row}_{i}", edge, u, z, 0.9, 0.9, 0.07, "shade", tilt=math.pi / 4)
-                plate(kit, f"{name}_port{row}_{i}", edge, u, z, 0.55, 0.55, 0.1, "soot", tilt=math.pi / 4)
             elif style == "scrap":
                 plate(kit, f"{name}_port{row}_{i}", edge, u + kit.rng.uniform(-0.4, 0.4), z, 1.1, 0.35, 0.1, "soot", tilt=kit.rng.uniform(-0.1, 0.1))
             else:
@@ -305,11 +262,6 @@ def block(kit: Kit, style: str, name: str, poly: list[XY], z1: float, top: float
         extrude(kit, f"{name}_core", poly, poly, -SKIRT, z1, "body")
         foot = 2.0
         extrude(kit, f"{name}_plinth", _outset(poly, 0.3, faces), poly, -SKIRT, foot, "dark")
-        detail_from = foot
-    elif style == "ship":
-        extrude(kit, f"{name}_core", poly, poly, -SKIRT, z1, "dark")
-        foot = 0.9
-        extrude(kit, f"{name}_footing", _outset(poly, 0.25, faces), _outset(poly, 0.25, faces), -SKIRT, foot, "shade")
         detail_from = foot
     elif style == "scrap":
         extrude(kit, f"{name}_core", poly, poly, -SKIRT, z1, "shade")
@@ -387,13 +339,6 @@ def doors(kit: Kit, style: str, name: str, edge: tuple[XY, XY], width: float, he
                 plate(kit, f"{name}_{side}_plank{k}", edge, u + (k - 1) * leaf / 3, height / 2, 0.08, height - 0.2, 0.23, "door_dark")
             for k, z in enumerate((height * 0.18, height * 0.5, height * 0.82)):
                 plate(kit, f"{name}_{side}_strap{k}", edge, u, z, leaf - 0.1, 0.3, 0.26, "iron")
-        elif style == "ship":
-            plate(kit, f"{name}_{side}", edge, u, height / 2, leaf, height, 0.2, "door")
-            for k in range(4):
-                plate(kit, f"{name}_{side}_rib{k}", edge, u, height * (k + 0.5) / 4, leaf - 0.3, 0.35, 0.24, "shade")
-            plate(kit, f"{name}_{side}_kick", edge, u, 0.45, leaf, 0.9, 0.25, "soot")
-            for k in range(int(leaf / 0.9)):
-                plate(kit, f"{name}_{side}_chev{k}", edge, u - leaf / 2 + (k + 0.5) * leaf / int(leaf / 0.9), 0.45, 0.45, 0.45, 0.27, "accent", tilt=math.pi / 4)
         elif style == "scrap":
             plate(kit, f"{name}_{side}", edge, u, height / 2, leaf, height, 0.2, "door", dent=0.05)
             for k in range(5):
@@ -417,12 +362,7 @@ def wall(kit: Kit, style: str) -> None:
     poly = rect(-half_l, half_l, -half_d, half_d)
     z1 = 10.6
     block(kit, style, "wall", poly, z1, WALL_HEIGHT, faces={0, 2})
-    if style == "ship":
-        # Ribs where hull sections were welded together.
-        for x in (-half_l + 0.3, 0.0, half_l - 0.3):
-            for sign in (-1, 1):
-                kit.box("wall_rib", (0.4, 0.1, z1 - 1.0), (x, sign * (half_d + 0.03), (z1 - 1.0) / 2), "shade")
-    elif style == "scrap":
+    if style == "scrap":
         # Two tiers of mesh baskets at the base, rust plate above and a wire coil along the top (R6).
         tier = 1.4
         for sign in (-1, 1):
@@ -471,38 +411,14 @@ def _masonry_drum(kit: Kit) -> None:
 
 
 def tower(kit: Kit, style: str) -> None:
-    """A tower on a 6 m footprint, 16 m tall: square stone, a round ship turret or stacked scrap boxes."""
+    """A tower on a 6 m footprint, 16 m tall: a round stone drum or stacked scrap boxes."""
     half = TOWER_SIZE / 2
     if style == "masonry":
         _masonry_drum(kit)
-    elif style == "ship":
-        _ship_turret(kit, "tower", (0.0, 0.0), 2.8, 13.0)
     elif style == "scrap":
         _scrap_stack(kit, "tower", (0.0, 0.0), 5.6, 5.6, dressed=True)
     else:
         raise KeyError(f"unknown fort style {style!r}")
-
-
-def _ship_turret(kit: Kit, name: str, at: XY, radius: float, z1: float) -> None:
-    """A round plated turret with porthole rings, a gallery and a domed cabin topping out at 16 m."""
-    x, y = at
-    kit.cylinder(f"{name}_core", radius, z1 + SKIRT, (x, y, (z1 - SKIRT) / 2), "dark", vertices=12)
-    kit.cylinder(f"{name}_footing", radius + 0.2, 0.9 + SKIRT, (x, y, (0.9 - SKIRT) / 2), "shade", vertices=12)
-    for k, z in enumerate((2.0, 4.4, 6.8, 9.2)):
-        kit.cylinder(f"{name}_plates{k}", radius + 0.05, 2.2, (x, y, z + 0.1), "body" if k % 2 else "shade", vertices=12)
-    kit.cylinder(f"{name}_paint", radius + 0.06, 0.8, (x, y, 10.6), "trim", vertices=12)
-    kit.cylinder(f"{name}_hazard", radius + 0.07, 0.5, (x, y, 11.6), "accent", vertices=12)
-    for k in range(6):
-        a = k * math.tau / 6 + math.pi / 6
-        for z in (4.5, 8.8):
-            kit.box(f"{name}_port{k}_{z}", (0.2, 0.6, 0.6), (x + math.cos(a) * (radius + 0.08), y + math.sin(a) * (radius + 0.08), z), "soot", rot=(math.pi / 4, 0, a))
-    kit.cylinder(f"{name}_gallery", radius + 0.2, 0.6, (x, y, z1 + 0.3), "light", vertices=12)
-    kit.cylinder(f"{name}_cabin", radius - 0.6, 1.8, (x, y, z1 + 1.5), "body", vertices=12)
-    kit.cylinder(f"{name}_windows", radius - 0.55, 0.5, (x, y, z1 + 1.6), "soot", vertices=12)
-    dome = kit.cylinder(f"{name}_dome", radius - 0.6, 0.6, (x, y, z1 + 2.7), "shade", vertices=12)
-    taper(dome, 0.45)
-    strut(kit, f"{name}_mast", (x, y, z1 + 3.0), (x, y, TOWER_HEIGHT + 2.0), 0.12, "iron", sides=6)
-    kit.box(f"{name}_beacon", (0.3, 0.3, 0.3), (x, y, TOWER_HEIGHT + 2.0), "accent")
 
 
 def _scrap_stack(kit: Kit, name: str, at: XY, sx: float, sy: float, dressed: bool = False) -> None:
@@ -567,24 +483,13 @@ def gate(kit: Kit, style: str) -> None:
         for k in range(int(fl / 1.0)):
             plate(kit, f"gate_corbel{k}", face, (k + 0.5) * fl / int(fl / 1.0), 10.6, 0.5, 0.9, 0.3, "trim")
         plate(kit, "gate_crest", face, fl / 2, 9.4, 1.2, 1.2, 0.15, "accent")
-    elif style == "ship":
-        plate(kit, "gate_sign", face, frame(*face)[0] / 2, 10.3, 5.0, 1.1, 0.15, "trim")
-        plate(kit, "gate_lamp_l", face, frame(*face)[0] / 2 - 3.6, 9.0, 0.5, 0.5, 0.25, "accent")
-        plate(kit, "gate_lamp_r", face, frame(*face)[0] / 2 + 3.6, 9.0, 0.5, 0.5, 0.25, "accent")
     elif style == "scrap":
         for k in range(5):
             u = frame(*face)[0] / 2 + (k - 2) * 1.4
             plate(kit, f"gate_spike{k}", face, u, 10.0, 0.18, 2.0, 0.3, "iron", tilt=(k - 2) * 0.25)
     for sign in (-1, 1):
         y0, y1 = (hw - tw, hw) if sign > 0 else (-hw, -(hw - tw))
-        if style == "ship":
-            # A round-fronted turret: a plated box behind a turret drum whose front touches X = 0.
-            r = tw / 2
-            cy = (y0 + y1) / 2
-            back = rect(-d, -r, y0, y1)
-            block(kit, style, f"gate_tower{sign}", back, 13.0, 14.0, faces={0, 2, 3})
-            _ship_turret(kit, f"gate_turret{sign}", (-r, cy), r - 0.05, 13.0)
-        elif style == "scrap":
+        if style == "scrap":
             _scrap_stack(kit, f"gate_tower{sign}", (-d / 2, (y0 + y1) / 2), d - 0.4, tw - 0.4)
         else:
             body = rect(-d, front, y0, y1)
@@ -600,9 +505,6 @@ def bastion(kit: Kit, style: str) -> None:
         kit.cylinder("bastion_sentry", 0.7, 2.2, (4.4, 0.0, 12.3), "shade", vertices=8)
         cone = kit.cylinder("bastion_sentry_roof", 0.9, 0.9, (4.4, 0.0, 13.85), "trim", vertices=8)
         taper(cone, 0.1)
-    elif style == "ship":
-        kit.cylinder("bastion_mount", 1.0, 0.8, (2.4, 0.0, 11.6), "shade", vertices=10)
-        kit.box("bastion_gun", (3.2, 0.4, 0.4), (3.8, 0.0, 12.2), "iron")
     elif style == "scrap":
         for k in range(3):
             strut(kit, f"bastion_spike{k}", (4.4 - k * 0.8, (k - 1) * 0.6, 11.2), (5.6 - k * 0.5, (k - 1) * 0.9, BASTION_HEIGHT + 0.8), 0.14, "iron", sides=4)
@@ -620,14 +522,10 @@ def inner(kit: Kit, style: str) -> None:
         # Short end pillars stand a little higher, so the gate reads over the curtain.
         y = sign * (hw - 0.9)
         pillar = rect(-hd - 0.2, hd + 0.2, y - 0.9, y + 0.9)
-        if style == "ship":
-            kit.cylinder(f"inner_pillar{sign}", 1.0, INNER_HEIGHT + SKIRT, (0.0, y, (INNER_HEIGHT - SKIRT) / 2), "shade", vertices=10)
-            kit.cylinder(f"inner_pillar_hazard{sign}", 1.05, 0.5, (0.0, y, INNER_HEIGHT - 1.0), "accent", vertices=10)
-        else:
-            extrude(kit, f"inner_pillar{sign}", pillar, pillar, -SKIRT, INNER_HEIGHT, "shade" if style == "masonry" else "dark")
-            for i, e in enumerate(edges(pillar)):
-                if i in (1, 3):
-                    skin(kit, style, f"inner_pillar{sign}_face{i}", e, 0.0, INNER_HEIGHT - 0.4)
+        extrude(kit, f"inner_pillar{sign}", pillar, pillar, -SKIRT, INNER_HEIGHT, "shade" if style == "masonry" else "dark")
+        for i, e in enumerate(edges(pillar)):
+            if i in (1, 3):
+                skin(kit, style, f"inner_pillar{sign}_face{i}", e, 0.0, INNER_HEIGHT - 0.4)
 
 
 PIECES: dict[str, tuple[Callable[[Kit, str], None], float]] = {
