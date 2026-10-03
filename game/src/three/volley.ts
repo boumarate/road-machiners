@@ -5,6 +5,7 @@ import { PAL } from "../render/palette";
 import { GROUND, type TurnResult } from "../phys/drive";
 import { mountedParts } from "../sim/grid";
 import type { GameEvent, ShotRound, World } from "../sim/types";
+import type { Vec } from "../sim/vec";
 import { roundLabel } from "../ui/format";
 import { groundPoint, toMap, type V3 } from "../phys/frames";
 import type { Fx3D } from "./render/fx";
@@ -13,16 +14,19 @@ import { viewOf, type VehicleView } from "./render/vehicle";
 import type { SoundDirector } from "./sound";
 
 // What a volley draws on: the world it lands in, the effects and sounds it plays, and where an event's truck is seen.
+// onBurst hears each blast that lands on the ground, at the sim's burst point in tiles.
 export type VolleyHost = {
   world: World;
   fx: Fx3D;
   sound: SoundDirector;
   eventPoint: (vehicleId: string) => V3 | null;
+  onBurst: (point: Vec) => void;
 };
 
 // Plays one volley's bolts from the muzzle and sounds from a to b. The volley starts at its own moment in the
 // first CONFIG.combatFireSpreadMs of the band. Each round sounds as it leaves and as it lands, and each round that
 // damages parts shows its damage over the target as it lands. A dry volley clunks as its last round lands.
+// A round that burst on the ground tells host.onBurst as its blast lands.
 // Returns when the first round lands.
 export function playVolley(
   host: VolleyHost,
@@ -38,15 +42,18 @@ export function playVolley(
   const spec = projectileOf(weapon);
   const ground = (p: V3) => groundPoint(host.world.terrain, toMap(p)).y;
   const timing = { startMs: Math.random() * CONFIG.combatFireSpreadMs, windowMs: CONFIG.combatShotMs, burstMaxMs: CONFIG.combatBurstMaxMs };
-  const plans = planVolley(spec, a, roundAims(b, targetId, rounds, host.eventPoint), timing, ground);
+  const aims = roundAims(b, targetId, rounds, host.eventPoint, (p) => groundPoint(host.world.terrain, p));
+  const plans = planVolley(spec, a, aims, timing, ground);
   const fireCue = spec.look === "tracer" ? "mg-fire" : "cannon-fire";
   plans.forEach((plan, k) => {
     const last = dry && k === plans.length - 1;
+    const burst = rounds[k].burst;
     const cues = {
       fired: (m: Muzzle) => host.sound.at(fireCue, m.pos, 0),
       landed: () => {
         host.sound.at(plan.struck ? "hit-metal" : "miss", plan.land, 0);
         if (last) host.sound.at("gun-empty", a, 0);
+        if (burst) host.onBurst(burst);
       },
     };
     host.fx.shot(spec, muzzle, plan, blastRadiusOf(weapon), cues);

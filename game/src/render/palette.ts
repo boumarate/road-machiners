@@ -11,6 +11,8 @@ export const PAL = {
   roadCrack: 0x86684a, // cracks and potholes in the road texture
   padMark: 0xd86a2a, // worn orange paint around site pads, where trucks stop to use a site
   pebble: 0x9c7c54,
+  scorch: 0x2a2218, // blast-blackened ground in a crater
+  craterRim: 0x7a6242, // dirt a blast threw up around its crater
   scrub: [0x6f6a3a, 0x5d5a32, 0x7c7442],
   rock: { top: 0x9a8a78, side: 0x6e6254, dark: 0x4e453c },
   rust: { top: 0x8a4a2a, side: 0x5e3420, dark: 0x3a2418 },

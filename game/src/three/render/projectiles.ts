@@ -1,12 +1,14 @@
 // What flies from a muzzle to where each round lands: tracers, shells and missiles, with their look and speed per
 // weapon. Rounds fly straight from the barrel tip. Hits end on the target truck, and misses fly past it into the
-// ground, so the sim's spread shows. Render-only: randomness here never changes rules.
+// ground, so the sim's spread shows. An exploding round that missed lands where the sim burst it. Render-only:
+// randomness here never changes rules.
 
 import * as THREE from 'three';
 import { PARTS } from '../../data/parts';
 import { computeRoundPoint, type V3 } from '../../phys/frames';
 import { PAL } from '../../render/palette';
 import type { ShotRound } from '../../sim/types';
+import type { Vec } from '../../sim/vec';
 
 // Where a round leaves the gun and the unit direction it leaves in, read when the round fires.
 export type Muzzle = { pos: V3; dir: V3 };
@@ -88,31 +90,32 @@ const MISSILE = {
 
 export type RoundPlan = { land: V3; struck: boolean; delayMs: number; flightMs: number };
 // Where one round flies: point b of the truck it struck, or of its target when it struck none, and its offset
-// across the line of fire.
-export type RoundAim = { b: V3; struck: boolean; offset: number };
+// across the line of fire. burst is the ground point where the sim burst an exploding round that struck no truck.
+export type RoundAim = { b: V3; struck: boolean; offset: number; burst: V3 | null };
 
 // A round that struck a truck other than its target flies to that truck when it shows, else past the target.
-// pointOf gives the point of a truck that shows.
-export function roundAims(b: V3, targetId: string, rounds: ShotRound[], pointOf: (id: string) => V3 | null): RoundAim[] {
+// pointOf gives the point of a truck that shows, and groundOf the ground point under a map point.
+export function roundAims(b: V3, targetId: string, rounds: ShotRound[], pointOf: (id: string) => V3 | null, groundOf: (p: Vec) => V3): RoundAim[] {
   return rounds.map((r) => {
-    if (r.struck === null || r.struck === targetId) return { b, struck: r.struck !== null, offset: r.offset };
+    if (r.struck === null || r.struck === targetId) return { b, struck: r.struck !== null, offset: r.offset, burst: r.burst && groundOf(r.burst) };
     const p = pointOf(r.struck);
-    return p ? { b: p, struck: true, offset: 0 } : { b, struck: false, offset: r.offset };
+    return p ? { b: p, struck: true, offset: 0, burst: null } : { b, struck: false, offset: r.offset, burst: null };
   });
 }
 
 // When a volley leaves and how long its band is. startMs is the volley's own start; burstMaxMs caps one burst's length.
 export type VolleyTiming = { startMs: number; windowMs: number; burstMaxMs: number };
 
-// Where and when each round of a volley from gun point a lands. groundY gives the ground height under a point.
-// Rounds leave gapMs apart from startMs, and every one lands within the window.
+// Where and when each round of a volley from gun point a lands. A round that burst lands at its burst point, and
+// other misses past the target on the ground, where groundY gives the ground height under a point. Rounds leave
+// gapMs apart from startMs, and every one lands within the window.
 export function planVolley(spec: ProjectileSpec, a: V3, rounds: RoundAim[], timing: VolleyTiming, groundY: (p: V3) => number): RoundPlan[] {
   const { startMs, windowMs, burstMaxMs } = timing;
   const gap = rounds.length > 1 ? Math.min(spec.gapMs, burstMaxMs / (rounds.length - 1)) : 0;
   if (startMs + Math.max(0, rounds.length - 1) * gap >= windowMs) throw new Error(`A volley starting at ${startMs} ms leaves no time to fire ${rounds.length} rounds in ${windowMs} ms`);
   return rounds.map((r, k) => {
     const struck = r.struck;
-    const land = struck ? hitPoint(a, r.b, r.offset) : missPoint(a, r.b, r.offset, groundY);
+    const land = struck ? hitPoint(a, r.b, r.offset) : (r.burst ?? missPoint(a, r.b, r.offset, groundY));
     const delayMs = startMs + k * gap;
     const meters = Math.hypot(land.x - a.x, land.y - a.y, land.z - a.z);
     return { land, struck, delayMs, flightMs: Math.min((meters / spec.speed) * 1000, windowMs - delayMs) };

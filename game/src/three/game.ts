@@ -52,6 +52,7 @@ import { Fx3D, TruckFx } from "./render/fx";
 import { CollisionCues, collisionSteps, playCrashes, playDryGuns, playShotFx, type CombatHost } from "./volley";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
+import { CraterViews } from "./render/craters";
 import { playBreaks } from "./render/partDebris";
 import { PathView } from "./render/path";
 import { RenderScope, SightLimit } from "./render/scope";
@@ -115,6 +116,7 @@ export class Game {
   private readonly props = new THREE.Group(); // sites and obstacles near the view
   private readonly scopes: RenderScope[];
   private readonly obstacles: ObstacleViews;
+  private readonly craters: CraterViews;
   private readonly fog: FogView;
   private readonly lastSeen = new Map<string, number>(); // vehicle id to the turn the player last saw it
   private readonly shade: ShadeView;
@@ -211,7 +213,8 @@ export class Game {
     this.sightLimit = new SightLimit(this.world.size);
     const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit, false, false);
     const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true, true);
-    this.scopes = [groundScope, propScope, addHullDecks(this.world.terrain, this.props, this.sightLimit)];
+    this.craters = new CraterViews(this.world, this.sightLimit);
+    this.scopes = [groundScope, propScope, addHullDecks(this.world.terrain, this.props, this.sightLimit), this.craters.scope];
     const groundChunks = terrainMesh(this.world, groundScope);
     addSites(this.world.terrain, propScope);
     this.obstacles = new ObstacleViews(propScope, this.world.terrain);
@@ -225,6 +228,7 @@ export class Game {
     this.scene.add(
       this.ground,
       this.props,
+      this.craters.root,
       this.shade.mesh,
       this.weather.root,
       this.zones.root,
@@ -376,6 +380,8 @@ export class Game {
     }
     if (!this.anim || this.anim.impacts)
       this.obstacles.sync(this.world.obstacles, this.world.salvage, this.world.broken);
+    // Every refresh, so this turn's craters have hidden views before their blasts land.
+    this.craters.sync(this.world);
     this.hud.renderTop(this.displayWorld());
     this.hud.renderRescue(this.displayWorld());
     if (!this.anim && this.world.player.state === "dead") this.death.show();
@@ -691,6 +697,7 @@ export class Game {
   private landImpacts(a: Playback): void {
     a.impacts = true;
     this.phase = "Results";
+    this.craters.revealAll(this.world.turn);
     for (const e of this.world.events) {
       if (e.t !== "destroyed") continue;
       const p = this.eventPoint(e.vehicle);
@@ -816,7 +823,7 @@ export class Game {
   }
 
   private combatHost(): CombatHost {
-    return { world: this.world, fx: this.fx, sound: this.sound, eventPoint: (id) => this.eventPoint(id), views: this.views };
+    return { world: this.world, fx: this.fx, sound: this.sound, eventPoint: (id) => this.eventPoint(id), onBurst: (p) => this.craters.reveal(p), views: this.views };
   }
 
   // The path preview chains physics turns from the current state, so it shows what will happen.

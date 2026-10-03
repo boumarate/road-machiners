@@ -1,16 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { PARTS } from '../../data/parts';
 import { CONFIG } from '../../config';
-import { blastRadiusOf, planVolley, PROJECTILES, projectileOf, type RoundAim } from './projectiles';
+import type { ShotRound } from '../../sim/types';
+import { blastRadiusOf, planVolley, PROJECTILES, projectileOf, roundAims, type RoundAim } from './projectiles';
 
 const A = { x: 0, y: 2, z: 0 };
 const B = { x: 40, y: 2, z: 0 };
-const round = (struck: boolean, offset: number): RoundAim => ({ b: B, struck, offset });
+const round = (struck: boolean, offset: number): RoundAim => ({ b: B, struck, offset, burst: null });
 const WINDOW = 1000;
 const BURST = 450;
 const at = (startMs: number) => ({ startMs, windowMs: WINDOW, burstMaxMs: BURST });
 
 describe('planVolley', () => {
+  it('lands a round that burst on the ground at its burst point', () => {
+    const burst = { x: 30, y: -0.5, z: 6 };
+    const [plan] = planVolley(projectileOf('grenadeLauncher'), A, [{ b: B, struck: false, offset: 3, burst }], at(0), () => -1);
+    expect(plan.land).toEqual(burst);
+    expect(plan.struck).toBe(false);
+  });
+
   it('ends hits on the target and sends misses past it to the ground', () => {
     const [hit, miss] = planVolley(projectileOf('mg'), A, [round(true, 0.3), round(false, 3)], at(0), () => -1);
     expect(hit.struck).toBe(true);
@@ -79,5 +87,21 @@ describe('planVolley', () => {
     expect(blastRadiusOf('mg')).toBe(0);
     expect(blastRadiusOf('guard')).toBe(0);
     expect(() => blastRadiusOf('stockEngine')).toThrow();
+  });
+});
+
+describe('roundAims', () => {
+  const shotRound = (struck: string | null, burst: ShotRound['burst']): ShotRound => ({ hit: false, crit: false, offset: 2, struck, hits: [], blast: [], burst });
+  const ground = (p: { x: number; y: number }) => ({ x: p.x * 10, y: -1, z: p.y * 10 });
+
+  it('places a burst round on the ground under its burst point', () => {
+    const [aim] = roundAims(B, 'target', [shotRound(null, { x: 3, y: 4 })], () => null, ground);
+    expect(aim).toEqual({ b: B, struck: false, offset: 2, burst: { x: 30, y: -1, z: 40 } });
+  });
+
+  it('gives rounds with no burst point no burst', () => {
+    const [miss, hit] = roundAims(B, 'target', [shotRound(null, null), shotRound('target', null)], () => null, ground);
+    expect(miss.burst).toBeNull();
+    expect(hit.burst).toBeNull();
   });
 });
