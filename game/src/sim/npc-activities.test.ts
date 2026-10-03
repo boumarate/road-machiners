@@ -31,6 +31,7 @@ import type { NpcActivity, Vehicle, World } from './types';
 import { addState } from './states';
 import { inCombat } from './combat';
 import { refreshVision } from './vision';
+import { emptyHidden } from './salvage';
 
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
@@ -166,7 +167,7 @@ describe('NPC activities', () => {
   it('drops a scavenge goal when nothing left in the stock fits its cargo', () => {
     const { w, npc } = createScavenger();
     addGoods(w, npc, 'scrap', freeCells(npc) - 1);
-    w.salvage = [{ id: 'wreck-test', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)] }];
+    w.salvage = [{ id: 'wreck-test', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)], hidden: emptyHidden() }];
     npc.speed = 0;
     npc.brain!.goals = [{ kind: 'scavenge', targetId: 'wreck-test', destination: { ...npc.pos }, phase: 'travel', reason: 'collect visible salvage' }];
     w.events = [];
@@ -178,7 +179,7 @@ describe('NPC activities', () => {
   it('does not see a reachable stock as salvage when nothing in it fits', () => {
     const { w, npc } = createScavenger();
     addGoods(w, npc, 'scrap', freeCells(npc) - 1);
-    w.salvage = [{ id: 'wreck-test', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)] }];
+    w.salvage = [{ id: 'wreck-test', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)], hidden: emptyHidden() }];
     npc.speed = 0;
     expect(visibleSalvage(w, npc)).toEqual([]);
     w.salvage[0].goods.scrap = 1;
@@ -222,7 +223,7 @@ describe('NPC activities', () => {
 
   it('cannot inspect distant salvage contents', () => {
     const { w, npc } = createScavenger();
-    w.salvage = [{ id: 'wreck-test', pos: { x: 17, y: 10 }, radius: 0.6, goods: { scrap: 0 }, parts: [] }];
+    w.salvage = [{ id: 'wreck-test', pos: { x: 17, y: 10 }, radius: 0.6, goods: { scrap: 0 }, parts: [], hidden: emptyHidden() }];
     const full = cloneWorld(w);
     full.salvage[0].goods.scrap = 5;
     expect(thinkNpc(full, full.vehicles.find((v) => v.id === npc.id)!)).toEqual(thinkNpc(w, npc));
@@ -639,7 +640,7 @@ describe('salvage on the way', () => {
     const { w, npc } = createScavenger();
     npc.brain = npcBrain('scavenger', npc.pos, traits);
     npc.brain.goals = [{ kind: 'scavenge', targetId: 'podfield', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'search a known salvage site' }];
-    w.salvage.push({ id: 'wreck900', pos: { x: 14, y: 10 }, radius: 0.6, goods: { scrap: 2 }, parts: [] });
+    w.salvage.push({ id: 'wreck900', pos: { x: 14, y: 10 }, radius: 0.6, goods: { scrap: 2 }, parts: [], hidden: emptyHidden() });
     return { w, npc };
   }
 
@@ -746,7 +747,7 @@ describe('repair goal in combat', () => {
 describe('salvage in combat', () => {
   it('is given up at the stock when no search runs, since none can start', () => {
     const { w, npc } = createScavenger();
-    w.salvage.push({ id: 'test-stock', pos: { ...npc.pos }, radius: 1, goods: { scrap: 3 }, parts: [] });
+    w.salvage.push({ id: 'test-stock', pos: { ...npc.pos }, radius: 1, goods: { scrap: 3 }, parts: [], hidden: emptyHidden() });
     npc.brain!.goals = [{ kind: 'scavenge', targetId: 'test-stock', destination: { ...npc.pos }, phase: 'act', reason: 'collect visible salvage' }];
     const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 16, y: 10 });
     addState(w, 'feud', foe.id, npc.id, { kind: 'feud', robbery: false });
@@ -775,7 +776,7 @@ describe('one looter per target', () => {
   // Two scavengers parked beside a road wreck. The first one searches it.
   function contestedWreck() {
     const { w, npc: first } = createScavenger();
-    const wreck = { id: 'wreck901', pos: { x: 10.5, y: 10.5 }, radius: 0.6, goods: { scrap: 6 }, parts: [] };
+    const wreck = { id: 'wreck901', pos: { x: 10.5, y: 10.5 }, radius: 0.6, goods: { scrap: 6 }, parts: [], hidden: emptyHidden() };
     w.salvage.push(wreck);
     first.speed = 0;
     first.brain!.goals = [lootGoal('scavenge', wreck.id, 'act', wreck.pos)];
@@ -888,7 +889,7 @@ describe('one looter per target', () => {
   it('never lets two drivers search one wreck at once, through full turns', () => {
     const w0 = emptyWorld({ x: 50, y: 50 });
     for (const key of Object.keys(NPCS)) w0.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
-    const wreck = { id: 'wreck902', pos: { x: 15, y: 12 }, radius: 0.6, goods: { scrap: 8 }, parts: [] };
+    const wreck = { id: 'wreck902', pos: { x: 15, y: 12 }, radius: 0.6, goods: { scrap: 8 }, parts: [], hidden: emptyHidden() };
     w0.salvage.push(wreck);
     const ids = [{ x: 10, y: 12 }, { x: 20, y: 12 }].map((pos) => {
       const npc = parkedScavenger(w0, pos);

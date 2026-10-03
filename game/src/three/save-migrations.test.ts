@@ -11,9 +11,11 @@ import FORMAT_2_5 from './save-fixtures/format-2-5.json';
 import FORMAT_2_6 from './save-fixtures/format-2-6.json';
 import FORMAT_2_7 from './save-fixtures/format-2-7.json';
 import FORMAT_2_8 from './save-fixtures/format-2-8.json';
+import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS } from './save-migrations';
+import { searchStream } from '../sim/search';
 
 describe('save migrations', () => {
   it('0 to 1 gives the player townPatched false and keeps every other field', () => {
@@ -198,5 +200,59 @@ describe('save migration 8 to 9', () => {
   it('ends a search of the old stock and keeps other searches', () => {
     expect(next.vehicles[0].job).toBeNull();
     expect(next.vehicles[1]).toEqual(FORMAT_2_8.vehicles[1]);
+  });
+});
+
+describe('save migration 9 to 10', () => {
+  type Loot = { goods: Partial<Record<string, number>>; parts: unknown[]; fuel?: number; supplies?: number };
+  type Stock = Loot & { id: string; hidden: Loot };
+  type Saved = {
+    vehicles: { id: string; utilityOrders: object }[];
+    removed: { id: string; utilityOrders: object }[];
+    smoke: unknown[];
+    fields: unknown[];
+    flares: unknown[];
+    lines: unknown[];
+    searchRng: { rngState: number };
+    salvage: Stock[];
+  };
+  const next = MIGRATIONS[9](FORMAT_2_9) as Saved;
+  const stock = (id: string) => next.salvage.find((s) => s.id === id)!;
+  const before = (id: string) => FORMAT_2_9.salvage.find((s) => s.id === id)!;
+  const NO_HIDDEN = { goods: {}, parts: [], fuel: 0, supplies: 0 };
+
+  it('gives every vehicle and removed vehicle empty utility orders, keeping its other fields', () => {
+    expect(next.vehicles).toEqual(FORMAT_2_9.vehicles.map((v) => ({ ...v, utilityOrders: {} })));
+    expect(next.removed).toEqual(FORMAT_2_9.removed.map((v) => ({ ...v, utilityOrders: {} })));
+  });
+
+  it('starts empty smoke, fields, flares and lines, and the search stream a new game of the same seed has', () => {
+    expect([next.smoke, next.fields, next.flares, next.lines]).toEqual([[], [], [], []]);
+    expect(next.searchRng).toEqual(searchStream(FORMAT_2_9.seed));
+  });
+
+  it.each(['burnt-convoy', 'barn-759', 'wreck12'])('hides all the loot of the unsearched rolled stock %s', (id) => {
+    const old = before(id);
+    expect(stock(id)).toEqual({
+      ...old,
+      goods: {},
+      parts: [],
+      fuel: 0,
+      supplies: 0,
+      hidden: { goods: old.goods, parts: old.parts, fuel: old.fuel, supplies: old.supplies },
+    });
+  });
+
+  it('counts a rolled stock without fuel or supplies fields as none of them', () => {
+    expect(stock('deckBay-1450').hidden).toEqual({ goods: { scrap: 4 }, parts: [], fuel: 0, supplies: 0 });
+  });
+
+  it.each(['podfield', 'wreck4', 'wreck-v40', 'cargo-v41-30'])('leaves the searched stock, truck wreck or pile %s in the open', (id) => {
+    expect(stock(id)).toEqual({ ...before(id), hidden: NO_HIDDEN });
+  });
+
+  it('keeps the loot total of every stock', () => {
+    const total = (s: Loot) => Object.values(s.goods).reduce((a: number, b) => a + (b ?? 0), 0) + s.parts.length + (s.fuel ?? 0) + (s.supplies ?? 0);
+    for (const s of next.salvage) expect(total(s) + total(s.hidden), s.id).toBe(total(before(s.id)));
   });
 });

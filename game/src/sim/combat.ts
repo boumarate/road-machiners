@@ -41,7 +41,8 @@ export type FireBlock =
   | "unseen"
   | "covered"
   | "talking"
-  | "out";
+  | "out"
+  | "unmounted";
 
 export function inFeud(world: World, a: Vehicle, b: Vehicle): boolean {
   return stateOf(world, "feud", a.id, b.id) !== null || stateOf(world, "feud", b.id, a.id) !== null;

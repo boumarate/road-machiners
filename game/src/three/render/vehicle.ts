@@ -33,7 +33,7 @@ const GLASS = 'glass'; // the cab window material in the base models, tinted by 
 const TRIM = 'trim'; // base material that takes the faction cab color
 
 // Color factor for every material of a broken part.
-const BROKEN_TONE: Record<PartKind, number> = { weapon: 0.5, armor: 0.6, engine: 0.6, cargo: 0.6, core: 0.6, scanner: 0.6, store: 0.6 };
+const BROKEN_TONE: Record<PartKind, number> = { weapon: 0.5, armor: 0.6, engine: 0.6, cargo: 0.6, core: 0.6, scanner: 0.6, store: 0.6, utility: 0.6 };
 
 // Yaw for rotation 1. Local +x, the model's front, turns to the truck's left.
 const ROT_YAW = Math.PI / 2;

@@ -6,8 +6,16 @@ import { playerVehicle } from './damage';
 import { startJob } from './jobs';
 import { practice, skillEffect } from './progress';
 import { canReachSalvage, collectSalvage, requireLootFree, salvageUnits } from './salvage';
+import type { Rng } from './rng';
 import type { Job, Vehicle, World } from './types';
 import { playerCommand } from './world';
+
+// The world's stream for search reveals, so a search never shifts combat, NPC or shop randomness.
+const SEARCH_SALT = 0x73656172;
+
+export function searchStream(seed: number): Rng {
+  return { rngState: seed ^ SEARCH_SALT };
+}
 
 // Turns a search needs: the stock's units at unitsPerTurn a turn, cut by the player's machining.
 function estimateTurns(world: World, v: Vehicle, units: number): number {

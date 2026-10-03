@@ -217,7 +217,7 @@ export class InventoryView {
       el(
         "div",
         {},
-        "Top view, nose up. D: deck mounts for weapons, scanners and cargo frames. E: engine mount. F B L R: armor mounts on the front, back, left and right.",
+        "Top view, nose up. D: deck mounts for weapons, scanners, utilities and cargo frames. E: engine mount. F B L R: armor mounts on the front, back, left and right.",
       ),
       el(
         "div",

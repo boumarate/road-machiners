@@ -256,7 +256,7 @@ function partDamage(hits: PartHit[]): Map<string, number> {
 
 // Short part names for damage popups, by part kind and core role.
 const PART_SHORT = {
-  weapon: 'Gun', engine: 'Eng', armor: 'Arm', cargo: 'Cargo', scanner: 'Scan', store: 'Store',
+  weapon: 'Gun', engine: 'Eng', armor: 'Arm', cargo: 'Cargo', scanner: 'Scan', store: 'Store', utility: 'Util',
   cab: 'Cab', transmission: 'Trans', wheel: 'Whl', tank: 'Tank',
 } as const;
 

@@ -50,6 +50,7 @@ Each chassis has one base model. Parts and goods have their own. A part with no 
 | part | steelPlate | arm_plate |
 | part | scrapSheet | arm_scrap_sheet |
 | part | ceramicTile | arm_ceramic_tile |
+| part | claymoreRam | arm_ram |
 | part | rack | cargo_rack |
 | part | trailerBox | cargo_trailer_box |
 | part | panniers | cargo_panniers |
@@ -60,6 +61,15 @@ Each chassis has one base model. Parts and goods have their own. A part with no 
 | part | scanner | scanner |
 | part | jerrycans | store_jerrycans |
 | part | supplyLocker | store_locker |
+| part | sprout | scanner |
+| part | caltrops | scanner |
+| part | oilSpiller | store_jerrycans |
+| part | patcherCrane | store_locker |
+| part | harpoon | scanner |
+| part | smokeMortar | scanner |
+| part | flareCannon | scanner |
+| part | scrapersKnife | store_locker |
+| part | emitter | store_locker |
 | good | scrap | good_scrap |
 | good | salt | good_salt |
 | good | meds | good_meds |

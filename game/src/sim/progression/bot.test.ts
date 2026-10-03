@@ -10,6 +10,7 @@ import { nearestPad, nearestTown } from '../sites';
 import { isStranded } from '../stats';
 import { addVehicle, emptyWorld , startCombat } from '../testkit';
 import { botOrders, raiderHuntGrounds } from './bot';
+import { emptyHidden } from '../salvage';
 
 function town(id: string) {
   const found = REGION.towns.find((t) => t.id === id);
@@ -103,7 +104,7 @@ describe('botOrders', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = playerVehicle(w);
     me.speed = 0;
-    w.salvage.push({ id: 'wreck-beside', pos: { x: 31.5, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [] });
+    w.salvage.push({ id: 'wreck-beside', pos: { x: 31.5, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [], hidden: emptyHidden() });
     startCombat(w, addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 }), me);
 
     const turn = botOrders(w, 'scavenger');

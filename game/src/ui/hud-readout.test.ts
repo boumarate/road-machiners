@@ -22,7 +22,7 @@ import { newWorld } from "../sim/world";
 import { playerVehicle } from "../sim/damage";
 import { stowPart } from "../sim/inventory";
 import { beginSearch } from "../sim/search";
-import { dumpOnPile } from "../sim/salvage";
+import { dumpOnPile, emptyHidden } from "../sim/salvage";
 import { TEST_MAP } from "../test/map";
 
 describe('knocked-out truck interaction', () => {
@@ -61,7 +61,7 @@ describe('salvage interaction', () => {
   it('says a site is picked clean when its stock is empty', () => {
     const site = REGION.locations.find((site) => site.id === 'podfield')!;
     const w = emptyWorld({ ...sitePads(site)[0] });
-    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [] }];
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [], hidden: emptyHidden() }];
     expect(getContextActions(w, false)[0]).toMatchObject({ label: `Search ${site.name}`, ready: true, combat: undefined });
     w.salvage[0].goods.scrap = 0;
     expect(getContextActions(w, false)[0]).toMatchObject({ label: `${site.name} is picked clean`, ready: false, hint: 'No loot left' });
@@ -80,7 +80,7 @@ describe('every interaction in reach', () => {
 
   it('lists a pile on a wreck beside the wreck', () => {
     const w = emptyWorld({ x: 30, y: 30 });
-    w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [] });
+    w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [], hidden: emptyHidden() });
     const me = w.vehicles[0];
     const pile = dumpOnPile(w, me, me.items.find((item) => item.kind === 'good') ?? me.items[0]);
     expect(getContextActions(w, false).map((a) => a.target)).toEqual([
@@ -104,7 +104,7 @@ describe('every interaction in reach', () => {
 
   it('lists no stock action while the truck is busy', () => {
     const w = emptyWorld({ x: 30, y: 30 });
-    w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [] });
+    w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [], hidden: emptyHidden() });
     beginSearch(w, w.vehicles[0], 'wreck901');
     expect(getContextActions(w, false)).toEqual([]);
   });
@@ -113,7 +113,7 @@ describe('every interaction in reach', () => {
 describe('shared wreck', () => {
   it('dims the search while another driver searches the wreck, and names the driver', () => {
     const w = emptyWorld({ x: 30, y: 30 });
-    w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [] });
+    w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [], hidden: emptyHidden() });
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 31.5, y: 30 });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
     npc.speed = 0;
@@ -127,7 +127,7 @@ describe('search in combat', () => {
   function siteScene() {
     const site = REGION.locations.find((site) => site.id === 'podfield')!;
     const w = emptyWorld({ ...sitePads(site)[0] });
-    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [] }];
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [], hidden: emptyHidden() }];
     const me = playerVehicle(w).pos;
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: me.x + 6, y: me.y });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);

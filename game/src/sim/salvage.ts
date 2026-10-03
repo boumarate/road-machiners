@@ -20,7 +20,7 @@ import { getResources } from './resources';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { inCombat } from './combat';
 import { cancelJob, startJob } from './jobs';
-import type { GridItem, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
+import type { GridItem, HiddenLoot, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { estimateCrashGeometry } from './crash-contact';
 import { walkLane } from './armor';
 import { canUseSite, townAt } from './sites';
@@ -72,7 +72,12 @@ export function rollStock(world: World, table: LootTable, id: string, pos: Vec, 
   goods.parts = randInt(world, table.parts[0], table.parts[1]);
   const parts: PartInstance[] = [];
   if (chance(world, table.sparePartChance)) parts.push(fieldSpare(world, table));
-  return { id, pos: { ...pos }, radius, goods, parts, fuel: randInt(world, ...table.fuel), supplies: randInt(world, ...table.supplies) };
+  return { id, pos: { ...pos }, radius, goods, parts, fuel: randInt(world, ...table.fuel), supplies: randInt(world, ...table.supplies), hidden: emptyHidden() };
+}
+
+// No hidden loot: a stock whose loot lies in the open.
+export function emptyHidden(): HiddenLoot {
+  return { goods: {}, parts: [], fuel: 0, supplies: 0 };
 }
 
 export function hasSalvage(stock: SalvageStock): boolean {
@@ -251,7 +256,7 @@ export function hasCargo(vehicle: Vehicle): boolean {
 
 function addVehicleStock(world: World, vehicle: Vehicle, id: string, goods: Record<string, number>, parts: PartInstance[]): SalvageStock {
   if (world.salvage.some((stock) => stock.id === id)) throw new Error(`Duplicate wreck salvage ${id}`);
-  const stock: SalvageStock = { id, pos: { ...vehicle.pos }, radius: vehicleStats(world, vehicle).radius * RULES.wreckRadiusScale, goods, parts };
+  const stock: SalvageStock = { id, pos: { ...vehicle.pos }, radius: vehicleStats(world, vehicle).radius * RULES.wreckRadiusScale, goods, parts, hidden: emptyHidden() };
   world.salvage.push(stock);
   return stock;
 }

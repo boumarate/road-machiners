@@ -80,7 +80,7 @@ export const NPC_BEHAVIOR = {
   ram: {
     // Value of one hit point lost, by the part that loses it. The cab, wheels, engine and guns decide a fight. Armor
     // and ram bars exist to be hit.
-    partWeight: { cab: 4, wheel: 2, transmission: 2, tank: 1, engine: 3, weapon: 3, armor: 0.25, scanner: 1, store: 1, cargo: 1 },
+    partWeight: { cab: 4, wheel: 2, transmission: 2, tank: 1, engine: 3, weapon: 3, armor: 0.25, scanner: 1, store: 1, cargo: 1, utility: 1 },
     gunWeight: 1,
     // Ram weight is the ram value times this, so a ram worth as much as the guns, a value of 0.5, weighs 0.15 times the
     // base weight and is chosen about 1 time in 2. Against an equal truck this gives a ram in about 1 fight in 8 without

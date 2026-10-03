@@ -12,7 +12,7 @@ import { TIME } from './time';
 
 export type Tier = 1 | 2 | 3;
 
-export type ItemKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'scanner' | 'store' | 'chassis' | 'good';
+export type ItemKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'scanner' | 'store' | 'utility' | 'chassis' | 'good';
 
 export const EFFORT = {
   // Net money per turn at each tier. Tier 1 is the salvage bot's wage from `npm run econ` over seeds
@@ -35,6 +35,7 @@ export const EFFORT = {
       cargo: [250, 700],
       scanner: [250, 700],
       store: [250, 700],
+      utility: [250, 700],
       chassis: [5000, 7500],
       good: [40, 100],
     },
@@ -45,6 +46,7 @@ export const EFFORT = {
       cargo: [180, 480],
       scanner: [180, 480],
       store: [180, 480],
+      utility: [180, 480],
       chassis: [2800, 4200],
       good: [50, 100],
     },
@@ -55,6 +57,7 @@ export const EFFORT = {
       cargo: [180, 380],
       scanner: [180, 380],
       store: [180, 380],
+      utility: [180, 380],
       chassis: [1900, 2800],
       good: [40, 80],
     },

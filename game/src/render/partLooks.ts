@@ -66,6 +66,7 @@ export const PART_MODELS: Record<string, ModelName> = {
   steelPlate: 'arm_plate',
   scrapSheet: 'arm_scrap_sheet',
   ceramicTile: 'arm_ceramic_tile',
+  claymoreRam: 'arm_ram', // stand-in until its own model
 
   rack: 'cargo_rack',
   trailerBox: 'cargo_trailer_box',
@@ -79,6 +80,17 @@ export const PART_MODELS: Record<string, ModelName> = {
 
   jerrycans: 'store_jerrycans',
   supplyLocker: 'store_locker',
+
+  // Stand-ins until the utilities get their own models.
+  sprout: 'scanner',
+  caltrops: 'scanner',
+  oilSpiller: 'store_jerrycans',
+  patcherCrane: 'store_locker',
+  harpoon: 'scanner',
+  smokeMortar: 'scanner',
+  flareCannon: 'scanner',
+  scrapersKnife: 'store_locker',
+  emitter: 'store_locker',
 
   scrap: 'good_scrap',
   salt: 'good_salt',

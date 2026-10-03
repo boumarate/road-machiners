@@ -36,7 +36,7 @@ import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from
 import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
 import { advanceAid, readyAid } from './aid';
-import type { GridItem, MoveOrder, PartInstance, Vehicle, WeaponOrder, World, XpSource } from './types';
+import type { GridItem, MoveOrder, PartInstance, UtilityOrder, Vehicle, WeaponOrder, World, XpSource } from './types';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
 import { noteEscape } from './escape';
@@ -44,15 +44,17 @@ import { advanceWeather } from './weather';
 import { advanceContracts, advanceShops, initializeShops, marketStream, shopNear } from './market';
 import { applyWear, carryHp } from './wear';
 import { advanceDust } from './detect';
+import { searchStream } from './search';
+import { activateUtilities, advanceUtilityEffects, tickCharges, utilityOrderError } from './utility';
 import { advanceJobs, startAutoRepair } from './jobs';
 import { advanceEngineHeat } from './engine-heat';
 import { nearestPad } from './sites';
 import { clamp, dist, type Vec } from './vec';
 
 // The world seed and the random streams it starts.
-export function seedStreams(seed: number): Pick<World, 'seed' | 'rngState' | 'marketRng' | 'nameRng'> {
+export function seedStreams(seed: number): Pick<World, 'seed' | 'rngState' | 'marketRng' | 'nameRng' | 'searchRng'> {
   if (!Number.isInteger(seed)) throw new Error(`Seed must be an integer, got ${seed}`);
-  return { seed, rngState: seed, marketRng: marketStream(seed), nameRng: nameStream(seed) };
+  return { seed, rngState: seed, marketRng: marketStream(seed), nameRng: nameStream(seed), searchRng: searchStream(seed) };
 }
 
 // A new game on the baked map. The map gives terrain and props; the world seed drives all other randomness.
@@ -122,6 +124,10 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
     weather: [],
     dustClouds: [],
     states: [],
+    smoke: [],
+    fields: [],
+    flares: [],
+    lines: [],
   };
   world.obstacles = generateObstacles(world, map);
   const truck = makeVehicle(world, {
@@ -271,6 +277,7 @@ export function endTurn(
     applyWear(w);
     advanceEngineHeat(w);
     advanceDust(w);
+    advanceUtilityEffects(w);
     clearPiles(w);
     renewSalvage(w);
     advanceJobs(w);
@@ -279,6 +286,8 @@ export function endTurn(
     raiseCalls(w);
     assignAutoOrders(w);
     settleAims(w);
+    activateUtilities(w);
+    tickCharges(w);
     fireWeapons(w);
     fireGuards(w);
     consumeSupplies(w);
@@ -334,6 +343,20 @@ export function setWeaponOrder(
     if (order.aim !== "body" && !findPart(target, order.aim))
       throw new Error(`Target has no part ${order.aim}`);
     me.weaponOrders[weaponId] = order;
+  });
+}
+
+// Sets or clears the player's order to use a utility or arm a claymore ram this turn. Throws when the part refuses it.
+export function setUtilityOrder(world: World, partId: string, order: UtilityOrder | null): World {
+  return playerCommand(world, (w) => {
+    const me = playerVehicle(w);
+    if (order === null) {
+      delete me.utilityOrders[partId];
+      return;
+    }
+    const error = utilityOrderError(w, me, partId, order);
+    if (error) throw new Error(error);
+    me.utilityOrders[partId] = order;
   });
 }
 

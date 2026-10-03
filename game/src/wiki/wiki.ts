@@ -156,10 +156,14 @@ const TABLES: WikiTable[] = [
     rows: () => partsOf('weapon').map((p) => [p.id, p.round.damage, p.round.pen, p.round.blast, p.round.speed, p.round.splashRadius, p.round.splashDamage, p.round.splashPen]),
   },
   partTable('engines', 'engine', ['speed bonus', 'accel bonus', 'fuel mult', 'noise', 'heat'], (p) => [p.speedBonus, p.accelBonus, p.fuelMult, p.noise, p.heat]),
-  partTable('armor', 'armor', ['blast armor', 'field repair', 'ram mult'], (p) => [p.blastArmor, p.fieldRepair, p.ramMult]),
+  partTable('armor', 'armor', ['blast armor', 'field repair', 'ram mult', 'claymore'], (p) => [p.blastArmor, p.fieldRepair, p.ramMult, p.claymore ?? null]),
   partTable('cargo', 'cargo', ['extra rows'], (p) => [p.extraRows]),
   partTable('scanners', 'scanner', ['range (tiles)'], (p) => [p.range]),
   partTable('stores', 'store', ['holds', 'amount (units)'], (p) => [p.holds, p.amount]),
+  partTable('utilities', 'utility', ['effect', 'reload (turns)', 'effect numbers', 'shot range (tiles)'], (p) => {
+    const { type, ...numbers } = p.effect;
+    return [type, p.reload, numbers, p.shot ? p.shot.range : null];
+  }),
   partTable('core', 'core', ['role'], (p) => [p.role]),
   {
     id: 'goods',

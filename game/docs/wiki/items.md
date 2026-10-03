@@ -92,22 +92,23 @@ Each weapon's round:
 
 ## Armor
 
-`armor` stops kinetic rounds and `blast armor` stops blast rounds and splash. Field repair says how far a repair on the road restores the part.
+`armor` stops kinetic rounds and `blast armor` stops blast rounds and splash. Field repair says how far a repair on the road restores the part. A claymore ram holds a charge that the driver arms. It blasts on the next hard truck crash on its side.
 
 <!-- wiki:armor -->
-| id | name | tier | value | cells (w x h) | mass (kg) | hp | armor | tall | blast armor | field repair | ram mult |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| plates | Steel plates | 2 | 304 | 1 x 3 | 225 | 80 | 12 | false | 12 | capped | 1 |
-| cage | Rebar cage | 1 | 218 | 1 x 2 | 110 | 60 | 2 | false | 20 | capped | 1 |
-| ram | Ram bar | 2 | 328 | 3 x 1 | 480 | 100 | 20 | false | 8 | capped | 2 |
-| scrapPanels | Scrap panels | 1 | 150 | 1 x 2 | 200 | 44 | 5 | false | 5 | full | 1 |
-| ceramicPlates | Ceramic plates | 2 | 450 | 1 x 2 | 100 | 36 | 22 | false | 8 | none | 1 |
-| spacedArmor | Spaced armor | 2 | 424 | 1 x 4 | 260 | 110 | 10 | false | 28 | capped | 1 |
-| reinforcedCage | Reinforced cage | 2 | 350 | 1 x 3 | 180 | 130 | 4 | false | 26 | capped | 1.2 |
-| plowRam | Plow ram | 3 | 602 | 3 x 1 | 420 | 170 | 25 | false | 12 | none | 2.8 |
-| steelPlate | Steel plate | 2 | 198 | 1 x 1 | 80 | 28 | 12 | false | 12 | capped | 1 |
-| scrapSheet | Scrap sheet | 1 | 100 | 1 x 1 | 100 | 22 | 5 | false | 5 | full | 1 |
-| ceramicTile | Ceramic tile | 2 | 260 | 1 x 1 | 50 | 18 | 22 | false | 8 | none | 1 |
+| id | name | tier | value | cells (w x h) | mass (kg) | hp | armor | tall | blast armor | field repair | ram mult | claymore |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| plates | Steel plates | 2 | 304 | 1 x 3 | 225 | 80 | 12 | false | 12 | capped | 1 |  |
+| cage | Rebar cage | 1 | 218 | 1 x 2 | 110 | 60 | 2 | false | 20 | capped | 1 |  |
+| ram | Ram bar | 2 | 328 | 3 x 1 | 480 | 100 | 20 | false | 8 | capped | 2 |  |
+| scrapPanels | Scrap panels | 1 | 150 | 1 x 2 | 200 | 44 | 5 | false | 5 | full | 1 |  |
+| ceramicPlates | Ceramic plates | 2 | 450 | 1 x 2 | 100 | 36 | 22 | false | 8 | none | 1 |  |
+| spacedArmor | Spaced armor | 2 | 424 | 1 x 4 | 260 | 110 | 10 | false | 28 | capped | 1 |  |
+| reinforcedCage | Reinforced cage | 2 | 350 | 1 x 3 | 180 | 130 | 4 | false | 26 | capped | 1.2 |  |
+| plowRam | Plow ram | 3 | 602 | 3 x 1 | 420 | 170 | 25 | false | 12 | none | 2.8 |  |
+| claymoreRam | Claymore ram | 2 | 420 | 3 x 1 | 380 | 80 | 14 | false | 6 | capped | 1.5 | {"minImpact":3,"blast":{"damage":60,"pen":12,"radius":2},"selfBlast":{"damage":25,"pen":6},"reload":20} |
+| steelPlate | Steel plate | 2 | 198 | 1 x 1 | 80 | 28 | 12 | false | 12 | capped | 1 |  |
+| scrapSheet | Scrap sheet | 1 | 100 | 1 x 1 | 100 | 22 | 5 | false | 5 | full | 1 |  |
+| ceramicTile | Ceramic tile | 2 | 260 | 1 x 1 | 50 | 18 | 22 | false | 8 | none | 1 |  |
 <!-- /wiki:armor -->
 
 ## Cargo
@@ -140,6 +141,24 @@ Each weapon's round:
 | jerrycans | Jerrycan rack | 1 | 130 | 1 x 1 | 70 | 30 | 1 | false | fuel | 12 |
 | supplyLocker | Supply locker | 1 | 130 | 1 x 1 | 60 | 30 | 2 | false | supplies | 10 |
 <!-- /wiki:stores -->
+
+## Utilities
+
+Yellow deck parts with one job each. An active utility acts once on an order and then recharges for its reload in turns. Each wear step adds 10% to the reload, rounded up. The patcher crane and the scraper's knife are passive and work while mounted.
+
+<!-- wiki:utilities -->
+| id | name | tier | value | cells (w x h) | mass (kg) | hp | armor | tall | effect | reload (turns) | effect numbers | shot range (tiles) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| sprout | Sprout | 1 | 170 | 1 x 1 | 60 | 25 | 2 | false | sprout | 10 | {"radius":5,"turns":6} |  |
+| caltrops | Caltrops | 1 | 140 | 1 x 1 | 70 | 30 | 3 | false | caltrops | 10 | {"radius":1.25,"turns":10,"behind":1} |  |
+| oilSpiller | Oil spiller | 1 | 161 | 1 x 1 | 90 | 30 | 3 | false | oil | 6 | {"radius":1.25,"turns":8,"behind":1,"fuel":2} |  |
+| patcherCrane | Patcher crane | 1 | 180 | 1 x 2 | 150 | 50 | 4 | false | crane |  | {} |  |
+| harpoon | Harpoon | 2 | 300 | 1 x 2 | 120 | 40 | 4 | false | harpoon | 5 | {"turns":3} | 8 |
+| smokeMortar | Smoke mortar | 2 | 320 | 1 x 2 | 110 | 36 | 3 | false | mortar | 8 | {"radius":4,"turns":5,"minRange":5,"maxRange":16} |  |
+| flareCannon | Flare cannon | 2 | 220 | 1 x 1 | 50 | 28 | 2 | false | flare | 10 | {"radius":10,"turns":6,"minRange":4,"maxRange":24} |  |
+| scrapersKnife | Scraper's knife | 2 | 280 | 1 x 2 | 170 | 50 | 4 | false | scraper |  | {} |  |
+| emitter | Emitter | 3 | 750 | 2 x 2 | 200 | 44 | 4 | false | emitter | 10 | {"radius":6,"turns":2} |  |
+<!-- /wiki:utilities -->
 
 ## Core parts
 

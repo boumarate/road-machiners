@@ -28,6 +28,7 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
   covered: "behind cover",
   talking: "on the radio",
   out: "driver knocked out",
+  unmounted: "not mounted",
 };
 
 // One weapon aimed at a vehicle, as its marker shows it.

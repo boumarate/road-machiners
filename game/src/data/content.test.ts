@@ -43,8 +43,13 @@ const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {
     "steelPlate",
     "scrapSheet",
     "ceramicTile",
+    "claymoreRam",
   ],
   cargo: ["panniers", "flatbed", "lightFrame", "enclosedFrame", "heavyFrame"],
+  utility: [
+    "sprout", "caltrops", "oilSpiller", "patcherCrane", "harpoon",
+    "smokeMortar", "flareCannon", "scrapersKnife", "emitter",
+  ],
 };
 const addedGoods = ["grain", "textiles", "tools", "batteries", "electronics"];
 const addedChassis = ["courier", "van", "longbed", "carrier", "tractor", "jeep", "convertible", "bus", "loader"];
@@ -97,6 +102,7 @@ describe("equipment variety", () => {
         armor: 3,
         cargo: 2,
         store: 0,
+        utility: 0,
       };
       expect(Object.values(PARTS).filter((p) => p.kind === kind)).toHaveLength(
         originalCounts[kind] + ids.length,
@@ -208,6 +214,30 @@ describe("equipment variety", () => {
   });
 });
 
+describe("utilities", () => {
+  const utilities = Object.values(PARTS).filter((p) => p.kind === "utility");
+
+  it("prices each of the nine utilities inside its one tier's effort band", () => {
+    expect(utilities).toHaveLength(9);
+    for (const def of utilities) {
+      const [lo, hi] = EFFORT.bands[def.tier].utility;
+      const effort = def.value / EFFORT.wage[def.tier];
+      expect(effort, `${def.id} tier ${def.tier}: ${effort.toFixed(1)} turns`).toBeGreaterThanOrEqual(lo);
+      expect(effort, `${def.id} tier ${def.tier}: ${effort.toFixed(1)} turns`).toBeLessThanOrEqual(hi);
+    }
+  });
+
+  it("gives a reload to every active utility and none to the crane and the scraper", () => {
+    const passive = utilities.filter((def) => def.reload === null).map((def) => def.effect.type).sort();
+    expect(passive).toEqual(["crane", "scraper"]);
+  });
+
+  it("keeps the claymore ram an armor ram with a claymore", () => {
+    const def = PARTS.claymoreRam;
+    expect(def.kind === "armor" && def.look === "ram" && def.claymore !== undefined).toBe(true);
+  });
+});
+
 describe("one-cell armor plates", () => {
   it.each(["steelPlate", "scrapSheet", "ceramicTile"])("%s fills one cell with its plate line's armor", (id) => {
     const line = { steelPlate: "plates", scrapSheet: "scrapPanels", ceramicTile: "ceramicPlates" }[id]!;
@@ -235,13 +265,17 @@ function partAxes(def: PartDef): number[] {
     }
     case "cargo":
       return [def.hp, -def.mass, def.armor, -cells, tall, def.extraRows];
+    case "utility":
+      return [def.hp, -def.mass, def.armor, -cells, tall, -(def.reload ?? 0)];
     default:
       return [];
   }
 }
 
+// Utilities compare only within one effect, since each effect does a different job.
 function dominates(a: PartDef, b: PartDef): boolean {
   if (a.kind === "weapon" && b.kind === "weapon" && a.round.blast !== b.round.blast) return false;
+  if (a.kind === "utility" && b.kind === "utility" && a.effect.type !== b.effect.type) return false;
   const x = partAxes(a);
   const y = partAxes(b);
   return x.every((v, i) => v >= y[i]) && x.some((v, i) => v > y[i]);

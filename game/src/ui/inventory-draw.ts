@@ -13,7 +13,7 @@ import { createIcon, goodIcon, partIcon, type IconName } from "./cards";
 import { hp, kg } from "./units";
 
 const CELL_TITLE: Record<Cell, string> = {
-  D: "deck mount for a weapon, scanner, cargo frame or store",
+  D: "deck mount for a weapon, scanner, utility, cargo frame or store",
   E: "engine mount",
   F: "front armor mount",
   B: "back armor mount",
@@ -30,6 +30,7 @@ export const KIND_CLASS: Record<PartKind, string> = {
   core: "k-core",
   scanner: "k-weapon",
   store: "k-cargo",
+  utility: "k-utility",
 };
 
 // The item a garage storage chip stands for. Its id starts with store- so it never clashes with a grid item.

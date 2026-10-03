@@ -201,6 +201,48 @@ function withoutRetiredStock_8_9(world: SavedJson): SavedJson {
   };
 }
 
+// Utility items arrive: every truck gets utility orders, the world gets empty utility effects and the search stream,
+// and every stock gets hidden loot. The stream comes from the world seed like a new game's.
+const SEARCH_SALT_9_10 = 0x73656172;
+const NO_HIDDEN_9_10 = (): SavedJson => ({ goods: {}, parts: [], fuel: 0, supplies: 0 });
+
+function withUtilities_9_10(world: SavedJson): SavedJson {
+  const ordered = (v: SavedJson): SavedJson => ({ ...v, utilityOrders: {} });
+  return {
+    ...world,
+    vehicles: (world.vehicles as SavedJson[]).map(ordered),
+    removed: (world.removed as SavedJson[]).map(ordered),
+    smoke: [],
+    fields: [],
+    flares: [],
+    lines: [],
+    searchRng: { rngState: (world.seed as number) ^ SEARCH_SALT_9_10 },
+  };
+}
+
+// Stocks rolled from loot tables at minor format 9: the sites that hold salvage, the loot spots of territories, whose
+// ids are <prop kind>-<n>, and the road wrecks, whose ids are wreck<n>. Truck wrecks (wreck-<vehicle>) and piles lie
+// in the open.
+const LOOT_SITES_9_10 = new Set(['burnt-convoy', 'podfield', 'canyon-bridge', 'glass-flats', 'south-lock', 'ridge-wrecks', 'broken-wing']);
+const LOOT_SPOT_9_10 = /^(farmhouse|barn|quonset|bunker|guardPost|armyTruck|armyCache|deckBay|shipCache)-\d+$/;
+const ROAD_WRECK_9_10 = /^wreck\d+$/;
+
+function isRolledStock_9_10(stock: SavedJson): boolean {
+  const id = stock.id as string;
+  return !stock.pile && (LOOT_SITES_9_10.has(id) || LOOT_SPOT_9_10.test(id) || ROAD_WRECK_9_10.test(id));
+}
+
+// A rolled stock the player has not searched hides all its loot, as a new game's does. Other stocks hide nothing.
+function withHiddenStock_9_10(world: SavedJson): SavedJson {
+  const searched = new Set((world.player as SavedJson).scavenged as string[]);
+  const hide = (stock: SavedJson): SavedJson => {
+    if (searched.has(stock.id as string) || !isRolledStock_9_10(stock)) return { ...stock, hidden: NO_HIDDEN_9_10() };
+    const hidden = { goods: stock.goods, parts: stock.parts, fuel: stock.fuel ?? 0, supplies: stock.supplies ?? 0 };
+    return { ...stock, goods: {}, parts: [], fuel: 0, supplies: 0, hidden };
+  };
+  return { ...world, salvage: (world.salvage as SavedJson[]).map(hide) };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -255,6 +297,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withoutRetiredStock_7_8,
   // 8 to 9: Old Orchard is a territory, so its site stock goes.
   withoutRetiredStock_8_9,
+  // 9 to 10: utility orders and effects, the search stream, and hidden salvage in every unsearched rolled stock.
+  (world) => withHiddenStock_9_10(withUtilities_9_10(world)),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

@@ -4,7 +4,7 @@
 
 import { RULES } from "../data/rules";
 import { chassisDef } from "../data/chassis";
-import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type FieldRepair } from "../data/parts";
+import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type UtilityDef, type FieldRepair } from "../data/parts";
 import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
 import { maxHp, partValue, wornDef } from "../sim/wear";
 import type { PartInstance, Vehicle } from "../sim/types";
@@ -53,6 +53,7 @@ const ART = {
   parts:
     '<circle cx="20" cy="20" r="8"/><circle cx="20" cy="20" r="3"/><path d="M20 4v6M20 30v6M4 20h6M30 20h6M9 9l4 4M27 27l4 4M31 9l-4 4M9 31l4-4"/>',
   scanner: '<path d="M8 30q-4-16 12-22l6 12zM17 19l9-9M26 10l4-4M20 30v6M12 36h16"/>',
+  utility: '<path d="M6 14h28v20H6zM10 14V8h20v6M20 18v12M14 24h12M30 8l5-4"/>',
   damage: '<path d="M20 3l4 10 11-3-7 9 8 8-11-1-1 11-5-9-7 8v-11l-10-3 10-5-4-10 10 5z"/>',
   pen: '<path d="M22 5v30M4 20h28M26 14l7 6-7 6"/>',
   range: '<path d="M4 20h32M4 13v14M36 13v14M12 17v6M20 16v8M28 17v6"/>',
@@ -110,6 +111,7 @@ const ICON_NAMES: Record<IconName, string> = {
   fuelDrums: "Fuel drums",
   water: "Water",
   scanner: "Radio scanner",
+  utility: "Utility",
   damage: "Damage",
   pen: "Penetration",
   range: "Range",
@@ -323,7 +325,8 @@ export type StatIcon =
   | "blast"
   | "heat"
   | "patch"
-  | "tall";
+  | "tall"
+  | "clock";
 
 // better is the direction that helps the player. null marks a stat with no better side.
 export type Stat = {
@@ -367,7 +370,24 @@ const KIND_STATS: Record<PartKind, (part: PartInstance) => Stat[]> = {
   scanner: (part) => [stat("scanner", "Detection range", meters(wornDef<ScannerDef>(part).range), "m", "more")],
   store: storeStats,
   core: () => [],
+  utility: utilityStats,
 };
+
+// A passive utility shows only its mass.
+function utilityStats(part: PartInstance): Stat[] {
+  const d = wornDef<UtilityDef>(part);
+  const reload = d.reload === null ? [] : [stat("reload", "Turns to recharge", d.reload, "t", "less")];
+  const lasts = "turns" in d.effect ? [stat("clock", "Turns it lasts", d.effect.turns, "t", "more")] : [];
+  return [...reload, ...utilityReach(d), ...lasts];
+}
+
+// How far a utility sends its effect, or the radius it covers around the truck.
+function utilityReach(d: UtilityDef): Stat[] {
+  const e = d.effect;
+  if ("maxRange" in e) return [stat("range", "Range", meters(e.maxRange), "m", "more")];
+  if (d.shot) return [stat("range", "Range", meters(d.shot.range), "m", "more")];
+  return "radius" in e ? [stat("range", "Radius", meters(e.radius), "m", "more")] : [];
+}
 
 function storeStats(part: PartInstance): Stat[] {
   const d = partDefOf<StoreDef>(part);

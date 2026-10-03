@@ -58,7 +58,7 @@ type Tab = "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
 // The part stock filter. Core parts are built in, so no shop sells them.
 type StockFilter = "all" | Exclude<PartKind, "core">;
 
-const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner", "store"];
+const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner", "store", "utility"];
 
 const GARAGE_ONLY: Tab[] = ["trucks"];
 
@@ -402,6 +402,7 @@ const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
   cargo: "Cargo",
   scanner: "Scanners",
   store: "Stores",
+  utility: "Utilities",
 };
 
 const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
@@ -411,6 +412,7 @@ const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
   cargo: "cargo",
   scanner: "scanner",
   store: "supplies",
+  utility: "utility",
 };
 
 const TAB_LABEL: Record<Tab, string> = {

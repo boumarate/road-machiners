@@ -10,7 +10,7 @@ import { advanceJobs } from './jobs';
 import { optionWeights } from './npc-decisions';
 import { thinkNpc, topGoal } from './npc-activities';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
-import { lootTruckTurn, takeFromTruck } from './salvage';
+import { lootTruckTurn, takeFromTruck, emptyHidden } from './salvage';
 import { lootBlockerHere } from './locations';
 import type { GridItem, Vehicle, World } from './types';
 import { refreshVision } from './vision';
@@ -167,7 +167,7 @@ describe('an NPC looting a knocked-out truck', () => {
     me.pos = { x: 200, y: 200 };
     const looter = looterBeside(w, buggy);
     looter.pos = { x: buggy.pos.x, y: buggy.pos.y + 6 };
-    w.salvage.push({ id: 'wreck-road', pos: { x: buggy.pos.x + 1, y: buggy.pos.y + 6 }, radius: 0.7, goods: { scrap: 2 }, parts: [] });
+    w.salvage.push({ id: 'wreck-road', pos: { x: buggy.pos.x + 1, y: buggy.pos.y + 6 }, radius: 0.7, goods: { scrap: 2 }, parts: [], hidden: emptyHidden() });
     refreshVision(w);
     expect(optionWeights(w, looter, 'salvageSeen', buggy.id, null)).toEqual(optionWeights(w, looter, 'salvageSeen', 'wreck-road', null));
   });

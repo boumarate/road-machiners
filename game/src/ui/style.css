@@ -1180,6 +1180,10 @@ body {
 .k-cargo {
   background: #655a4c;
 }
+/* Utilities: muted mustard, darker and greener than the gold selection outline, so a selection still reads on top. */
+.k-utility {
+  background: #7a6a2c;
+}
 .k-core {
   background: #404f57;
 }
@@ -1550,6 +1554,9 @@ canvas.view {
 }
 .card.k-cargo {
   border-left-color: #a08c68;
+}
+.card.k-utility {
+  border-left-color: #b39a3a;
 }
 .card-head {
   display: flex;
