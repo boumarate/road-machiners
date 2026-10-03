@@ -50,6 +50,12 @@ describe('runPolicy', () => {
     expect(r.telemetry.trades).toBeGreaterThan(0);
   });
 
+  // The game's search job reveals hidden stock and pays search XP, which the old direct collect never did.
+  it('salvageOnly searches through the game search job and learns from it', () => {
+    const r = run(1, 'salvageOnly', 2);
+    expect(r.perDay.at(-1)!.level).toBeGreaterThan(0);
+  });
+
   it('contractsOnly accepts at least one contract over a few days', () => {
     const r = run(1, 'contractsOnly', 3);
     expect(r.telemetry.contractsAccepted).toBeGreaterThan(0);

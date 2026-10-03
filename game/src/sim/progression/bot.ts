@@ -19,7 +19,7 @@ import { affordableBuyCount, buyGood, buyStockPart, buySupply, partTradePrice, g
 import { findSpot, freeCells, goodsCount, gridOf, isMounted, MOUNT_CELLS, mountedParts, type Spot } from '../grid';
 import { moveItem, storePart, takeFromStorage } from '../inventory';
 import { shopAt, shopState } from '../market';
-import { canLoot, salvageHere, takeAllLoot } from '../locations';
+import { canLoot, needsSearch, salvageHere, takeAllLoot } from '../locations';
 import { getUpkeepReserve, raiderGrounds } from '../npc-decisions';
 import { canReachSalvage, hasSalvage, lootBlocker } from '../salvage';
 import { startSearch } from '../search';
@@ -308,7 +308,7 @@ function sellAt(world: World, town: TownDef, good: string): number {
   return getTradePrice(world, playerVehicle(world), town.id, good, 'sell');
 }
 
-// The scavenger loots what it searched, searches the nearest known stock it has not searched, and sells in the
+// The scavenger loots what it searched, searches the nearest known stock that needs a search, and sells in the
 // nearest town when its cargo is full or no stock is left. With nothing left to search it drives to find a new
 // salvage site. Returns false when it has nothing to do: no stock, no cargo and no site left to find.
 function scavenge(o: Orders): boolean {
@@ -373,11 +373,11 @@ function nearestFoe(world: World): Vec | null {
 
 // ---- Salvage.
 
-// Stocks the player knows of that hold loot and that it has not searched: at a discovered site, or a wreck on
-// explored ground.
+// Stocks the player knows of that need a search, since they hide units or it never searched them: at a discovered
+// site, or a wreck on explored ground. So the bot searches a stock again while units stay hidden, as NPCs do.
 function knownStocks(world: World): SalvageStock[] {
   return world.salvage.filter((stock) => {
-    if (!hasSalvage(stock) || world.player.scavenged.includes(stock.id)) return false;
+    if (!hasSalvage(stock) || !needsSearch(world, stock)) return false;
     const site = REGION.locations.find((l) => l.id === stock.id);
     return site ? world.player.discovered.includes(site.id) : playerExplored(world, stock.pos);
   });

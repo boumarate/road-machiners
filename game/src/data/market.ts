@@ -348,9 +348,6 @@ export const HARNESS = {
   fightDamageShare: 0.3,
   // Turns a fight takes off the clock, win or lose: maneuvering, shooting and the aftermath.
   fightTurns: 20,
-
-  // Loot units a bot searches out of a salvage stock per turn spent searching it.
-  searchRate: 2,
 };
 
 

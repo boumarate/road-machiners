@@ -113,7 +113,12 @@
     },
     "hidden": {
      "fuel": "number",
-     "goods": {},
+     "goods": {
+      "grain": "number",
+      "parts": "number",
+      "scrap": "number",
+      "textiles": "number"
+     },
      "parts": [],
      "supplies": "number"
     },
@@ -136,8 +141,23 @@
     },
     "hidden": {
      "fuel": "number",
-     "goods": {},
-     "parts": [],
+     "goods": {
+      "grain": "number",
+      "parts": "number",
+      "scrap": "number",
+      "textiles": "number"
+     },
+     "parts": [
+      {
+       "charge": {
+        "reload": "number"
+       },
+       "defId": "string",
+       "hp": "number",
+       "id": "string",
+       "wear": "number"
+      }
+     ],
      "supplies": "number"
     },
     "id": "string",
@@ -169,8 +189,25 @@
     },
     "hidden": {
      "fuel": "number",
-     "goods": {},
-     "parts": [],
+     "goods": {
+      "grain": "number",
+      "parts": "number",
+      "scrap": "number",
+      "textiles": "number"
+     },
+     "parts": [
+      {
+       "defId": "string",
+       "gun": {
+        "ammo": "number",
+        "cooldown": "number",
+        "reloadWork": "number"
+       },
+       "hp": "number",
+       "id": "string",
+       "wear": "number"
+      }
+     ],
      "supplies": "number"
     },
     "id": "string",
@@ -204,7 +241,12 @@
     },
     "hidden": {
      "fuel": "number",
-     "goods": {},
+     "goods": {
+      "meds": "number",
+      "parts": "number",
+      "salt": "number",
+      "scrap": "number"
+     },
      "parts": [],
      "supplies": "number"
     },
@@ -227,8 +269,23 @@
     },
     "hidden": {
      "fuel": "number",
-     "goods": {},
-     "parts": [],
+     "goods": {
+      "meds": "number",
+      "parts": "number",
+      "salt": "number",
+      "scrap": "number"
+     },
+     "parts": [
+      {
+       "charge": {
+        "reload": "number"
+       },
+       "defId": "string",
+       "hp": "number",
+       "id": "string",
+       "wear": "number"
+      }
+     ],
      "supplies": "number"
     },
     "id": "string",
@@ -260,8 +317,25 @@
     },
     "hidden": {
      "fuel": "number",
-     "goods": {},
-     "parts": [],
+     "goods": {
+      "meds": "number",
+      "parts": "number",
+      "salt": "number",
+      "scrap": "number"
+     },
+     "parts": [
+      {
+       "defId": "string",
+       "gun": {
+        "ammo": "number",
+        "cooldown": "number",
+        "reloadWork": "number"
+       },
+       "hp": "number",
+       "id": "string",
+       "wear": "number"
+      }
+     ],
      "supplies": "number"
     },
     "id": "string",
@@ -294,7 +368,11 @@
     },
     "hidden": {
      "fuel": "number",
-     "goods": {},
+     "goods": {
+      "meds": "number",
+      "parts": "number",
+      "scrap": "number"
+     },
      "parts": [],
      "supplies": "number"
     },
@@ -316,8 +394,22 @@
     },
     "hidden": {
      "fuel": "number",
-     "goods": {},
-     "parts": [],
+     "goods": {
+      "meds": "number",
+      "parts": "number",
+      "scrap": "number"
+     },
+     "parts": [
+      {
+       "charge": {
+        "reload": "number"
+       },
+       "defId": "string",
+       "hp": "number",
+       "id": "string",
+       "wear": "number"
+      }
+     ],
      "supplies": "number"
     },
     "id": "string",
@@ -348,8 +440,24 @@
     },
     "hidden": {
      "fuel": "number",
-     "goods": {},
-     "parts": [],
+     "goods": {
+      "meds": "number",
+      "parts": "number",
+      "scrap": "number"
+     },
+     "parts": [
+      {
+       "defId": "string",
+       "gun": {
+        "ammo": "number",
+        "cooldown": "number",
+        "reloadWork": "number"
+       },
+       "hp": "number",
+       "id": "string",
+       "wear": "number"
+      }
+     ],
      "supplies": "number"
     },
     "id": "string",
@@ -381,7 +489,10 @@
     },
     "hidden": {
      "fuel": "number",
-     "goods": {},
+     "goods": {
+      "parts": "number",
+      "scrap": "number"
+     },
      "parts": [],
      "supplies": "number"
     },
@@ -402,8 +513,21 @@
     },
     "hidden": {
      "fuel": "number",
-     "goods": {},
-     "parts": [],
+     "goods": {
+      "parts": "number",
+      "scrap": "number"
+     },
+     "parts": [
+      {
+       "charge": {
+        "reload": "number"
+       },
+       "defId": "string",
+       "hp": "number",
+       "id": "string",
+       "wear": "number"
+      }
+     ],
      "supplies": "number"
     },
     "id": "string",
@@ -433,8 +557,23 @@
     },
     "hidden": {
      "fuel": "number",
-     "goods": {},
-     "parts": [],
+     "goods": {
+      "parts": "number",
+      "scrap": "number"
+     },
+     "parts": [
+      {
+       "defId": "string",
+       "gun": {
+        "ammo": "number",
+        "cooldown": "number",
+        "reloadWork": "number"
+       },
+       "hp": "number",
+       "id": "string",
+       "wear": "number"
+      }
+     ],
      "supplies": "number"
     },
     "id": "string",

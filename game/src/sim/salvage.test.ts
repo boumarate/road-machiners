@@ -237,14 +237,17 @@ const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
     // Empty the tank and stores so the convoy's fuel and supplies fit.
     w.player.fuel = 0;
     w.player.supplies = 0;
-    const totalScrap = w.salvage.find((s) => s.id === convoy.id)!.goods.scrap;
-    let next = scavenge(w, convoy.id);
+    const totalScrap = w.salvage.find((s) => s.id === convoy.id)!.hidden.goods.scrap;
+    let next = w;
     let turns = 0;
-    while (next.vehicles[0].job) {
-      next = endTurn(next, testDrive);
-      if (++turns > 50) throw new Error('search never finished');
+    while (canScavenge(next, convoy.id)) {
+      next = scavenge(next, convoy.id);
+      while (next.vehicles[0].job) {
+        next = endTurn(next, testDrive);
+        if (++turns > 200) throw new Error('search never finished');
+      }
+      next = takeAllLoot(next, convoy.id);
     }
-    next = takeAllLoot(next, convoy.id);
     next.player.scavenged = [];
     expect(canScavenge(next, convoy.id)).toBe(false);
     expect(goodsCount(next.vehicles[0]).scrap).toBe(totalScrap);
@@ -257,9 +260,9 @@ const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
     const w = emptyWorld();
     const stock = w.salvage.find((s) => s.id === landmark.id)!;
     expect(hasSalvage(stock)).toBe(true);
-    expect(stock.goods.parts).toBeGreaterThan(0);
-    expect(stock.fuel).toBeGreaterThanOrEqual(SALVAGE.landmark.fuel[0]);
-    expect(stock.supplies).toBeGreaterThanOrEqual(SALVAGE.landmark.supplies[0]);
+    expect(stock.hidden.goods.parts).toBeGreaterThan(0);
+    expect(stock.hidden.fuel).toBeGreaterThanOrEqual(SALVAGE.landmark.fuel[0]);
+    expect(stock.hidden.supplies).toBeGreaterThanOrEqual(SALVAGE.landmark.supplies[0]);
   });
 
   it('gives a wreck its mounted parts at their hp, and turns built-in parts into the parts good', () => {
@@ -309,7 +312,7 @@ describe('field spare parts', () => {
       w.rngState = seed;
       w.marketRng.rngState = seed * 7919;
       initializeSalvage(w);
-      for (const stock of w.salvage) wears.push(...stock.parts.map((p) => p.wear));
+      for (const stock of w.salvage) wears.push(...stock.hidden.parts.map((p) => p.wear));
     }
     const pristine = wears.filter((wear) => wear === 0).length;
     expect(wears.length).toBeGreaterThan(50);
@@ -390,6 +393,7 @@ function emptyStock(stock: SalvageStock): void {
   stock.parts = [];
   stock.fuel = 0;
   stock.supplies = 0;
+  stock.hidden = emptyHidden();
 }
 
 // A world whose only road wreck is a looted one at `pos`, with the player at `playerPos`.
@@ -415,14 +419,14 @@ describe('site restock', () => {
     const stock = stockOf(w, convoy.id);
     emptyStock(stock);
     runDays(w, 1);
-    const firstDay = stock.goods.scrap;
+    const firstDay = stock.hidden.goods.scrap;
     // A unit comes back at SALVAGE.restockShare a day, so a year of days fills every range but for
     // odds far below one in a million.
     runDays(w, 365);
     expect(firstDay).toBeLessThan(SALVAGE.convoy.goods.scrap[1]);
-    expect(stock.goods.scrap).toBe(SALVAGE.convoy.goods.scrap[1]);
-    expect(stock.goods.parts).toBe(SALVAGE.convoy.parts[1]);
-    expect(stock.fuel).toBe(SALVAGE.convoy.fuel[1]);
+    expect(stock.hidden.goods.scrap).toBe(SALVAGE.convoy.goods.scrap[1]);
+    expect(stock.hidden.goods.parts).toBe(SALVAGE.convoy.parts[1]);
+    expect(stock.hidden.fuel).toBe(SALVAGE.convoy.fuel[1]);
   });
 
   it('refills an emptied spare part slot with one part at a small daily chance', () => {
@@ -432,12 +436,12 @@ describe('site restock', () => {
     // The daily chance is sparePartChance * restockShare, a few percent, so 1000 days refill it
     // except with odds far below one in a million.
     let days = 0;
-    while (stock.parts.length === 0 && days < 1000) {
+    while (stock.hidden.parts.length === 0 && days < 1000) {
       runDays(w, 1);
       days++;
     }
     runDays(w, 30);
-    expect(stock.parts).toHaveLength(1);
+    expect(stock.hidden.parts).toHaveLength(1);
   });
 
   it('restocks only on the last turn of a day', () => {
@@ -448,7 +452,8 @@ describe('site restock', () => {
       w.turn = turn;
       renewSalvage(w);
     }
-    expect(stock.goods.scrap).toBe(0);
+    expect(stock.goods.scrap ?? 0).toBe(0);
+    expect(stock.hidden).toEqual(emptyHidden());
   });
 
   it('keeps a count above the table high', () => {
@@ -473,7 +478,7 @@ describe('road wreck turnover', () => {
     expect(wrecks).toHaveLength(1);
     expect(wrecks[0].id).not.toBe('wreck0');
     expect(dist(wrecks[0].pos, near)).toBeGreaterThan(grayRadius(w, wrecks[0].pos));
-    expect(stockOf(w, wrecks[0].id).goods.scrap).toBeGreaterThan(0);
+    expect(stockOf(w, wrecks[0].id).hidden.goods.scrap).toBeGreaterThan(0);
   });
 
   it('keeps a looted wreck the player can see', () => {
@@ -759,8 +764,8 @@ describe('territory loot spots', () => {
       expect(stocks, o.id).toHaveLength(1);
       expect(territoryOfStock(stocks[0])?.id, o.id).toBe('orchard');
       const table = spotTable(o);
-      expect(stocks[0].goods.parts ?? 0, o.id).toBeGreaterThanOrEqual(table.parts[0]);
-      expect(stocks[0].goods.parts ?? 0, o.id).toBeLessThanOrEqual(table.parts[1]);
+      expect(stocks[0].hidden.goods.parts ?? 0, o.id).toBeGreaterThanOrEqual(table.parts[0]);
+      expect(stocks[0].hidden.goods.parts ?? 0, o.id).toBeLessThanOrEqual(table.parts[1]);
     }
     expect(w.salvage.some((s) => s.id === 'orchard')).toBe(false);
   }, 30_000);
@@ -771,9 +776,9 @@ describe('territory loot spots', () => {
       const table = spotTable(o);
       const stock = stockOf(w, o.id);
       expect(table).toBe(o.kind === 'landmark' && o.look === 'deckBay' ? SALVAGE.landmark : SALVAGE.hullScrap);
-      expect(stock.goods.parts).toBeGreaterThanOrEqual(table.parts[0]);
-      expect(stock.goods.parts).toBeLessThanOrEqual(table.parts[1]);
-      expect(stock.fuel).toBeLessThanOrEqual(table.fuel[1]);
+      expect(stock.hidden.goods.parts).toBeGreaterThanOrEqual(table.parts[0]);
+      expect(stock.hidden.goods.parts).toBeLessThanOrEqual(table.parts[1]);
+      expect(stock.hidden.fuel).toBeLessThanOrEqual(table.fuel[1]);
       expect(stock.radius).toBeCloseTo(propReach(o), 6);
     }
   }, 30_000);
@@ -785,14 +790,14 @@ describe('territory loot spots', () => {
     const stocks = bays.map((o) => stockOf(w, o.id));
     for (const stock of stocks) emptyStock(stock);
     runDays(w, 1);
-    const scrap = () => stocks.reduce((n, stock) => n + (stock.goods.scrap ?? 0), 0);
+    const scrap = () => stocks.reduce((n, stock) => n + (stock.hidden.goods.scrap ?? 0), 0);
     expect(scrap()).toBeLessThan(stocks.length * SALVAGE.landmark.goods.scrap[1]);
     runDays(w, 365);
     for (const [k, stock] of stocks.entries()) {
-      expect(stock.goods.scrap, bays[k].id).toBe(SALVAGE.landmark.goods.scrap[1]);
-      expect(stock.goods.parts, bays[k].id).toBe(SALVAGE.landmark.parts[1]);
-      expect(stock.fuel, bays[k].id).toBe(SALVAGE.landmark.fuel[1]);
-      expect(stockOf(w, bays[k].id).parts.length, bays[k].id).toBeLessThanOrEqual(1);
+      expect(stock.hidden.goods.scrap, bays[k].id).toBe(SALVAGE.landmark.goods.scrap[1]);
+      expect(stock.hidden.goods.parts, bays[k].id).toBe(SALVAGE.landmark.parts[1]);
+      expect(stock.hidden.fuel, bays[k].id).toBe(SALVAGE.landmark.fuel[1]);
+      expect(stockOf(w, bays[k].id).hidden.parts.length, bays[k].id).toBeLessThanOrEqual(1);
     }
   }, 30_000);
 

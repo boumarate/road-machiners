@@ -537,6 +537,13 @@ function searchedText(stock: string): { text: string; cls: string } {
   return { text: `Search done${site ? ` at ${site.name}` : ''}.`, cls: 'good' };
 }
 
+// The loot one search turn revealed, like "Found 3 Scrap, Machine gun, 12 L of fuel."
+function foundText(_world: World, e: Extract<GameEvent, { t: 'found' }>): LogLine {
+  const stores = e.fuel > 0 || e.supplies > 0 ? [fillLine('{aid}', { aid: { kind: 'aid', fuel: e.fuel, supplies: e.supplies } })] : [];
+  const items = [...Object.entries(e.goods).map(([good, count]) => `${count} ${GOODS[good].name}`), ...e.parts.map((defId) => partDef(defId).name), ...stores];
+  return { text: `Found ${items.join(', ')}.`, cls: 'good' };
+}
+
 const CONTRACT_OUTCOME = { accepted: ['Contract taken', ''], expiring: ['Contract due soon', 'bad'], done: ['Contract done', 'good'], failed: ['Contract failed', 'bad'], lapsed: ['Contract lapsed', 'dim'] } as const;
 
 function contractText(c: Contract, outcome: keyof typeof CONTRACT_OUTCOME): { text: string; cls: string } {
@@ -647,6 +654,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   lineTorn: lineTornText,
   pulse: pulseText,
   claymore: claymoreText,
+  found: foundText,
   say: sayText,
   job: jobText,
   weather: weatherText,

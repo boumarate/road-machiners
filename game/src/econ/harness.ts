@@ -53,10 +53,12 @@ import {
 } from '../sim/market';
 import { advanceJobs } from '../sim/jobs';
 import { burnFuel, consumeVehicleSupplies } from '../sim/resources';
-import { collectSalvage, createWreckSalvage, renewSalvage, salvageUnits, wreckStockId } from '../sim/salvage';
+import { collectSalvage, createWreckSalvage, hasSalvage, renewSalvage, salvageUnits, wreckStockId } from '../sim/salvage';
+import { needsSearch } from '../sim/locations';
+import { beginSearch } from '../sim/search';
 import { siteGates, sitePads } from '../sim/sites';
 import { vehicleStats } from '../sim/stats';
-import type { PartInstance, SkillId, Vehicle, World } from '../sim/types';
+import type { PartInstance, SalvageStock, SkillId, Vehicle, World } from '../sim/types';
 import { dist, type Vec } from '../sim/vec';
 import { damagePart, isJunk, maxHp, partValue } from '../sim/wear';
 import { newWorld } from '../sim/world';
@@ -325,9 +327,10 @@ function unvisitedShop(world: World, mem: Memory): string | null {
 // ---- Salvage sites the harness can search: every convoy or landmark site, plus road wrecks, all
 // carrying finite stock rolled at world creation (src/sim/salvage.ts initializeSalvage).
 
+// Loot left in the stock, hidden or revealed.
 function hasLoot(id: string, world: World): boolean {
   const stock = world.salvage.find((s) => s.id === id);
-  return !!stock && (stock.parts.length > 0 || Object.values(stock.goods).some((n) => n > 0));
+  return !!stock && hasSalvage(stock);
 }
 
 // A walled site with no road generated to it (a road-generation gap, not a rule the harness owns
@@ -359,15 +362,31 @@ function driveToSalvage(world: World, telemetry: Telemetry, stockId: string): vo
   else driveToPoint(world, telemetry, world.salvage.find((s) => s.id === stockId)!.pos);
 }
 
+// Searches through the game's own search job, which reveals hidden loot turn by turn at the game's reveal chance, then
+// takes the revealed loot that fits. It searches again while units stay hidden, as NPCs do.
 function searchStock(world: World, telemetry: Telemetry, mem: Memory, stockId: string): void {
   driveToSalvage(world, telemetry, stockId);
-  while (hasLoot(stockId, world) && freeCells(playerVehicle(world)) > 0) {
-    const took = collectSalvage(world, playerVehicle(world), stockId, Math.min(HARNESS.searchRate, freeCells(playerVehicle(world))));
-    passTurns(world, telemetry, 1, 0);
-    if (took > 0) continue;
+  const me = playerVehicle(world);
+  while (hasLoot(stockId, world) && freeCells(me) > 0) {
+    const searching = needsSearch(world, stockOf(world, stockId));
+    if (searching) runSearch(world, telemetry, me, stockId);
+    if (collectSalvage(world, me, stockId, freeCells(me)) > 0 || searching) continue;
     mem.full.add(stockId);
     return;
   }
+}
+
+function stockOf(world: World, stockId: string): SalvageStock {
+  const stock = world.salvage.find((s) => s.id === stockId);
+  if (!stock) throw new Error(`Unknown salvage ${stockId}`);
+  return stock;
+}
+
+// Parked turns pass until the search job, and any job before it, ends.
+function runSearch(world: World, telemetry: Telemetry, me: Vehicle, stockId: string): void {
+  while (me.job) passTurns(world, telemetry, 1, 0);
+  beginSearch(world, me, stockId);
+  while (me.job) passTurns(world, telemetry, 1, 0);
 }
 
 // ---- Selling whatever the truck carries, goods and spare parts alike, at the shop it is parked at.

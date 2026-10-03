@@ -12,6 +12,7 @@ import { workOf, addState } from "../sim/states";
 import { startAid } from "../sim/aid";
 import { contractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel, conditionTier, conditionStatus, showsCondition } from "./format";
 import { mountedParts } from "../sim/grid";
+import { fuelLiters } from "./units";
 
 function part(wear: number): PartInstance {
   return { id: "p1", defId: "mg", hp: 10, wear };
@@ -396,5 +397,14 @@ describe("aid handover text", () => {
     const theirs = next.vehicles.find((v) => v.id === npc.id)!;
     expect(workLabel(next, theirs, workOf(next, theirs)!)).toMatch(/^Taking .* from you$/);
     expect(eventText(next, next.events.find((e) => e.t === "aidStarted")!)?.text).toMatch(/^You start handing/);
+  });
+});
+
+describe("found log", () => {
+  it("lists the goods, parts, fuel and supplies a search turn found", () => {
+    const w = emptyWorld();
+    const e: GameEvent = { t: "found", vehicle: w.player.vehicleId, stock: "rich", goods: { scrap: 3 }, parts: ["mg"], fuel: 2, supplies: 1 };
+
+    expect(eventText(w, e)).toEqual({ text: `Found 3 Scrap metal, ${partDef("mg").name}, ${fuelLiters(2)} L of fuel and 1 supply.`, cls: "good" });
   });
 });

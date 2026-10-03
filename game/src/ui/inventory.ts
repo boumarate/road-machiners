@@ -31,7 +31,7 @@ import { repairPlan, type RepairPlan } from "../sim/repair";
 import { shopAt } from "../sim/market";
 import { townAt } from "../sim/sites";
 import { takeAllLoot, takeLoot, takeStores } from "../sim/locations";
-import { canLootTruck, hasStores, takeFromTruck } from "../sim/salvage";
+import { canLootTruck, hasStores, hiddenUnits, takeFromTruck } from "../sim/salvage";
 import { gaveUp, isKnockedOut } from "../sim/defeat";
 import { REGION } from "../data/region";
 import type {
@@ -611,7 +611,8 @@ export class InventoryView {
     ];
   }
 
-  // What a finished search turned up. Drag a chip onto the grid to take it; the rest stays here.
+  // The revealed loot, what searches turned up. Drag a chip onto the grid to take it; the rest stays here. Hidden
+  // loot never shows.
   private lootEl(w: World, stockId: string): HTMLElement {
     const stock = w.salvage.find((s) => s.id === stockId);
     if (!stock) throw new Error(`Unknown salvage ${stockId}`);
@@ -627,7 +628,7 @@ export class InventoryView {
       el("h3", {}, `Salvage${site ? `: ${site.name}` : ""}`),
       ...(chips.length
         ? chips
-        : [el("div", { class: "dim" }, "Nothing left here.")]),
+        : [el("div", { class: "dim" }, hiddenUnits(stock) > 0 ? "Nothing found yet." : "Nothing left here.")]),
       ...(chips.length
         ? [
             el(

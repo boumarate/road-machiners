@@ -66,6 +66,46 @@ describe('salvage interaction', () => {
     w.salvage[0].goods.scrap = 0;
     expect(getContextActions(w, false)[0]).toMatchObject({ label: `${site.name} is picked clean`, ready: false, hint: 'No loot left' });
   });
+
+  it('offers a search while units stay hidden and the revealed loot once searched, both at once', () => {
+    const site = REGION.locations.find((site) => site.id === 'podfield')!;
+    const w = emptyWorld({ ...sitePads(site)[0] });
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [], hidden: { ...emptyHidden(), goods: { scrap: 2 } } }];
+    expect(getContextActions(w, false).map((a) => a.label)).toEqual([`Search ${site.name}`]);
+    w.player.scavenged.push(site.id);
+    expect(getContextActions(w, false)).toEqual([
+      expect.objectContaining({ label: `Search ${site.name}`, ready: true, target: { kind: 'stock', id: site.id } }),
+      expect.objectContaining({ label: `Loot ${site.name}`, ready: true, target: { kind: 'loot', id: site.id } }),
+    ]);
+    w.salvage[0].hidden = emptyHidden();
+    expect(getContextActions(w, false).map((a) => a.label)).toEqual([`Loot ${site.name}`]);
+    w.salvage[0].goods.scrap = 0;
+    expect(getContextActions(w, false)[0]).toMatchObject({ label: `${site.name} is picked clean` });
+  });
+
+  it('picks the loot of a stock beside its search with the arrows', () => {
+    const site = REGION.locations.find((site) => site.id === 'podfield')!;
+    const w = emptyWorld({ ...sitePads(site)[0] });
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [], hidden: { ...emptyHidden(), goods: { scrap: 2 } } }];
+    w.player.scavenged.push(site.id);
+    const picker = new ContextPicker();
+    expect(picker.pick(getContextActions(w, false))?.label).toBe(`Search ${site.name}`);
+    picker.cycle(getContextActions(w, false), 1);
+    expect(picker.pick(getContextActions(w, false))?.label).toBe(`Loot ${site.name}`);
+  });
+
+  it('blocks both the search and the loot while another truck loots the stock', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 1 }, parts: [], hidden: { ...emptyHidden(), goods: { scrap: 2 } } });
+    w.player.scavenged.push('wreck901');
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 31.5, y: 30 });
+    npc.speed = 0;
+    beginSearch(w, npc, 'wreck901');
+    expect(getContextActions(w, false)).toEqual([
+      expect.objectContaining({ label: 'Search the wreck', ready: false, hint: `${npc.name} is looting it` }),
+      expect.objectContaining({ label: 'Loot the wreck', ready: false, hint: `${npc.name} is looting it` }),
+    ]);
+  });
 });
 
 describe('every interaction in reach', () => {
@@ -85,7 +125,7 @@ describe('every interaction in reach', () => {
     const pile = dumpOnPile(w, me, me.items.find((item) => item.kind === 'good') ?? me.items[0]);
     expect(getContextActions(w, false).map((a) => a.target)).toEqual([
       { kind: 'stock', id: 'wreck901' },
-      { kind: 'stock', id: pile.id },
+      { kind: 'loot', id: pile.id },
     ]);
   });
 
@@ -348,7 +388,7 @@ describe('aid handover action', () => {
 });
 
 const shop: ContextAction = { label: 'Enter', ready: true, target: { kind: 'shop' } };
-const pile: ContextAction = { label: 'Loot the pile', ready: true, target: { kind: 'stock', id: 'p1' } };
+const pile: ContextAction = { label: 'Loot the pile', ready: true, target: { kind: 'loot', id: 'p1' } };
 const wreck: ContextAction = { label: 'Search the wreck', ready: true, target: { kind: 'stock', id: 'w1' } };
 
 describe('context picker', () => {
