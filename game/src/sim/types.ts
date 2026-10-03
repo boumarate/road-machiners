@@ -314,8 +314,9 @@ export type TopicOutcome = "agreed" | "refused" | "done";
 export type Player = {
   vehicleId: string;
   money: number;
-  skills: Record<SkillId, number>; // XP per skill; the level follows from XP_TO_REACH
-  xpToday: Record<SkillId, number>; // XP per skill earned on day xpDay, for the daily soft cap
+  xp: number; // unspent XP, earned by any activity; see src/sim/progress.ts
+  ranks: Record<SkillId, number>; // bought ranks per skill, from 0 to MAX_RANK
+  xpToday: Record<SkillId, number>; // XP per activity family earned on day xpDay, for the daily soft cap
   xpDay: number;
   repeats: Record<string, Repeat>; // "source:target" to the earlier practice on that target; see XP_SOURCES
   xpBySource: Record<XpSource, number>; // lifetime XP per source, for the debug console
@@ -381,7 +382,7 @@ export type GameEvent =
   | { t: 'despawn'; vehicle: string }
   | { t: 'hostile'; vehicle: string; against: string }
   | { t: 'practice'; source: XpSource; amount: number; difficulty: number | null; target: string; xp: number }
-  | { t: 'skillUp'; skill: SkillId; level: number }
+  | { t: 'skillUp'; skill: SkillId; level: number } // level is the rank just bought
   | { t: 'money'; amount: number; reason: string }
   | { t: 'contract'; contract: Contract; outcome: 'accepted' | 'expiring' | 'done' | 'failed' | 'lapsed' }
   | { t: 'discover'; location: string }

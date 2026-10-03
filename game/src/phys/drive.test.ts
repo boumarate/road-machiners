@@ -2,7 +2,6 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
-import { XP_TO_REACH } from '../data/skills';
 import { makeVehicle } from '../sim/factory';
 import { addGoods, removeAllGoods } from '../sim/inventory';
 import { loadFactor, vehicleMass } from '../sim/mass';
@@ -22,6 +21,7 @@ import { callVehicle, chooseOption, currentOptions } from '../sim/dialogue';
 import { TOW } from '../data/tow';
 import { NPCS } from '../data/npcs';
 import { soundRange } from '../sim/detect';
+import { budget } from '../test/budget';
 
 beforeAll(async () => {
   await initPhysics();
@@ -214,17 +214,17 @@ describe('physics turns', () => {
       const road = play(ordered(order), 3);
       roadSkill0 = road.w;
       freeDrive(road.d);
-      w.player.skills.driving = XP_TO_REACH[5];
+      w.player.ranks.driving = 5;
       const skilled = play(setMoveOrder(w, order), 3);
       mudSkill5 = skilled.w;
       freeDrive(skilled.d);
-    }, 30_000); // three physics runs share this hook; the default 10s hook timeout is too tight under load
+    }, budget(30_000)); // three physics runs share this hook; the default 10s hook timeout is too tight under load
 
     it('mud covers less ground than road at the same order', () => {
       expect(me(mudSkill0).pos.x - 30).toBeLessThan(me(roadSkill0).pos.x - 30);
     });
 
-    it('a player at driving level 5 covers more mud than at level 0', () => {
+    it('a player at driving rank 5 covers more mud than at rank 0', () => {
       expect(me(mudSkill5).pos.x).toBeGreaterThan(me(mudSkill0).pos.x);
     });
   });
@@ -613,7 +613,7 @@ describe('physics turns', () => {
     const { w } = play(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 12);
     expect(me(w).pos.x).toBeGreaterThan(32);
     expect(me(w).speed).toBeGreaterThan(0.5);
-  }, 90_000); // twelve physics turns take 5s alone and over 30s when the whole suite shares the cores
+  }, budget(90_000)); // twelve physics turns take 5s alone and over 30s when the whole suite shares the cores
 
   it('a click in the hold zone keeps its speed up a hill', () => {
     let w = emptyWorld({ x: 29, y: 30 });

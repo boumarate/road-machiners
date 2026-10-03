@@ -1,15 +1,13 @@
 {
-  "turn": 900,
-  "shops": {
-    "nose": { "contracts": [], "pressure": { "salt": -0.2, "scrap": 0.1 }, "stock": [], "restockAt": 1000 }
+  "player": {
+    "vehicleId": "player",
+    "money": 340,
+    "skills": { "driving": 0, "perception": 450, "machining": 600, "toughness": 3500, "social": 1999 },
+    "xpToday": { "driving": 0, "perception": 12.5, "machining": 80, "toughness": 0, "social": 40 },
+    "xpDay": 3,
+    "repeats": { "search:dump-1": { "count": 1, "turn": 610 }, "profit:bowl:salt": { "count": 2.5, "turn": 640 } },
+    "xpBySource": { "search": 600, "profit": 1999, "discover": 450, "heat": 3500 },
+    "perks": ["welder", "desertRat"]
   },
-  "vehicles": [
-    { "id": "player", "brain": null },
-    { "id": "npc1", "brain": { "templateId": "trader", "goals": [], "lastTown": "nose" } },
-    { "id": "npc2", "brain": { "templateId": "scavenger", "goals": [] } },
-    { "id": "npc3", "brain": { "templateId": "trader", "goals": [], "lastTown": "atlantis" } }
-  ],
-  "removed": [
-    { "id": "npc4", "brain": { "templateId": "courier", "goals": [], "lastTown": "nose" } }
-  ]
+  "turn": 650
 }

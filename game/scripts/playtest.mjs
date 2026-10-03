@@ -17,16 +17,21 @@ const turns = Number(arg('turns', cpu ? '4' : '12'));
 const MIN_FPS = 50; // headless Chromium caps frames at 60 Hz
 // A turn plays in about 1.3 s on the GPU, and the first, while the game warms up, in about 3.2 s.
 // Software drawing on a 2 vCPU server runs near 1.5 fps, and turns there took over 10 s, so --cpu waits longer.
-const TURN_LIMIT_MS = cpu ? 60000 : 10000;
+// The factory sets TEST_TIMEOUTS=off on its shared server, where a time limit measures the load, not a hang. There no step has a limit,
+// since Playwright reads 0 as none, and the factory's job time limit stops a hung run. src/test/timeouts.ts does the same for the tests.
+const timeoutsOff = process.env.TEST_TIMEOUTS === 'off';
+const TURN_LIMIT_MS = timeoutsOff ? 0 : cpu ? 60000 : 10000;
+const BOOT_LIMIT_MS = timeoutsOff ? 0 : 30000;
 
 mkdirSync('.playtest', { recursive: true });
 const browser = await chromium.launch({ args: cpu ? [] : ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+if (timeoutsOff) page.setDefaultTimeout(0);
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.stack ?? e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 await page.goto(url);
-await page.waitForFunction(() => window.__ROAM__, null, { timeout: 30000 });
+await page.waitForFunction(() => window.__ROAM__, null, { timeout: BOOT_LIMIT_MS });
 await page.waitForTimeout(1000);
 await page.screenshot({ path: '.playtest/start.png' });
 

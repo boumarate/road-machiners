@@ -2,17 +2,17 @@
 
 Skills, XP and perks. The principles behind them are in [DESIGN.md](../../DESIGN.md).
 
-The character has five skills. These are the durable upgrades that persist across trucks. Each skill is broad: it touches several activities and grows from several activities.
+The character has five skills. These are the durable upgrades that persist across trucks. Each skill is broad: it touches several activities, and several activities earn XP in its family.
 
-- Driving improves handling, crash damage, rough ground and crawling. It grows from driving off the road, rams and escapes from hostiles.
-- Perception improves aim, sight, hearing and contact circles. It grows from hits, new contacts and discovered places.
-- Machining improves repair and refit time, the field repair cap, search time and engine heat. It grows from field repairs, patches for other trucks and searches. Refits teach nothing, because a part can move back and forth forever.
-- Toughness raises max health, and cuts health lost to cab damage, supply use and heat drain. It grows from driving in heat, health lost and knockouts with a hostile truck in sight.
-- Social improves prices, tow fees and patch prices, and makes robbers see the truck as stronger. It grows from trade profit, agreed deals, finished contracts, radio calls, honks, free tows and free fuel or supplies given to drivers.
+- Driving improves handling, crash damage, rough ground and crawling. It earns XP from driving off the road, rams and escapes from hostiles.
+- Perception improves aim, sight, hearing and contact circles. It earns XP from hits, new contacts and discovered places.
+- Machining improves repair and refit time, the field repair cap, search time and engine heat. It earns XP from field repairs, patches for other trucks and searches. Refits teach nothing, because a part can move back and forth forever.
+- Toughness raises max health, and cuts health lost to cab damage, supply use and heat drain. It earns XP from driving in heat, health lost and knockouts with a hostile truck in sight.
+- Social improves prices, tow fees and patch prices, and makes robbers see the truck as stronger. It earns XP from trade profit, agreed deals, finished contracts, radio calls, honks, free tows and free fuel or supplies given to drivers.
 
-Skills grow from use. Each skill has its own XP and five levels, and each level costs more XP. A hard action pays more than an easy one: a hit at a low chance pays more than a sure hit. Each skill earns full XP up to a daily cap, and much less after it until the next day. Every XP event also has a target, like a driver, a truck, a pile, a map region or a trade good. Each repeat on the same target pays less, and the target recovers slowly with game time. Some targets pay only once, like a question to one driver or a found place. So grinding one easy action on one target does not pay, even when it takes no turn.
+XP comes from use and goes into one shared pool. The player spends the pool on ranks of any skill on the character screen [C]. Each skill has five ranks, bought in order, and each rank costs more XP than the last. A bought rank is permanent, and spent XP is never refunded. Each XP source belongs to the activity family of one skill, as listed above. A hard action pays more than an easy one: a hit at a low chance pays more than a sure hit. Each activity family earns full XP up to a daily cap, and much less after it until the next day. Every XP event also has a target, like a driver, a truck, a pile, a map region or a trade good. Each repeat on the same target pays less, and the target recovers slowly with game time. Some targets pay only once, like a question to one driver or a found place. So grinding one easy action on one target does not pay, even when it takes no turn.
 
-At level 2 and level 4 of each skill the player picks one of two perks. A pick is permanent. Each pair splits the skill into two playstyles. A perk adds an action, breaks a rule or shows hidden information. It never multiplies a number the skill levels already grow, and it never fires only after the player fails.
+At rank 2 and rank 4 of each skill the player picks one of two perks. The bought rank is the perk's only cost. A pick is permanent. Each pair splits the skill into two playstyles. A perk adds an action, breaks a rule or shows hidden information. It never multiplies a number the skill ranks already grow, and it never fires only after the player fails.
 
 - Driving 2, rammer or ghost. Rammer: a ram on a hostile truck stalls its engine for one turn. Cold running: below half speed, your engine is heard only inside sight.
 - Driving 4, run and gun or run away. Steady aim: your own speed adds no scatter to your shots. Dust screen: at top speed on dusty ground, your dust blocks sight like a hill.

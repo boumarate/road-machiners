@@ -10,6 +10,7 @@ import { endTurn, newWorld, setMoveOrder } from '../sim/world';
 import { buildDrive, freeDrive, initPhysics, type Drive } from './drive';
 import { physicsMove } from './turn';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 beforeAll(async () => {
   await initPhysics();
@@ -55,7 +56,7 @@ it('the player drives from Bowl to Nose without a serious hit on a static obstac
   // give the arrival distance some slack instead of the tight tolerance that model allowed.
   expect(dist(w.vehicles[0].pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.4);
   expect(dist(w.vehicles[0].pos, nose.pos)).toBeLessThanOrEqual(nose.radius + 1.5);
-}, 120_000);
+}, budget(120_000));
 
 // Flat hardpan with one road of the given center line and the map's road width.
 function roadWorld(road: Vec[]) {
@@ -80,4 +81,4 @@ it('a truck following a road into a blocking rock stops on the corner without a 
   });
   expect(damage).toBeLessThan(5);
   expect(dist(w.vehicles[0].pos, { x: 60, y: 8 })).toBeLessThan(0.5);
-}, 90_000); // up to 40 physics turns, slow when the suite runs in parallel
+}, budget(90_000)); // forty physics turns take 11s alone and over 30s when the whole suite shares the cores
