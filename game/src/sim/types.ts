@@ -438,7 +438,8 @@ export type GameEvent =
   | { t: 'utility'; vehicle: string; part: string; effect: UtilityEffectType | 'claymore'; target: string | null; point: Vec | null }
   | { t: 'lineTorn'; line: string; vehicle: string; part: string; damage: number } // the harpoon line tore; part on vehicle took damage
   | { t: 'pulse'; vehicle: string; pos: Vec; hit: string[] } // an emitter pulse and the trucks it shut down
-  | { t: 'claymore'; vehicle: string; other: string; pos: Vec } // a claymore ram on vehicle blasted other at pos
+  // A claymore ram on vehicle blasted other at pos. hits are other's parts, selfHits vehicle's own struck side.
+  | { t: 'claymore'; vehicle: string; other: string; pos: Vec; hits: PartHit[]; selfHits: PartHit[] }
   | { t: 'caltrops'; vehicle: string; field: string; source: string } // vehicle drove into source's caltrop field
   // A search turn revealed loot in a stock.
   | { t: 'found'; vehicle: string; stock: string; goods: Record<string, number>; parts: string[]; fuel: number; supplies: number };

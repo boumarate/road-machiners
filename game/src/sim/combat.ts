@@ -27,7 +27,7 @@ import { vehicleMass } from './mass';
 import { vehicleStats, type MountedWeapon } from './stats';
 import { partDef, type ShotDef, type UtilityDef, type WeaponDef } from '../data/parts';
 import type { Tier } from '../data/market';
-import type { Aim, GunState, NpcActivity, PartInstance, ShotRound, Vehicle, VehicleHits, World } from './types';
+import type { Aim, GameEvent, GunState, NpcActivity, PartInstance, ShotRound, Vehicle, VehicleHits, World } from './types';
 import { weatherAt } from './weather';
 import { smokeCrosses } from './hazards';
 import { SMOKE } from '../data/utilities';
@@ -635,18 +635,19 @@ export function shotDamage(e: { rounds: ShotRound[] }): Map<string, PartHit[]> {
   return out;
 }
 
-// Every part hit of this turn per truck, from shots, guard shots and collisions.
+// Every part hit of this turn per truck, from shots, guard shots, collisions and claymore blasts.
 export function turnPartHits(world: World): Map<string, PartHit[]> {
   const out = new Map<string, PartHit[]>();
   const add = (id: string, hits: PartHit[]) => { if (hits.length > 0) out.set(id, [...(out.get(id) ?? []), ...hits]); };
-  for (const e of world.events) {
-    if (e.t === "shot" || e.t === "guardShot") for (const [id, hits] of shotDamage(e)) add(id, hits);
-    else if (e.t === "collision") {
-      add(e.a, e.hitsA);
-      add(e.b, e.hitsB);
-    }
-  }
+  for (const e of world.events) for (const [id, hits] of eventHits(e)) add(id, hits);
   return out;
+}
+
+function eventHits(e: GameEvent): [string, PartHit[]][] {
+  if (e.t === "shot" || e.t === "guardShot") return [...shotDamage(e)];
+  if (e.t === "collision") return [[e.a, e.hitsA], [e.b, e.hitsB]];
+  if (e.t === "claymore") return [[e.other, e.hits], [e.vehicle, e.selfHits]];
+  return [];
 }
 
 function vehicleById(world: World, id: string): Vehicle {
@@ -754,14 +755,18 @@ function explode(world: World, r: WeaponDef["round"], landing: Landing): Vehicle
   if (r.splashRadius <= 0) return [];
   const out: VehicleHits[] = [];
   for (const v of world.vehicles) {
-    const { side, lanes } = blastLanes(v, landing.point, r.splashRadius);
     const skip = v.id === landing.struck?.id ? landing.lane : null;
-    const hits = lanes
-      .filter((lane) => lane !== skip)
-      .flatMap((lane) => walkLane(world, v, side, lane, splashRound(r)));
+    const hits = blastTruck(world, v, landing.point, r.splashRadius, splashRound(r), skip);
     if (hits.length > 0) out.push({ vehicle: v.id, hits });
   }
   return out;
+}
+
+// One truck's share of a blast at p: the round walks each of its lanes on the side facing p whose face center lies
+// within radius meters, except skip. The caller judges the attack.
+export function blastTruck(world: World, v: Vehicle, p: Vec, radius: number, round: Round, skip: number | null): PartHit[] {
+  const { side, lanes } = blastLanes(v, p, radius);
+  return lanes.filter((lane) => lane !== skip).flatMap((lane) => walkLane(world, v, side, lane, round));
 }
 
 // The player practices perception from each round that hits as rolled, harder at a lower hit chance. A miss

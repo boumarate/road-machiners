@@ -8,6 +8,7 @@ import { newId } from './factory';
 import { cabShield, gunLayoutScore } from './armor';
 import { findSpot, freeCells, gridOf, isMounted, itemCells, MOUNT_CELLS, mountSpots, placementError, type Cell, type Spot } from './grid';
 import { requireTown, townAt } from './sites';
+import { disarm } from './claymore';
 import { startJob } from './jobs';
 import { RULES } from '../data/rules';
 import { PERK_NUMBERS } from '../data/skills';
@@ -121,6 +122,8 @@ export function moveItem(world: World, itemId: string, to: Spot): World {
     const me = playerVehicle(w);
     const result = planItemMove(me, itemId, to);
     if (result.error !== null) throw new Error(result.error);
+    const moving = findItem(me, itemId);
+    if (moving.kind === 'part') disarm(moving.part);
     const { moves, items, turns } = result.plan;
     if (turns > 0 && !townAt(w)) {
       const work = refitTurns(w, me, turns);
@@ -150,6 +153,7 @@ export function storePart(world: World, itemId: string): World {
     if (item.kind !== 'part') throw new Error('Only parts go into garage storage');
     requireRemovable(item);
     me.items = me.items.filter((it) => it.id !== itemId);
+    disarm(item.part);
     w.player.storage.push(item.part);
     afterRefit(w);
   });

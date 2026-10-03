@@ -524,6 +524,7 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   escortRefused: (e) => [e.by, e.client],
   caltrops: (e) => [e.vehicle],
   lineTorn: (e) => [e.vehicle],
+  claymore: (e) => [e.vehicle, e.other],
 };
 
 function unnoticed(world: World, e: GameEvent): boolean {
@@ -619,6 +620,17 @@ function pulseText(world: World, e: Extract<GameEvent, { t: 'pulse' }>): LogLine
   return { text: `${vehicleName(world, e.vehicle)}'s emitter pulse shuts your truck down for ${left} ${left === 1 ? 'turn' : 'turns'}`, cls: 'bad' };
 }
 
+// A claymore ram blast the player set off, one that hit the player, or a seen one between other trucks. The line
+// lists the blasted truck's damage. The ram's owner sees its own damage on its truck.
+function claymoreText(world: World, e: Extract<GameEvent, { t: 'claymore' }>): LogLine {
+  const me = world.player.vehicleId;
+  const [who, whom, cls] =
+    e.vehicle === me ? ['Your', vehicleName(world, e.other), 'good']
+    : e.other === me ? [`${vehicleName(world, e.vehicle)}'s`, 'your truck', 'bad']
+    : [`${vehicleName(world, e.vehicle)}'s`, vehicleName(world, e.other), 'dim'];
+  return spanLine(cls, [{ text: `${who} claymore ram blasts ${whom}`, cls: '' }, ...damageSpans(world, e.other, e.hits)]);
+}
+
 // Events whose log line has its own function.
 const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
   activity: activityText,
@@ -634,6 +646,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   caltrops: caltropsText,
   lineTorn: lineTornText,
   pulse: pulseText,
+  claymore: claymoreText,
   say: sayText,
   job: jobText,
   weather: weatherText,

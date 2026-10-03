@@ -9,6 +9,7 @@ import { isHostile, noteAttack, type FireBlock } from './combat';
 import { findPart } from './damage';
 import { isKnockedOut } from './defeat';
 import { isMounted, mountedParts } from './grid';
+import { armClaymore } from './claymore';
 import { endLines, fireHarpoon, harpoonBlock } from './harpoon';
 import { deploySmoke, dropField, launchFlare, oilShort, spillOil } from './hazards';
 import type { ChargeState, GameEvent, PartInstance, UtilityOrder, Vehicle, World } from './types';
@@ -49,10 +50,7 @@ const USE_ORDER: Record<UseKind, number> = {
 
 type Use = { vehicle: Vehicle; part: PartInstance; order: UtilityOrder; kind: UseKind };
 
-// Each effect's arm. The effect files fill these in.
-const notBuilt = (kind: UseKind) => (): void => {
-  throw new Error(`not built: ${kind}`);
-};
+// Each use's arm, in its effect's owner file.
 const passive = (kind: UseKind) => (): void => {
   throw new Error(`${kind} is passive and is never used`);
 };
@@ -69,7 +67,7 @@ const ARMS: Record<UseKind, (world: World, use: Use) => void> = {
   harpoon: (world, { vehicle, part, order }) => fireHarpoon(world, vehicle, part, truckOf(order)),
   caltrops: (world, { vehicle, part }) => dropField(world, vehicle, 'caltrops', effectOf(part, 'caltrops')),
   oil: (world, { vehicle, part }) => spillOil(world, vehicle, effectOf(part, 'oil')),
-  claymore: notBuilt('claymore'),
+  claymore: (_world, { vehicle, part }) => armClaymore(vehicle, part),
   emitter: (world, { vehicle, part }) => pulse(world, vehicle, effectOf(part, 'emitter')),
   crane: passive('crane'),
   scraper: passive('scraper'),
@@ -147,9 +145,14 @@ export function utilityOrderError(world: World, v: Vehicle, partId: string, orde
   const wanted = ORDER_KIND[useKindOf(def)];
   if (wanted === null) return `${def.name} is passive and takes no order`;
   if (order.kind !== wanted) return `${def.name} takes a ${wanted} order`;
-  const block = utilityBlock(world, v, part);
-  if (block) return `${def.name}: ${block}`;
+  const charge = chargeError(world, v, part);
+  if (charge) return `${def.name}: ${charge}`;
   return costError(world, v, def) ?? targetError(world, v, part, order);
+}
+
+// Why the part's charge cannot take an order now: a block, or a claymore ram that is armed already.
+function chargeError(world: World, v: Vehicle, part: PartInstance): string | null {
+  return utilityBlock(world, v, part) ?? (chargeOf(part).armed ? 'armed' : null);
 }
 
 // The oil spiller needs its fuel in the tank.

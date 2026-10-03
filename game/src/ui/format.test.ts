@@ -210,6 +210,37 @@ describe("emitter pulse log", () => {
   });
 });
 
+describe("claymore log", () => {
+  it("names the truck the player's claymore ram blasts and the damage it took", () => {
+    const w = emptyWorld();
+    const trader = addVehicle(w, "traders", "hauler", ["stockEngine"], { x: 33, y: 30 });
+    const engine = mountedParts(trader, "engine")[0];
+    const hits = [{ part: engine.id, damage: 20 }];
+
+    expect(eventText(w, { t: "claymore", vehicle: w.player.vehicleId, other: trader.id, pos: { x: 32, y: 30 }, hits, selfHits: [] })).toMatchObject({ text: `Your claymore ram blasts ${vehicleName(w, trader.id)} · Stock engine −20`, cls: "good" });
+  });
+
+  it("tells the player a claymore ram blasted its truck", () => {
+    const w = emptyWorld();
+    const raider = addVehicle(w, "raiders", "hauler", [], { x: 33, y: 30 });
+    const engine = mountedParts(w.vehicles[0], "engine")[0];
+    const hits = [{ part: engine.id, damage: 20 }];
+
+    expect(eventText(w, { t: "claymore", vehicle: raider.id, other: w.player.vehicleId, pos: { x: 31, y: 30 }, hits, selfHits: [] })).toMatchObject({ text: `${vehicleName(w, raider.id)}'s claymore ram blasts your truck · ${partDef(engine.defId).name} −20`, cls: "bad" });
+  });
+
+  it("logs a seen blast between other trucks and nothing for one out of sight", () => {
+    const w = emptyWorld();
+    const raider = addVehicle(w, "raiders", "hauler", [], { x: 33, y: 30 });
+    const trader = addVehicle(w, "traders", "hauler", [], { x: 35, y: 30 });
+    const far = addVehicle(w, "raiders", "hauler", [], { x: 200, y: 200 });
+    const farTrader = addVehicle(w, "traders", "hauler", [], { x: 202, y: 200 });
+
+    expect(eventText(w, { t: "claymore", vehicle: raider.id, other: trader.id, pos: { x: 34, y: 30 }, hits: [], selfHits: [] })).toMatchObject({ text: `${vehicleName(w, raider.id)}'s claymore ram blasts ${vehicleName(w, trader.id)}`, cls: "dim" });
+    expect(eventText(w, { t: "claymore", vehicle: far.id, other: farTrader.id, pos: { x: 201, y: 200 }, hits: [], selfHits: [] })).toBeNull();
+  });
+});
+
 describe("caltrops log", () => {
   it("tells the player its wheels took caltrops", () => {
     const w = emptyWorld();

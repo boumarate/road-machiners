@@ -35,6 +35,19 @@ describe("collisionSteps", () => {
   });
 });
 
+describe("collisionSteps with claymore blasts", () => {
+  const blast = (vehicle: string, other: string): GameEvent => ({ t: "claymore", vehicle, other, pos: { x: 0, y: 0 }, hits: [], selfHits: [] });
+
+  it("times each blast at the step of the crash it follows", () => {
+    const timed = collisionSteps([hit("a", "b"), blast("a", "b"), blast("b", "a")], { ...none, crashes: [crash("a", "b", 12)] });
+    expect(timed.map((t) => [t.event.t, t.step])).toEqual([["collision", 12], ["claymore", 12], ["claymore", 12]]);
+  });
+
+  it("throws on a blast that follows no crash of its trucks", () => {
+    expect(() => collisionSteps([hit("a", "c"), blast("a", "b")], { ...none, crashes: [crash("a", "c", 3)] })).toThrow(/follows no crash/);
+  });
+});
+
 describe("CollisionCues", () => {
   it("returns each event once, when its step is reached, and the rest when movement ends", () => {
     const [e1, e2, e3] = [hit("a", "b"), hit("a", "c"), hit("a", "d")];

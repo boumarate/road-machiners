@@ -55,6 +55,22 @@ describe('inventory grid', () => {
     expect(() => moveItem(w, g.id, { x: 9, y: 0, rot: 0 })).toThrow(/fit/);
   });
 
+  it('disarms a claymore ram that is moved or stored', () => {
+    const w = emptyWorld(sitePads(bowl)[0]);
+    const claymore = makePart(w, 'claymoreRam', 0);
+    if (!mountPart(w, w.vehicles[0], claymore)) throw new Error('No room for the claymore ram');
+    claymore.charge = { reload: 0, armed: true };
+    const it = item(w, 'claymoreRam');
+    const spot = stowSpot(w.vehicles[0], it);
+    if (!spot) throw new Error('No storage room');
+
+    const moved = moveItem(w, it.id, spot);
+    const stored = storePart(update(w, (d) => { (item(d, 'claymoreRam') as Extract<GridItem, { kind: 'part' }>).part.charge = { reload: 0, armed: true }; }), it.id);
+
+    expect((item(moved, 'claymoreRam') as Extract<GridItem, { kind: 'part' }>).part.charge).toEqual({ reload: 0 });
+    expect(stored.player.storage.find((p) => p.defId === 'claymoreRam')?.charge).toEqual({ reload: 0 });
+  });
+
   it('unmounting takes three turns in the field and is instant in town', () => {
     const w = emptyWorld();
     const mg = item(w, 'mg');

@@ -73,13 +73,27 @@ function damageLabel(host: VolleyHost, vehicleId: string, label: string | null, 
 // What combat effects draw on: a volley host plus the vehicle views the guns' muzzles come from.
 export type CombatHost = VolleyHost & { views: Map<string, VehicleView> };
 
-// Sparks and the crash sound for the collisions due by this physics step, or all that remain when null.
+// Sparks and the crash sound for the collisions due by this physics step, or all that remain when null, and the
+// blast of each claymore ram a crash set off, on the truck it blasted.
 export function playCrashes(host: CombatHost, cues: CollisionCues | null, step: number | null): void {
   for (const e of cues?.due(step) ?? []) {
-    const p = host.eventPoint(e.a);
-    if (p) host.fx.crash(p);
-    if (p) host.sound.at("crash", p, 0);
+    if (e.t === "claymore") playBlast(host, e);
+    else playCrash(host, e);
   }
+}
+
+function playCrash(host: CombatHost, e: CollisionEvent): void {
+  const p = host.eventPoint(e.a);
+  if (!p) return;
+  host.fx.crash(p);
+  host.sound.at("crash", p, 0);
+}
+
+function playBlast(host: CombatHost, e: ClaymoreEvent): void {
+  const p = host.eventPoint(e.other);
+  if (!p) return;
+  host.fx.explode(p);
+  host.sound.at("explosion", p, 0);
 }
 
 // A seen gun that fired its last round with no volley shown clunks as the band ends. Played guns clunk with their last round.
@@ -134,13 +148,16 @@ function playGuardShot(host: CombatHost, e: Extract<GameEvent, { t: "guardShot" 
 }
 
 export type CollisionEvent = Extract<GameEvent, { t: "collision" }>;
-export type TimedCollision = { event: CollisionEvent; step: number | null };
+export type ClaymoreEvent = Extract<GameEvent, { t: "claymore" }>;
+// A crash, or a claymore ram blast, which plays at the step of the crash that set it off.
+export type CrashCue = CollisionEvent | ClaymoreEvent;
+export type TimedCollision = { event: CrashCue; step: number | null };
 
 type Steps = Pick<TurnResult, "crashes" | "breaks" | "landings">;
 
 // Matches each collision event to the physics step it happened at. Candidates are scanned in the order applyTurn()
 // writes the events (breaks, crashes, landings) and each is taken once. An event with no candidate, such as a far
-// truck breaking a fence, has no step.
+// truck breaking a fence, has no step. A claymore event follows the collision of its two trucks and takes its step.
 export function collisionSteps(events: GameEvent[], result: Steps): TimedCollision[] {
   const used = new Set<object>();
   const take = <T extends { step: number }>(list: T[], fits: (c: T) => boolean): number | null => {
@@ -151,6 +168,10 @@ export function collisionSteps(events: GameEvent[], result: Steps): TimedCollisi
   };
   const timed: TimedCollision[] = [];
   for (const event of events) {
+    if (event.t === "claymore") {
+      timed.push({ event, step: blastStep(timed, event) });
+      continue;
+    }
     if (event.t !== "collision") continue;
     const step =
       take(result.breaks, (b) => b.vehicle === event.a && b.prop === event.b) ??
@@ -161,7 +182,14 @@ export function collisionSteps(events: GameEvent[], result: Steps): TimedCollisi
   return timed;
 }
 
-function samePair(c: { a: string; b: string }, e: CollisionEvent): boolean {
+function blastStep(timed: TimedCollision[], e: ClaymoreEvent): number | null {
+  const crash = timed.at(-1)?.event;
+  const pair = { a: e.vehicle, b: e.other };
+  if (!crash || !samePair(pair, crash.t === "claymore" ? { a: crash.vehicle, b: crash.other } : crash)) throw new Error(`Claymore blast of ${e.vehicle} follows no crash with ${e.other}`);
+  return timed[timed.length - 1].step;
+}
+
+function samePair(c: { a: string; b: string }, e: { a: string; b: string }): boolean {
   return (c.a === e.a && c.b === e.b) || (c.a === e.b && c.b === e.a);
 }
 
@@ -174,7 +202,7 @@ export class CollisionCues {
   }
 
   // The events at or before this step. A null step means movement is over, so every remaining event is due.
-  due(step: number | null): CollisionEvent[] {
+  due(step: number | null): CrashCue[] {
     const out = this.pending.filter((t) => step === null || (t.step !== null && t.step <= step));
     this.pending = this.pending.filter((t) => !out.includes(t));
     return out.map((t) => t.event);

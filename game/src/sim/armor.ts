@@ -36,9 +36,14 @@ export function ramMult(v: Vehicle, side: Side): number {
   for (const p of mountedParts(v, 'armor')) {
     const def = partDef(p.defId);
     if (def.kind !== 'armor') throw new Error(`${p.id} is mounted as armor but is ${def.kind}`);
-    if (p.hp > 0 && sideOf(v, p) === LETTER[side]) mult = Math.max(mult, def.ramMult);
+    if (p.hp > 0 && coversSide(v, p, side)) mult = Math.max(mult, def.ramMult);
   }
   return mult;
+}
+
+// Whether a mounted armor part covers the side.
+export function coversSide(v: Vehicle, part: PartInstance, side: Side): boolean {
+  return sideOf(v, part) === LETTER[side];
 }
 
 // How well armor shields the cab, to compare armor layouts. A cab lane is shielded where an armor cell on that

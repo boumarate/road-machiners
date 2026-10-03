@@ -157,11 +157,13 @@ describe('the activation step', () => {
     expect(w.smoke).toEqual([]);
   });
 
-  it('hands an accepted order to its effect, which later phases build', () => {
+  it('hands an accepted arming order to the claymore ram, which keeps its reload at 0', () => {
     const { w, v, part } = withUtility('claymoreRam');
     v.utilityOrders[part.id] = { kind: 'self' };
 
-    expect(() => activateUtilities(w)).toThrow(/not built: claymore/);
+    activateUtilities(w);
+
+    expect(part.charge).toEqual({ reload: 0, armed: true });
   });
 });
 
