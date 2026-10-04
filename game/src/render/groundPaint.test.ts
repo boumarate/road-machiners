@@ -134,13 +134,13 @@ describe('ground paint over the Fallen Sun', () => {
     expect(floor).toBeGreaterThan(500);
   });
 
-  it('paints scree on the bank of the west arc only', () => {
+  it('paints scree on the foot of the bank of the west arc only', () => {
     const scree = TERRITORIES['fallen-sun'].wreck!.scree!;
-    // Halfway up the bank, out from a floor vertex along its bearing.
-    const onBank = (k: number) => {
+    // `up` tiles up the bank, out from a floor vertex along its bearing.
+    const onBank = (k: number, up = 3) => {
       const v = sunBasin.floor[k];
       const r = Math.hypot(v.x, v.y);
-      const out = (r + sunBasin.bank[k] / 2) / r;
+      const out = (r + up) / r;
       return { x: sunBasin.center.x + v.x * out, y: sunBasin.center.y + v.y * out };
     };
     const n = sunBasin.floor.length;
@@ -149,6 +149,9 @@ describe('ground paint over the Fallen Sun', () => {
     expect(arc).toEqual([21, 0, 1]);
     for (const k of arc) expect(paintOver(painted, onBank(k)).length, `vertex ${k}`).toBeGreaterThan(0);
     for (const k of [6, 12, 17]) expect(paintOver(painted, onBank(k)), `vertex ${k}`).toEqual([]);
+    // The west road's long bank is a road grade: no scree halfway up it.
+    expect(sunBasin.bank[21]).toBeGreaterThan(20);
+    expect(paintOver(painted, onBank(21, sunBasin.bank[21] / 2))).toEqual([]);
   });
 
   it("keeps the Bowl's scorched crater floor", () => {

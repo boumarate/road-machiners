@@ -85,9 +85,12 @@ function paintCraters(c: PaintCanvas): void {
 }
 
 // Bands a scree slope is painted in, each reaching a step further up the bank, so the colour is densest at the foot
-// and thins toward the top, where it reads as a slope, not a stain.
+// and thins toward the top, where it reads as a slope, not a stain. It reaches at most SCREE_REACH tiles up the bank,
+// since the long banks where roads come down to the floor are road grades, not scree, and a wash over them read as a
+// painted stain on the land outside.
 const SCREE_BANDS = 4;
-const SCREE_BAND_ALPHA = 0.5;
+const SCREE_BAND_ALPHA = 0.3;
+const SCREE_REACH = 8;
 
 // A territory's scree slope, red-brown over the bank of its basin's scree arc.
 function paintScree(c: PaintCanvas): void {
@@ -97,7 +100,8 @@ function paintScree(c: PaintCanvas): void {
   }
 }
 
-// The bank of floor vertices from..to, in bands from the floor edge up the bank.
+// The bank of floor vertices from..to, in bands from the floor edge up the bank. The arc's two end vertices reach
+// nothing, so the slope tapers out along the rim instead of stopping at a straight cut.
 function paintScreeArc(c: PaintCanvas, b: Basin, scree: { from: number; to: number }): void {
   const n = b.floor.length;
   if (!isVertex(scree.from, n) || !isVertex(scree.to, n)) throw new Error(`Scree arc ${scree.from}..${scree.to} is not on a basin of ${n} floor points`);
@@ -106,7 +110,8 @@ function paintScreeArc(c: PaintCanvas, b: Basin, scree: { from: number; to: numb
   const out = arc.map((k) => outward(b.floor, k));
   for (let band = 1; band <= SCREE_BANDS; band++) {
     const top = arc.map((k, i) => {
-      const reach = (b.bank[k] * band) / SCREE_BANDS;
+      const end = i === 0 || i === arc.length - 1;
+      const reach = end ? 0 : (Math.min(b.bank[k], SCREE_REACH) * band) / SCREE_BANDS;
       return { x: foot[i].x + out[i].x * reach, y: foot[i].y + out[i].y * reach };
     });
     polygon(c, [...foot, ...top.reverse()], css(PAL.scree, SCREE_BAND_ALPHA));
