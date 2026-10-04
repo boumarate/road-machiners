@@ -233,12 +233,12 @@ function withMemories_11_12(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(remembering), removed: (world.removed as SavedJson[]).map(remembering) };
 }
 
-// Step 12 to 13: a shot round records the ground point where an exploding round burst. A saved round has none, so the
+// Step 13 to 14: a shot round records the ground point where an exploding round burst. A saved round has none, so the
 // renderer plays its old miss.
-const SHOT_EVENTS_12_13 = ['shot', 'guardShot'];
+const SHOT_EVENTS_13_14 = ['shot', 'guardShot'];
 
-function withBurst_12_13(event: SavedJson): SavedJson {
-  if (!SHOT_EVENTS_12_13.includes(event.t as string)) return event;
+function withBurst_13_14(event: SavedJson): SavedJson {
+  if (!SHOT_EVENTS_13_14.includes(event.t as string)) return event;
   return { ...event, rounds: (event.rounds as SavedJson[]).map((round) => ({ ...round, burst: null })) };
 }
 
@@ -305,8 +305,10 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => world,
   // 11 to 12: a driver's last town becomes a memory of its prices.
   withMemories_11_12,
-  // 12 to 13: craters and the burst point of shot rounds. A new game has no craters.
-  (world) => ({ ...world, craters: [], events: (world.events as SavedJson[]).map(withBurst_12_13) }),
+  // 12 to 13: the player gets the headlight switch, off as in a new game.
+  (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
+  // 13 to 14: craters and the burst point of shot rounds. A new game has no craters.
+  (world) => ({ ...world, craters: [], events: (world.events as SavedJson[]).map(withBurst_13_14) }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

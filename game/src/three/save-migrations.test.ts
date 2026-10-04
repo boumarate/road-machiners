@@ -18,6 +18,7 @@ import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import FORMAT_2_10 from './save-fixtures/format-2-10.json';
 import FORMAT_2_11 from './save-fixtures/format-2-11.json';
 import FORMAT_2_12 from './save-fixtures/format-2-12.json';
+import FORMAT_2_13 from './save-fixtures/format-2-13.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -291,13 +292,21 @@ describe('save migration 11 to 12', () => {
 });
 
 describe('save migration 12 to 13', () => {
-  it('adds no craters and gives every shot and guard round a null burst, changing nothing else', () => {
+  it('gives the player the headlight switch off and keeps every other field', () => {
     const next = MIGRATIONS[12](FORMAT_2_12);
-    const [shot, guard, arrived] = FORMAT_2_12.events;
+
+    expect(next).toEqual({ ...FORMAT_2_12, player: { ...FORMAT_2_12.player, headlights: false } });
+  });
+});
+
+describe('save migration 13 to 14', () => {
+  it('adds no craters and gives every shot and guard round a null burst, changing nothing else', () => {
+    const next = MIGRATIONS[13](FORMAT_2_13);
+    const [shot, guard, arrived] = FORMAT_2_13.events;
     const burstless = (rounds: object[]) => rounds.map((round) => ({ ...round, burst: null }));
 
     expect(next).toEqual({
-      ...FORMAT_2_12,
+      ...FORMAT_2_13,
       craters: [],
       events: [{ ...shot, rounds: burstless(shot.rounds!) }, { ...guard, rounds: burstless(guard.rounds!) }, arrived],
     });

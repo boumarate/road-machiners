@@ -86,7 +86,7 @@ Every `FACTORY_WASTE_REVIEW_DAYS`, the tick starts a waste review in the triage 
 
 The testing agent writes `.factory/screenshot.png`, the primary, and optionally `.factory/evidence.json`, an ordered manifest of up to 10 images with the primary first. The manifest lists the visible `features` of the change and, per image, a short description and the features it `covers`. Rules the factory checks:
 
-- Every feature has an image. A `location` has at least three views. A `system` has an image marked `sheet`, a labeled contact sheet of real screenshots.
+- Every feature has an image. A `location` has at least one real image, and no minimum count: the agent shows its layout, and where useful the approach and traversal, as the location needs. A `system` has an image marked `sheet`, a labeled contact sheet of real screenshots.
 - Each file is a plain relative name inside `.factory/`, a real PNG, JPEG or WebP under 10 MB with no link out of the folder, and no two images are equal.
 - `commit` is the final head of the branch. A test-fix round that changed code must capture again, or the stage fails.
 - With no manifest, the one screenshot posts as before. A manifest that breaks a rule fails verify or the patch that wrote it.

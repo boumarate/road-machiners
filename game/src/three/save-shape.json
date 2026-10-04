@@ -1,5 +1,5 @@
 {
- "format": "2.13",
+ "format": "2.14",
  "shape": {
   "broken": [],
   "craters": [],
@@ -41,6 +41,7 @@
    "fuel": "number",
    "fullLog": "boolean",
    "god": "boolean",
+   "headlights": "boolean",
    "health": "number",
    "hostilesSeen": [],
    "knockoutTurns": "number",
