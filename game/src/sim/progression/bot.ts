@@ -20,7 +20,7 @@ import { callVehicle, chooseOption, currentOptions } from '../dialogue';
 import { offeredSurrenderBy } from '../parley';
 import { hashRandom } from '../rng';
 import { affordableBuyCount, basicsRepairCost, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairBasics, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
-import { findSpot, freeCells, goodsCount, gridOf, isMounted, itemCells, MOUNT_CELLS, mountedItems, mountedParts, type Spot } from '../grid';
+import { corePart, findSpot, freeCells, goodsCount, gridOf, isMounted, itemCells, MOUNT_CELLS, mountedItems, mountedParts, type Spot } from '../grid';
 import { stowSpot, storePart } from '../inventory';
 import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
 import { shopDef, SHOPS } from '../../data/market';
@@ -30,7 +30,7 @@ import { firepower, getUpkeepReserve, isWeak, ownDanger, perceiveDanger } from '
 import { canReachSalvage, hasSalvage, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, sitePads, townAt, type Site } from '../sites';
-import { fuelCap, hasWorkingEngine, isStranded, suppliesCap, vehicleStats } from '../stats';
+import { fuelCap, hasWorkingEngine, isStranded, isWorking, suppliesCap, vehicleStats } from '../stats';
 import { inTowReach, playerTow, setBeacon } from '../tow';
 import { towData } from '../states';
 import type { Call, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
@@ -197,15 +197,22 @@ function takesTowOffer(world: World): boolean {
   return offer === null || towFixes(world, towData(offer).site);
 }
 
-// A dry tank fills anywhere. A truck without an engine needs a shop that stocks one its money and sellable gear
-// cover. A broken engine or transmission needs a garage and the money for the repair.
+// A tow helps only to another shop that fixes what strands the truck, with the money and sellable gear for it. A
+// truck without an engine needs a shop that stocks one. A broken engine or transmission needs a garage.
 function towFixes(world: World, siteId: string): boolean {
-  if (world.player.fuel <= 0) return true;
-  if (!(siteId in SHOPS)) return false;
+  if (!(siteId in SHOPS) || shopAt(world) === siteId) return false;
+  const budget = engineBudget(world, siteId);
+  if (mountedParts(playerVehicle(world), 'engine').length === 0) return stockEngine(world, siteId, budget) !== null;
+  return repairFits(world, siteId, budget);
+}
+
+// A truck stranded by a dry tank alone crawls on, so it wants a tow only to a shop where it can pay for fuel.
+function repairFits(world: World, siteId: string, budget: number): boolean {
   const me = playerVehicle(world);
-  if (mountedParts(me, 'engine').length === 0) return stockEngine(world, siteId, engineBudget(world, siteId)) !== null;
+  const broken = !hasWorkingEngine(me) || !isWorking(corePart(me, 'transmission'));
+  if (!broken) return budget >= ECONOMY.supplyPrice.fuel;
   const fix = hasWorkingEngine(me) ? basicsRepairCost(world) : repairCost(world);
-  return shopDef(siteId).kind === 'garage' && fix <= engineBudget(world, siteId);
+  return shopDef(siteId).kind === 'garage' && fix <= budget;
 }
 
 function serviceStop(world: World): Site | null {

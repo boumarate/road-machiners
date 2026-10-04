@@ -182,6 +182,22 @@ describe('botOrders', () => {
     expect(stranded(0).player.beacon).toBe(false);
   });
 
+  // An empty tank still lets the truck crawl, and a tow to a town it cannot buy fuel in only adds the fee.
+  it('has a broke truck with an empty tank crawl on instead of calling a tow', () => {
+    const dry = (money: number) => {
+      const w = parkedAt('bowl');
+      const me = playerVehicle(w);
+      me.pos = { x: me.pos.x + 40, y: me.pos.y };
+      me.items = me.items.filter((it) => it.kind === 'part' && ['core', 'engine'].includes(partDef(it.part.defId).kind));
+      w.player.fuel = 0;
+      w.player.money = money;
+      return botOrders(w, 'trader').world;
+    };
+
+    expect(dry(500).player.beacon).toBe(true);
+    expect(dry(0).player.beacon).toBe(false);
+  });
+
   // A trader parks beside a truck a robbery left with no engine and offers a tow to its nearest town.
   it('has a truck without an engine take a tow only to a town where it can get one', () => {
     const offerTo = (money: number, stock: 'there' | 'elsewhere') => {
