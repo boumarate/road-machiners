@@ -508,6 +508,31 @@ describe('the hunter', () => {
     expect(heldAfter('trader')).toEqual([]);
   });
 
+  it('has a hunter strip a spare part for repair parts where a trader sells it', () => {
+    const turnOf = (archetype: 'hunter' | 'trader') => {
+      const w = parkedAt('bowl');
+      expect(stowPart(w, playerVehicle(w), makePart(w, 'mg', 0))).toBe(true);
+      return botOrders(w, archetype);
+    };
+
+    expect(playerVehicle(turnOf('hunter').world).job?.kind).toBe('strip');
+    expect(turnOf('hunter').ledger.lootSales).toBe(0);
+    expect(turnOf('trader').ledger.lootSales).toBeGreaterThan(0);
+  });
+
+  it('has a hunter leave a worn gun to field repair where a trader pays the garage', () => {
+    const repairsOf = (archetype: 'hunter' | 'trader') => {
+      const w = parkedAt('bowl');
+      const gun = mountedParts(playerVehicle(w)).find((p) => partDef(p.defId).kind === 'weapon');
+      if (!gun) throw new Error('The start truck mounts no gun');
+      gun.hp = 1;
+      return botOrders(w, archetype).ledger.repairs;
+    };
+
+    expect(repairsOf('hunter')).toBe(0);
+    expect(repairsOf('trader')).toBeLessThan(0);
+  });
+
   it('has a hauler take the haul on the board it is parked at before it trades', () => {
     const w = parkedAt('bowl');
     w.shops.bowl.contracts = [{ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'scrap', units: 3, to: 'nose', reward: 600, deadline: 5000, window: 600, rush: false, tier: 2 }];

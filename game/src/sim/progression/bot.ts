@@ -13,6 +13,7 @@ import { ENGINE_HEAT } from '../../data/wear';
 import { TOPICS, type TopicId } from '../../data/dialogue';
 import { maxHp, partValue } from '../wear';
 import { inCombat, isHostile } from '../combat';
+import { startStrip, stripYield } from '../jobs';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder, setWeaponOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
 import { isKnockedOut } from '../defeat';
@@ -30,7 +31,7 @@ import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
 import { firepower, getUpkeepReserve, isWeak, ownDanger, perceiveDanger } from '../npc-decisions';
 import { canReachSalvage, hasSalvage, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
-import { canUseSite, nearestPad, nearestTown, sitePads, townAt, type Site } from '../sites';
+import { canUseSite, nearestPad, nearestTown, siteGates, sitePads, townAt, type Site } from '../sites';
 import { fuelCap, hasWorkingEngine, isStranded, isWorking, suppliesCap, vehicleStats } from '../stats';
 import { inTowReach, playerTow, setBeacon } from '../tow';
 import { towData } from '../states';
@@ -57,7 +58,8 @@ const CARGO_GEAR: UpgradeStyle = { skip: [], chassis: 'value', keepRoom: true };
 const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
   trader: CARGO_GEAR,
   scavenger: CARGO_GEAR,
-  hunter: { skip: [], chassis: 'value', keepRoom: false },
+  // A hunter drives to catch a foe it can beat and away from one it cannot, so it buys speed, not the dearest chassis.
+  hunter: { skip: [], chassis: 'speed', keepRoom: false },
   fastTrader: { skip: ['armor'], chassis: 'speed', keepRoom: true },
   hauler: CARGO_GEAR,
 };
@@ -78,6 +80,7 @@ export function isArchetype(value: string): value is Archetype {
 export function botOrders(world: World, archetype: Archetype, options: BotOptions = {}): BotTurn {
   const o = new Orders(world);
   const goal = goalOf(world, archetype, options);
+  o.fieldRepair = goal === 'hunter';
   const replies = goal === 'hunter' ? HUNTER_REPLIES : DEFENDER_REPLIES;
   answerCall(o, takesTowOffer(world) ? replies : { ...replies, ...REFUSE_TOW });
   if (playerCanAct(o.world)) {
@@ -202,7 +205,7 @@ function serviceTrip(o: Orders, style: UpgradeStyle): boolean {
   if (beacon !== o.world.player.beacon) o.run((w) => setBeacon(w, beacon));
   const shop = shopAt(o.world);
   if (shop) serviceInTown(o, style, shop);
-  const target = serviceStop(o.world);
+  const target = serviceStop(o);
   if (!target || target.id === shop) return false;
   driveToSite(o, target);
   return true;
@@ -237,12 +240,12 @@ function repairFits(world: World, siteId: string, budget: number): boolean {
   return shopDef(siteId).kind === 'garage' && fix <= budget;
 }
 
-function serviceStop(world: World): Site | null {
-  if (mountedParts(playerVehicle(world), 'engine').length === 0) {
-    const engineShop = nearestEngineShop(world);
+function serviceStop(o: Orders): Site | null {
+  if (mountedParts(o.me, 'engine').length === 0) {
+    const engineShop = nearestEngineShop(o.world);
     if (engineShop) return engineShop;
   }
-  return !shopAt(world) && needsService(world) ? nearestShop(world) : null;
+  return !shopAt(o.world) && needsService(o) ? nearestShop(o.world) : null;
 }
 
 // A bot in debt can buy no fuel, supplies or load, so it sells cargo, then gear, to clear the debt. The engine
@@ -256,7 +259,7 @@ function serviceInTown(o: Orders, style: UpgradeStyle, shop: string): void {
   restoreEngine(o, shop);
   restoreBasics(o, shop);
   serviceHere(o);
-  if (needsService(o.world)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money: ${needsOf(o.world)}`);
+  if (needsService(o)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money: ${needsOf(o.world)}`);
   if (mountedParts(o.me, 'engine').length === 0) return;
   rearm(o);
   upgradeGear(o, style);
@@ -385,20 +388,22 @@ function fuelForWayToShop(world: World): number {
   return dist(me.pos, nearestShop(world).pos) * vehicleStats(world, me).fuelPerTile * heatAt(world, me.pos) * NPC_UPKEEP.fuelReserve;
 }
 
-function needsService(world: World): boolean {
+function needsService(o: Orders): boolean {
+  const world = o.world;
   const p = world.player;
-  const me = playerVehicle(world);
+  const me = o.me;
   const lowFuel = p.fuel <= Math.max(fuelCap(me) * RULES.lowFuelThreshold, fuelForWayToShop(world)) && p.money >= ECONOMY.supplyPrice.fuel;
   const lowSupplies = p.supplies <= suppliesCap(me) * NPC_UPKEEP.lowSupplies && p.money >= ECONOMY.supplyPrice.supplies;
-  return lowFuel || lowSupplies || needsRepair(world);
+  return lowFuel || lowSupplies || needsRepair(o);
 }
 
 // A badly damaged part the money covers, once the fight is over: repairing under fire pays for the next hit. A junk
-// part no garage can rebuild has no repair, so it adds nothing to the cost.
-function needsRepair(world: World): boolean {
-  const me = playerVehicle(world);
-  const cost = repairCost(world);
-  return mountedParts(me).some(isBadlyDamaged) && cost > 0 && cost <= world.player.money && !underFire(world, me);
+// part no garage can rebuild has no repair, so it adds nothing to the cost. A field repairer counts only the built-in
+// parts and their bill.
+function needsRepair(o: Orders): boolean {
+  const cost = o.fieldRepair ? basicsRepairCost(o.world) : repairCost(o.world);
+  const parts = o.fieldRepair ? mountedParts(o.me, 'core') : mountedParts(o.me);
+  return parts.some(isBadlyDamaged) && cost > 0 && cost <= o.world.player.money && !underFire(o.world, o.me);
 }
 
 function isBadlyDamaged(part: PartInstance): boolean {
@@ -411,6 +416,10 @@ function serviceHere(o: Orders): void {
     const n = Math.min(supplyRoom(o.world, kind), Math.floor(o.world.player.money / ECONOMY.supplyPrice[kind]));
     if (n > 0) o.run((w) => buySupply(w, kind, n), kind);
   }
+  if (!o.fieldRepair) repairAtGarage(o);
+}
+
+function repairAtGarage(o: Orders): void {
   const cost = repairCost(o.world);
   if (cost > 0 && cost <= o.world.player.money && !underFire(o.world, o.me)) o.run(repairAll, 'repairs');
 }
@@ -598,8 +607,13 @@ function engageFoe(o: Orders): boolean {
   return heard !== null;
 }
 
+// A hunter picks a fight only against a foe this many times less dangerous than itself. In the snowball runs, fights
+// below a ratio of 2 cost about 700 net worth each, and fights at 4 or more cost next to nothing. A foe it will not
+// fight it outruns, as a player does.
+const HUNT_MARGIN = 4;
+
 function engageSeen(o: Orders, foe: Vehicle): boolean {
-  if (dangerOf(o.world, foe) > ownDanger(o.world, o.me)) return false;
+  if (dangerOf(o.world, foe) * HUNT_MARGIN > ownDanger(o.world, o.me)) return false;
   setFire(o, true);
   if (!demandYield(o, foe)) driveTo(o, foe.pos);
   return true;
@@ -670,7 +684,8 @@ function defend(o: Orders, goal: Goal): boolean {
 }
 
 function fights(o: Orders, foe: Vehicle, goal: Goal): boolean {
-  return dangerOf(o.world, foe) <= ownDanger(o.world, o.me) && (goal === 'hunter' || !outruns(o.world, o.me, foe));
+  const margin = goal === 'hunter' ? HUNT_MARGIN : 1;
+  return dangerOf(o.world, foe) * margin <= ownDanger(o.world, o.me) && (goal === 'hunter' || !outruns(o.world, o.me, foe));
 }
 
 // A foe the bot can neither beat nor outrun takes the cargo anyway, and the gear with it after a knockout.
@@ -712,14 +727,38 @@ function collectOrHunt(o: Orders): void {
   hunt(o);
 }
 
-// The hunter patrols the roads between the shops, where lone raiders prey on traders, and stays out of the camps, whose
-// guard guns shoot it. It keeps driving to the shop it is bound for. Without one, it goes to the shop after the one
-// nearest it, in data order.
+// A place on the hunter's patrol: a shop, reached at its nearest pad, or a point on the road out of a raider camp.
+type Post = { pos: Vec; shop: Site | null };
+
+// A camp's gate guns shoot every outsider in range, so the hunter waits for raiders leaving it half a gun range
+// beyond that, on the line to the nearest shop.
+const CAMP_STANDOFF = RULES.guards.range * 1.5;
+
+// The camp posts, each with the shop nearest to its gate.
+function campPosts(): { post: Post; near: Site }[] {
+  return REGION.locations.filter((l) => l.kind === 'camp').flatMap((camp) => siteGates(camp).map((gate) => {
+    const near = SHOP_SITES.reduce((best, s) => (dist(gate, s.pos) < dist(gate, best.pos) ? s : best));
+    const gap = dist(gate, near.pos);
+    const at = { x: gate.x + ((near.pos.x - gate.x) / gap) * CAMP_STANDOFF, y: gate.y + ((near.pos.y - gate.y) / gap) * CAMP_STANDOFF };
+    return { post: { pos: at, shop: null }, near };
+  }));
+}
+
+// Each shop, then the camp posts whose nearest shop it is, in data order.
+const PATROL: readonly Post[] = SHOP_SITES.flatMap((s) => [{ pos: s.pos, shop: s }, ...campPosts().filter((c) => c.near === s).map((c) => c.post)]);
+
+function postDests(post: Post): Vec[] {
+  return post.shop ? sitePads(post.shop) : [post.pos];
+}
+
+// The hunter patrols the shops and the roads out of the raider camps, where lone raiders prey on traders. It keeps
+// driving to the post it is bound for. Without one, it goes to the post after the one nearest it.
 function hunt(o: Orders): void {
   const order = o.me.order;
-  if (order?.kind === 'stopAt' && SHOP_SITES.some((s) => sitePads(s).some((p) => p.x === order.dest.x && p.y === order.dest.y))) return;
-  const here = SHOP_SITES.indexOf(nearestShop(o.world));
-  driveTo(o, nearestPad(SHOP_SITES[(here + 1) % SHOP_SITES.length], o.me.pos));
+  if (order?.kind === 'stopAt' && PATROL.some((p) => postDests(p).some((d) => d.x === order.dest.x && d.y === order.dest.y))) return;
+  const here = PATROL.reduce((best, p, i) => (dist(o.me.pos, p.pos) < dist(o.me.pos, PATROL[best].pos) ? i : best), 0);
+  const next = PATROL[(here + 1) % PATROL.length];
+  driveTo(o, next.shop ? nearestPad(next.shop, o.me.pos) : next.pos);
 }
 
 // ---- Salvage.
@@ -779,8 +818,23 @@ function hasCargo(world: World, v: Vehicle): boolean {
 
 // Sells the goods for sale and the spare parts. Every shop buys both.
 function sellCargo(o: Orders): void {
-  for (const [good, n] of Object.entries(cargoForSale(o.world, o.me))) o.run((w) => sellGood(w, good, n), 'goodsSold');
-  for (const { partId } of spareItems(o.me)) o.run((w) => sellPart(w, partId), 'lootSales');
+  for (const [good, n] of Object.entries(cargoForSale(o.world, o.me))) if (!o.fieldRepair || good !== 'parts') o.run((w) => sellGood(w, good, n), 'goodsSold');
+  for (const { partId } of spareItems(o.me)) if (!stripForRepair(o, partId)) o.run((w) => sellPart(w, partId), 'lootSales');
+}
+
+// A field repairer turns a spare part into repair parts, one strip at a time, while the truck has room for the yield
+// and no strip is running. The strip job holds the truck, so the bot sells the other spares on later visits.
+function stripForRepair(o: Orders, partId: string): boolean {
+  if (!o.fieldRepair) return false;
+  if (o.me.job) return true;
+  if (!canStrip(o, partId)) return false;
+  o.run((w) => startStrip(w, partId));
+  return true;
+}
+
+function canStrip(o: Orders, partId: string): boolean {
+  const item = o.me.items.find((it) => it.kind === 'part' && it.part.id === partId);
+  return item?.kind === 'part' && !inCombat(o.world, o.me) && freeCells(o.me) >= stripYield(item.part);
 }
 
 // ---- Driving.

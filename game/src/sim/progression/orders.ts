@@ -11,7 +11,7 @@ import { partDef, type PartKind } from '../../data/parts';
 import { playerVehicle } from '../damage';
 import { buyChassis, buyStockPart, chassisTradeIn, partTradePrice, sellPart } from '../economy';
 import { freeCells, goodsCount, mountedItems, type Spot } from '../grid';
-import { installSpot, moveItem, spareParts, storePart, takeFromStorage } from '../inventory';
+import { getLayoutError, installSpot, moveItem, spareParts, storePart, takeFromStorage } from '../inventory';
 import { shopAt, shopState } from '../market';
 import { getUpkeepReserve } from '../npc-decisions';
 import type { GameEvent, GridItem, PartInstance, Vehicle, World } from '../types';
@@ -31,6 +31,9 @@ export type BotTurn = { world: World; events: GameEvent[]; ledger: Ledger };
 export class Orders {
   readonly events: GameEvent[] = [];
   readonly ledger = emptyLedger();
+  // A bot that repairs in the field pays the garage only for the built-in parts that keep the truck driving, strips
+  // its spare parts into the parts good and spends that on the rest.
+  fieldRepair = false;
   constructor(public world: World) {}
 
   // A command that moves money names where it goes: a purchase counts as spending, a sale as income.
@@ -128,10 +131,17 @@ function partOption(o: Orders, c: Candidate, keepRoom: boolean): Option[] {
   };
   if (installSpot(o.me, probe(c.part))) return fits(o.me) ? [{ gain: quality(c.part), cost: c.price, take: (orders) => mount(orders, c, null) }] : [];
   const weakest = weakestOfKind(o.me, partDef(c.part.defId).kind);
-  if (!weakest || quality(c.part) <= quality(weakest.part)) return [];
-  if (!fits({ ...o.me, items: o.me.items.filter((it) => it.id !== weakest.id) })) return [];
+  if (!canSwap(o.me, c.part, weakest, fits)) return [];
   const resale = partTradePrice(o.world, o.me, weakest.part, 'sell');
   return [{ gain: quality(c.part) - quality(weakest.part), cost: c.price - resale, take: (orders) => mount(orders, c, weakest) }];
+}
+
+// Whether the part is better than the weakest mounted part of its kind and the truck holds together without that one.
+// Goods stowed on cells the old part provides, such as a cargo rack, would fall off the grid without it.
+function canSwap(me: Vehicle, part: PartInstance, weakest: PartItem | null, fits: (v: Vehicle) => boolean): weakest is PartItem {
+  if (!weakest || quality(part) <= quality(weakest.part)) return false;
+  const items = me.items.filter((it) => it.id !== weakest.id);
+  return getLayoutError(me, items) === null && fits({ ...me, items });
 }
 
 // The cells goods could use if the truck carried none.
