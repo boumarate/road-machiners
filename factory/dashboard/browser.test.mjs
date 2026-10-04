@@ -1,0 +1,134 @@
+import { createServer } from 'node:http';
+import { readFile, mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import assert from 'node:assert/strict';
+
+if (!process.argv[2] || !process.argv[3]) throw new Error('Usage: node browser.test.mjs <playwright-module> <evidence-directory>');
+const { chromium } = await import(pathToFileURL(resolve(process.argv[2])).href);
+const evidence = resolve(process.argv[3]);
+const root = new URL('./', import.meta.url);
+const now = new Date().toISOString();
+function createSource(value) { return { status: 'ok', at: now, value }; }
+const jobs = Array.from({ length: 45 }, (_, i) => ({ key: `job-${i}`, issue: i + 1, stage: ['design', 'implement', 'verify'][i % 3], startedAt: new Date(Date.now() - 900000).toISOString() }));
+function createSummary(days) {
+  const tokens = { input: 1000000, output: 300000, cacheRead: 200000, cacheWrite: 100000 };
+  return { days, since: now, workerMs: 7200000, cost: 14.5, tokens, waitingMs: 3600000, waitingGaps: 1, missingUsage: 2,
+    stages: [{ stage: 'design', workerMs: 7200000 }], waitingStages: [{ stage: 'design', workerMs: 3600000 }],
+    daily: [{ day: now.slice(0, 10), cost: 14.5, tokens }], retries: [{ outcome: 'timeout', runs: 3, cost: 2, workerMs: 600000 }],
+    models: Array.from({ length: 20 }, (_, i) => ({ model: `model-${i}-${'long'.repeat(30)}`, input: 100000, output: 300, cacheRead: 100, cacheWrite: 200, cost: 0.5 })),
+    activity: jobs.map((job) => ({ stage: job.stage, issue: job.issue, outcome: 'done', at: now })) };
+}
+const fixture = {
+  generatedAt: now, repoUrl: 'https://github.com/example/factory', playUrl: 'https://example.com/',
+  operations: createSource({ jobs, queues: Object.fromEntries(['branch', 'triage', 'design', 'implement', 'verify', 'test'].map((queue) => [queue, { total: 20, busy: 15 }])), releaseKey: 'release', release: { issue: 99 }, candidateUrl: null }),
+  github: createSource({ releaseKey: 'release', features: [{ title: 'Long release '.repeat(40) }], cards: jobs.map((job) => ({ issue: job.issue, title: `Task ${job.issue} ${'unbroken'.repeat(60)}` })) }),
+  live: createSource({ workers: jobs.map((job) => ({ key: job.key, activity: 'tests', phase: 'running', status: 'ok', source: 'runner', progressAt: now })), manager: { activity: 'command', intent: 'investigate', phase: 'running', status: 'ok', since: now }, scheduler: { status: 'ready', freshness: 'ok', at: now, counts: { Triage: 12345678, Design: 200, Implementation: 31, Testing: 20, Approval: 10, Done: 99 }, decisions: [{ stage: 'design', queue: 'design', issue: 42, reasons: ['needs-info'] }], release: { reason: 'release-tasks', issues: [42] } } }),
+  host: createSource({ cpu: createSource(85), ram: createSource({ used: 10000000000, total: 16000000000 }), gpu: createSource([{ utilization: 90 }]), ssd: createSource({ free: 20000000000 }), containers: createSource(jobs.map((job) => ({ jobId: job.key, service: 'worker', cpu: 2, memory: 1000000000 }))) }),
+  analytics: createSource({ ranges: [1, 7, 30].map(createSummary) }),
+};
+function readContentType(path) {
+  const extension = path.split('.').at(-1);
+  return { js: 'text/javascript', css: 'text/css', woff2: 'font/woff2', html: 'text/html' }[extension] ?? 'application/octet-stream';
+}
+const server = createServer(async (request, response) => {
+  try {
+    const path = request.url === '/factory/' ? 'index.html' : request.url.replace('/factory/', '');
+    if (path.includes('..')) throw new Error('Invalid path');
+    const bytes = await readFile(new URL(path, root));
+    response.setHeader('Content-Type', readContentType(path));
+    response.end(bytes);
+  } catch { response.writeHead(404).end(); }
+});
+async function waitForRender(page) { await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))); }
+async function sendSnapshot(page, value) {
+  await page.evaluate((data) => window.fixtureStream.listeners.snapshot({ data: JSON.stringify(data) }), value);
+  await waitForRender(page);
+}
+async function checkLayout(page, size) {
+  for (const tab of ['overview', 'analytics']) {
+    await page.locator(`#${tab}-tab`).click();
+    await waitForRender(page);
+    const overflow = await page.evaluate(() => ({
+      document: document.documentElement.scrollHeight > innerHeight || document.documentElement.scrollWidth > innerWidth,
+      panels: [...document.querySelectorAll('.panel')].filter((node) => node.getClientRects().length && (node.scrollHeight > node.clientHeight + 1 || node.scrollWidth > node.clientWidth + 1)).map((node) => node.className),
+    }));
+    await page.screenshot({ path: `${evidence}/${tab}-${size.width}.png` });
+    assert.equal(overflow.document, false);
+    assert.deepEqual(overflow.panels, []);
+    console.log(size, tab, 'fits without scrolling');
+  }
+}
+async function checkCounters(page) {
+  await page.locator('#usage-tokens').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#full-text').textContent(), '1600000');
+  assert.equal(await page.locator('#full-text').evaluate((node) => node === document.activeElement), true);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#full-text').isVisible(), false);
+  assert.equal(await page.locator('#usage-tokens').evaluate((node) => node === document.activeElement), true);
+  await page.getByRole('button', { name: '24 hours', exact: true }).click();
+  await waitForRender(page);
+  assert.equal(await page.locator('.chart-column').count(), 2);
+}
+async function checkPagination(page) {
+  await page.locator('#overview-tab').click();
+  await page.getByRole('button', { name: 'Next worker', exact: true }).click();
+  await waitForRender(page);
+  assert.ok(!(await page.locator('#worker-rows').textContent()).includes('Task 1 '));
+  await sendSnapshot(page, fixture);
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.key), 'worker-Next');
+  const full = structuredClone(fixture);
+  for (const queue of Object.values(full.operations.value.queues)) queue.busy = queue.total;
+  await sendSnapshot(page, full);
+  assert.ok((await page.locator('#capacity-rows').textContent()).includes('#42'));
+  const fewer = structuredClone(fixture);
+  fewer.operations.value.jobs = jobs.slice(0, 1);
+  await sendSnapshot(page, fewer);
+  assert.equal(await page.locator('#worker-rows tr').count(), 1);
+  assert.ok((await page.locator('#worker-rows').textContent()).includes('Task 1 '));
+}
+async function checkUntrustedAndMissingData(page) {
+  const malicious = structuredClone(fixture);
+  malicious.github.value.cards[0].title = '<img src=x onerror="window.injected=true">';
+  malicious.operations.value.privateChat = 'PRIVATE CHAT MUST NOT RENDER';
+  await sendSnapshot(page, malicious);
+  assert.equal(await page.locator('#worker-rows img').count(), 0);
+  assert.ok((await page.locator('#worker-rows').textContent()).includes('<img'));
+  assert.ok(!(await page.locator('body').textContent()).includes('PRIVATE CHAT MUST NOT RENDER'));
+  const missing = structuredClone(fixture);
+  for (const name of ['operations', 'github', 'live', 'host', 'analytics']) missing[name] = { status: 'unavailable', value: null, at: null };
+  await sendSnapshot(page, missing);
+  assert.ok((await page.locator('#worker-rows').textContent()).includes('unavailable'));
+  await page.locator('#analytics-tab').click();
+  await waitForRender(page);
+  assert.equal(await page.locator('#usage-cost').textContent(), '—');
+  assert.equal(await page.locator('#usage-wait').textContent(), '—');
+}
+await new Promise((done) => server.listen(0, '127.0.0.1', done));
+await mkdir(evidence, { recursive: true });
+const browser = await chromium.launch({ headless: true });
+try {
+  for (const size of [{ width: 1440, height: 900 }, { width: 1366, height: 768 }]) {
+    const page = await browser.newPage({ viewport: size });
+    const errors = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.addInitScript(() => {
+      window.EventSource = class {
+        constructor() { this.listeners = {}; window.fixtureStream = this; }
+        addEventListener(name, callback) { this.listeners[name] = callback; }
+        close() {}
+      };
+    });
+    await page.goto(`http://127.0.0.1:${server.address().port}/factory/`);
+    await page.evaluate(() => document.fonts.ready);
+    await sendSnapshot(page, fixture);
+    await checkLayout(page, size);
+    await checkCounters(page);
+    await checkPagination(page);
+    await checkUntrustedAndMissingData(page);
+    assert.deepEqual(errors, []);
+    await page.close();
+  }
+  console.log('Browser layout, keyboard, pagination, missing-data and escaping checks passed');
+} finally { await browser.close(); await new Promise((done) => server.close(done)); }

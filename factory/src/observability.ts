@@ -3,14 +3,14 @@ import { join } from 'node:path';
 import { appendLedger } from './ledger';
 import { withLockSync } from './lock';
 import type { ScheduleReport } from './tick';
-import { ADHOC_LABEL, type Card, type Column, type JobStage } from './types';
+import { ADHOC_LABEL, QUEUE_OF, type Card, type Column, type JobStage } from './types';
 import type { JobOutcome } from './ledger';
 
 export const ACTIVITIES = ['starting', 'model', 'reading', 'editing', 'command', 'tests', 'typecheck', 'playtest', 'build', 'publish', 'install', 'git', 'lock', 'review', 'design', 'investigate', 'waiting', 'finished'] as const;
 export type Activity = typeof ACTIVITIES[number];
 export type ActivityData = { type: 'activity'; activity: Activity; phase: 'running' | 'completed' | 'failed'; source: 'runner' | 'agent'; progressAt?: string | null; ownerPid?: number | null };
 export type SchedulerData = { type: 'scheduler'; status: 'checking' | 'ready' | 'paused' | 'disk-low' | 'failed'; report: ScheduleReport | null; counts: Partial<Record<Column, number>> };
-export type ManagerData = { type: 'manager'; activity: Activity; phase: 'running' | 'completed' | 'failed'; issue: number | null };
+export type ManagerData = { type: 'manager'; activity: Activity; intent?: Activity | null; phase: 'running' | 'completed' | 'failed'; issue: number | null };
 export type AttemptData = { type: 'attempt'; jobId: string; stage: JobStage; issue: number | null; startedAt: string; outcome: JobOutcome | 'started'; previousId: string | null };
 export type ObservationData = ActivityData | SchedulerData | ManagerData | AttemptData;
 export type Observation = { kind: 'observation'; producer: string; at: string; since: string; data: ObservationData };
@@ -29,10 +29,46 @@ export function readObservation(home: string, producer: string): Observation | n
   return record;
 }
 function validateObservationData(data: ObservationData): void {
-  if (data.type === 'scheduler' || data.type === 'attempt') return;
+  if (data.type === 'scheduler') return validateScheduler(data);
+  if (data.type === 'attempt') return;
+  validateActivitySource(data);
   if (!['activity', 'manager'].includes(data.type)) throw new Error('Invalid observation type');
   if (!ACTIVITIES.includes(data.activity)) throw new Error('Invalid observation activity');
   if (!['running', 'completed', 'failed'].includes(data.phase)) throw new Error('Invalid observation phase');
+}
+function validateActivitySource(data: ActivityData | ManagerData): void {
+  if (data.type === 'manager') return validateManagerIntent(data);
+  if (!['runner', 'agent'].includes(data.source)) throw new Error('Invalid activity source');
+  if (data.progressAt != null && !Number.isFinite(Date.parse(data.progressAt))) throw new Error('Invalid progress time');
+}
+function validateManagerIntent(data: ManagerData): void {
+  if (data.intent != null && !ACTIVITIES.includes(data.intent)) throw new Error('Invalid manager intent');
+}
+function validateScheduler(data: SchedulerData): void {
+  if (!['checking', 'ready', 'paused', 'disk-low', 'failed'].includes(data.status)) throw new Error('Invalid scheduler status');
+  for (const [column, count] of Object.entries(data.counts)) validateFunnelCount(column, count);
+  if (data.report === null) return;
+  for (const decision of data.report.decisions) validateDecision(decision);
+  validateReleaseReport(data.report);
+}
+function validateFunnelCount(column: string, count: number): void {
+  if (!['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'].includes(column)) throw new Error('Invalid funnel column');
+  if (!Number.isSafeInteger(count) || count < 0) throw new Error('Invalid funnel count');
+}
+function validateDecision(decision: ScheduleReport['decisions'][number]): void {
+  if (!Object.hasOwn(QUEUE_OF, decision.stage)) throw new Error('Invalid scheduler stage');
+  validateIssue(decision.issue);
+  const reasons = ['queue-full', 'issue-running', 'daily-cap', 'needs-info', 'failed', 'approval'];
+  if (!decision.reasons.every((reason) => reasons.includes(reason))) throw new Error('Invalid scheduler reason');
+}
+function validateIssue(issue: number | null): void {
+  if (issue === null) return;
+  if (!Number.isSafeInteger(issue) || issue <= 0) throw new Error('Invalid observation issue');
+}
+function validateReleaseReport(report: ScheduleReport): void {
+  if (report.nextCapAt !== null && !Number.isFinite(Date.parse(report.nextCapAt))) throw new Error('Invalid cap time');
+  if (!['uncut', 'tracking-missing', 'failed', 'release-tasks', 'candidate', 'ship-approval'].includes(report.release.reason)) throw new Error('Invalid release gate');
+  for (const issue of report.release.issues) validateIssue(issue);
 }
 export function recordObservation(home: string, producer: string, data: ObservationData, now = new Date()): void {
   const path = resolveObservationPath(home, producer);
@@ -48,11 +84,12 @@ function writeObservation(home: string, path: string, producer: string, data: Ob
   const changed = JSON.stringify(previous?.data) !== JSON.stringify(data);
   const since = changed ? at : previous!.since;
   const record: Observation = { kind: 'observation', producer, at, since, data };
-  if (changed) appendLedger(home, record);
+  if (shouldJournalObservation(changed, data)) appendLedger(home, record);
   const temporary = `${path}.${process.pid}.tmp`;
   writeFileSync(temporary, JSON.stringify(record), { mode: 0o600 });
   renameSync(temporary, path);
 }
+function shouldJournalObservation(changed: boolean, data: ObservationData): boolean { return changed || data.type === 'scheduler'; }
 export function reportObservation(home: string, producer: string, data: ObservationData, now = new Date()): boolean {
   try {
     recordObservation(home, producer, data, now);

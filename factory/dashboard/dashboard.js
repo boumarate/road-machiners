@@ -1,322 +1,396 @@
-const stageNames = { triage: 'Triage', design: 'Design', implement: 'Implementation', testing: 'Testing', approve: 'Approval', adhoc: 'Ad hoc task', change: 'Factory change', candidate: 'Candidate', release: 'Release cut', ship: 'Ship', remove: 'Removal', dev: 'Dev build' };
-const columns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval'];
-const numberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1, notation: 'compact' });
-const moneyFormat = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
+const stages = { triage: 'Triage', design: 'Design', implement: 'Implement', patch: 'Patch', verify: 'Verify', checks: 'Test', approve: 'Approval', adhoc: 'Private task', change: 'Factory change', candidate: 'Candidate', release: 'Release', ship: 'Ship', remove: 'Removal', incident: 'Incident', dev: 'Dev build', waste: 'Review' };
+const actions = { starting: 'Starting', model: 'Waiting for model', reading: 'Reading code', editing: 'Editing code', command: 'Running command', tests: 'Running tests', typecheck: 'Typechecking', playtest: 'Running playtest', build: 'Building', publish: 'Publishing', install: 'Installing dependencies', git: 'Git operation', lock: 'Waiting for repository lock', review: 'Reviewing', design: 'Designing', investigate: 'Investigating', waiting: 'Waiting', finished: 'Finished' };
+const reasons = { 'queue-full': 'Queue occupied', 'issue-running': 'Already running', 'daily-cap': 'Daily job limit', 'needs-info': 'Needs author reply', failed: 'Failed job needs attention', approval: 'Needs committee approval' };
+const columns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
+const queueNames = { branch: 'Branch', triage: 'Triage', design: 'Design', implement: 'Implement', verify: 'Verify', test: 'Test' };
+const pages = new Map();
+const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
+const money = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
 let snapshot = null;
 let selectedDays = 7;
+let metric = 'tokens';
 let connected = false;
-
+let renderPending = false;
+let renderFailed = false;
+let detailOwner = null;
 function getElement(id) { return document.getElementById(id); }
-function createNode(tag, text = '', className = '') {
-  const node = document.createElement(tag);
-  node.textContent = text;
-  node.className = className;
-  return node;
+function createNode(tag, text = '', className = '') { const node = document.createElement(tag); node.textContent = text; node.className = className; return node; }
+function setText(id, value) { getElement(id).textContent = value; }
+function formatNumber(value) { return value == null ? '—' : compact.format(value); }
+function formatCost(value) { return value == null ? '—' : money.format(value); }
+function formatBytes(value) { return value == null ? '—' : `${(value / 1073741824).toFixed(1)} GiB`; }
+function formatDuration(ms) {
+  if (ms == null || !Number.isFinite(ms)) return '—';
+  const minutes = Math.floor(Math.max(0, ms) / 60000);
+  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
-function setText(id, text) { getElement(id).textContent = text; }
-function createLink(text, href, className = 'link') {
-  const node = createNode('a', text, className);
+function formatAge(at) {
+  if (!at) return 'unknown';
+  const seconds = Math.max(0, Math.floor((Date.now() - Date.parse(at)) / 1000));
+  return seconds < 60 ? `${seconds}s` : formatDuration(seconds * 1000);
+}
+function countTokens(tokens) { return tokens == null ? null : tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite; }
+function createLink(text, href) {
   const url = new URL(href);
   if (url.protocol !== 'https:') throw new Error('Invalid public link');
+  const node = createNode('a', text);
   node.href = url.href;
   node.rel = 'noopener noreferrer';
   node.dataset.key = url.href;
   return node;
 }
+function getIssueUrl(issue) { return `${snapshot.repoUrl}/issues/${issue}`; }
 function replaceContents(id, nodes) {
   const target = getElement(id);
-  const focused = target.contains(document.activeElement) ? document.activeElement.dataset.key : null;
-  const scrollTop = target.scrollTop;
+  const key = target.contains(document.activeElement) ? document.activeElement.dataset.key : null;
   target.replaceChildren(...nodes);
-  target.scrollTop = scrollTop;
-  if (focused) target.querySelector(`[data-key="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
+  if (key) target.querySelector(`[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
 }
-function formatNumber(value) { return value === null ? '—' : numberFormat.format(value); }
-function formatCost(value) { return value === null ? '—' : moneyFormat.format(value); }
-function countTokens(tokens) { return tokens === null ? null : tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite; }
-function formatDuration(ms) {
-  if (!Number.isFinite(ms) || ms < 0) return 'Unavailable';
-  const minutes = Math.floor(ms / 60000);
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+function requestRender() {
+  if (renderPending) return;
+  renderPending = true;
+  requestAnimationFrame(() => {
+    renderPending = false;
+    if (!snapshot) return;
+    try { renderSnapshot(); renderFailed = false; }
+    catch (error) { renderFailed = true; console.error('Dashboard render failed', error); setText('connection', 'Invalid data'); }
+  });
 }
-function formatBytes(bytes) { return `${(bytes / 1073741824).toFixed(1)} GiB`; }
-function formatAge(source) {
-  if (source.at === null) return 'unavailable';
-  const seconds = Math.max(0, Math.floor((Date.now() - Date.parse(source.at)) / 1000));
-  return `${source.status} · ${seconds}s ago`;
+function createPageButton(label, key, disabled, change) {
+  const button = createNode('button', label === 'Previous' ? '←' : '→');
+  button.setAttribute('aria-label', `${label} ${key}`);
+  button.dataset.key = `${key}-${label}`;
+  button.disabled = disabled;
+  button.addEventListener('click', () => { pages.set(key, (pages.get(key) ?? 0) + change); requestRender(); });
+  return button;
 }
-function getIssueLink(issue) { return `${snapshot.repoUrl}/issues/${issue}`; }
-function getReleaseData() {
+function selectPage(key, rows, capacity) {
+  const size = Math.max(1, capacity);
+  const last = Math.max(0, Math.ceil(rows.length / size) - 1);
+  const page = Math.min(pages.get(key) ?? 0, last);
+  pages.set(key, page);
+  const controls = rows.length > size ? [createPageButton('Previous', key, page === 0, -1), createNode('span', `${page * size + 1}–${Math.min((page + 1) * size, rows.length)} / ${rows.length}`), createPageButton('Next', key, page === last, 1)] : [];
+  replaceContents(`${key}-pages`, controls);
+  return rows.slice(page * size, (page + 1) * size);
+}
+function readTableCapacity(key) {
+  const zone = getElement(`${key}-zone`);
+  const header = zone.querySelector('thead').getBoundingClientRect().height;
+  const row = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--row-height'));
+  return Math.max(1, Math.floor((zone.clientHeight - header) / row));
+}
+function createEmptyRow(text, columnsCount) { const row = createNode('tr'); const cell = createNode('td', text, 'muted'); cell.colSpan = columnsCount; row.append(cell); return row; }
+function renderTable(key, rows, renderRow, empty, columnCount) {
+  const visible = selectPage(key, rows, readTableCapacity(key));
+  replaceContents(`${key}-rows`, visible.length ? visible.map(renderRow) : [createEmptyRow(empty, columnCount)]);
+}
+function readOperations() { return snapshot.operations.value; }
+function readLive() { return snapshot.live?.value ?? null; }
+function readCards() { return snapshot.github.value?.cards ?? []; }
+function readWorkerTitle(job) {
+  if (job.issue === null) return stages[job.stage];
+  const card = readCards().find((item) => item.issue === job.issue);
+  return card ? `#${job.issue} ${card.title}` : `#${job.issue}`;
+}
+function readDoing(activity) {
+  if (!activity?.activity) return 'Activity unavailable';
+  if (activity.status === 'stale') return 'Activity stale';
+  if (activity.phase === 'failed') return 'Command failed';
+  if (activity.phase === 'completed') return 'Next operation pending';
+  return formatActivity(activity);
+}
+function formatActivity(activity) { return (activity.source === 'agent' ? 'Reported: ' : '') + actions[activity.activity]; }
+function createWorkerRow(job) {
+  const row = createNode('tr');
+  const title = createNode('td');
+  const text = readWorkerTitle(job);
+  if (job.issue === null) title.textContent = text;
+  else title.append(createLink(text, getIssueUrl(job.issue)));
+  const activity = readLive()?.workers.find((item) => item.key === job.key);
+  const progress = activity?.progressAt ? formatAge(activity.progressAt) : '—';
+  row.append(title, createNode('td', stages[job.stage]), createNode('td', readDoing(activity)), createNode('td', `${progress} / ${formatDuration(Date.now() - Date.parse(job.startedAt))}`, 'numeric'));
+  row.lastChild.title = 'Time since last completed operation / total job time';
+  return row;
+}
+function renderWorkers() {
+  const operations = readOperations();
+  renderTable('worker', operations?.jobs ?? [], createWorkerRow, operations ? 'No running jobs' : 'State unavailable', 4);
+  renderCapacity(operations);
+}
+function readQueueReason(queue) {
+  const scheduler = readLive()?.scheduler;
+  if (!scheduler || scheduler.freshness !== 'ok') return 'Reason unavailable';
+  if (scheduler.status !== 'ready') return readSchedulerStatus(scheduler.status);
+  const waiting = readQueueWaits(queue);
+  if (!waiting.length) return 'No eligible work';
+  return waiting.map((item) => `${item.issue === null ? stages[item.stage] : `#${item.issue}`} ${item.reasons.map((reason) => reasons[reason]).join(', ') || 'Selected at last check'}`).join(', ');
+}
+function readQueueWaits(queue) {
+  const decisions = readLive()?.scheduler?.decisions ?? [];
+  return decisions.filter((item) => item.queue === queue && item.reasons.length > 0 && !item.reasons.includes('issue-running'));
+}
+function renderCapacity(operations) {
+  const rows = operations ? Object.entries(operations.queues).filter(([name, queue]) => queue.total > queue.busy || readQueueWaits(name).length > 0) : [];
+  const capacity = Math.max(1, Math.floor(getElement('capacity-rows').clientHeight / 24));
+  const visible = selectPage('capacity', rows, capacity);
+  replaceContents('capacity-rows', visible.map(([name, queue]) => {
+    const row = createNode('div', '', 'capacity-row');
+    row.append(createNode('span', `${queueNames[name]}: ${Math.max(0, queue.total - queue.busy)} free`), createNode('span', readQueueReason(name)));
+    return row;
+  }));
+  if (!rows.length) replaceContents('capacity-rows', [createNode('p', operations ? 'All slots occupied' : 'State unavailable', 'empty')]);
+}
+function renderFunnel() {
+  const scheduler = readLive()?.scheduler;
+  const counts = scheduler?.status === 'ready' ? scheduler.counts : null;
+  replaceContents('funnel', columns.map((column) => {
+    const item = createNode('div');
+    const value = counts === null ? null : counts[column] ?? 0;
+    item.append(createNode('span', column.replace('Implementation', 'Implement').replace('Testing', 'Test')), createNode('strong', formatNumber(value)));
+    item.lastChild.title = value === null ? 'Unavailable' : value.toLocaleString();
+    return item;
+  }));
+}
+function getRelease() {
   const github = snapshot.github.value;
-  if (github === null || snapshot.operations.value === null) return null;
-  return github.releaseKey === snapshot.operations.value.releaseKey ? github : null;
+  const operations = readOperations();
+  if (!github || !operations) return null;
+  return github.releaseKey === operations.releaseKey ? github : null;
 }
-function renderHeader() {
-  getElement('github-link').href = snapshot.repoUrl;
-  getElement('play-link').href = snapshot.playUrl;
-  const showChannel = snapshot.channelUrl !== null;
-  getElement('channel').hidden = !showChannel;
-  getElement('channel-tab').hidden = !showChannel;
-  if (showChannel) getElement('channel-link').href = snapshot.channelUrl;
-  const operations = snapshot.operations.value;
-  if (operations === null) {
-    setText('factory-status', 'Factory state unavailable');
-    setText('worker-count', '—');
-    return;
-  }
-  const jobs = operations.jobs;
-  setText('factory-status', `${operations.status} · ${jobs.length} running`);
-  const capacity = Object.values(operations.queues).reduce((total, queue) => total + queue.total, 0);
-  setText('worker-count', `${jobs.length} / ${capacity}`);
-  setText('job-count', `${jobs.length} running`);
-}
-function createJobRow(job, card) {
-  const row = createNode('tr');
-  const title = createNode('td', '', 'job-title');
-  if (job.issue !== null) title.append(createLink(`#${job.issue} ${card?.title ?? ''}`, getIssueLink(job.issue), ''));
-  else title.textContent = stageNames[job.stage];
-  title.append(createNode('span', `${job.queue} queue`, 'dim'));
-  row.append(title, createNode('td', stageNames[job.stage], 'stage gold'), createNode('td', formatDuration(Date.now() - Date.parse(job.startedAt)), 'elapsed'));
-  return row;
-}
-function createWaitingRow(card) {
-  const row = createNode('tr');
-  const title = createNode('td', '', 'job-title');
-  title.append(createLink(`#${card.issue} ${card.title}`, getIssueLink(card.issue), ''));
-  const status = card.blocked ? 'Blocked' : card.column;
-  row.append(title, createNode('td', status, card.blocked ? 'stage bad' : 'stage'), createNode('td', 'Waiting', 'elapsed dim'));
-  return row;
-}
-function renderJobs() {
-  const operations = snapshot.operations.value;
-  if (operations === null) {
-    replaceContents('job-rows', []);
-    setText('pipeline', 'Factory state unavailable');
-    setText('job-count', 'Unavailable');
-    return;
-  }
-  const cards = snapshot.github.value?.cards ?? [];
-  const running = new Set(operations.jobs.map((job) => job.issue));
-  const rows = operations.jobs.map((job) => createJobRow(job, cards.find((card) => card.issue === job.issue)));
-  rows.push(...cards.filter((card) => !running.has(card.issue)).map(createWaitingRow));
-  replaceContents('job-rows', rows);
-  const pipeline = columns.map((column) => createNode('span', `${column} ${cards.filter((card) => card.column === column).length}`));
-  replaceContents('pipeline', snapshot.github.value === null ? [createNode('span', 'GitHub queue unavailable')] : pipeline);
-  renderJobNote(rows.length);
-}
-function renderJobNote(count) {
-  setText('job-note', snapshot.github.status === 'ok' ? 'Running jobs and queued public issues. Private request text is hidden.' : 'GitHub is unavailable or stale. Queue details may be incomplete.');
-  if (count === 0 && snapshot.github.status === 'ok') setText('job-note', 'No running jobs or queued public issues.');
+function formatReleaseGate(gate) {
+  if (!gate) return 'Readiness unavailable';
+  if (gate.reason === 'release-tasks') return `${gate.issues.length} release tasks remain: ${gate.issues.map((issue) => `#${issue}`).join(', ')}`;
+  const labels = { uncut: 'Release not cut', 'tracking-missing': 'Tracking issue unavailable', failed: 'Release job failed', candidate: 'Candidate build pending', 'ship-approval': 'Needs committee ship approval' };
+  return labels[gate.reason];
 }
 function renderRelease() {
-  const release = getReleaseData();
-  if (release === null) {
-    setText('release-status', 'Awaiting GitHub');
-    setText('release-name', '—');
-    setText('release-phase', 'Awaiting GitHub');
-    setText('change-count', '—');
-    replaceContents('release-changes', []);
-    replaceContents('release-actions', []);
-    setText('release-count', 'Unavailable');
-    setText('release-blockers', 'Release contents have not been confirmed.');
-    return;
-  }
-  const operations = snapshot.operations.value;
-  setText('release-name', release.provisional ? 'dev / provisional' : `Release ${operations.release.day}`);
-  setText('release-count', `${release.features.length} merged changes`);
-  setText('change-count', String(release.features.length));
-  const phase = release.provisional ? 'Before release cut' : 'In preparation';
-  setText('release-phase', phase);
-  setText('release-status', operations.candidateUrl ? 'Candidate ready' : phase);
-  replaceContents('release-changes', release.features.map((feature) => {
-    const li = createNode('li');
-    li.append(createNode('span', `#${feature.issue}`, 'issue'), createLink(feature.title, getIssueLink(feature.issue), ''));
-    return li;
-  }));
-  const blockers = release.cards.filter((card) => card.releaseTask).length;
-  setText('release-blockers', `${blockers} open release tasks. ${release.provisional ? 'Contents can change before the cut.' : 'Committee approval is required to ship.'}`);
-  renderReleaseActions(operations);
+  const release = getRelease();
+  const summary = release ? release.features.map((feature) => feature.title).join(', ') : 'Contents unavailable';
+  setText('release-summary', summary || 'No changes');
+  setText('release-gate', formatReleaseGate(readLive()?.scheduler?.release));
+  renderReleaseLinks(release);
 }
-function renderReleaseActions(operations) {
-  const actions = [];
-  if (operations.release) actions.push(createLink('Tracking issue ↗', getIssueLink(operations.release.issue), 'button'));
-  if (operations.candidateUrl) actions.push(createLink('Play candidate ↗', operations.candidateUrl, 'button on'));
-  replaceContents('release-actions', actions);
+function renderReleaseLinks(release) {
+  const operations = readOperations();
+  const tracking = operations?.release;
+  getElement('release-link').hidden = release === null;
+  getElement('release-link').href = tracking ? getIssueUrl(tracking.issue) : `${snapshot.repoUrl}/compare/main...dev`;
+  const candidateUrl = operations?.candidateUrl;
+  getElement('candidate-link').hidden = !candidateUrl;
+  if (candidateUrl) getElement('candidate-link').href = candidateUrl;
 }
-function createHostReading(name, value, detail, percentage) {
-  const node = createNode('div', '', 'host-reading');
-  node.append(createNode('h4', name), createNode('strong', value), createNode('p', detail, 'small dim'));
-  if (percentage !== null) {
-    const meter = document.createElement('meter');
-    meter.min = 0;
-    meter.max = 100;
-    meter.value = percentage;
-    meter.setAttribute('aria-label', `${name} utilization`);
-    node.append(meter);
-  }
-  return node;
+function readSchedulerStatus(status) {
+  const labels = { checking: 'Checking queues', ready: 'Queues checked', paused: 'Factory paused', 'disk-low': 'Starts blocked by low disk space', failed: 'Scheduler failed' };
+  return labels[status];
 }
-function createCapacityReading(name, source) {
-  if (source.value === null) return createHostReading(name, 'Unavailable', source.error, null);
-  const data = source.value;
-  return createHostReading(name, `${formatBytes(data.used)} / ${formatBytes(data.total)}`, `${formatBytes(data.free)} available`, 100 * data.used / data.total);
+function readManagerAction(manager) {
+  if (!manager) return 'Activity unavailable';
+  if (manager.status !== 'ok') return 'Activity stale';
+  if (manager.phase === 'completed') return 'Idle';
+  return manager.intent ? `${actions[manager.intent]}: ${actions[manager.activity].toLowerCase()}` : actions[manager.activity];
 }
-function renderHost() {
-  const host = snapshot.host.value;
-  if (host === null) return replaceContents('host-readings', [createNode('p', 'Host readings unavailable', 'empty')]);
-  const cpu = host.cpu.value;
-  const nodes = [createHostReading('CPU', cpu === null ? 'Unavailable' : `${cpu.toFixed(1)}%`, formatAge(host.cpu), cpu), createCapacityReading('RAM', host.ram), createCapacityReading('SSD', host.ssd)];
-  if (host.gpu.value === null) nodes.push(createHostReading('GPU', 'Unavailable', 'NVIDIA readings unavailable', null));
-  else for (const gpu of host.gpu.value) nodes.push(createHostReading(`GPU ${gpu.index} · ${gpu.name}`, `${gpu.utilization}%`, `${formatBytes(gpu.memory.used)} / ${formatBytes(gpu.memory.total)} video memory`, gpu.utilization));
-  replaceContents('host-readings', nodes);
-  setText('host-age', formatAge(snapshot.host));
+function renderManager() {
+  const live = readLive();
+  const manager = live?.manager;
+  setText('manager-action', readManagerAction(manager));
+  setText('manager-age', manager ? formatAge(manager.since) : '');
+  const scheduler = live?.scheduler;
+  setText('scheduler-action', scheduler ? `${readSchedulerStatus(scheduler.status)}, ${formatAge(scheduler.at)} ago` : 'Scheduler unavailable');
 }
-function renderDailyChart(summary) {
-  const max = Math.max(1, ...summary.daily.map((day) => countTokens(day.tokens)));
-  const bars = [];
-  const labels = [];
-  for (const day of summary.daily) {
-    const col = createNode('div', '', 'chart-col');
-    const fresh = createNode('div', '', 'fresh');
-    const cached = createNode('div', '', 'cached');
-    fresh.style.height = `${100 * (day.tokens.input + day.tokens.output) / max}%`;
-    cached.style.height = `${100 * (day.tokens.cacheRead + day.tokens.cacheWrite) / max}%`;
-    col.title = `${day.day}: ${day.tokens.input} input, ${day.tokens.output} output, ${day.tokens.cacheRead} cache read, ${day.tokens.cacheWrite} cache write. ${formatCost(day.cost)}`;
-    col.append(fresh, cached);
-    bars.push(col);
-    labels.push(createNode('span', day.day.slice(5)));
-  }
-  replaceContents('usage-chart', bars.length ? bars : [createNode('p', 'No measured agent usage in this range', 'empty')]);
-  replaceContents('chart-days', labels);
-}
-function createStatRow(label, amount, fraction) {
-  const row = createNode('div', '', 'stat-row');
-  const bar = createNode('span', '', 'bar');
-  const fill = createNode('i');
-  fill.style.width = `${fraction * 100}%`;
-  bar.append(fill);
-  row.append(createNode('span', label), bar, createNode('span', amount, 'mono'));
+function createReading(label, value) { const node = createNode('div'); node.append(createNode('span', label), createNode('strong', value)); return node; }
+function readRam(host) { const ram = host.ram.value; return ram ? `${(ram.used / 1073741824).toFixed(1)} / ${formatBytes(ram.total)}` : '—'; }
+function readGpu(host) { const gpu = host.gpu.value; return gpu ? gpu.map((row) => `${row.utilization}%`).join(' / ') : '—'; }
+function createResourceRow(resource) {
+  const job = readOperations()?.jobs.find((item) => item.key === resource.jobId);
+  const title = job ? readResourceTitle(job) : resource.service;
+  const row = createNode('tr');
+  row.append(createNode('td', title), createNode('td', `${resource.cpu.toFixed(1)}%`, 'numeric'), createNode('td', formatBytes(resource.memory), 'numeric'));
   return row;
 }
-function renderUsageBreakdown(summary) {
-  const maxTime = Math.max(1, ...summary.stages.map((stage) => stage.workerMs));
-  const maxTokens = Math.max(1, ...summary.models.map(countTokens));
-  replaceContents('stage-usage', summary.stages.map((stage) => createStatRow(stageNames[stage.stage] ?? stage.stage, formatDuration(stage.workerMs), stage.workerMs / maxTime)));
-  replaceContents('model-usage', summary.models.map((model) => {
-    const group = createNode('div');
-    group.append(createStatRow(model.model, formatNumber(countTokens(model)), countTokens(model) / maxTokens), createNode('p', `${formatCost(model.cost)} estimated cost`, 'small dim'));
-    return group;
-  }));
-  replaceContents('issue-usage', summary.issues.map((issue) => {
-    const row = createNode('tr');
-    const link = createNode('td');
-    link.append(createLink(`#${issue.issue}`, getIssueLink(issue.issue)));
-    row.append(link, createNode('td', formatDuration(issue.workerMs)), createNode('td', formatCost(issue.cost)));
-    return row;
-  }));
+function readResourceTitle(job) { return job.issue === null ? stages[job.stage] : `#${job.issue}`; }
+function renderServer() {
+  const host = snapshot.host.value;
+  setText('server-age', formatAge(snapshot.host.at));
+  replaceContents('server-totals', createServerTotals(host));
+  renderTable('server', host?.containers?.value ?? [], createResourceRow, 'Container readings unavailable', 3);
+  setText('server-note', readStorageNote(host));
 }
+function createServerTotals(host) {
+  if (!host) return [createReading('Readings', 'Unavailable')];
+  const cpu = host.cpu.value === null ? '—' : `${host.cpu.value.toFixed(1)}%`;
+  return [createReading('CPU', cpu), createReading('RAM', readRam(host)), createReading('GPU', readGpu(host))];
+}
+function readStorageNote(host) { return host?.ssd.value ? `Disk free ${formatBytes(host.ssd.value.free)}. Host processes and GPU ownership unattributed.` : 'Disk reading unavailable'; }
+function readSummary() { return snapshot.analytics.value?.ranges.find((range) => range.days === selectedDays) ?? null; }
+function createEvent(event) {
+  const node = createNode('div', '', 'event');
+  node.append(createNode('time', event.at.slice(11, 16)), createNode('span', `${stages[event.stage]} ${event.outcome}`));
+  if (event.issue !== null) node.append(' ', createLink(`#${event.issue}`, getIssueUrl(event.issue)));
+  node.title = event.at;
+  return node;
+}
+function renderEvents() {
+  const events = snapshot.analytics.value?.ranges.find((range) => range.days === 30)?.activity ?? [];
+  const width = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--event-width'));
+  const capacity = Math.max(1, Math.floor(getElement('event-log').clientWidth / width));
+  const visible = selectPage('event', events, capacity);
+  replaceContents('event-log', visible.length ? visible.map(createEvent) : [createNode('span', 'No recorded events', 'muted')]);
+}
+function renderCounters(summary) {
+  if (!summary) return clearCounters();
+  setCounter('usage-tokens', formatNumber(countTokens(summary.tokens)), countTokens(summary.tokens));
+  setCounter('usage-time', summary.since ? formatDuration(summary.workerMs) : '—', summary.since ? `${summary.workerMs} ms` : null);
+  setCounter('usage-cost', formatCost(summary.cost), summary.cost);
+  setCounter('usage-wait', formatDuration(summary.waitingMs), summary.waitingMs === null ? null : `${summary.waitingMs} ms`);
+  setText('coverage', `${summary.missingUsage} runs missing usage, ${summary.waitingGaps} gaps in waiting records`);
+}
+function setCounter(id, display, exact) { setText(id, display); getElement(id).dataset.exact = exact == null ? 'Unavailable' : String(exact); }
+function clearCounters() {
+  for (const id of ['usage-tokens', 'usage-time', 'usage-cost', 'usage-wait']) setCounter(id, '—', null);
+  setText('coverage', 'Measurements unavailable');
+}
+function readDailyValue(day) { return metric === 'tokens' ? countTokens(day.tokens) : day.cost; }
+function formatDailyValue(value) { return metric === 'tokens' ? formatNumber(value) : formatCost(value); }
+function createDailyBar(day, maximum) {
+  const value = readDailyValue(day);
+  const column = createNode('div', '', 'chart-column');
+  const space = createNode('div', '', 'bar-space');
+  const bar = createNode('div', '', value === null ? 'no-value' : 'bar');
+  if (value !== null) bar.style.height = `${100 * value / maximum}%`;
+  space.append(bar);
+  column.append(createNode('span', formatDailyValue(value), 'chart-value'), space, createNode('span', day.day.slice(5), 'chart-label'));
+  column.tabIndex = 0;
+  column.dataset.detail = `${day.day}: ${formatDailyValue(value)}`;
+  return column;
+}
+function readDailyBuckets(summary) {
+  if (!summary) return [];
+  const end = new Date(snapshot.generatedAt);
+  end.setUTCHours(0, 0, 0, 0);
+  return Array.from({ length: summary.days + 1 }, (_, index) => {
+    const day = new Date(end.getTime() - (summary.days - index) * 86400000).toISOString().slice(0, 10);
+    return summary.daily.find((row) => row.day === day) ?? { day, cost: null, tokens: null };
+  });
+}
+function renderDailyChart(summary) {
+  const days = readDailyBuckets(summary);
+  const capacity = Math.max(1, Math.floor(getElement('daily-chart').clientWidth / 48));
+  const visible = selectPage('daily', days, capacity);
+  const maximum = Math.max(1, ...days.map((day) => readDailyValue(day) ?? 0));
+  replaceContents('daily-chart', visible.length ? visible.map((day) => createDailyBar(day, maximum)) : [createNode('p', 'No recorded usage', 'empty')]);
+}
+function readStageRows(summary) {
+  if (!summary) return [];
+  const names = new Set([...summary.stages.map((row) => row.stage), ...summary.waitingStages.map((row) => row.stage)]);
+  return [...names].map((stage) => ({ stage, run: summary.stages.find((row) => row.stage === stage)?.workerMs ?? 0, wait: summary.waitingStages.find((row) => row.stage === stage)?.workerMs ?? 0 }));
+}
+function createStageBar(row, maximum, waitingKnown) {
+  const node = createNode('div', '', 'stage-row');
+  const bar = createNode('div', '', 'stage-bar');
+  for (const [name, value] of [['running', row.run], ['waiting', row.wait]]) {
+    const segment = createNode('span', '', name);
+    segment.style.width = `${100 * value / maximum}%`;
+    bar.append(segment);
+  }
+  const wait = waitingKnown ? formatDuration(row.wait) : '—';
+  node.append(createNode('span', stages[row.stage]), bar, createNode('span', `${formatDuration(row.run)} / ${wait}`, 'stage-amount'));
+  node.tabIndex = 0;
+  node.dataset.detail = `${stages[row.stage]}: ${formatDuration(row.run)} running, ${wait} waiting`;
+  return node;
+}
+function renderStageChart(summary) {
+  const rows = readStageRows(summary);
+  const maximum = Math.max(1, ...rows.map((row) => row.run + row.wait));
+  const capacity = Math.max(1, Math.floor(getElement('stage-chart').clientHeight / 34));
+  const visible = selectPage('stage', rows, capacity);
+  replaceContents('stage-chart', visible.length ? visible.map((row) => createStageBar(row, maximum, summary.waitingMs !== null)) : [createNode('p', 'No measured time', 'empty')]);
+}
+function createRetryRow(item) { const row = createNode('tr'); row.append(createNode('td', item.outcome), createNode('td', String(item.runs), 'numeric'), createNode('td', formatDuration(item.workerMs), 'numeric'), createNode('td', formatCost(item.cost), 'numeric')); return row; }
+function createModelRow(item) { const row = createNode('tr'); row.append(createNode('td', item.model), createNode('td', formatNumber(countTokens(item)), 'numeric'), createNode('td', formatCost(item.cost), 'numeric')); return row; }
 function renderAnalytics() {
-  const analytics = snapshot.analytics.value;
-  if (analytics === null) return renderUnavailableAnalytics();
-  const summary = analytics.ranges.find((range) => range.days === selectedDays);
-  const today = analytics.ranges.find((range) => range.days === 1);
-  setText('tokens-today', formatNumber(countTokens(today.tokens)));
-  setText('cost-today', formatCost(today.cost));
-  setText('time-today', today.since === null ? '—' : formatDuration(today.workerMs));
-  setText('usage-coverage', `${today.missingUsage} runs without final usage`);
-  setText('usage-tokens', formatNumber(countTokens(summary.tokens)));
-  setText('usage-cost', formatCost(summary.cost));
-  setText('usage-time', summary.since === null ? '—' : formatDuration(summary.workerMs));
-  setText('usage-outcomes', `${summary.completed} completed · ${summary.failed} failed · ${summary.timeouts} timed out`);
-  setText('measurement-note', `Collection since ${summary.since ?? 'not started'}. ${summary.missingUsage} runs without final usage. ${summary.collectionFaults} collection faults. Unmeasured usage is excluded.`);
-  setText('token-split', formatTokenSplit(summary.tokens));
+  const summary = readSummary();
+  renderCounters(summary);
   renderDailyChart(summary);
-  renderUsageBreakdown(summary);
-  renderEvents(analytics.ranges.find((range) => range.days === 30));
-  if (snapshot.channelUrl !== null) renderPosts(analytics.posts);
-}
-function formatTokenSplit(tokens) {
-  if (tokens === null) return 'Token breakdown unavailable.';
-  return `Input ${tokens.input.toLocaleString()} · Output ${tokens.output.toLocaleString()} · Cache read ${tokens.cacheRead.toLocaleString()} · Cache write ${tokens.cacheWrite.toLocaleString()}`;
-}
-function renderUnavailableAnalytics() {
-  for (const id of ['tokens-today', 'cost-today', 'time-today', 'usage-tokens', 'usage-cost', 'usage-time']) setText(id, '—');
-  for (const id of ['stage-usage', 'model-usage', 'issue-usage', 'usage-chart', 'chart-days', 'event-log', 'posts']) replaceContents(id, []);
-  setText('measurement-note', 'Usage collection is unavailable.');
-  setText('usage-coverage', 'Unavailable');
-  setText('usage-outcomes', 'Unavailable');
-  setText('token-split', 'Token breakdown unavailable.');
-}
-function renderEvents(summary) {
-  replaceContents('event-log', summary.activity.map((event) => {
-    const row = createNode('div', '', 'log-line');
-    const text = `${stageNames[event.stage]} ${event.outcome}`;
-    const message = createNode('span', text, event.outcome === 'finished' ? 'good' : 'bad');
-    if (event.issue !== null) message.append(' ', createLink(`#${event.issue}`, getIssueLink(event.issue)));
-    row.append(createNode('time', event.at.slice(11, 16)), message);
-    row.title = event.at;
-    return row;
-  }));
-  if (!summary.activity.length) replaceContents('event-log', [createNode('p', 'No recorded job outcomes yet.', 'empty')]);
-}
-function renderPosts(posts) {
-  replaceContents('posts', posts.map((post) => {
-    const article = createNode('article', '', 'post');
-    article.append(createNode('time', post.at.slice(0, 16).replace('T', ' '), 'mono'), createNode('p', post.text), createLink('View public post ↗', `${snapshot.channelUrl}/${post.id}`));
-    return article;
-  }));
-  if (!posts.length) replaceContents('posts', [createNode('p', 'No recorded announcements yet. Open the channel for earlier posts.', 'empty')]);
+  renderStageChart(summary);
+  renderTable('retry', summary?.retries ?? [], createRetryRow, summary ? 'No linked repeat attempts' : 'Unavailable', 4);
+  renderTable('model', summary?.models ?? [], createModelRow, 'No reported models', 3);
 }
 function renderFreshness() {
-  if (snapshot === null) return;
-  setText('state-age', `Local state: ${formatAge(snapshot.operations)}`);
-  setText('source-age', `State: ${formatAge(snapshot.operations)} / GitHub: ${formatAge(snapshot.github)} / Usage: ${formatAge(snapshot.analytics)}`);
-  const sourceProblem = [snapshot.operations, snapshot.github, snapshot.analytics].some((source) => source.status !== 'ok');
-  const message = connected ? 'Connected' : 'Disconnected · Reconnecting automatically';
-  setText('connection', `${message}${sourceProblem ? ' · Some sources are unavailable or stale' : ''}`);
-  getElement('connection').classList.toggle('bad', !connected || sourceProblem);
-  setText('footer-status', `Latest server snapshot: ${snapshot.generatedAt}`);
+  if (!snapshot) return;
+  if (renderFailed) return setText('connection', 'Invalid data');
+  setText('connection', connected ? `Updated ${formatAge(snapshot.generatedAt)} ago` : 'Reconnecting');
+  const sources = [['State', snapshot.operations], ['GitHub', snapshot.github], ['Usage', snapshot.analytics], ['Host', snapshot.host], ['Activity', snapshot.live]];
+  const failures = sources.filter(([, source]) => source?.status !== 'ok').map(([name, source]) => `${name} ${source?.status ?? 'unavailable'}`);
+  setText('source-status', failures.join(', '));
+  getElement('connection').classList.toggle('bad', !connected);
 }
+function renderOverview() { renderWorkers(); renderFunnel(); renderRelease(); renderManager(); renderServer(); renderEvents(); }
 function renderSnapshot() {
-  renderHeader();
-  renderJobs();
-  renderRelease();
-  renderHost();
-  renderAnalytics();
+  getElement('github-link').href = snapshot.repoUrl;
+  getElement('play-link').href = snapshot.playUrl;
   renderFreshness();
+  if (!getElement('overview').hidden) renderOverview();
+  if (!getElement('analytics').hidden) renderAnalytics();
+  updateOverflow();
 }
-for (const button of document.querySelectorAll('[data-days]')) {
-  button.addEventListener('click', () => {
-    selectedDays = Number(button.dataset.days);
-    for (const choice of document.querySelectorAll('[data-days]')) {
-      const on = Number(choice.dataset.days) === selectedDays;
-      choice.classList.toggle('on', on);
-      choice.setAttribute('aria-pressed', String(on));
-    }
-    if (snapshot !== null) renderAnalytics();
-  });
+function updateOverflow() {
+  for (const node of document.querySelectorAll('td,th,.event,.capacity-row span,.clamp,.clipped,.counter strong,.funnel strong,.server-totals strong')) {
+    if (!node.getClientRects().length) continue;
+    if (node.dataset.exact) { node.dataset.detail = node.dataset.exact; node.tabIndex = 0; continue; }
+    const truncated = node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight;
+    node.classList.toggle('inspect', truncated);
+    if (truncated) { node.dataset.detail = node.textContent.trim(); node.tabIndex = 0; }
+    else { delete node.dataset.detail; node.removeAttribute('tabindex'); }
+  }
 }
-for (const tab of document.querySelectorAll('nav a')) {
-  tab.addEventListener('click', () => {
-    for (const choice of document.querySelectorAll('nav a')) choice.classList.toggle('on', choice === tab);
-  });
+function showDetail(node) {
+  if (!node?.dataset.detail) return;
+  const tooltip = getElement('full-text');
+  tooltip.textContent = node.dataset.detail;
+  detailOwner = node;
+  tooltip.tabIndex = 0;
+  tooltip.hidden = false;
+  const bounds = node.getBoundingClientRect();
+  tooltip.style.left = `${Math.max(8, Math.min(bounds.left, innerWidth - tooltip.offsetWidth - 8))}px`;
+  tooltip.style.top = `${Math.max(8, Math.min(bounds.bottom + 6, innerHeight - tooltip.offsetHeight - 8))}px`;
+  node.setAttribute('aria-describedby', tooltip.id);
 }
+function hideDetail() { getElement('full-text').hidden = true; }
+const tabs = [...document.querySelectorAll('[role="tab"]')];
+function selectTab(tab) {
+  for (const choice of tabs) { const selected = choice === tab; choice.setAttribute('aria-selected', String(selected)); choice.tabIndex = selected ? 0 : -1; getElement(choice.getAttribute('aria-controls')).hidden = !selected; }
+  hideDetail();
+  requestRender();
+}
+function navigateTabs(event, tab) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  let index = tabs.indexOf(tab) + (event.key === 'ArrowRight' ? 1 : -1);
+  if (event.key === 'Home') index = 0;
+  if (event.key === 'End') index = tabs.length - 1;
+  const next = tabs[(index + tabs.length) % tabs.length];
+  selectTab(next);
+  next.focus();
+}
+for (const tab of tabs) { tab.addEventListener('click', () => selectTab(tab)); tab.addEventListener('keydown', (event) => navigateTabs(event, tab)); }
+function selectButtons(selector, chosen, attribute) { for (const button of document.querySelectorAll(selector)) button.setAttribute('aria-pressed', String(button.dataset[attribute] === chosen)); }
+for (const button of document.querySelectorAll('[data-days]')) button.addEventListener('click', () => { selectedDays = Number(button.dataset.days); selectButtons('[data-days]', button.dataset.days, 'days'); pages.clear(); requestRender(); });
+for (const button of document.querySelectorAll('[data-metric]')) button.addEventListener('click', () => { metric = button.dataset.metric; selectButtons('[data-metric]', metric, 'metric'); requestRender(); });
+document.addEventListener('mouseover', (event) => showDetail(event.target.closest('[data-detail]')));
+document.addEventListener('focusin', (event) => showDetail(event.target));
+document.addEventListener('mouseout', (event) => { if (event.relatedTarget !== getElement('full-text')) hideDetail(); });
+document.addEventListener('focusout', (event) => { if (event.relatedTarget !== getElement('full-text')) hideDetail(); });
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') { detailOwner?.focus({ preventScroll: true }); hideDetail(); }
+  if (event.key === 'Enter' && event.target.dataset.detail) { event.preventDefault(); showDetail(event.target); getElement('full-text').focus(); }
+});
+window.addEventListener('resize', () => { hideDetail(); requestRender(); });
+document.fonts.ready.then(requestRender);
 const stream = new EventSource('/factory/api/events');
 stream.addEventListener('snapshot', (event) => {
-  try {
-    snapshot = JSON.parse(event.data);
-    connected = true;
-    renderSnapshot();
-  } catch (error) {
-    console.error('Invalid dashboard snapshot', error);
-    setText('connection', 'Dashboard data could not be displayed. Reload to retry.');
-    getElement('connection').classList.add('bad');
-  }
+  try { snapshot = JSON.parse(event.data); connected = true; requestRender(); }
+  catch (error) { renderFailed = true; console.error('Invalid dashboard snapshot', error); setText('connection', 'Invalid data'); }
 });
-stream.addEventListener('error', () => {
-  connected = false;
-  setText('connection', 'Disconnected · Reconnecting automatically');
-  getElement('connection').classList.add('bad');
-});
+stream.addEventListener('error', () => { connected = false; setText('connection', 'Reconnecting'); });
 setInterval(renderFreshness, 1000);
 window.addEventListener('pagehide', () => stream.close());

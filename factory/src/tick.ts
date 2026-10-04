@@ -157,7 +157,10 @@ function readCardWait(state: FactoryState, card: Card): ScheduleDecision[] {
   if (card.labels.includes(STUCK_LABEL)) reasons.push('failed');
   if (card.labels.includes(NEEDS_INFO_LABEL)) reasons.push('needs-info');
   if (card.column === 'Approval') reasons.push('approval');
-  return reasons.length ? [{ stage: cardStage(state, card), issue: card.issue, reasons }] : [];
+  return reasons.length ? [{ stage: readWaitingStage(state, card), issue: card.issue, reasons }] : [];
+}
+function readWaitingStage(state: FactoryState, card: Card): JobStage {
+  return card.column === 'Approval' ? 'approve' : cardStage(state, card);
 }
 function readNextCapAt(state: FactoryState, now: Date, cfg: Due): string | null {
   if (!atCap(state, now, cfg)) return null;

@@ -37,6 +37,8 @@ it('rejects traversal and unknown activity names instead of persisting arbitrary
   expect(observations).toHaveProperty('recordObservation');
   const home = createHome();
   expect(() => observations.readObservation(home, '../state')).toThrow('producer');
+  expect(() => observations.recordObservation(home, 'bad', { type: 'activity', activity: 'reading', phase: 'running', source: 'PRIVATE' } as never)).toThrow('source');
+  expect(() => observations.recordObservation(home, 'bad', { type: 'scheduler', status: 'PRIVATE', report: null, counts: {} } as never)).toThrow('scheduler');
   expect(observations.parseAgentActivity('{"type":"factory_status","activity":"PRIVATE secret"}')).toBeNull();
   expect(observations.parseAgentActivity('{"type":"factory_status","activity":"tests"}')).toBe('tests');
 });
