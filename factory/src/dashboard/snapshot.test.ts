@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { EMPTY_STATE, writeState } from '../state';
+import { appendLedger } from '../ledger';
 import { buildOperations, selectReleaseFeatures, PublicGitHub, SnapshotCollector } from './snapshot';
 import { HostSampler, type HostLoad } from './host';
 import type { DashboardConfig } from './config';
@@ -30,7 +31,7 @@ it('only publishes a candidate link while the current candidate is valid', () =>
 });
 
 function createConfig(home: string): DashboardConfig {
-  return { home, repo: 'owner/game', projectOwner: 'owner', projectNumber: 1, publicUrl: 'https://example.org', playUrl: 'https://owner.itch.io/game', channelUrl: 'https://t.me/roam_public', socket: null, port: 8787, refreshMs: 2000, githubRefreshMs: 60000, commandTimeoutMs: 15000, triageWorkers: 1, designWorkers: 2, implementWorkers: 2, verifyWorkers: 2, testWorkers: 2 };
+  return { home, repo: 'owner/game', projectOwner: 'owner', projectNumber: 1, publicUrl: 'https://example.org', playUrl: 'https://owner.itch.io/game', channelUrl: 'https://t.me/roam_public', publicChannel: '@roam_public', socket: null, port: 8787, refreshMs: 2000, githubRefreshMs: 60000, commandTimeoutMs: 15000, triageWorkers: 1, designWorkers: 2, implementWorkers: 2, verifyWorkers: 2, testWorkers: 2 };
 }
 class FixtureGithub extends PublicGitHub {
   failed = false;
@@ -73,6 +74,21 @@ it('retains the last good snapshot with stale markers when its sources fail', as
     expect(stale.github.value).toEqual(good.github.value);
     expect(JSON.stringify(stale)).not.toContain('PRIVATE');
   } finally { vi.useRealTimers(); rmSync(home, { recursive: true, force: true }); }
+});
+it('does not expose committee posts when Telegram is hidden', async () => {
+  const home = mkdtempSync(resolve('tmp/snapshot-'));
+  try {
+    mkdirSync(join(home, 'state'));
+    writeState(join(home, 'state', 'state.json'), structuredClone(EMPTY_STATE));
+    appendLedger(home, { kind: 'post', id: 7, channel: '-1001', text: 'PRIVATE committee post', at: new Date().toISOString() });
+    const config = { ...createConfig(home), channelUrl: null, publicChannel: null };
+    const collector = new SnapshotCollector(config, new FixtureGithub(config, async () => { throw new Error('No network'); }), new FixtureHost(home, 100));
+    await collector.refreshLocal();
+    const snapshot = collector.getSnapshot();
+    expect(snapshot.channelUrl).toBeNull();
+    expect(snapshot.analytics.value?.posts).toEqual([]);
+    expect(JSON.stringify(snapshot)).not.toContain('PRIVATE');
+  } finally { rmSync(home, { recursive: true, force: true }); }
 });
 it('refuses to collect a private repository before reading its issues', async () => {
   const calls: string[][] = [];

@@ -2,7 +2,7 @@ import { isAbsolute } from 'node:path';
 
 export type DashboardConfig = {
   home: string; repo: string; projectOwner: string; projectNumber: number; publicUrl: string;
-  playUrl: string; channelUrl: string; socket: string | null; port: number | null;
+  playUrl: string; channelUrl: string | null; publicChannel: string | null; socket: string | null; port: number | null;
   refreshMs: number; githubRefreshMs: number; commandTimeoutMs: number;
   triageWorkers: number; designWorkers: number; implementWorkers: number; verifyWorkers: number; testWorkers: number;
 };
@@ -39,6 +39,16 @@ function readPublicUrl(env: NodeJS.ProcessEnv): string {
   if (url.protocol !== 'https:' || url.username || url.password) throw new Error('FACTORY_PUBLIC_URL must be public HTTPS');
   return url.origin;
 }
+function readChannel(env: NodeJS.ProcessEnv): { channelUrl: string | null; publicChannel: string | null } {
+  if (env.DASHBOARD_HIDE_TELEGRAM === '1') {
+    if (readOptional(env, 'DASHBOARD_CHANNEL_URL')) throw new Error('DASHBOARD_CHANNEL_URL must be empty while Telegram is hidden');
+    return { channelUrl: null, publicChannel: null };
+  }
+  if (readOptional(env, 'DASHBOARD_HIDE_TELEGRAM')) throw new Error('DASHBOARD_HIDE_TELEGRAM must be 1 or empty');
+  const publicChannel = requireValue(env, 'FACTORY_PUBLIC_CHANNEL');
+  if (publicChannel === requireValue(env, 'FACTORY_COMMITTEE_CHAT')) throw new Error('Public channel must differ from committee chat');
+  return { channelUrl: requireMatch(requireValue(env, 'DASHBOARD_CHANNEL_URL'), /^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{4,31}$/, 'DASHBOARD_CHANNEL_URL'), publicChannel };
+}
 export function loadDashboardConfig(env: NodeJS.ProcessEnv): DashboardConfig {
   const target = requireMatch(requireValue(env, 'ITCH_TARGET'), /^[\w-]+\/[\w-]+$/, 'ITCH_TARGET').split('/');
   return {
@@ -47,7 +57,7 @@ export function loadDashboardConfig(env: NodeJS.ProcessEnv): DashboardConfig {
     projectOwner: requireMatch(requireValue(env, 'FACTORY_PROJECT_OWNER'), /^[\w-]+$/, 'FACTORY_PROJECT_OWNER'),
     projectNumber: readPositive(env, 'FACTORY_PROJECT_NUMBER'), publicUrl: readPublicUrl(env),
     playUrl: `https://${target[0]}.itch.io/${target[1]}`,
-    channelUrl: requireMatch(requireValue(env, 'DASHBOARD_CHANNEL_URL'), /^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{4,31}$/, 'DASHBOARD_CHANNEL_URL'),
+    ...readChannel(env),
     ...readListener(env), refreshMs: readPositive(env, 'DASHBOARD_REFRESH_MS'), githubRefreshMs: readPositive(env, 'DASHBOARD_GITHUB_REFRESH_MS'),
     commandTimeoutMs: readPositive(env, 'DASHBOARD_COMMAND_TIMEOUT_MS'),
     triageWorkers: readPositive(env, 'FACTORY_TRIAGE_WORKERS'), designWorkers: readPositive(env, 'FACTORY_DESIGN_WORKERS'),

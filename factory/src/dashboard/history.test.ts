@@ -20,9 +20,11 @@ it('streams new ledger lines once and keeps private routes out of public history
     expect(summary.cost).toBe(1.5);
     expect(summary.tokens).toEqual({ input: 10, output: 20, cacheRead: 30, cacheWrite: 40 });
     expect(JSON.stringify(summary)).not.toContain('PRIVATE');
-    appendLedger(home, { kind: 'post', id: 10, text: 'Public release', at: '2026-10-10T11:01:00Z' });
+    appendLedger(home, { kind: 'post', id: 9, text: 'PRIVATE committee post', at: '2026-10-10T11:00:00Z' });
+    appendLedger(home, { kind: 'post', id: 10, channel: '@public_factory', text: 'Public release', at: '2026-10-10T11:01:00Z' });
+    appendLedger(home, { kind: 'post', id: 11, channel: '-1001', text: 'PRIVATE new post', at: '2026-10-10T11:02:00Z' });
     await history.refresh(now);
-    expect(history.readPosts(now)).toEqual([{ id: 10, text: 'Public release', at: '2026-10-10T11:01:00Z' }]);
+    expect(history.readPosts(now, '@public_factory')).toEqual([{ id: 10, text: 'Public release', at: '2026-10-10T11:01:00Z' }]);
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 

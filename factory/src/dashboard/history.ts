@@ -124,8 +124,8 @@ export class DashboardHistory {
     summary.activity.sort((a, b) => b.at.localeCompare(a.at));
     return summary;
   }
-  readPosts(now: Date): { id: number; text: string; at: string }[] {
-    return this.records.filter((line): line is Extract<LedgerLine, { kind: 'post' }> => line.kind === 'post' && Date.parse(line.at) >= now.getTime() - 30 * DAY_MS)
+  readPosts(now: Date, channel: string): { id: number; text: string; at: string }[] {
+    return this.records.filter((line): line is Extract<LedgerLine, { kind: 'post' }> => line.kind === 'post' && line.channel === channel && Date.parse(line.at) >= now.getTime() - 30 * DAY_MS)
       .sort((a, b) => b.at.localeCompare(a.at)).map((line) => ({ id: line.id, text: line.text, at: line.at }));
   }
 }

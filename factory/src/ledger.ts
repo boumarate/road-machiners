@@ -12,7 +12,7 @@ export type JobOutcome = 'done' | 'failed' | 'died' | 'timeout';
 export type LedgerLine =
   | { kind: 'job'; id: string; stage: JobStage; issue: number | null; startedAt: string; endedAt: string; outcome: JobOutcome; agents: AgentUsage[] }
   | { kind: 'route'; issue: number; route: Route; by: string; at: string }
-  | { kind: 'post'; id: number; text: string; at: string };
+  | { kind: 'post'; id: number; channel?: string; text: string; at: string };
 
 // An append is one small write, so a writer that waits this long found a stuck lock.
 const LEDGER_LOCK_MS = 30_000;
