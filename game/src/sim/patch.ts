@@ -147,7 +147,9 @@ export function patchTerms(world: World, npc: Vehicle): CallVar | null {
 // Both sides agreed on the terms over the radio.
 export function agreePatch(world: World, npc: Vehicle, terms: Extract<CallVar, { kind: 'deal' }>): NpcState {
   const { patcher, client } = rolesWith(world, npc);
-  const data: StateData = { kind: 'patch', deal: terms.deal, parts: terms.parts, price: terms.price, work: terms.turns, workLeft: terms.turns };
+  const partIds = patchParts(world, client).map((p) => p.id);
+  if (partIds.length === 0) throw new Error(`Patch of ${client.id} agreed with nothing to patch`);
+  const data: StateData = { kind: 'patch', deal: terms.deal, parts: terms.parts, partIds, price: terms.price, work: terms.turns, workLeft: terms.turns };
   return addState(world, 'patch', patcher.id, client.id, data);
 }
 
@@ -195,19 +197,19 @@ export function checkPatch(world: World, s: NpcState): 'fulfilled' | 'broken' | 
   if (!partiesPresent(world, s)) return null;
   const data = patchData(s);
   const roles = { patcher: vehicleById(world, s.holder), client: vehicleById(world, s.other) };
-  if (!canStillPay(world, data, roles) || !termsHold(world, data, roles)) return 'broken';
+  if (!canStillPay(world, data, roles)) return 'broken';
   return data.workLeft <= 0 ? 'fulfilled' : null;
-}
-
-// The terms were priced on one part list. A client that strands mid-deal switches lists, and then the work no longer
-// matches what was paid for.
-function termsHold(world: World, data: Extract<StateData, { kind: 'patch' }>, roles: Roles): boolean {
-  const plan = patchPlan(world, roles);
-  return plan.parts === data.parts && plan.turns === data.work;
 }
 
 function canStillPay(world: World, data: Extract<StateData, { kind: 'patch' }>, roles: Roles): boolean {
   return partsHeld(partsPayer(data.deal, roles)) >= data.parts && canPay(world, roles.client, data.price);
+}
+
+// The agreed parts that are still patchable and below the target go up to it. Nothing else changes.
+function liftAgreedParts(data: Extract<StateData, { kind: 'patch' }>, client: Vehicle): void {
+  for (const part of patchable(client)) {
+    if (data.partIds.includes(part.id) && part.hp < patchTarget(part)) restorePart(part, patchTarget(part));
+  }
 }
 
 // The one place a patch pays: parts leave the payer, money moves from client to patcher, and the parts work again.
@@ -217,7 +219,7 @@ export function settlePatch(world: World, s: NpcState): void {
   removeGoods(partsPayer(data.deal, roles), 'parts', data.parts);
   getResources(world, roles.client).money -= data.price;
   getResources(world, roles.patcher).money += data.price;
-  for (const part of patchParts(world, roles.client)) restorePart(part, patchTarget(part));
+  liftAgreedParts(data, roles.client);
   world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'done' });
   if (s.holder === world.player.vehicleId) practice(world, 'patch', 1, null, s.other);
   if (s.holder === world.player.vehicleId) practice(world, 'deal', 1, null, s.other);
