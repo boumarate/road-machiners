@@ -6,7 +6,7 @@
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
-import type { TerrainTypeId } from '../../data/terrain';
+import { TERRAIN_TYPES, type TerrainTypeId } from '../../data/terrain';
 import { REGION } from '../../data/region';
 import { desertWeight } from '../../render/groundPaint';
 import { hash2 } from '../../render/noise';
@@ -101,12 +101,13 @@ function modelOf(kind: ScatterKind, desert: boolean): ScatterModel {
 // What tile x, y holds. Road shoulders take their own chances.
 function tileScatter(t: Terrain, x: number, y: number, byRock: boolean): ScatterKind | null {
   const h = hash2(x * 7 + 3, y * 13 + 5);
-  const type = t.types[y * t.size + x];
+  const odds = CHANCES[t.types[y * t.size + x]];
+  const open = byRock ? odds.byRock : odds.open;
   // Nothing can land here whatever the road distance, so skip the road lookup.
-  if (pick(h, chances(type, false, byRock)) === null && pick(h, chances(type, true, byRock)) === null) return null;
+  if (pick(h, open) === null && pick(h, odds.shoulder) === null) return null;
   const p = tilePoint(x, y);
   const road = ROAD_INDEX.nearestWithin(p.x, p.y, ROAD_GAP + SHOULDER_TILES);
-  return road < ROAD_GAP ? null : pick(h, chances(type, road < ROAD_GAP + SHOULDER_TILES, byRock));
+  return road < ROAD_GAP ? null : pick(h, road < ROAD_GAP + SHOULDER_TILES ? odds.shoulder : open);
 }
 
 type Chances = { pebbles: number; scrub: number; cactus: number };
@@ -124,6 +125,14 @@ function chances(type: TerrainTypeId, shoulder: boolean, byRock: boolean): Chanc
   const pebbles = PEBBLE_CHANCE + (PEBBLE_ON_DESERT - PEBBLE_CHANCE) * w;
   return { pebbles, scrub, cactus: (byRock ? CACTUS_BY_ROCK : CACTUS_ON_DESERT) * w };
 }
+
+// The chances of each ground type, worked out once rather than per tile.
+const CHANCES = Object.fromEntries(
+  (Object.keys(TERRAIN_TYPES) as TerrainTypeId[]).map((type) => [
+    type,
+    { open: chances(type, false, false), byRock: chances(type, false, true), shoulder: chances(type, true, false) },
+  ]),
+) as Record<TerrainTypeId, { open: Chances; byRock: Chances; shoulder: Chances }>;
 
 // Pebbles take the low end of the tile hash, cacti the range above them and scrub the high end.
 function pick(h: number, c: Chances): ScatterKind | null {

@@ -236,11 +236,25 @@ function jittered(x: number, y: number): Jittered {
 }
 
 // Warm sand with slow deep and light patches over open desert. Patch noise near 0.5 leaves the sand as it is.
+// Both mixes run per channel with one rounding, since most of the map is desert and this runs per pixel.
 function desertSand(look: TileLook, color: number, weight: number, x: number, y: number): number {
   if (weight === 0) return color;
-  const sand = mix(color, PAL.desertSand, weight * SAND_WARM);
+  const warm = weight * SAND_WARM;
   const n = look.patch.at(x / PATCH_TILES + PATCH_OFFSET, y / PATCH_TILES + PATCH_OFFSET);
-  return mix(sand, n < 0.5 ? PAL.sandShade : PAL.sandLight, Math.abs(n - 0.5) * 2 * PATCH_MIX * weight);
+  const patch = n < 0.5 ? PAL.sandShade : PAL.sandLight;
+  const k = Math.abs(n - 0.5) * 2 * PATCH_MIX * weight;
+  return (
+    (sandChannel(color >> 16, PAL.desertSand >> 16, patch >> 16, warm, k) << 16) |
+    (sandChannel(color >> 8, PAL.desertSand >> 8, patch >> 8, warm, k) << 8) |
+    sandChannel(color, PAL.desertSand, patch, warm, k)
+  );
+}
+
+// One 8-bit channel of color mixed toward sand by warm, then toward patch by k, rounded once.
+function sandChannel(color: number, sand: number, patch: number, warm: number, k: number): number {
+  const c = color & 0xff;
+  const warmed = c + ((sand & 0xff) - c) * warm;
+  return (warmed + ((patch & 0xff) - warmed) * k + 0.5) | 0;
 }
 
 // Road tiles paint as hardpan, since the ground shader draws the road over it with its own edge.
