@@ -294,8 +294,8 @@ export function breakSignature(def: PartDef): BreakSignature | null {
   return def.kind === 'store' && def.holds === 'fuel' ? 'fire' : null;
 }
 
-// Item and chassis icons: what gets one and what each draws. The icons own only the one weapon look per def and the pips
-// that tell apart defs drawn by the same models. Everything else comes from the mappings above.
+// Item and chassis icons: what gets one and what each draws. The icons own only the one weapon look per def and the rank
+// that tells apart defs drawn by the same models. Everything else comes from the mappings above.
 
 export type IconSection = 'weapon' | 'engine' | 'armor' | 'cargo' | 'store' | 'core' | 'good' | 'chassis';
 
@@ -303,19 +303,20 @@ export type IconSection = 'weapon' | 'engine' | 'armor' | 'cargo' | 'store' | 'c
 export const ICON_SECTIONS: readonly IconSection[] = ['weapon', 'engine', 'armor', 'cargo', 'store', 'core', 'good', 'chassis'];
 
 // models: every model the icon draws. A weapon lists mount, receiver, barrel and extra, see weapon.
-// footprint: inventory cells before rotation. pips: 1..n among entries drawn by the same models, 0 when none share them.
+// footprint: inventory cells before rotation. rank: 1..n among entries drawn by the same models, 0 when none share them.
+// The renderer draws rank 1 plain and hatches the silhouette denser for each rank above it.
 export type IconEntry = {
   id: string;
   section: IconSection;
   label: string;
   models: ModelName[];
   footprint: { w: number; h: number };
-  pips: number;
+  rank: number;
   weapon: WeaponLook | null;
 };
 
 // One look per weapon def, each from that def's WEAPON_POOLS. Defs that would read alike take a different mount,
-// receiver, barrel or extra. Defs whose pools allow one look only, such as sniperCannon and amRifle, get pips and
+// receiver, barrel or extra. Defs whose pools allow one look only, such as sniperCannon and amRifle, get ranks and
 // differ by footprint, which the icon's stretched mount draws.
 export const ICON_WEAPON_PICKS: Record<string, WeaponLook> = {
   mg: { mount: 'wmount_ring_small', receiver: 'wrec_mg_a', barrel: 'wbar_mg_short', extra: 'wext_drum' },
@@ -361,11 +362,11 @@ export function iconCatalog(
     ...Object.values(chassis).map(chassisDraft),
   ];
   checkUniqueIds(drafts);
-  return withPips(drafts);
+  return withRanks(drafts);
 }
 
-// An entry before pips, with the HP that ranks it among entries drawn alike.
-type IconDraft = { entry: Omit<IconEntry, 'pips'>; hp: number };
+// An entry before its rank, with the HP that ranks it among entries drawn alike.
+type IconDraft = { entry: Omit<IconEntry, 'rank'>; hp: number };
 
 function partDraft(def: PartDef, picks: Record<string, WeaponLook>): IconDraft {
   const base = { id: def.id, section: PART_SECTION[def.kind], label: def.name, footprint: { w: def.w, h: def.h } };
@@ -395,25 +396,25 @@ function weaponModels(look: WeaponLook): ModelName[] {
   return look.extra ? [look.mount, look.receiver, look.barrel, look.extra] : [look.mount, look.receiver, look.barrel];
 }
 
-// Entries drawn by the same models rank by HP, then id, and draw that many pips. A weapon's stretched mount shows its
-// footprint too, but seen from the side a wider mount barely shows, so same-model weapons get pips as well.
-function withPips(drafts: readonly IconDraft[]): IconEntry[] {
+// Entries drawn by the same models rank 1..n by HP, then id. A weapon's stretched mount shows its footprint too, but
+// seen from the side a wider mount barely shows, so same-model weapons get ranks as well.
+function withRanks(drafts: readonly IconDraft[]): IconEntry[] {
   const groups = new Map<string, IconDraft[]>();
   for (const d of drafts) {
     const key = d.entry.models.join('+');
     groups.set(key, [...(groups.get(key) ?? []), d]);
   }
-  const pips = new Map<string, number>();
+  const ranks = new Map<string, number>();
   for (const group of groups.values()) {
     if (group.length === 1) continue;
-    group.sort((a, b) => a.hp - b.hp || a.entry.id.localeCompare(b.entry.id)).forEach((d, i) => pips.set(d.entry.id, i + 1));
+    group.sort((a, b) => a.hp - b.hp || a.entry.id.localeCompare(b.entry.id)).forEach((d, i) => ranks.set(d.entry.id, i + 1));
   }
-  return drafts.map((d) => ({ ...d.entry, pips: pips.get(d.entry.id) ?? 0 }));
+  return drafts.map((d) => ({ ...d.entry, rank: ranks.get(d.entry.id) ?? 0 }));
 }
 
-// What an icon looks like: its models, its pips and, for a weapon, its footprint, since the weapon mount stretches to
+// What an icon looks like: its models, its rank and, for a weapon, its footprint, since the weapon mount stretches to
 // fill it. Other parts draw at their authored size.
 export function renderKey(e: IconEntry): string {
   const footprint = e.weapon ? `@${e.footprint.w}x${e.footprint.h}` : '';
-  return `${e.models.join('+')}${footprint}#${e.pips}`;
+  return `${e.models.join('+')}${footprint}#${e.rank}`;
 }

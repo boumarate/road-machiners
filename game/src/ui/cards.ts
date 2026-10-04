@@ -168,11 +168,13 @@ function viewOf(view: string): View {
 }
 
 function cellOf(sheet: Sheet, id: string, label: string): Omit<IconCell, "box" | "view"> {
-  const icons: Record<string, { index: number }> = ICONS[sheet];
+  const icons: Record<string, { index: number; lying?: { index: number } }> = ICONS[sheet];
   const icon = icons[id];
   if (!icon) throw new Error(`No ${sheet} icon for ${id}. Run npm run icons.`);
   const cols = ICONS.cols[sheet];
-  const rows = Math.ceil(Object.keys(icons).length / cols);
+  // A weapon's lying cell sits after every upright cell, so the sheet holds one cell per entry and per lying cell.
+  const cells = Object.values(icons).reduce((n, entry) => n + (entry.lying ? 2 : 1), 0);
+  const rows = Math.ceil(cells / cols);
   return { sheet, label, col: icon.index % cols, row: Math.floor(icon.index / cols), cols, rows };
 }
 
@@ -247,15 +249,10 @@ export function gridItemIcon(item: GridItem, chassisId: string): HTMLElement {
   return sheetIcon(cell, "icon item-icon", crop, turn);
 }
 
-// A truck seen as the shop shows it, beside its grid. Seen from above it is cropped to the truck, so its nose and
-// tail line up with the grid's first and last rows.
+// A truck seen as the shop shows it, beside its grid, as its whole cell.
 export function chassisPortrait(chassisId: string): HTMLElement {
-  const edge = ICONS.margin - ICONS.outline / ICONS.cell.chassis;
-  const top = ICONS.views.chassis === "top";
-  const w = ICONS.portraitWidth; // the widest truck's share of the cell, measured by npm run icons
-  const crop = top ? { x: (1 - w) / 2, y: edge, w, h: 1 - 2 * edge } : undefined;
-  const portrait = sheetIcon(chassisPortraitCell(chassisId), "chassis-portrait", crop);
-  portrait.style.aspectRatio = crop ? `${crop.w} / ${crop.h}` : "1";
+  const portrait = sheetIcon(chassisPortraitCell(chassisId), "chassis-portrait");
+  portrait.style.aspectRatio = "1";
   return portrait;
 }
 

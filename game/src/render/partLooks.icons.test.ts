@@ -19,9 +19,14 @@ describe('icon catalog', () => {
     expect(catalog.map((e) => e.id).sort()).toEqual(expected.sort());
   });
 
-  it('gives no two entries the same render key once pips count', () => {
+  it('gives no two entries the same render key once ranks count', () => {
     const keys = catalog.map(renderKey);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('puts the rank in the render key, so same-model defs differ only by it', () => {
+    expect(renderKey(entry('tank'))).toMatch(/#1$/);
+    expect(renderKey(entry('tankHeavy'))).toMatch(/#4$/);
   });
 
   it('labels each entry with its def name', () => {
@@ -52,20 +57,20 @@ describe('icon catalog', () => {
   });
 
   it('ranks defs that draw alike by HP, then id', () => {
-    expect(['wheel', 'wheelMid', 'wheelHeavy'].map((id) => entry(id).pips)).toEqual([1, 2, 3]);
-    expect(['tank', 'tankLong', 'tankMid', 'tankHeavy'].map((id) => entry(id).pips)).toEqual([1, 2, 3, 4]);
-    expect(['transmission', 'transmissionMid', 'transmissionHeavy'].map((id) => entry(id).pips)).toEqual([1, 2, 3]);
+    expect(['wheel', 'wheelMid', 'wheelHeavy'].map((id) => entry(id).rank)).toEqual([1, 2, 3]);
+    expect(['tank', 'tankLong', 'tankMid', 'tankHeavy'].map((id) => entry(id).rank)).toEqual([1, 2, 3, 4]);
+    expect(['transmission', 'transmissionMid', 'transmissionHeavy'].map((id) => entry(id).rank)).toEqual([1, 2, 3]);
   });
 
-  it('gives a def that draws unlike every other no pips', () => {
-    expect(entry('stockEngine').pips).toBe(0);
-    expect(entry('salt').pips).toBe(0);
-    expect(entry('scout').pips).toBe(0);
+  it('gives a def that draws unlike every other rank 0', () => {
+    expect(entry('stockEngine').rank).toBe(0);
+    expect(entry('salt').rank).toBe(0);
+    expect(entry('scout').rank).toBe(0);
   });
 
-  it('tells apart weapons of one look by pips and by their footprint, which the stretched mount draws', () => {
+  it('tells apart weapons of one look by rank and by their footprint, which the stretched mount draws', () => {
     expect(entry('amRifle').models).toEqual(entry('sniperCannon').models);
-    expect([entry('amRifle').pips, entry('sniperCannon').pips]).toEqual([1, 2]);
+    expect([entry('amRifle').rank, entry('sniperCannon').rank]).toEqual([1, 2]);
     expect(renderKey(entry('amRifle'))).toContain('@1x3');
     expect(renderKey(entry('sniperCannon'))).toContain('@2x3');
   });

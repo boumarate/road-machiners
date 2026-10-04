@@ -2,7 +2,8 @@
 // Writes the sprite sheets public/icons/items.png and public/icons/chassis.png, the manifest src/data/item-icons.json,
 // and under public/icons/atlas/ the labeled atlases atlas-top.png, atlas-diagonal.png and atlas-game.png (each entry in
 // the view the game shows) and report.txt. The build serves the atlases for review, and the game never loads them.
-// Fails when a weapon's barrel does not read from lower left to upper right in the diagonal view.
+// Fails when a weapon's barrel does not read from lower left to upper right in the diagonal view, or when a blueprint
+// (top-down) cell holds a color outside the blueprint palette before its downscale.
 // Rerun after a model, a weapon pick or the icon style changes. src/data/item-icons.test.ts fails while the manifest is stale.
 // Usage: npm run icons -- [--cpu]. With --cpu, Chromium draws in software, as on a machine without a GPU.
 
@@ -38,6 +39,10 @@ try {
   for (const o of turned) console.error(`${o.id}: barrel does not read lower left to upper right: ${JSON.stringify(o.read)}`);
   if (turned.length) throw new Error(`${turned.length} weapon icons face the wrong way in the diagonal view`);
 
+  const off = result.palette.filter((p) => p.misses > 0);
+  for (const p of off) console.error(`${p.id} (${p.view}, ${p.lie}): ${p.misses} pixels outside the blueprint palette`);
+  if (off.length) throw new Error(`${off.length} blueprint icons use colors outside the blueprint palette`);
+
   for (const [path, url] of Object.entries(result.files)) {
     writeAtomic(path, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'));
     console.log(`${path}: ${(statSync(path).size / 1024).toFixed(0)} KB`);
@@ -47,6 +52,7 @@ try {
   const counts = `${Object.keys(result.manifest.items).length} items, ${Object.keys(result.manifest.chassis).length} chassis`;
   console.log(`src/data/item-icons.json: ${counts}, views ${JSON.stringify(result.manifest.views)}`);
   console.log(`${result.orientation.length} weapon barrels read lower left to upper right`);
+  console.log(`${result.palette.length} blueprint cells keep to the blueprint palette`);
 } finally {
   await browser.close();
   await server.close();

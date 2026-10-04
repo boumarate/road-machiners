@@ -1,5 +1,6 @@
-// Every item and chassis has one icon in item-icons.json, and each stored hash matches the current models, weapon picks
-// and icon style. A stale hash means something an icon draws changed after the last npm run icons.
+// Every item and chassis has one icon in item-icons.json, every weapon also a lying cell, and each stored hash matches the
+// current models, weapon picks, lie and icon style. A stale hash means something an icon draws changed after the last
+// npm run icons.
 
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from './chassis';
@@ -17,6 +18,13 @@ const STALE = 'Run npm run icons.';
 const catalog = iconCatalog(PARTS, GOODS, CHASSIS, ICON_WEAPON_PICKS);
 const items = catalog.filter((e) => e.section !== 'chassis');
 const chassis = catalog.filter((e) => e.section === 'chassis');
+const weapons = catalog.filter((e) => e.weapon !== null);
+
+// A drawn extent as shares of the cell: x, y, w, h.
+type Cell = { index: number; hash: string; box: number[] };
+const storedItems: Record<string, Cell & { lying?: Cell }> = ICONS.items;
+const storedChassis: Record<string, Cell> = ICONS.chassis;
+const lyingCells = Object.entries(storedItems).flatMap(([id, icon]) => (icon.lying ? [[id, icon.lying] as const] : []));
 
 const bytes = new Map<string, Uint8Array>();
 for (const name of new Set(catalog.flatMap((e) => e.models))) {
@@ -51,11 +59,24 @@ describe('item icons', () => {
       if (!entry) throw new Error(`No catalog entry ${id}`);
       return iconView(entry);
     };
-    expect(['mg', 'steelPlate', 'stockEngine', 'scrap', 'scout'].map(view)).toEqual(['top', 'top', 'top', 'diagonal', 'top']);
+    expect(['mg', 'steelPlate', 'stockEngine', 'scrap', 'scout'].map(view)).toEqual(['top', 'top', 'top', 'diagonal', 'diagonal']);
   });
 
-  it.each(Object.entries(ICONS.items))('item %s has a drawn extent inside its cell', (_id, icon) => {
-    const [x, y, w, h] = icon.box;
+  it('gives exactly the weapons a lying cell', () => {
+    expect(lyingCells.map(([id]) => id).sort(), STALE).toEqual(weapons.map((e) => e.id).sort());
+  });
+
+  it('gives every chassis a drawn extent', () => {
+    for (const icon of Object.values(storedChassis)) expect(icon.box, STALE).toHaveLength(4);
+  });
+
+  const boxes = [
+    ...Object.entries(storedItems).map(([id, icon]) => [`item ${id}`, icon.box] as const),
+    ...lyingCells.map(([id, icon]) => [`lying ${id}`, icon.box] as const),
+    ...Object.entries(storedChassis).map(([id, icon]) => [`chassis ${id}`, icon.box] as const),
+  ];
+  it.each(boxes)('%s has a drawn extent inside its cell', (_name, box) => {
+    const [x, y, w, h] = box;
     expect(w).toBeGreaterThan(0);
     expect(h).toBeGreaterThan(0);
     expect(x).toBeGreaterThanOrEqual(0);
@@ -64,20 +85,31 @@ describe('item icons', () => {
     expect(y + h).toBeLessThanOrEqual(1);
   });
 
-  it('gives every icon its own cell', () => {
-    for (const sheet of [ICONS.items, ICONS.chassis]) {
-      const cells = Object.values(sheet).map((e) => e.index);
-      expect(new Set(cells).size).toBe(cells.length);
-    }
+  it('gives every icon its own cell, lying cells after the upright ones', () => {
+    const upright = Object.values(storedItems).map((e) => e.index);
+    const lying = lyingCells.map(([, icon]) => icon.index);
+    const cells = [...upright, ...lying];
+    expect(new Set(cells).size).toBe(cells.length);
+    expect(Math.min(...lying)).toBeGreaterThan(Math.max(...upright));
+    const portraits = Object.values(storedChassis).map((e) => e.index);
+    expect(new Set(portraits).size).toBe(portraits.length);
+  });
+
+  it('puts the lie in the hash', () => {
+    const mg = weapons.find((e) => e.id === 'mg');
+    if (!mg) throw new Error('No catalog entry mg');
+    expect(iconHash(mg, 'top', read, 'lying')).not.toBe(iconHash(mg, 'top', read));
   });
 
   it.each(items.map((e) => [e.id, e] as const))('item %s matches its models and pick', (id, entry) => {
-    const stored: Record<string, { hash: string }> = ICONS.items;
-    expect(stored[id]?.hash, STALE).toBe(iconHash(entry, iconView(entry), read));
+    expect(storedItems[id]?.hash, STALE).toBe(iconHash(entry, iconView(entry), read));
+  });
+
+  it.each(weapons.map((e) => [e.id, e] as const))('lying weapon %s matches its models and pick', (id, entry) => {
+    expect(storedItems[id]?.lying?.hash, STALE).toBe(iconHash(entry, iconView(entry), read, 'lying'));
   });
 
   it.each(chassis.map((e) => [e.id, e] as const))('chassis %s matches its model', (id, entry) => {
-    const stored: Record<string, { hash: string }> = ICONS.chassis;
-    expect(stored[id]?.hash, STALE).toBe(iconHash(entry, iconView(entry), read));
+    expect(storedChassis[id]?.hash, STALE).toBe(iconHash(entry, iconView(entry), read));
   });
 });
