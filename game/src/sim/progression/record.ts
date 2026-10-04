@@ -34,8 +34,8 @@ export type RunEnd = { end: 'death'; turn: number };
 // The last entry of a run an error stopped. turn is the last world turn that finished, and message the error.
 export type RunFailure = { end: 'error'; turn: number; message: string };
 // rows holds the economy row of a day that ended on this step. death is set on the last step of a run the player did
-// not survive.
-export type RecordStep = { world: World; lines: TraceLine[]; rows: DayRow[]; death: RunEnd | null };
+// not survive. events holds everything the bot's commands and the turn raised, and ledger the money they moved.
+export type RecordStep = { world: World; lines: TraceLine[]; rows: DayRow[]; death: RunEnd | null; events: GameEvent[]; ledger: Ledger };
 export type Recording = { lines: TraceLine[]; rows: DayRow[]; death: RunEnd | null };
 
 // A truck that moves less than this many tiles in a whole in-game day, while not parked on purpose, has stalled.
@@ -89,11 +89,11 @@ function* playSteps(start: World, label: string, archetype: Archetype, turns: nu
     const rows = [...carried, ...closed];
     carried = [];
     if (dead) {
-      yield { world, lines: played.lines, rows, death: { end: 'death', turn: world.turn } };
+      yield { world, lines: played.lines, rows, death: { end: 'death', turn: world.turn }, events: played.events, ledger: played.ledger };
       return;
     }
     watch.note(world.turn, playerVehicle(world).pos, parkedOnPurpose(world));
-    yield { world, lines: played.lines, rows, death: null };
+    yield { world, lines: played.lines, rows, death: null, events: played.events, ledger: played.ledger };
   }
 }
 

@@ -21,7 +21,7 @@ if (sides.length === 1) printFull(sides[0]);
 else printCompare(sides, dirs);
 
 async function readDir(dir) {
-  const files = readdirSync(dir).filter((f) => f.endsWith('.jsonl')).sort();
+  const files = readdirSync(dir).filter((f) => f.endsWith('.jsonl') && !f.endsWith('.turns.jsonl') && !f.endsWith('.world.jsonl')).sort();
   if (files.length === 0) throw new Error(`No traces in ${dir}/. Run npm run progression:record first.`);
   const runs = [];
   for (const file of files) runs.push(await readRun(`${dir}/${file}`));

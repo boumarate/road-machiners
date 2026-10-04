@@ -1,6 +1,9 @@
 // Records progression traces: a bot plays each archetype on each seed, and every practice event goes to
 // tmp/progression/<archetype>-<seed>.jsonl. The first line holds the run, then one trace line per event and one
 // economy row per in-game day. A run the player did not survive ends early with a {"end":"death","turn":N} line.
+// Beside each trace, <archetype>-<seed>.turns.jsonl holds one line per turn from src/sim/progression/turn-log.ts: the
+// truck's state, the hostiles in sight, the money moved and the events that touch the player. <archetype>-<seed>.world.jsonl
+// holds every event of every turn raw, and a snapshot of every truck every ten turns.
 // Each run is a child process. A run an error stops ends with {"end":"error","turn":N,"message":...}.
 // Usage: npm run progression:record -- --archetypes trader,hunter --seeds 1,2,3 --turns 2000
 // The markov archetype also needs --markov-turns <k>, the turns it keeps one goal.
@@ -19,6 +22,7 @@ if (patchAt >= 0) await import(pathToFileURL(resolve(argv[patchAt + 1])).href);
 const { TIME } = await import('../src/data/time.ts');
 const { isArchetype } = await import('../src/sim/progression/bot.ts');
 const { recordTurns } = await import('../src/sim/progression/record.ts');
+const { turnLine, worldLine } = await import('../src/sim/progression/turn-log.ts');
 
 const USAGE = 'Usage: npm run progression:record -- --archetypes <a,b> --seeds <1,2> --turns <n> [--markov-turns <k>] [--tolerate-stalls true] [--out <dir>] [--patch <file>]';
 
@@ -123,12 +127,16 @@ function recordOne({ archetype, seed }, turns, options, place) {
   const name = `${archetype}-${seed}`;
   const path = `${place.out}/${name}.jsonl`;
   mkdirSync(place.out, { recursive: true });
+  const turnsPath = `${place.out}/${name}.turns.jsonl`;
   const fd = openSync(`${path}.part`, 'w');
+  const turnsFd = openSync(`${turnsPath}.part`, 'w');
+  const worldPath = `${place.out}/${name}.world.jsonl`;
+  const worldFd = openSync(`${worldPath}.part`, 'w');
   const started = Date.now();
   writeSync(fd, `${JSON.stringify({ archetype, seed, turns, ...options, patch: place.patch })}\n`);
   const progress = { count: 0, end: null, lastTurn: 1 };
   try {
-    writeSteps(fd, name, recordTurns(seed, archetype, turns, options), progress);
+    writeSteps({ fd, turnsFd, worldFd }, name, recordTurns(seed, archetype, turns, options), progress);
   } catch (error) {
     // A bot or rule error ends this run with an error marker, so the batch and the report go on without it.
     console.error(error);
@@ -139,18 +147,25 @@ function recordOne({ archetype, seed }, turns, options, place) {
   // A run the player did not survive ends with the death marker.
   if (end) writeSync(fd, `${JSON.stringify(end)}\n`);
   closeSync(fd);
+  closeSync(turnsFd);
+  closeSync(worldFd);
   renameSync(`${path}.part`, path);
+  renameSync(`${turnsPath}.part`, turnsPath);
+  renameSync(`${worldPath}.part`, worldPath);
   const ending = end ? `${end.end === 'death' ? 'died' : 'failed'} on turn ${end.turn}` : `${turns} turns`;
   console.log(`${name}: ${ending}, ${count} events in ${((Date.now() - started) / 1000).toFixed(0)} s`);
 }
 
 // Writes each step's trace lines and rows as it comes, and keeps the count, the death marker and the last turn in
 // progress, so an error part way still leaves them.
-function writeSteps(fd, name, steps, progress) {
+function writeSteps({ fd, turnsFd, worldFd }, name, steps, progress) {
   for (const step of steps) {
     const { world, lines, rows } = step;
     const written = [...lines, ...rows];
     if (written.length > 0) writeSync(fd, written.map((line) => `${JSON.stringify(line)}\n`).join(''));
+    writeSync(turnsFd, `${JSON.stringify(turnLine(world, step.events, step.ledger))}\n`);
+    const all = worldLine(world, step.events);
+    if (all) writeSync(worldFd, `${JSON.stringify(all)}\n`);
     progress.count += lines.length;
     progress.end = step.death;
     progress.lastTurn = world.turn;

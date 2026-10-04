@@ -16,6 +16,7 @@ import { inCombat, isHostile } from '../combat';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
 import { isKnockedOut } from '../defeat';
+import { isTownGuarded } from '../guards';
 import { callVehicle, chooseOption, currentOptions } from '../dialogue';
 import { offeredSurrenderBy } from '../parley';
 import { hashRandom } from '../rng';
@@ -132,7 +133,13 @@ function replyTo(world: World, call: Call, replies: Partial<Record<TopicId, stri
 // raider that left it alone. The hunter also turns it on at the foe it picks.
 function keepSwitches(o: Orders): void {
   if (!o.world.player.autoRepair) o.run((w) => setAutoRepair(w, true));
-  setFire(o, inCombat(o.world, o.me));
+  setFire(o, underFire(o.world, o.me));
+}
+
+// In combat and outside the guns of a town gate. Inside them a foe may camp at the gate for hundreds of turns: the
+// guard shoots any truck that fires at a non-raider, so the bot holds its fire there and repairs as a player would.
+function underFire(world: World, me: Vehicle): boolean {
+  return inCombat(world, me) && !isTownGuarded(me.pos);
 }
 
 function setFire(o: Orders, on: boolean): void {
@@ -243,7 +250,7 @@ function serviceInTown(o: Orders, style: UpgradeStyle, shop: string): void {
 function needsOf(world: World): string {
   const p = world.player;
   const me = playerVehicle(world);
-  return `shop ${shopAt(world)}, fuel ${p.fuel}/${fuelCap(me)} for way ${fuelForWayToShop(world).toFixed(1)}, supplies ${p.supplies}/${suppliesCap(me)}, repair ${repairCost(world)}, badly damaged ${mountedParts(me).filter(isBadlyDamaged).map((part) => part.defId).join(' ')}, combat ${inCombat(world, me)}, engine ${mountedParts(me, 'engine').length}`;
+  return `shop ${shopAt(world)}, fuel ${p.fuel}/${fuelCap(me)} for way ${fuelForWayToShop(world).toFixed(1)}, supplies ${p.supplies}/${suppliesCap(me)}, repair ${repairCost(world)}, badly damaged ${mountedParts(me).filter(isBadlyDamaged).map((part) => part.defId).join(' ')}, combat ${inCombat(world, me)}, exposed ${underFire(world, me)}, engine ${mountedParts(me, 'engine').length}`;
 }
 
 // The nearest shop that stocks an engine the money and the sellable gear cover. A guess from engine prices alone
@@ -316,7 +323,7 @@ function restoreEngine(o: Orders, shopId: string): void {
 // Badly damaged built-in parts get fixed before fuel and supplies, with cargo and then gear sold for the bill, since
 // the truck must drive to earn. Gear sells only when it covers the whole bill. The repair waits for the end of a fight.
 function restoreBasics(o: Orders, shopId: string): void {
-  if (inCombat(o.world, o.me) || !mountedParts(o.me, 'core').some(isBadlyDamaged)) return;
+  if (underFire(o.world, o.me) || !mountedParts(o.me, 'core').some(isBadlyDamaged)) return;
   const cost = basicsRepairCost(o.world);
   if (o.world.player.money < cost) sellCargo(o);
   if (saleBudget(o.world, shopId) < cost) return;
@@ -376,7 +383,7 @@ function needsService(world: World): boolean {
 function needsRepair(world: World): boolean {
   const me = playerVehicle(world);
   const cost = repairCost(world);
-  return mountedParts(me).some(isBadlyDamaged) && cost > 0 && cost <= world.player.money && !inCombat(world, me);
+  return mountedParts(me).some(isBadlyDamaged) && cost > 0 && cost <= world.player.money && !underFire(world, me);
 }
 
 function isBadlyDamaged(part: PartInstance): boolean {
@@ -390,7 +397,7 @@ function serviceHere(o: Orders): void {
     if (n > 0) o.run((w) => buySupply(w, kind, n), kind);
   }
   const cost = repairCost(o.world);
-  if (cost > 0 && cost <= o.world.player.money && !inCombat(o.world, o.me)) o.run(repairAll, 'repairs');
+  if (cost > 0 && cost <= o.world.player.money && !underFire(o.world, o.me)) o.run(repairAll, 'repairs');
 }
 
 // ---- Goals.

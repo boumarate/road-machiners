@@ -467,6 +467,22 @@ describe('the hunter', () => {
     expect(order).toEqual({ kind: 'stopAt', dest: nearestPad(nearestTown(w), me.pos) });
   });
 
+  // A merc camps at the gate. Firing from town makes the guard shoot the bot, so it holds fire and repairs instead.
+  it('has a bot at a town gate in combat hold its fire and repair', () => {
+    const w = parkedAt('bowl');
+    const me = playerVehicle(w);
+    for (const part of mountedParts(me)) part.hp = Math.floor(maxHp(part) / 4);
+    w.player.money = 2000;
+    const merc = addVehicle(w, 'mercs', 'van', ['mg', 'stockEngine'], { x: me.pos.x + 8, y: me.pos.y });
+    merc.brain = npcBrain('merc', merc.pos, NPCS.merc.traits);
+    startCombat(w, merc, me);
+
+    const turn = botOrders(w, 'trader');
+
+    expect(turn.world.player.autoFire).toBe(false);
+    expect(turn.ledger.repairs).toBeLessThan(0);
+  });
+
   // A raider demands the cargo. A trader too slow to get away hands it to a stronger raider and refuses a weaker one.
   it('has a trader hand its cargo only to a raider that outmatches it', () => {
     const demandedBy = (weapons: string[]) => {
