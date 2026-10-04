@@ -75,6 +75,21 @@ describe('gameVersion', () => {
     expect(merged).toBeGreaterThan(main);
   });
 
+  it('finds a format that a merge brought in while resolving a conflict', () => {
+    const dir = repoAt('2.2');
+    git(dir, 'checkout', '-q', '-b', 'side');
+    writeFormat(dir, '2.3');
+    commit(dir, 'side step');
+    git(dir, 'checkout', '-q', 'main');
+    writeFormat(dir, '2.3', '{\n "format": "2.3",\n "shape": {"main": 1}\n}\n');
+    commit(dir, 'main step');
+    expect(() => git(dir, 'merge', '-q', '--no-commit', 'side')).toThrow();
+    writeFormat(dir, '2.4');
+    git(dir, 'add', '-A');
+    git(dir, 'commit', '-q', '-m', 'merge renumbers the step');
+    expect(gameVersion(dir)).toBe(`2.4.0+${head(dir)}`);
+  });
+
   it('keeps z when a commit rewrites the file with the same format', () => {
     const dir = repoAt('2.2');
     commit(dir, 'a');

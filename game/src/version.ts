@@ -17,12 +17,15 @@ function savedFormat(gameDir: string): string {
   return shape.format;
 }
 
-// The latest commit whose change adds the format string. The search matches what `npm run save:shape` writes.
+// The latest commit whose change adds the format string. The search matches what `npm run save:shape` writes. A
+// format first written by a merge, as when the merge renumbers a conflicting save step, is found in the merge's change
+// from its first parent, since git log leaves merges out of the plain search.
 function formatCommit(gameDir: string, format: string): string {
   if (git(gameDir, ['rev-parse', '--is-shallow-repository']) === 'true') {
     throw new Error('Cannot work out the game version in a shallow clone. Fetch the full git history.');
   }
-  const found = git(gameDir, ['log', '-1', '--format=%H', `-S"format": "${format}"`, '--', SHAPE_FILE]);
+  const search = ['log', '-1', '--format=%H', `-S"format": "${format}"`];
+  const found = git(gameDir, [...search, '--', SHAPE_FILE]) || git(gameDir, [...search, '--diff-merges=first-parent', '--no-patch', '--', SHAPE_FILE]);
   if (!found) {
     throw new Error(`No commit brings format ${format} into ${SHAPE_FILE}. Commit the output of npm run save:shape, with full git history.`);
   }
