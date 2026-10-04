@@ -86,6 +86,9 @@ if [ "$(readlink "$releases/current")" != "$target" ]; then
   building=$release
   git worktree add --quiet --detach "$release" "$target"
   ln -sfn "$env_file" "$release/factory/.env"
+  if [ -d "$release/factory/dashboard" ]; then
+    ln -sfn "$root/dashboard/dashboard.env" "$release/factory/dashboard/.env"
+  fi
   log "built ${target:0:7}"
   log "npm ci"
   (cd "$release/factory" && timeout 900 npm ci) || fail "npm ci failed at ${target:0:7}"
@@ -106,6 +109,7 @@ if [ "$(readlink "$releases/current")" != "$target" ]; then
   ln -sfn "$target" "$releases/current.new"
   mv -T "$releases/current.new" "$releases/current"
   log "switched to ${target:0:7}"
+  touch "$home/dashboard-restart"
 fi
 
 echo "$target" > "$home/deployed"

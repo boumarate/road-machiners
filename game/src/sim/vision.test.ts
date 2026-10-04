@@ -350,7 +350,8 @@ describe('sight from the wing', () => {
   function wingWorld(): World {
     const w = newWorld(1337, START_KITS.standard, TEST_MAP);
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
-    w.vehicles[0].pos = { x: 30, y: 30 };
+    // The player watches from near the wing, so the meetings play by the full rules.
+    w.vehicles[0].pos = at(mid, 0, -5);
     return w;
   }
   const viewer = (w: World, pos: Vec) => addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], pos);

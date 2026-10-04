@@ -10,6 +10,8 @@ import { TIME } from '../data/time';
 import type { Obstacle, Vehicle, World } from './types';
 import { heightAt, type Terrain } from './terrain';
 import { boxDistance, propReach, reachableBoxes, segmentCrossesBox } from './mapgen';
+import { isCheapMeeting, isHeadless } from './fidelity';
+import { propsAlong, propsAround } from './prop-index';
 import { sunAt } from './sun';
 import { weatherAt } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
@@ -18,17 +20,10 @@ import { cloudsSeenBy, contactDifficulty, contactsOf } from './detect';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { PERK_NUMBERS } from '../data/skills';
 
-const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building', 'landmark'];
-
-function blocksSight(o: Obstacle): boolean {
-  return BLOCKING.includes(o.kind);
-}
-
-// The sight-blocking props that can touch the line a-b. Every point of the line lies within dist(a, b) of a, so a prop
-// farther than that plus its reach cannot hide anything.
+// The sight-blocking props whose reach touches the line a-b. A prop farther from the line than its reach cannot hide
+// anything.
 function propsNear(world: World, a: Vec, b: Vec): Obstacle[] {
-  const d = dist(a, b);
-  return world.obstacles.filter((o) => blocksSight(o) && dist(a, o.pos) < d + propReach(o));
+  return propsAlong(world, 'sight', a, b, 0);
 }
 
 // A dust screen: a circle that blocks sight lines through it.
@@ -65,8 +60,7 @@ export function exploreFrom(world: World, from: Vec): void {
 function forSeenTiles(world: World, from: Vec, test: (idx: number) => boolean, seen: (idx: number) => void): void {
   const size = world.size;
   const r = sightRadius(world, playerVehicle(world), from);
-  // Every sight line lies within r of the viewer, so props beyond r plus their reach cannot touch it.
-  const props = world.obstacles.filter((o) => blocksSight(o) && dist(from, o.pos) < r + propReach(o));
+  const inView = plainViewFrom(world, from, r);
   const lo = { x: Math.max(0, Math.floor(from.x - r)), y: Math.max(0, Math.floor(from.y - r)) };
   const hi = { x: Math.min(size - 1, Math.ceil(from.x + r)), y: Math.min(size - 1, Math.ceil(from.y + r)) };
   for (let x = lo.x; x <= hi.x; x++) {
@@ -74,16 +68,25 @@ function forSeenTiles(world: World, from: Vec, test: (idx: number) => boolean, s
       const idx = y * size + x;
       const tile = { x: x + 0.5, y: y + 0.5 };
       if (!test(idx) || dist(from, tile) > r) continue;
-      if (inPlainView(world, from, tile, props, [])) seen(idx);
+      if (inView(tile)) seen(idx);
     }
   }
+}
+
+// Whether a tile within r of `from` lies in plain view. The recorder's player sees the whole radius.
+function plainViewFrom(world: World, from: Vec, r: number): (tile: Vec) => boolean {
+  if (isHeadless()) return () => true;
+  // Every sight line lies within r of the viewer, so props beyond r plus their reach cannot touch it.
+  const props = propsAround(world, 'sight', from, r);
+  return (tile) => inPlainView(world, from, tile, props, []);
 }
 
 export function canVehicleSee(world: World, observer: Vehicle, position: Vec): boolean {
   if (observer.id === world.player.vehicleId) return playerSees(world, position);
   const target = position;
-  return dist(observer.pos, target) <= sightRadius(world, observer) &&
-    inPlainView(world, observer.pos, target, propsNear(world, observer.pos, target), dustScreens(world));
+  if (dist(observer.pos, target) > sightRadius(world, observer)) return false;
+  // Out of the player's live range, sight is the radius alone.
+  return isCheapMeeting(world, observer.pos, target) || inPlainView(world, observer.pos, target, propsNear(world, observer.pos, target), dustScreens(world));
 }
 
 // Dust screen clouds block sight like rocks, for NPCs only. The player's view never counts them.

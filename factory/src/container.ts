@@ -94,9 +94,9 @@ function effortArgs(effort: string | undefined): string[] {
 }
 
 // A finished run must report its cost. A failed run may have died before its result event, and then it records nothing.
-function recordUsage(home: string, jobId: string, result: RunResult, model: string): void {
-  if (result.code === 0) return appendUsage(home, jobId, usageFromOutput(result.stdout, model));
-  if (result.stdout.includes('"type":"result"')) appendUsage(home, jobId, usageFromOutput(result.stdout, model));
+function recordUsage(home: string, jobId: string, result: RunResult, model: string, resumed: boolean): void {
+  if (result.code === 0) return appendUsage(home, jobId, usageFromOutput(result.stdout, model, resumed));
+  if (result.stdout.includes('"type":"result"')) appendUsage(home, jobId, usageFromOutput(result.stdout, model, resumed));
 }
 
 // Agents get the work clone, the npm cache, the read-only folders their stage names, the OAuth token and the ElevenLabs key with its cap, nothing else. Secrets travel in the docker process env, never in argv.
@@ -118,7 +118,7 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
       ];
       const input = [skill, outputsNote(dir), prompt].filter((part) => part !== undefined).join('\n\n');
       const result = await run('docker', args, { env, input, logPath: log });
-      if (jobId !== null) recordUsage(cfg.home, jobId, result, model);
+      if (jobId !== null) recordUsage(cfg.home, jobId, result, model, session?.resume ?? false);
       must(result, `agent in ${clone}`);
     },
     async shell(clone, script, log, env = {}) {
