@@ -235,13 +235,13 @@ function withMemories_11_12(world: SavedJson): SavedJson {
 
 // Old saves hold a circle for each of these sites and a ring of buildings for Bowl and Nose. The sites are fortresses now:
 // their walls come from the map file, and the town houses from the render. The salvage yard's wrecks are gone too.
-const FORTRESS_OBSTACLES_12_13 = new Set(
+const FORTRESS_OBSTACLES_13_14 = new Set(
   ['bowl', 'nose', 'dustwell', 'green-pit', 'pump-station', 'granary', 'salvage-yard', 'south-lock', 'scrapjaw', 'kiln'].map((id) => `site-${id}`),
 );
 
-function isGoneObstacle_12_13(o: SavedJson): boolean {
+function isGoneObstacle_13_14(o: SavedJson): boolean {
   const id = o.id as string;
-  return FORTRESS_OBSTACLES_12_13.has(id) || id.startsWith('bld-bowl-') || id.startsWith('bld-nose-') || id.startsWith('cw-salvage-yard-');
+  return FORTRESS_OBSTACLES_13_14.has(id) || id.startsWith('bld-bowl-') || id.startsWith('bld-nose-') || id.startsWith('cw-salvage-yard-');
 }
 
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
@@ -307,8 +307,10 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => world,
   // 11 to 12: a driver's last town becomes a memory of its prices.
   withMemories_11_12,
-  // 12 to 13: the fortress sites lose their circle obstacle, and Bowl and Nose their building rings.
-  (world) => ({ ...world, obstacles: (world.obstacles as SavedJson[]).filter((o) => !isGoneObstacle_12_13(o)) }),
+  // 12 to 13: the player gets the headlight switch, off as in a new game.
+  (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
+  // 13 to 14: the fortress sites lose their circle obstacle, and Bowl and Nose their building rings.
+  (world) => ({ ...world, obstacles: (world.obstacles as SavedJson[]).filter((o) => !isGoneObstacle_13_14(o)) }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

@@ -8,6 +8,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, NPCS, TRAITS, type TraitId } from '../data/npcs';
 import { SHOPS } from '../data/market';
+import { partDef } from '../data/parts';
 import { optionChances, optionWeights, visibleDowned, visibleSalvage } from './npc-decisions';
 import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
@@ -430,6 +431,19 @@ describe('NPC activities', () => {
     getResources(w, npc).fuel = 0;
     planNpcOrders(w);
     expect(topGoal(npc)?.kind).toBe('resupply');
+  });
+
+  it('sends a driver with no engine to a town for service, since a stall cannot refit it', () => {
+    const { w, npc } = createTrader();
+    const stall = Object.values(SHOPS).find((s) => s.kind === 'stall');
+    const site = REGION.locations.find((l) => l.id === stall?.id);
+    if (!site) throw new Error('The map has no service stall');
+    npc.items = npc.items.filter((it) => !(it.kind === 'part' && partDef(it.part.defId).kind === 'engine'));
+    npc.pos = { ...site.pos };
+
+    planNpcOrders(w);
+
+    expect(REGION.towns.map((t) => t.id)).toContain(topGoal(npc)?.targetId);
   });
 
   it('heads for fuel once the tank holds less than its reserve for the straight way to a pump', () => {

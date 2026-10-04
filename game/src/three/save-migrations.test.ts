@@ -18,6 +18,7 @@ import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import FORMAT_2_10 from './save-fixtures/format-2-10.json';
 import FORMAT_2_11 from './save-fixtures/format-2-11.json';
 import FORMAT_2_12 from './save-fixtures/format-2-12.json';
+import FORMAT_2_13 from './save-fixtures/format-2-13.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -291,16 +292,24 @@ describe('save migration 11 to 12', () => {
 });
 
 describe('save migration 12 to 13', () => {
+  it('gives the player the headlight switch off and keeps every other field', () => {
+    const next = MIGRATIONS[12](FORMAT_2_12);
+
+    expect(next).toEqual({ ...FORMAT_2_12, player: { ...FORMAT_2_12.player, headlights: false } });
+  });
+});
+
+describe('save migration 13 to 14', () => {
   it('drops the circles of the fortress sites and the Bowl and Nose buildings, and keeps every other obstacle', () => {
-    const next = MIGRATIONS[12](FORMAT_2_12) as { obstacles: { id: string }[] };
+    const next = MIGRATIONS[13](FORMAT_2_13) as { obstacles: { id: string }[] };
 
     expect(next.obstacles.map((o) => o.id)).toEqual(['site-old-mill', 'bld-dustwell-1', 'pond-dustwell', 'cw-convoy-0', 'wreck4']);
-    expect(next.obstacles[0]).toEqual(FORMAT_2_12.obstacles[5]);
+    expect(next.obstacles[0]).toEqual(FORMAT_2_13.obstacles[5]);
   });
 
   it('drops the old salvage yard wrecks, which a fortress yard no longer has', () => {
-    const world = { ...FORMAT_2_12, obstacles: [{ id: 'cw-salvage-yard-0' }, { id: 'cw-convoy-0' }] };
-    const next = MIGRATIONS[12](world) as { obstacles: { id: string }[] };
+    const world = { ...FORMAT_2_13, obstacles: [{ id: 'cw-salvage-yard-0' }, { id: 'cw-convoy-0' }] };
+    const next = MIGRATIONS[13](world) as { obstacles: { id: string }[] };
 
     expect(next.obstacles.map((o) => o.id)).toEqual(['cw-convoy-0']);
   });
