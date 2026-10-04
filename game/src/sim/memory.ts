@@ -30,10 +30,11 @@ export function recall<K extends MemoryFact['kind']>(vehicle: Vehicle, kind: K):
     .reverse();
 }
 
-// Drops every memory that has reached its kind's lifetime. Runs once a turn.
+// Drops every memory that has reached its kind's lifetime. Runs once a turn, so it builds a new log only for a
+// driver that forgets something.
 export function forgetOld(world: World): void {
+  const fresh = (m: Memory): boolean => world.turn - m.turn < MEMORY.turns[m.fact.kind];
   for (const v of world.vehicles) {
-    if (!v.brain) continue;
-    v.brain.memories = v.brain.memories.filter((m) => world.turn - m.turn < MEMORY.turns[m.fact.kind]);
+    if (v.brain && !v.brain.memories.every(fresh)) v.brain.memories = v.brain.memories.filter(fresh);
   }
 }

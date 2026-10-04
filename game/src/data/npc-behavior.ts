@@ -195,8 +195,9 @@ export const MEMORY = {
   turns: { prices: TIME.turnsPerDay } satisfies Record<MemoryFact['kind'], number>,
 };
 
-// Trade tips; see src/sim/trade-tips.ts. A remembered price at least this share off a good's value is worth telling.
-// At rest every good a shop makes sits at 0.75 of value, and a good far from its maker climbs past 1.2.
+// Trade tips; see tradeTip() in src/sim/dialogue-rules.ts. A remembered price at least this share off a good's value
+// is worth telling. At rest every good a shop makes sits at 0.75 of value, and a good far from its maker climbs past
+// 1.2.
 export const TRADE_TIP = { share: 0.2 };
 
 // Name pools for NPC drivers. Each driver gets one first name and one surname at spawn.
