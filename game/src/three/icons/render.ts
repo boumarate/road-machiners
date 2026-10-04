@@ -12,11 +12,11 @@ import { renderKey, type IconEntry } from '../../render/partLooks';
 import { model, socket, type ModelName } from '../render/models';
 import { weaponHead } from '../render/weaponHead';
 import {
-  boundsOf, clip, edgeBand, emptyMask, keepLongest, maskOfPieces, pieces, simplify, solidMask, stripes, thicken, type Mask, type Pixels, type Rgba,
+  boundsOf, clip, edgeBand, emptyMask, keepLongest, lineLike, maskOfPieces, pieces, simplify, solidMask, stripes, thicken, type Mask, type Pixels, type Rgba,
 } from './lines';
 
 // Bump when a change here alters how icons look, so the manifest test asks for npm run icons.
-export const ICON_STYLE_VERSION = 5;
+export const ICON_STYLE_VERSION = 6;
 
 // top: straight down, nose up, like the inventory grid. diagonal: from the right side with the nose to the image's
 // right, turned DIAGONAL_YAW_DEG toward the rear and raised DIAGONAL_PITCH_DEG, so a barrel reads lower left to upper right.
@@ -59,6 +59,9 @@ export const LINE_CELLS = 0.065;
 // side, and only the MAX_INNER longest are kept. Shorter creases are detail that blurs at 42 px.
 export const MIN_INNER = 0.25;
 export const MAX_INNER = 3;
+// A crease piece with more pixels per pixel of its length than this is a web of detail, not a line. Goods, drawn
+// diagonal, read by their faces' edges, which meet in webs.
+const MAX_WIND: Record<IconView, number> = { top: 5, diagonal: 12 };
 // The silhouette drops detail narrower than SIMPLIFY line widths, except thin parts at least MIN_THIN of the drawing's
 // longer side long, like barrels and rails.
 const SIMPLIFY = 2;
@@ -68,7 +71,7 @@ const MIN_HOLE = 0.12; // holes and islands shorter than this share of the longe
 const TOON_OUTLINE_PX = 4; // toon silhouette outline width at cell size
 const RAMP = [0.45, 0.75, 1]; // toon light steps
 // The normal change, as color distance in the normal pass, and the depth step, in 8-bit depth levels, that draw a crease.
-const CREASE: Record<IconStyle, { normal: number; depth: number }> = { toon: { normal: 0.3, depth: 4 }, line: { normal: 0.6, depth: 12 } };
+const CREASE: Record<IconStyle, { normal: number; depth: number }> = { toon: { normal: 0.3, depth: 4 }, line: { normal: 0.45, depth: 6 } };
 const CREASE_SHADE = 0.45; // toon crease pixels keep this share of their color
 const INK = PAL.outline;
 const STRIPE_WIDTH = 1; // rank stripes as lines of the style's width
@@ -106,7 +109,8 @@ function renderer(): { renderer: THREE.WebGLRenderer; ramp: THREE.DataTexture } 
 export function renderIcon(entry: IconEntry, view: IconView, size: number): { icon: HTMLCanvasElement; drawn: Pixels; inner: number } {
   const big = size * SUPERSAMPLE;
   const style = iconStyle(entry);
-  const { scene, camera } = stage(entry, view);
+  const { scene, camera, mount } = stage(entry, view);
+  const head = mount ? headOnly(scene, camera, big, mount) : null;
   const color = draw(scene, camera, big, null);
   const normal = draw(scene, camera, big, new THREE.MeshNormalMaterial({ flatShading: true }));
   const depth = draw(scene, camera, big, new THREE.MeshDepthMaterial());
@@ -119,8 +123,17 @@ export function renderIcon(entry: IconEntry, view: IconView, size: number): { ic
   }
   // Pixels per meter, through the camera, so the line width follows the grid cell.
   const width = LINE_CELLS * CELL.along * (big / (camera.right - camera.left));
-  const inner = lineArt(color, creases, width, entry.rank);
+  const inner = lineArt(color, creases, { width, wind: MAX_WIND[view] }, entry.rank, head);
   return { icon: shrink(color, size), drawn: color, inner };
+}
+
+// A weapon head's silhouette, drawn with its mount hidden. Its outline is the weapon's one interior shape that always
+// draws, since the head's creases are a web of detail.
+function headOnly(scene: THREE.Scene, camera: THREE.Camera, size: number, mount: THREE.Object3D): Mask {
+  mount.visible = false;
+  const head = solidMask(draw(scene, camera, size, null));
+  mount.visible = true;
+  return head;
 }
 
 // Where the barrel reads in the drawn icon, for the orientation check. Weapons only.
@@ -136,11 +149,12 @@ export function barrelReads(entry: IconEntry, view: IconView, size: number): Bar
   return { ...at, pixelTip: farthestAlong(color, at.head, at.tip) };
 }
 
-type Stage = { scene: THREE.Scene; camera: THREE.OrthographicCamera; head: THREE.Vector3; tip: THREE.Vector3 };
+// mount: a weapon's mount, null for every other entry.
+type Stage = { scene: THREE.Scene; camera: THREE.OrthographicCamera; head: THREE.Vector3; tip: THREE.Vector3; mount: THREE.Object3D | null };
 
 function stage(entry: IconEntry, view: IconView): Stage {
   const scene = new THREE.Scene();
-  const { root, head, tip } = build(entry);
+  const { root, head, tip, mount } = build(entry);
   toon(root, iconStyle(entry));
   scene.add(root);
   const camera = frame(root, view);
@@ -149,16 +163,16 @@ function stage(entry: IconEntry, view: IconView): Stage {
   key.position.copy(camera.position).add(new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).multiplyScalar(40));
   key.position.add(new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(-25));
   scene.add(key, new THREE.AmbientLight(0xffffff, 1.1));
-  return { scene, camera, head, tip };
+  return { scene, camera, head, tip, mount };
 }
 
 // A weapon is its mount stretched to fill the def's footprint, with the head at its authored size on the mount's head
 // socket, aimed forward. The stretch shows the footprint, so weapons of one look but different sizes differ.
-function build(entry: IconEntry): { root: THREE.Group; head: THREE.Vector3; tip: THREE.Vector3 } {
+function build(entry: IconEntry): Omit<Stage, 'scene' | 'camera'> & { root: THREE.Group } {
   const root = new THREE.Group();
   if (!entry.weapon) {
     for (const name of entry.models) root.add(model(name));
-    return { root, head: new THREE.Vector3(), tip: new THREE.Vector3() };
+    return { root, head: new THREE.Vector3(), tip: new THREE.Vector3(), mount: null };
   }
   const look = entry.weapon;
   const mount = model(look.mount);
@@ -171,7 +185,7 @@ function build(entry: IconEntry): { root: THREE.Group; head: THREE.Vector3; tip:
   const at = socket(look.mount, 'head').applyMatrix4(mount.matrix);
   built.head.position.copy(at);
   root.add(built.head);
-  return { root, head: at.clone(), tip: built.tip.add(at) };
+  return { root, head: at.clone(), tip: built.tip.add(at), mount };
 }
 
 // Swaps every material for the style's. Toon keeps the material's color on the light ramp, with faction paint as its
@@ -272,11 +286,14 @@ function toonPixel(data: Uint8ClampedArray, at: number, crease: boolean, ink: re
   else if (data[at + 3] > 0) data[at + 3] = 255;
 }
 
-// Redraws the drawing as line art in LINE_COLORS: the simplified silhouette's edge band, the MAX_INNER longest creases
-// at least MIN_INNER of the drawing long, and a stripe per rank above 1, all width wide, over the fill. Returns how many
-// interior lines it kept.
-function lineArt(color: Pixels, creases: Mask, width: number, rank: number): number {
-  const { drawn, lines, inner } = lineMasks(solidMask(color), creases, width, rank);
+// Line art's width in drawing pixels, and how webbed a crease may be and still draw.
+type Pen = { width: number; wind: number };
+
+// Redraws the drawing as line art in LINE_COLORS: the simplified silhouette's edge band, a weapon head's outline, the
+// longest line-like creases at least MIN_INNER of the drawing long up to MAX_INNER interior lines, and a stripe per rank
+// above 1, all width wide, over the fill. Returns how many interior lines it drew.
+function lineArt(color: Pixels, creases: Mask, pen: Pen, rank: number, head: Mask | null): number {
+  const { drawn, lines, inner } = lineMasks(solidMask(color), creases, pen, rank, head);
   const [line, fill] = LINE_COLORS;
   const clear: Rgba = [0, 0, 0, 0];
   for (let i = 0; i < drawn.bits.length; i++) color.data.set(lines.bits[i] ? line : drawn.bits[i] ? fill : clear, i * 4);
@@ -284,21 +301,24 @@ function lineArt(color: Pixels, creases: Mask, width: number, rank: number): num
 }
 
 // Where line art draws its lines, and where it draws at all, from the raw silhouette and its creases.
-function lineMasks(raw: Mask, creases: Mask, width: number, rank: number): { drawn: Mask; lines: Mask; inner: number } {
+function lineMasks(raw: Mask, creases: Mask, { width, wind }: Pen, rank: number, head: Mask | null): { drawn: Mask; lines: Mask; inner: number } {
   const { w, h } = raw;
   const half = width / 2;
   const rawBox = boundsOf(raw);
   const longest = Math.max(rawBox.x1 - rawBox.x0, rawBox.y1 - rawBox.y0);
-  const solid = simplify(raw, SIMPLIFY * width, MIN_THIN * longest, MIN_HOLE * longest);
+  const simple = (m: Mask): Mask => simplify(m, SIMPLIFY * width, MIN_THIN * longest, MIN_HOLE * longest);
+  const solid = simple(raw);
   const band = edgeBand(solid, half);
-  const open = { w, h, bits: creases.bits.map((b, i) => b & (band.bits[i] ^ 1)) };
-  const kept = keepLongest(pieces(open), MIN_INNER * longest, MAX_INNER);
+  const headBand = head ? edgeBand(simple(head), half) : emptyMask(w, h);
+  const open = { w, h, bits: creases.bits.map((b, i) => b & (band.bits[i] ^ 1) & (headBand.bits[i] ^ 1)) };
+  const room = MAX_INNER - (head ? 1 : 0);
+  const kept = keepLongest(pieces(open).filter((p) => lineLike(p, wind)), MIN_INNER * longest, room);
   const inner = clip(thicken(maskOfPieces(w, h, kept), half), solid);
   const marks = rank > 1 ? stripes(solid, boundsOf(solid), rank - 1, width * STRIPE_WIDTH) : emptyMask(w, h);
   const drawn = { w, h, bits: band.bits.map((b, i) => b | solid.bits[i]) };
-  const lines = { w, h, bits: band.bits.map((b, i) => b | inner.bits[i] | marks.bits[i]) };
+  const lines = { w, h, bits: band.bits.map((b, i) => b | inner.bits[i] | marks.bits[i] | (headBand.bits[i] & drawn.bits[i])) };
   joinSpecks(drawn, lines, SPECK * width);
-  return { drawn, lines, inner: kept.length };
+  return { drawn, lines, inner: MAX_INNER - room + kept.length };
 }
 
 // Specks of fill pinched between lines, shorter than maxLen, join the lines.

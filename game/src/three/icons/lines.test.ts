@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boundsOf, edgeBand, emptyMask, erode, keepLongest, pieces, simplify, solidMask, stripes, styleMisses, thicken, type Mask, type Pixels } from './lines';
+import { boundsOf, edgeBand, emptyMask, erode, keepLongest, lineLike, pieces, simplify, solidMask, stripes, styleMisses, thicken, type Mask, type Pixels } from './lines';
 
 function maskOf(rows: readonly string[]): Mask {
   const mask = emptyMask(rows[0].length, rows.length);
@@ -127,5 +127,15 @@ describe('silhouette simplification of holes and islands', () => {
     expect(simple.bits[11 * 60 + 11]).toBe(1);
     expect(simple.bits[30 * 60 + 30]).toBe(0);
     expect(simple.bits[58 * 60 + 58]).toBe(0);
+  });
+});
+
+describe('line-like pieces', () => {
+  it('take a straight crease and a rim as lines, and a web of creases as not', () => {
+    const [straight] = pieces(maskOf(['##########']));
+    const [rim] = pieces(maskOf(['#####', '#...#', '#...#', '#####']));
+    const [web] = pieces(maskOf(Array.from({ length: 9 }, (_, y) => (y % 2 ? '#.#.#.#.#' : '#########'))));
+
+    expect([lineLike(straight, 3), lineLike(rim, 3), lineLike(web, 3)]).toEqual([true, true, false]);
   });
 });

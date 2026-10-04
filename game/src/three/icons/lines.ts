@@ -42,6 +42,12 @@ export function keepLongest(list: readonly Piece[], minLen: number, max: number)
   return list.filter((p) => p.length >= minLen).sort((a, b) => b.length - a.length).slice(0, max);
 }
 
+// Whether a piece reads as one line: no more than maxWind pixels per pixel of its length. A straight crease has about
+// 1, a rectangle's rim about 3, and a web of short creases more.
+export function lineLike(piece: Piece, maxWind: number): boolean {
+  return piece.pixels.length <= maxWind * piece.length;
+}
+
 export function maskOfPieces(w: number, h: number, list: readonly Piece[]): Mask {
   const mask = emptyMask(w, h);
   setPieces(mask, list, 1);
@@ -50,10 +56,19 @@ export function maskOfPieces(w: number, h: number, list: readonly Piece[]): Mask
 
 // Every pixel within half of a mask pixel.
 export function thicken(mask: Mask, half: number): Mask {
+  return grow(mask, discOf(half));
+}
+
+// Pixels whose whole disc of radius half lies on the mask, inside the image.
+export function erode(mask: Mask, half: number): Mask {
+  return shrink(mask, discOf(half));
+}
+
+// Every pixel that one of the offsets reaches from a mask pixel.
+function grow(mask: Mask, offsets: readonly (readonly [number, number])[]): Mask {
   const out = emptyMask(mask.w, mask.h);
-  const disc = discOf(half);
   eachOn(mask, (x, y) => {
-    for (const [dx, dy] of disc) {
+    for (const [dx, dy] of offsets) {
       const i = indexAt(out, x + dx, y + dy);
       if (i >= 0) out.bits[i] = 1;
     }
@@ -61,18 +76,21 @@ export function thicken(mask: Mask, half: number): Mask {
   return out;
 }
 
-// Pixels whose whole disc of radius half lies on the mask, inside the image.
-export function erode(mask: Mask, half: number): Mask {
-  const disc = discOf(half);
-  return maskWhere(mask, (x, y) => isOn(mask, x, y) && disc.every(([dx, dy]) => isOn(mask, x + dx, y + dy)));
+// Pixels from which every offset lands on the mask, inside the image.
+function shrink(mask: Mask, offsets: readonly (readonly [number, number])[]): Mask {
+  return maskWhere(mask, (x, y) => isOn(mask, x, y) && offsets.every(([dx, dy]) => isOn(mask, x + dx, y + dy)));
 }
 
 // The silhouette without detail smaller than radius: notches and gaps narrower than 2 radius fill, and bumps narrower
-// than that drop unless they run at least minLen, like a barrel. Holes and islands shorter than minHole go too.
+// than that drop unless they run at least minLen, like a barrel. Holes and islands shorter than minHole go too. A square
+// kernel keeps the square corners of boxy parts.
 export function simplify(solid: Mask, radius: number, minLen: number, minHole: number): Mask {
   const { w, h } = solid;
-  const closed = erode(thicken(solid, radius), radius);
-  const core = thicken(erode(closed, radius), radius);
+  const [across, down] = squareOf(radius);
+  const growSquare = (m: Mask): Mask => grow(grow(m, across), down);
+  const shrinkSquare = (m: Mask): Mask => shrink(shrink(m, across), down);
+  const closed = shrinkSquare(growSquare(solid));
+  const core = growSquare(shrinkSquare(closed));
   const extra = { w, h, bits: closed.bits.map((b, i) => b & (core.bits[i] ^ 1)) };
   const kept = maskOfPieces(w, h, keepLongest(pieces(extra), minLen, Infinity));
   const shape = { w, h, bits: closed.bits.map((b, i) => b & (core.bits[i] | kept.bits[i])) };
@@ -125,6 +143,12 @@ function discOf(half: number): [number, number][] {
   const out: [number, number][] = [];
   for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= half * half) out.push([dx, dy]);
   return out;
+}
+
+// A square kernel of the radius as a row and a column, applied one after the other.
+function squareOf(radius: number): [[number, number][], [number, number][]] {
+  const steps = Array.from({ length: 2 * Math.round(radius) + 1 }, (_, i) => i - Math.round(radius));
+  return [steps.map((d) => [d, 0]), steps.map((d) => [0, d])];
 }
 
 // The index of x, y on the mask, or -1 off it.

@@ -349,7 +349,7 @@ export const ICON_WEAPON_PICKS: Record<string, WeaponLook> = {
   shotgun: { mount: 'wmount_pintle', receiver: 'wrec_shotgun', barrel: 'wbar_shotgun', extra: 'wext_shield' },
   longRifle: { mount: 'wmount_pintle', receiver: 'wrec_mg_b', barrel: 'wbar_mg_long', extra: 'wext_scope' },
   flamer: { mount: 'wmount_ring_small', receiver: 'wrec_shotgun', barrel: 'wbar_shotgun', extra: 'wext_drum' },
-  pneumobolter: { mount: 'wmount_pintle', receiver: 'wrec_autocannon', barrel: 'wbar_autocannon', extra: 'wext_drum' },
+  pneumobolter: { mount: 'wmount_ring_small', receiver: 'wrec_autocannon', barrel: 'wbar_autocannon', extra: 'wext_drum' },
   slugCannon: { mount: 'wmount_ring_wide', receiver: 'wrec_autocannon', barrel: 'wbar_cannon', extra: 'wext_shield' },
   heavyMg: { mount: 'wmount_ring_small', receiver: 'wrec_mg_a', barrel: 'wbar_twin', extra: 'wext_drum' },
   cannon: { mount: 'wmount_cradle', receiver: 'wrec_cannon', barrel: 'wbar_cannon', extra: 'wext_scope' },
