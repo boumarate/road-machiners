@@ -30,7 +30,7 @@ Details of the `npm run` commands and debug tools. Run them from `game/`.
 
 ## Browser checks
 
-Drive the game with a Playwright script in `tmp/`. Launch Chromium with `--use-angle=metal --enable-gpu --ignore-gpu-blocklist`, so it renders on the real GPU. On Linux with an NVIDIA card, use `--use-angle=vulkan --enable-features=Vulkan --disable-vulkan-surface --enable-gpu --ignore-gpu-blocklist`. SwiftShader renders on the CPU at 10 to 20 fps, so its frame rate says nothing about the game. The game is on `window.__ROAM__` in dev. Its world is `__ROAM__.state`. To set up a situation, clone that world, edit it, and pass it to `apply()`. `debugScreenOf(x, y)` gives the screen point of a map point on the ground, for clicks.
+A browser check is for what the screen shows: UI, rendering and screenshots. Playtest game behavior with the progression recorder instead. Drive the game with a Playwright script in `tmp/`. Launch Chromium with `--use-angle=metal --enable-gpu --ignore-gpu-blocklist`, so it renders on the real GPU. On Linux with an NVIDIA card, use `--use-angle=vulkan --enable-features=Vulkan --disable-vulkan-surface --enable-gpu --ignore-gpu-blocklist`. SwiftShader renders on the CPU at 10 to 20 fps, so its frame rate says nothing about the game. The game is on `window.__ROAM__` in dev. Its world is `__ROAM__.state`. To set up a situation, clone that world, edit it, and pass it to `apply()`. `debugScreenOf(x, y)` gives the screen point of a map point on the ground, for clicks.
 
 ## Debugging
 
