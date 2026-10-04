@@ -17,6 +17,7 @@ import FORMAT_2_8 from './save-fixtures/format-2-8.json';
 import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import FORMAT_2_10 from './save-fixtures/format-2-10.json';
 import FORMAT_2_11 from './save-fixtures/format-2-11.json';
+import FORMAT_2_12 from './save-fixtures/format-2-12.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -286,5 +287,23 @@ describe('save migration 11 to 12', () => {
     for (const v of [...next.vehicles, ...next.removed]) expect(v.brain && 'lastTown' in v.brain).toBeFalsy();
     expect(next.vehicles[0]).toEqual(FORMAT_2_11.vehicles[0]);
     expect(next.vehicles[2].brain).toEqual({ ...FORMAT_2_11.vehicles[2].brain, memories: [] });
+  });
+});
+
+describe('save migration 12 to 13', () => {
+  const before = structuredClone(FORMAT_2_12);
+  const next = MIGRATIONS[12](FORMAT_2_12) as { states: { data: { partIds?: string[] } }[] };
+
+  it('gives a patch the ids of its client parts at 0 HP, in item order', () => {
+    expect(next.states[0].data.partIds).toEqual(['p1', 'p2']);
+  });
+
+  it('gives a patch whose client is gone an empty list', () => {
+    expect(next.states[1].data.partIds).toEqual([]);
+  });
+
+  it('leaves other states alone and does not mutate its input', () => {
+    expect(next.states[2]).toEqual(FORMAT_2_12.states[2]);
+    expect(FORMAT_2_12).toEqual(before);
   });
 });
