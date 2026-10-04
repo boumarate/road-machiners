@@ -1,5 +1,5 @@
-// Tire marks a seen truck leaves on soft ground. Each wheel on the ground extends its own strip by one quad each
-// RUT.step meters of travel, draped on the ground and as wide as the tire, and darker on ground with a higher
+// Tire marks a seen truck leaves on soft ground. Each rear wheel on the ground, the pair that follows the truck's
+// path, extends its own strip by one quad each RUT.step meters of travel, draped on the ground and as wide as the tire, and darker on ground with a higher
 // rut in TERRAIN_TYPES. Marks fade over a day of turns. All strips share one instanced ring buffer: past RUT.max
 // segments the oldest is overwritten. Render-only: never saved and never read by sim or physics.
 
@@ -16,6 +16,7 @@ import type { Vehicle, World } from '../../sim/types';
 
 export const RUT = {
   max: 8000, // segments alive at once; a new one past it overwrites the oldest
+  wheels: [2, 3], // the wheelMounts indices that mark: the rear pair, so a turning truck leaves one left and one right track
   step: 0.5, // meters a wheel travels per segment
   gap: 4, // meters a wheel may move between frames and still join its strip, so fast trucks at low fps leave no holes
   width: 0.3, // meters across, the tire's width
@@ -62,14 +63,14 @@ export class Ruts {
     scene.add(this.mesh);
   }
 
-  // Extends each grounded wheel's strip by the frame's pose. Only a seen truck in a playing turn marks the ground, so
+  // Extends each grounded rear wheel's strip by the frame's pose. Only a seen truck in a playing turn marks the ground, so
   // ruts never give away a truck the player cannot see.
   track(world: World, v: Vehicle, f: VehicleFrame, sight: RutSight): void {
     if (!sight.seen || !sight.playing) return;
     const tires = tirePoints(world.terrain, v.chassisId, f);
     if (tires.length !== f.wheels.length) throw new Error(`Vehicle ${v.id} has ${f.wheels.length} wheel frames for ${tires.length} wheels`);
     const ends = this.endsOf(v.id, tires.length);
-    for (const [i, p] of tires.entries()) this.extend(ends, i, p, f.wheels[i].ground ? rutAt(world.terrain, p) : 0, world.turn);
+    for (const i of RUT.wheels) this.extend(ends, i, tires[i], f.wheels[i].ground ? rutAt(world.terrain, tires[i]) : 0, world.turn);
   }
 
   // Fades the segments to the turn's age, once per turn, and hides the expired ones.

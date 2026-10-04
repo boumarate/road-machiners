@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { PHYSICS } from '../../data/physics';
 import { flatTerrain } from '../../sim/testkit';
 import type { Terrain } from '../../sim/terrain';
-import { CASING, Casings, type Muzzle } from './projectiles';
+import { CASING, Casings, PROJECTILES, Projectiles, type Muzzle } from './projectiles';
 
 const S = PHYSICS.metersPerTile;
 const GROUND_TILES = 2; // the test ground sits this many tiles up, so resting on y 0 would show
@@ -102,3 +102,34 @@ function scaleOf(mesh: THREE.InstancedMesh, i: number): number {
   mesh.getMatrixAt(i, m);
   return new THREE.Vector3().setFromMatrixScale(m).x;
 }
+
+describe('a burst throwing casings', () => {
+  it('throws each round’s casing as that round fires, before any round lands', () => {
+    const scene = new THREE.Scene();
+    const casings = new Casings(scene);
+    const projectiles = new Projectiles(scene, () => undefined);
+    const landed: number[] = [];
+    const gap = PROJECTILES.mg.gapMs;
+    const plan = (k: number) => ({ land: { x: MUZZLE.pos.x + 60, y: MUZZLE.pos.y, z: MUZZLE.pos.z }, struck: false, delayMs: k * gap, flightMs: 900 });
+    for (let k = 0; k < 3; k++) {
+      projectiles.launch({
+        spec: PROJECTILES.mg,
+        muzzle: () => MUZZLE,
+        plan: plan(k),
+        onFire: (m) => casings.eject(m, 'small', 0),
+        onLand: () => landed.push(k),
+      });
+    }
+    const thrown = () => casings.meshes.small.count;
+    const dt = 1 / 60;
+
+    projectiles.tick(dt); // the first round leaves at once
+    casings.tick(dt, raisedTerrain(), 0);
+    expect(thrown()).toBe(1);
+
+    for (let t = dt; t < (gap + 20) / 1000; t += dt) projectiles.tick(dt);
+    casings.tick(dt, raisedTerrain(), 0);
+    expect(thrown()).toBe(2);
+    expect(landed).toEqual([]);
+  });
+});

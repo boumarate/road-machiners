@@ -358,13 +358,13 @@ export class Projectiles {
 
 export type CasingSize = 'small' | 'large';
 
-// Sizes are larger than real brass on purpose, so a casing reads from the isometric camera.
+// Sizes are a little larger than real brass, so a casing still reads from the isometric camera without looking like loot.
 export const CASING = {
   max: 400, // casings alive at once, both sizes together; a new one past it replaces the oldest
   lifeTurns: TIME.turnsPerDay,
   fadeShare: 0.1, // the last share of the life over which a casing shrinks away
-  small: { length: 0.24, radius: 0.05 }, // meters
-  large: { length: 0.45, radius: 0.1 },
+  small: { length: 0.14, radius: 0.03 }, // meters
+  large: { length: 0.28, radius: 0.06 },
   glint: 0x4a3810, // brass glows this much, so a casing reads against dark ground and in shade
   back: 0.6, // meters behind the muzzle along the barrel where the casing leaves the breech
   eject: { side: 2.4, up: 2.2, spread: 0.8, spin: 18 }, // m/s out to the right and up, ± m/s of spread, rad/s of tumble

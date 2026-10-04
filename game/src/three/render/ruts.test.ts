@@ -43,18 +43,33 @@ function drive(ruts: Ruts, w: World, x0: number, x1: number, ground = true): voi
   for (let i = 0; x0 + i * FRAME_MOVE <= x1; i++) ruts.track(w, v, frameAt(v, x0 + i * FRAME_MOVE, ground), PLAYING);
 }
 
-function wheels(w: World): number {
-  return wheelMounts(bodyOf(truckOf(w).chassisId)).length;
-}
+// The wheels that mark: a pair, however many wheels the truck has.
+const marking = RUT.wheels.length;
 
 describe('Ruts', () => {
-  it('lays one segment per step of travel for each wheel on sand', () => {
+  it('lays one segment per step of travel for each of the rear pair on sand', () => {
     const w = worldOn('sand');
     const ruts = new Ruts(new THREE.Scene());
 
     drive(ruts, w, 100, 100 + 4 * RUT.step);
 
-    expect(ruts.mesh.count).toBe(4 * wheels(w));
+    expect(ruts.mesh.count).toBe(4 * marking);
+  });
+
+  it('leaves one left and one right track while turning, not a doubled arc', () => {
+    const w = worldOn('sand');
+    const v = truckOf(w);
+    const ruts = new Ruts(new THREE.Scene());
+    const radius = 12; // meters, the turn's centre line
+    const centre = { x: 100, z: Y * S + radius };
+    for (let a = 0; a < 1.2; a += 0.01) {
+      const f = frameAt(v, centre.x + radius * Math.sin(a), true, centre.z - radius * Math.cos(a));
+      ruts.track(w, v, { ...f, rot: headingQuat(a) }, PLAYING);
+    }
+
+    const stepsOfArc = Math.ceil((radius * 1.2) / RUT.step);
+    expect(ruts.mesh.count).toBeGreaterThan(stepsOfArc); // both tracks lay segments
+    expect(ruts.mesh.count).toBeLessThanOrEqual(2 * (stepsOfArc + 2)); // and no more than a left and a right strip
   });
 
   it('lays nothing below one step of travel', () => {
@@ -107,7 +122,7 @@ describe('Ruts', () => {
     ruts.track(w, v, frameAt(v, 100), PLAYING);
     ruts.track(w, v, frameAt(v, 100 + 3 * RUT.step), PLAYING);
 
-    expect(ruts.mesh.count).toBe(wheels(w));
+    expect(ruts.mesh.count).toBe(marking);
   });
 
   it('starts a new strip after a jump of over a gap, with no segment across it', () => {
@@ -119,7 +134,7 @@ describe('Ruts', () => {
     ruts.track(w, v, frameAt(v, 100 + RUT.gap + RUT.step), PLAYING);
     ruts.track(w, v, frameAt(v, 100 + RUT.gap + 2 * RUT.step), PLAYING);
 
-    expect(ruts.mesh.count).toBe(wheels(w));
+    expect(ruts.mesh.count).toBe(marking);
   });
 
   it('starts a new strip after a wheel lifts', () => {
@@ -137,7 +152,7 @@ describe('Ruts', () => {
   it('never holds more than the cap, overwriting the oldest', () => {
     const w = worldOn('sand');
     const ruts = new Ruts(new THREE.Scene());
-    const per = wheels(w);
+    const per = marking;
 
     drive(ruts, w, 10, 10 + (RUT.max / per + 10) * RUT.step);
 
