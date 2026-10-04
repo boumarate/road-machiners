@@ -1,14 +1,18 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readEvidence, type Evidence } from '../evidence';
+import { postWithEvidence } from '../evidence-post';
 import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
 import { readState, updateState } from '../state';
-import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type InlineButton } from '../types';
-import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir } from './common';
+import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, type Ctx, type InlineButton, type TestPhase } from '../types';
+import { bundleOf } from './bundle';
+import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, playtestCommand, workDir } from './common';
+import { readApproval, setPhase, type Approval } from './verify';
 
 // Each step logs its start time, so the log shows where the time goes.
 // The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
 // Only the build gets SAVE_SCOPE, since the tests expect the default save key.
-const CHECK_SCRIPT = `set -e
+const checkScript = (playtest: string) => `set -e
 step() { echo "[checks] $(date -u +%T) $1"; }
 mkdir -p tmp
 step "npm ci"
@@ -30,7 +34,7 @@ done
 if [ "$ready" -ne 1 ]; then kill "$server"; exit 1; fi
 step "playtest"
 set +e
-npm run playtest -- --cpu
+${playtest}
 code=$?
 kill "$server"
 if [ "$code" -ne 0 ]; then exit "$code"; fi
@@ -40,39 +44,52 @@ SAVE_SCOPE="$BUILD_SCOPE" npm run build
 step "done"
 `;
 
-export type Approval = { description: string; howToTry: string };
-
+// The machine half of testing. It runs no agent, so it holds the test slot only for the checks and the build.
+// It checks the branch head that verify or a patch pushed, with the approval and evidence they left in the work clone.
+// A first failure hands the card to verify for one fix round. A failure after that fix stops the card.
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
+  const phase = checksPhase(ctx, issue);
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   const item = await ctx.github.issue(issue);
   const base = baseBranchFor(ctx, item.labels);
-  await ctx.repo.prepareWorkClone(BRANCH(issue), base, workDir(ctx, issue));
-  resetOutputs(home);
-  const merged = await mergeBase(ctx, issue, base, home);
-  await agentRound(ctx, issue, 'test', base);
-  await requireBaseMerged(ctx, issue, base, merged);
-  let build = await ctx.repo.headHash(BRANCH(issue));
-  const failure = await runChecks(ctx, issue, base, build);
-  // The agent gets one round to fix what the factory's own checks found. A second failure stops the card.
-  if (failure !== null) {
-    writeFileSync(`${home}/${OUT_DIR}/check-failure.md`, failure);
-    await agentRound(ctx, issue, 'test-fix', base);
-    build = await ctx.repo.headHash(BRANCH(issue));
-    const again = await runChecks(ctx, issue, base, build);
-    if (again !== null) throw new Error(`The factory checks failed twice.\n${again}`);
-  }
-  const approval = readApproval(home);
+  const build = await ctx.repo.headHash(BRANCH(issue));
+  // An approved card merges with no post, so only a card that will be posted needs the approval and the evidence. They are read before the checks, so a bad manifest fails fast.
+  const approver = approvedAlready(ctx, issue, item.labels);
+  const shown = approver === null ? { approval: readApproval(home), evidence: readEvidence(home, build) } : null;
+  // Timeouts alone rerun here. A real failure goes to verify for one fix round. Three timeouts throw with the phase kept, so a retry runs the checks again.
+  const failure = await checkPatiently(ctx, issue, base, build);
+  if (failure !== null) return failed(ctx, issue, home, phase, failure);
   const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
-  const approver = approvedAlready(ctx, issue, item.labels);
-  if (approver === null) await post(ctx, issue, approval, `${home}/${OUT_DIR}/screenshot.png`, url, base);
+  if (shown !== null) await post(ctx, issue, shown.approval, shown.evidence, url, base);
+  clearPhase(ctx, issue);
   await ctx.github.move(issue, 'Approval');
   if (approver !== null) queueMerge(ctx, issue, approver);
 }
 
+function checksPhase(ctx: Ctx, issue: number): TestPhase {
+  const phase = readState(ctx.statePath).testPhase[String(issue)];
+  if (phase !== 'checks' && phase !== 'checks-after-fix') throw new Error(`Issue #${issue} is not ready for checks, its test phase is ${phase ?? 'none'}`);
+  return phase;
+}
+
+// The phase goes on a second failure too, so a retry after Hermes clears the stuck label starts again from verify.
+async function failed(ctx: Ctx, issue: number, home: string, phase: TestPhase, failure: string): Promise<void> {
+  if (phase === 'checks-after-fix') {
+    clearPhase(ctx, issue);
+    throw new Error(`The factory checks failed twice.\n${failure}`);
+  }
+  writeFileSync(`${home}/${OUT_DIR}/check-failure.md`, failure);
+  setPhase(ctx, issue, 'fix');
+}
+
+function clearPhase(ctx: Ctx, issue: number): void {
+  updateState(ctx.statePath, (state) => ({ ...state, testPhase: omit(state.testPhase, issue) }));
+}
+
 // Who approved the card before this round, or null when it needs a committee post.
 // Cleanup tasks on the release branch skip the post, since the committee plays them in the candidate.
-// A card approved before a conflict sent it back here keeps its approval.
+// A card approved after its preview, or before a conflict sent it back here, keeps its approval.
 function approvedAlready(ctx: Ctx, issue: number, labels: string[]): string | null {
   if (labels.includes(RELEASE_TASK_LABEL) && labels.includes(MAINTENANCE_LABEL)) return 'the factory';
   return readState(ctx.statePath).approvedResolving[String(issue)] ?? null;
@@ -81,43 +98,7 @@ function approvedAlready(ctx: Ctx, issue: number, labels: string[]): string | nu
 // The merge runs as an approve job in the branch queue, like a member's approval, so it never races another branch job.
 function queueMerge(ctx: Ctx, issue: number, by: string): void {
   updateState(ctx.statePath, (state) => ({ ...state, pendingApprovals: { ...state.pendingApprovals, [String(issue)]: by } }));
-  ctx.log('testing', issue, `approved by ${by} already, merge queued`);
-}
-
-// The base moved on since design cut the branch. Testing runs on the branch with the current base merged in,
-// so the committee plays what approve will merge, and conflicts reach the agent here instead of failing approve.
-// Returns the base commit it merged.
-async function mergeBase(ctx: Ctx, issue: number, base: string, home: string): Promise<string> {
-  await ctx.repo.fetch();
-  const { commit, conflicts } = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
-  if (conflicts.length > 0) writeFileSync(`${home}/${OUT_DIR}/merge-conflicts.md`, `${conflicts.map((file) => `- ${file}`).join('\n')}\n`);
-  return commit;
-}
-
-// Checks the commit merged above, not the base branch. A parallel approval may move the base on meanwhile, and approve merges that newer base anyway.
-async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: string): Promise<void> {
-  if (!(await ctx.repo.isMerged(commit, BRANCH(issue)))) throw new Error(`The testing agent left the merge of ${base} at ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
-}
-
-async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'test-fix', base: string): Promise<void> {
-  await runAgent(ctx, issue, 'testing', ctx.cfg.buildModel, fillPrompt(prompt, { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
-  const home = agentHome(workDir(ctx, issue), GAME_DIR);
-  throwIfNeedsCommittee(home);
-  readApproval(home);
-  await guardAndPush(ctx, issue, base, 'testing');
-}
-
-function readApproval(home: string): Approval {
-  const raw = readOutput(home, 'approval.json');
-  if (raw === null) throw new Error('The testing stage wrote no .factory/approval.json');
-  if (readOutput(home, 'screenshot.png') === null) throw new Error('The testing stage wrote no .factory/screenshot.png');
-  return parseApproval(JSON.parse(raw));
-}
-
-function parseApproval(data: unknown): Approval {
-  const { description, howToTry } = (data ?? {}) as Record<string, unknown>;
-  if (typeof description !== 'string' || typeof howToTry !== 'string') throw new Error('.factory/approval.json needs string fields description and howToTry');
-  return { description, howToTry };
+  ctx.log('checks', issue, `approved by ${by} already, merge queued`);
 }
 
 function checkDir(ctx: Ctx, issue: number): string {
@@ -134,10 +115,34 @@ async function runChecks(ctx: Ctx, issue: number, base: string, build: string): 
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, dir);
   const log = agentLog(ctx, issue, 'checks');
   try {
-    await ctx.container.shell(dir, CHECK_SCRIPT, log, { BUILD_SCOPE: build });
+    await ctx.container.shell(dir, checkScript(playtestCommand(ctx.cfg)), log, { BUILD_SCOPE: build });
     return null;
   } catch (error) {
     return checkFailure(log, error);
+  }
+}
+
+// Vitest's messages when a test, a hook or the runner itself ran out of time.
+const TIMEOUT_LINE = /(Test|Hook) timed out in \d+ms|Timeout calling "onTaskUpdate"/;
+
+// Whether every error in a check failure is a timeout. Such a failure says the machine was slow, not that the code is wrong.
+// A failure with no error line at all, like a failed playtest or typecheck, is a real one.
+export function timeoutOnly(failure: string): boolean {
+  const errors = failure.split('\n').filter((line) => /Error:|timed out in/.test(line));
+  return errors.length > 0 && errors.every((line) => TIMEOUT_LINE.test(line));
+}
+
+// Two reruns ride out a burst of load. A third timeout means the load stays, and Hermes has to look.
+const CHECK_RUNS = 3;
+
+// Runs the checks until they pass or fail for a real reason. Timeouts alone rerun the checks with no agent round,
+// since an agent would only raise the time limits. Returns null on a pass, or the real failure. Throws after CHECK_RUNS timeouts.
+async function checkPatiently(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
+  for (let run = 1; ; run++) {
+    const failure = await runChecks(ctx, issue, base, build);
+    if (failure === null || !timeoutOnly(failure)) return failure;
+    if (run === CHECK_RUNS) throw new Error(`The factory checks timed out ${CHECK_RUNS} times, under load. No test failed for another reason.\n${failure}`);
+    ctx.log('checks', issue, `the checks only timed out, run ${run} of ${CHECK_RUNS}, running them again`);
   }
 }
 
@@ -153,22 +158,30 @@ function checkFailure(log: string, error: unknown): string {
 export const CAPTION_LIMIT = 1024;
 const TRIM_MARK = '…';
 
-// The approval post is one photo with everything in its caption. The full notes also go on the issue.
-export async function post(ctx: Ctx, issue: number, approval: Approval, screenshot: string, url: string, base: string): Promise<void> {
+// The approval post is the primary photo with everything in its caption, and the only post with buttons. The full notes also go on the issue.
+// Further evidence images follow as a reply photo or album, which no command acts on.
+export async function post(ctx: Ctx, issue: number, approval: Approval, evidence: Evidence, url: string, base: string): Promise<void> {
   const item = await ctx.github.issue(issue);
   const link = `https://github.com/${ctx.cfg.repo}/issues/${issue}`;
   const pr = await pullRequestUrl(ctx, issue, item.title, approval, base);
   await ctx.github.comment(issue, `Ready for approval: ${url}\n\n${approval.description}\n\nHow to try: ${approval.howToTry}`);
   const caption = approvalCaption(`#${issue} ${item.title}`, url, link, pr, approval, base);
-  const photoId = await ctx.telegram.sendPhoto(ctx.cfg.committeeChat, screenshot, caption, approvalButtons(issue, base));
-  updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [photoId]: issue }, postCaptions: { ...state.postCaptions, [photoId]: caption } }));
+  await postWithEvidence(ctx, evidence, caption, approvalButtons(issue, base), {
+    add: (id) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [id]: issue }, postCaptions: { ...state.postCaptions, [id]: caption } })),
+    drop: (id) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: omit(state.approvalPosts, id), postCaptions: omit(state.postCaptions, id) })),
+  });
+}
+
+function omit<T>(record: Record<string, T>, key: number): Record<string, T> {
+  return Object.fromEntries(Object.entries(record).filter(([name]) => name !== String(key)));
 }
 
 // A feedback round reuses the pull request of the first round.
 async function pullRequestUrl(ctx: Ctx, issue: number, title: string, approval: Approval, base: string): Promise<string> {
   const open = await ctx.github.pullRequestFor(BRANCH(issue));
   if (open !== null) return open;
-  const body = `Closes #${issue}.\n\n${approval.description}\n\nHow to try: ${approval.howToTry}\n\nThe factory merges it when the committee approves.`;
+  const closes = [issue, ...bundleOf(readState(ctx.statePath), issue)].map((n) => `#${n}`).join(', ');
+  const body = `Closes ${closes}.\n\n${approval.description}\n\nHow to try: ${approval.howToTry}\n\nThe factory merges it when the committee approves.`;
   return ctx.github.openPullRequest(BRANCH(issue), base, `#${issue} ${title}`, body);
 }
 
@@ -181,7 +194,7 @@ export function approvalCaption(title: string, url: string, link: string, pr: st
   // A hotfix skips dev and the release, so its post opens with a warning the committee cannot miss.
   const warning = base === HOTFIX_BASE ? '⚠️ HOTFIX. Approve merges into main and ships to players at once. Play it with care.\n\n' : '';
   const head = `${warning}${title}\n\nPlay: ${url}\nIssue: ${link}\nPR: ${pr}`;
-  const action = base === HOTFIX_BASE ? 'Approve ships this hotfix to main and itch.io at once.' : `Approve merges into ${base}.`;
+  const action = base === HOTFIX_BASE ? 'Approve ships this hotfix to main and itch.io at once.' : `Approve runs the review and full testing, then merges into ${base}.`;
   const tail = `${action} Deny closes the issue. A reply to this post sends feedback to design.`;
   const room = CAPTION_LIMIT - head.length - tail.length - '\n\n'.repeat(3).length - 'How to try: '.length;
   const [description, howToTry] = fitBoth(approval.description, approval.howToTry, room);

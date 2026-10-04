@@ -25,13 +25,13 @@ function shows(views: CraterViews, id: string): boolean {
 // A view built at turn 4 with no craters, so craters synced later are new to it.
 function viewsAt(turn: number): CraterViews {
   const w = worldAt(turn, []);
-  return new CraterViews(w, new SightLimit(w.size));
+  return new CraterViews(w, new SightLimit(w.size), new THREE.Group());
 }
 
 describe('CraterViews', () => {
   it('shows every crater at once when built, as after a load', () => {
     const w = worldAt(5, [crater('crater-5-0', 20, 5), crater('crater-3-0', 40, 3)]);
-    const views = new CraterViews(w, new SightLimit(w.size));
+    const views = new CraterViews(w, new SightLimit(w.size), new THREE.Group());
     expect(shows(views, 'crater-5-0')).toBe(true);
     expect(shows(views, 'crater-3-0')).toBe(true);
   });
@@ -83,7 +83,7 @@ describe('CraterViews', () => {
 
   it('raises the rim as high as the physics rim on flat ground', () => {
     const w = worldAt(5, [crater('crater-3-0', 20, 3, 1.5)]);
-    const views = new CraterViews(w, new SightLimit(w.size));
+    const views = new CraterViews(w, new SightLimit(w.size), new THREE.Group());
     const rim = views.root.getObjectByName('crater-3-0-rim');
     if (!rim) throw new Error('No rim');
     const top = new THREE.Box3().setFromObject(rim).max.y;
@@ -92,7 +92,7 @@ describe('CraterViews', () => {
 
   it('writes no truck or prop stencil bit', () => {
     const w = worldAt(5, [crater('crater-3-0', 20, 3)]);
-    const views = new CraterViews(w, new SightLimit(w.size));
+    const views = new CraterViews(w, new SightLimit(w.size), new THREE.Group());
     views.root.traverse((o) => {
       if (!(o instanceof THREE.Mesh)) return;
       const m = o.material as THREE.Material;

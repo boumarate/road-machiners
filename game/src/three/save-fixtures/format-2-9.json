@@ -1,27 +1,13 @@
 {
-  "turn": 50,
-  "events": [
-    {
-      "t": "shot",
-      "shooter": "npc1",
-      "weapon": "cannon",
-      "target": "player",
-      "aim": "body",
-      "chance": 0.5,
-      "damageChance": 0.8,
-      "side": "front",
-      "rounds": [
-        { "hit": false, "crit": false, "offset": 2.4, "struck": null, "hits": [], "blast": [] },
-        { "hit": true, "crit": false, "offset": 0.1, "struck": "player", "hits": [{ "part": "p1", "damage": 3 }], "blast": [] }
-      ]
-    },
-    {
-      "t": "guardShot",
-      "site": "nose",
-      "from": { "x": 120, "y": 80 },
-      "target": "npc1",
-      "rounds": [{ "hit": true, "crit": true, "offset": -0.2, "struck": "npc1", "hits": [], "blast": [] }]
-    },
-    { "t": "arrived", "vehicle": "npc2" }
-  ]
+  "player": {
+    "vehicleId": "player",
+    "money": 340,
+    "skills": { "driving": 0, "perception": 450, "machining": 600, "toughness": 3500, "social": 1999 },
+    "xpToday": { "driving": 0, "perception": 12.5, "machining": 80, "toughness": 0, "social": 40 },
+    "xpDay": 3,
+    "repeats": { "search:dump-1": { "count": 1, "turn": 610 }, "profit:bowl:salt": { "count": 2.5, "turn": 640 } },
+    "xpBySource": { "search": 600, "profit": 1999, "discover": 450, "heat": 3500 },
+    "perks": ["welder", "desertRat"]
+  },
+  "turn": 650
 }

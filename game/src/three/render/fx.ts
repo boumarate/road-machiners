@@ -8,17 +8,17 @@ import { PHYSICS } from '../../data/physics';
 import { TERRAIN_TYPES } from '../../data/terrain';
 import { ENGINE_HEAT } from '../../data/wear';
 import { wheelMounts } from '../../phys/body';
-import { groundPoint, headingOf, toMap, type V3, type VehicleFrame } from '../../phys/frames';
+import { headingOf, type V3, type VehicleFrame } from '../../phys/frames';
 import { PAL } from '../../render/palette';
 import { bodyOf } from '../../sim/body';
 import { corePart, mountedParts } from '../../sim/grid';
 import { inOverdrive, isStranded, vehicleStats } from '../../sim/stats';
-import { tileAt, type Terrain } from '../../sim/terrain';
+import { tileAt } from '../../sim/terrain';
 import type { Vehicle, World } from '../../sim/types';
 import { maxHp } from '../../sim/wear';
 import type { CameraRig } from './camera';
-import { Casings } from './casings';
-import { Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan, type ShotCues } from './projectiles';
+import { tirePoints, Ruts } from './ruts';
+import { Casings, Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan, type ShotCues } from './projectiles';
 
 // Pool sizes; effects beyond them are dropped rather than growing the pools. Wheel dust dominates: at the
 // top speed of 31 m/s on hardpan a truck throws 31 x DUST.perMeter x 3 wheel shares, about
@@ -266,11 +266,13 @@ export class Fx3D {
   private pending: Pending[] = [];
   private flashes: MuzzleFlashes;
   private casings: Casings;
+  readonly ruts: Ruts;
 
   constructor(private scene: THREE.Scene, private overlay: HTMLElement, private rig: CameraRig) {
     scene.add(this.puffs.mesh, this.glows.mesh);
     this.flashes = new MuzzleFlashes(scene);
     this.casings = new Casings(scene);
+    this.ruts = new Ruts(scene);
     this.projectiles = new Projectiles(scene, (p) => this.missileSmoke(p));
     for (let i = 0; i < MAX_TEXTS; i++) {
       const el = document.createElement('div');
@@ -437,13 +439,14 @@ export class Fx3D {
     slot.el.style.opacity = '1';
   }
 
-  // world gives the ground casings land on and the turn they age by.
+  // world gives the ground casings land on and the turn casings and ruts age by.
   tick(dtMs: number, world: World): void {
     const dt = dtMs / 1000;
     this.puffs.tick(dt);
     this.glows.tick(dt);
     this.flashes.tick(dt);
     this.casings.tick(dt, world.terrain, world.turn);
+    this.ruts.tick(world.turn);
     for (let i = this.pending.length - 1; i >= 0; i--) {
       const job = this.pending[i];
       job.left -= dt;
@@ -498,8 +501,10 @@ export class TruckFx {
 
   constructor(private fx: Fx3D) {}
 
-  // moving: a turn plays, so wheels turn and engines pull. dt: seconds of playback since the last frame.
-  emit(world: World, v: Vehicle, f: VehicleFrame, moving: boolean, dt: number): void {
+  // moving: a turn plays, so wheels turn and engines pull. dt: seconds of playback since the last frame. seen: the
+  // player sees the truck, so it may leave ruts.
+  emit(world: World, v: Vehicle, f: VehicleFrame, moving: boolean, dt: number, seen: boolean): void {
+    this.fx.ruts.track(world, v, f, { seen, playing: moving });
     const traits = this.traitsOf(world, v);
     const pose: Pose = { f, h: headingOf(f.rot), half: bodyOf(v.chassisId).half };
     if (moving) this.driving(world, v, pose, traits, dt);
@@ -586,16 +591,6 @@ export class TruckFx {
     }
     return t;
   }
-}
-
-// Each tire's ground contact under a frame's pose, in physics meters and wheelMounts order. Wheel dust and ruts start here.
-export function tirePoints(terrain: Terrain, chassisId: string, f: VehicleFrame): V3[] {
-  const h = headingOf(f.rot);
-  const at = toMap(f.pos);
-  return wheelMounts(bodyOf(chassisId)).map((m) => {
-    const off = rotate(m.x, m.z, h);
-    return groundPoint(terrain, { x: at.x + off.x / PHYSICS.metersPerTile, y: at.y + off.z / PHYSICS.metersPerTile });
-  });
 }
 
 // A chassis-space offset (x forward, z to the side) turned to the truck's heading, in meters.

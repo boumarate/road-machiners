@@ -48,8 +48,9 @@ export class CraterViews {
   });
   private readonly dirt = new THREE.MeshLambertMaterial({ color: PAL.craterRim, flatShading: true });
 
-  // Built from a loaded world, every crater shows at once.
-  constructor(world: World, limit: SightLimit) {
+  // Built from a loaded world, every crater shows at once. parent holds the crater views.
+  constructor(world: World, limit: SightLimit, parent: THREE.Object3D) {
+    parent.add(this.root);
     this.terrain = world.terrain;
     this.turn = world.turn;
     this.scope = new RenderScope(this.root, world.size, limit, true, false);

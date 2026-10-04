@@ -12,8 +12,7 @@ import { bodyOf } from '../../sim/body';
 import { DECKS } from '../../sim/bridge';
 import { editableTerrain, emptyWorld } from '../../sim/testkit';
 import type { Vehicle, World } from '../../sim/types';
-import { tirePoints } from './fx';
-import { RUT, Ruts } from './ruts';
+import { RUT, Ruts, tirePoints } from './ruts';
 
 const S = PHYSICS.metersPerTile;
 const Y = 30; // the map row the test truck drives along, facing +x

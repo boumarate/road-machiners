@@ -5,8 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { PHYSICS } from '../../data/physics';
 import { flatTerrain } from '../../sim/testkit';
 import type { Terrain } from '../../sim/terrain';
-import { CASING, Casings } from './casings';
-import type { Muzzle } from './projectiles';
+import { CASING, Casings, type Muzzle } from './projectiles';
 
 const S = PHYSICS.metersPerTile;
 const GROUND_TILES = 2; // the test ground sits this many tiles up, so resting on y 0 would show

@@ -4,13 +4,15 @@
 // segments the oldest is overwritten. Render-only: never saved and never read by sim or physics.
 
 import * as THREE from 'three';
+import { PHYSICS } from '../../data/physics';
 import { TERRAIN_TYPES } from '../../data/terrain';
+import { wheelMounts } from '../../phys/body';
 import { TIME } from '../../data/time';
-import { toMap, type V3, type VehicleFrame } from '../../phys/frames';
+import { groundPoint, headingOf, toMap, type V3, type VehicleFrame } from '../../phys/frames';
+import { bodyOf } from '../../sim/body';
 import { deckAt } from '../../sim/bridge';
 import { tileAt, type Terrain } from '../../sim/terrain';
 import type { Vehicle, World } from '../../sim/types';
-import { tirePoints } from './fx';
 
 export const RUT = {
   max: 8000, // segments alive at once; a new one past it overwrites the oldest
@@ -151,4 +153,14 @@ function rutAt(t: Terrain, p: V3): number {
 // The share of a segment's darkness left at an age in turns: 1 when new, down to 0 at the end of its life.
 function fadeOf(age: number): number {
   return Math.max(0, 1 - age / RUT.lifeTurns);
+}
+
+// Each tire's ground contact under a frame's pose, in physics meters and wheelMounts order. Wheel dust and ruts start here.
+export function tirePoints(terrain: Terrain, chassisId: string, f: VehicleFrame): V3[] {
+  const h = headingOf(f.rot);
+  const at = toMap(f.pos);
+  return wheelMounts(bodyOf(chassisId)).map((m) => {
+    const off = { x: m.x * Math.cos(h) - m.z * Math.sin(h), z: m.x * Math.sin(h) + m.z * Math.cos(h) };
+    return groundPoint(terrain, { x: at.x + off.x / PHYSICS.metersPerTile, y: at.y + off.z / PHYSICS.metersPerTile });
+  });
 }
