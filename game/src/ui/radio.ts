@@ -13,7 +13,7 @@ import { robbing } from '../sim/states';
 import { clockOf } from '../sim/sun';
 import type { GameEvent, Vehicle, WeatherEvent, World } from '../sim/types';
 import { dist, type Vec } from '../sim/vec';
-import { el, panel } from './dom';
+import { el, panel, rightDock } from './dom';
 
 export type Broadcast = { topic: RadioTopic; text: string; turn: number; rank: 'news' | 'time' | 'filler' };
 
@@ -235,7 +235,7 @@ export function revealed(text: string, elapsedMs: number, charsPerSecond: number
 
 // The car radio above the log. It only streams and draws. The station picks every line.
 export class RadioPanel {
-  readonly root = panel('radio');
+  readonly root = panel('radio', rightDock());
   readonly faceplate = el('div', { class: 'radio-faceplate' });
   // Screen readers wait for aria-busy to clear, so they read a broadcast once, whole.
   private text = el('div', { class: 'radio-text', 'aria-live': 'polite', 'aria-busy': 'false' });

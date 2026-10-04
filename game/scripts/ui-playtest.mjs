@@ -56,43 +56,83 @@ async function checkInstruments(page) {
   }
 }
 
-// The radio sits above the log, clear of the other right-hand panels, with its knobs and a broadcast on screen.
-async function checkRadio(page) {
-  await page.waitForFunction(() => document.querySelector('.radio-text')?.textContent.trim(), null, { timeout: 30000 });
-  const m = await page.evaluate(() => {
-    const visibleRect = selector => {
-      const node = document.querySelector(selector);
-      return node && node.offsetParent !== null && getComputedStyle(node).visibility !== 'hidden' ? node.getBoundingClientRect().toJSON() : null;
-    };
-    return {
-      radio: visibleRect('.radio'), log: visibleRect('.log'), others: ['.instruments', '.contracts', '.info'].map(visibleRect).filter(Boolean),
-      knobs: document.querySelectorAll('.radio [role=slider]').length, oldSound: document.querySelectorAll('.top-right .sound').length,
-    };
-  });
-  assert(m.radio, 'Radio must be visible');
-  assert.equal(m.knobs, 4, 'Radio must carry four volume knobs');
-  assert.equal(m.oldSound, 0, 'The top-right Sound panel must be gone');
-  assert(m.radio.bottom <= m.log.y, 'Radio must sit above the log');
-  for (const other of [m.log, ...m.others]) assert(!doRectsOverlap(m.radio, other), 'Radio must not overlap the log, instruments, contracts or info');
+// The gap between the log's top and the dock above it: the contracts' pre-issue spot, 246px from the bottom on wide
+// screens, and 8px above the narrow log.
+const dockGap = page => (page.viewportSize().width <= 720 ? 8 : 12);
+
+const near = (a, b) => Math.abs(a - b) <= 1;
+
+// Gives the player one or more held contracts copied from the boards, or none, and waits for the contracts panel.
+async function holdContracts(page, count) {
+  await page.evaluate(count => {
+    const g = window.__ROAM__;
+    const w = structuredClone(g.state);
+    w.player.contracts = Object.values(w.shops).flatMap(shop => shop.contracts).slice(0, count);
+    if (w.player.contracts.length !== count) throw new Error(`The boards hold fewer than ${count} contracts`);
+    g.apply(w);
+  }, count);
+  await page.waitForFunction(count => (getComputedStyle(document.querySelector('.contracts')).display !== 'none') === (count > 0), count);
 }
 
-// The hover panel at its smallest never covers the radio. On a screen too short for both, the radio steps away while
-// the panel shows, the panel reaches down to the log, and the radio comes back after.
-async function checkRadioUnderInfo(page, radioStays) {
-  const m = await page.evaluate(() => {
-    const info = document.querySelector('.info');
-    const radio = document.querySelector('.radio');
-    const was = info.style.display;
-    info.style.display = '';
-    const seen = { info: info.getBoundingClientRect().toJSON(), radio: radio.getBoundingClientRect().toJSON(), log: document.querySelector('.log').getBoundingClientRect().toJSON(), shown: getComputedStyle(radio).visibility !== 'hidden' };
-    info.style.display = was;
-    return { ...seen, after: getComputedStyle(radio).visibility !== 'hidden' };
-  });
+// Hovers the player's truck, or ends the hover, and lets the layout settle for two frames.
+async function hover(page, on) {
+  await page.evaluate(on => {
+    const g = window.__ROAM__;
+    g.setHovered(on ? g.state.player.vehicleId : null);
+  }, on);
+  await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+}
+
+const boxes = page => page.evaluate(() => {
+  const visibleRect = selector => {
+    const node = document.querySelector(selector);
+    return node && node.offsetParent !== null && getComputedStyle(node).visibility !== 'hidden' ? node.getBoundingClientRect().toJSON() : null;
+  };
+  return {
+    radio: visibleRect('.radio'), log: visibleRect('.log'), contracts: visibleRect('.contracts'), info: visibleRect('.info'),
+    instruments: visibleRect('.instruments'),
+    knobs: document.querySelectorAll('.radio [role=slider]').length, oldSound: document.querySelectorAll('.top-right .sound').length,
+  };
+});
+
+// The radio sits above the log, or above the contracts while the player holds some, clear of the other right-hand
+// panels, with its knobs and a broadcast on screen.
+async function checkRadio(page) {
+  await page.waitForFunction(() => document.querySelector('.radio-text')?.textContent.trim(), null, { timeout: 30000 });
   const size = page.viewportSize();
-  assert(m.after, 'The radio must come back once the hover panel hides');
-  assert.equal(m.shown, radioStays, `At ${size.width}x${size.height} the radio must ${radioStays ? 'stay' : 'step away'} under the hover panel`);
-  assert(!doRectsOverlap(m.log, m.info), `At ${size.width}x${size.height} the hover panel must stop above the log`);
-  if (m.shown) assert(!doRectsOverlap(m.radio, m.info), `At ${size.width}x${size.height} the hover panel must not cover the radio`);
+  for (const count of [0, 1]) {
+    await holdContracts(page, count);
+    const m = await boxes(page);
+    assert(m.radio, 'Radio must be visible');
+    assert.equal(m.knobs, 4, 'Radio must carry four volume knobs');
+    assert.equal(m.oldSound, 0, 'The top-right Sound panel must be gone');
+    const below = count ? m.contracts : m.log;
+    const gap = count ? 8 : dockGap(page);
+    assert(near(below.y - m.radio.bottom, gap), `At ${size.width}x${size.height} with ${count} contracts the radio must sit ${gap}px above the ${count ? 'contracts' : 'log'}, got ${below.y - m.radio.bottom}`);
+    for (const other of [m.log, m.contracts, m.instruments].filter(Boolean)) assert(!doRectsOverlap(m.radio, other), 'Radio must not overlap the log, instruments or contracts');
+  }
+}
+
+// The contracts keep their pre-issue spot and the hover panel stops above the log. While the hover panel shows, the
+// radio is away or clear of it, and it comes back once the hover ends. On a tall screen it stays during the hover.
+// radioStays is null where the hover panel's content decides.
+async function checkRightColumn(page, radioStays) {
+  const size = page.viewportSize();
+  const at = `At ${size.width}x${size.height}`;
+  await holdContracts(page, 1);
+  await hover(page, true);
+  const m = await boxes(page);
+  assert(m.info, `${at} the hover panel must show`);
+  assert(m.contracts, `${at} the contracts must show`);
+  assert(near(m.log.y - m.contracts.bottom, dockGap(page)), `${at} the contracts must sit ${dockGap(page)}px above the log, got ${m.log.y - m.contracts.bottom}`);
+  assert(!doRectsOverlap(m.log, m.info), `${at} the hover panel must stop above the log`);
+  // Where the contracts at their old spot were clear of the hover panel, they still are.
+  const old = { ...m.contracts, y: m.log.y - dockGap(page) - m.contracts.height, bottom: m.log.y - dockGap(page) };
+  if (!doRectsOverlap(old, m.info)) assert(!doRectsOverlap(m.contracts, m.info), `${at} the hover panel must not cover the contracts`);
+  if (m.radio) assert(!doRectsOverlap(m.radio, m.info), `${at} the hover panel must not cover the radio`);
+  if (radioStays !== null) assert.equal(Boolean(m.radio), radioStays, `${at} the radio must ${radioStays ? 'stay' : 'step away'} during the hover`);
+  await hover(page, false);
+  assert((await boxes(page)).radio, `${at} the radio must come back once the hover panel hides`);
 }
 
 try {
@@ -136,14 +176,14 @@ try {
     await page.setViewportSize({ width, height });
     await checkRadio(page);
   }
-  for (const [width, height, radioStays] of [[1280, 720, false], [1366, 657, false], [1280, 768, false], [1280, 800, true], [700, 800, false], [700, 940, true]]) {
+  for (const [width, height, radioStays] of [[1280, 720, false], [1366, 768, false], [1280, 800, false], [1440, 860, null], [1440, 900, true], [700, 800, false], [700, 940, false], [700, 1060, true]]) {
     await page.setViewportSize({ width, height });
-    await checkRadioUnderInfo(page, radioStays);
+    await checkRightColumn(page, radioStays);
   }
   assert.deepEqual(errors, [], 'No uncaught page errors');
   await mkdir('.playtest', { recursive: true });
   await page.screenshot({ path: '.playtest/ui-regression.png' });
-  console.log('PASS: hover names, flat surfaces, persistent resources/log, the radio above the log and clear of the hover panel, stable modal frames, movable-item inspection, and laptop/narrow layouts, clock strip, speedometer and action row');
+  console.log('PASS: hover names, flat surfaces, persistent resources/log, the radio above the log and contracts and clear of the hover panel, the contracts in their old spot, stable modal frames, movable-item inspection, and laptop/narrow layouts, clock strip, speedometer and action row');
 } finally {
   await browser.close();
 }

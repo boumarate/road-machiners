@@ -4,7 +4,7 @@ import { DialoguePanel, type DialogueHost } from "./dialogue";
 import type { Vehicle, World } from "../sim/types";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
-import { el, isBrowserChord, panel, topLeft, topRight } from "./dom";
+import { el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
 import {
   contractDue,
@@ -93,7 +93,7 @@ export class Hud {
   private top = panel("instruments");
   private condition = new TruckConditionView();
   private inspected = new TruckConditionView();
-  private contracts = panel("contracts");
+  private contracts = panel("contracts", rightDock());
   private log = new LogPanel();
   private info = panel("info");
   private infoBody = el("div");
@@ -113,11 +113,24 @@ export class Hud {
 
   private readonly dialogue: DialoguePanel;
 
+  // The hover panel wins the right column: the radio steps away while the shown hover panel overlaps it. Visibility
+  // keeps the radio's box, so the step-away never changes what it measures.
+  private keepRadioClear = (): void => {
+    const shown = this.info.style.display !== "none";
+    const away = shown && overlaps(this.info.getBoundingClientRect(), this.radio.root.getBoundingClientRect());
+    this.radio.root.classList.toggle("away", away);
+  };
+
   constructor(private actions: HudActions, private radio: RadioPanel) {
     this.dialogue = new DialoguePanel(actions.dialogue);
     this.info.style.display = "none";
     this.info.append(this.infoBody);
     this.contracts.style.display = "none";
+    // Any change in the hover panel's size or the dock's, or a layout switch, rechecks the radio.
+    const observer = new ResizeObserver(this.keepRadioClear);
+    observer.observe(this.info);
+    observer.observe(rightDock());
+    window.addEventListener("resize", this.keepRadioClear);
     this.toastBox.style.display = "none";
     this.rescue.style.display = "none";
     this.stranded.style.display = "none";

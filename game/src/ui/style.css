@@ -526,10 +526,27 @@ body {
   border-left: 2px solid #777e81;
   font-size: 12px;
 }
-#ui .contracts {
+/* The one owner of the stack above the log: the contracts at the old contracts spot, the radio in the space above.
+   Panels in it carry no position numbers of their own. */
+#ui .right-dock {
+  position: absolute;
   right: 16px;
-  bottom: 371px;
+  bottom: 246px;
   width: 282px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#ui .right-dock > .panel {
+  position: static;
+}
+#ui .right-dock > .radio {
+  order: 0;
+}
+#ui .right-dock > .contracts {
+  order: 1;
+}
+#ui .contracts {
   box-sizing: border-box;
   padding: 8px 10px;
   background: #202529e8;
@@ -537,14 +554,11 @@ body {
   border-left: 2px solid #777e81;
   font-size: 12px;
 }
-/* Waste Of Time Radio: a pager screen over a faceplate of volume knobs, between the log and the contracts. */
+/* Waste Of Time Radio: a pager screen over a faceplate of volume knobs, at the top of the right dock. */
 #ui .radio {
   --radio-line: 14px;
   --radio-lines: 3;
   --knob-size: 28px;
-  right: 16px;
-  bottom: 242px;
-  width: 282px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -794,24 +808,16 @@ body {
   top: 64px;
   width: var(--inspection-width);
   min-height: var(--inspection-height);
-  /* Stops above the radio. */
-  max-height: calc(100dvh - 64px - 363px - 8px);
+  /* Stops above the log. */
+  max-height: calc(100dvh - 64px - 234px - 8px);
   max-width: calc(100vw - 28px);
   box-sizing: border-box;
   overflow: auto;
   font-size: 12px;
 }
-/* A screen too short for the hover panel above the radio: the radio steps away while the panel shows. The panel
-   keeps its full height, since the mouse stays on the truck and cannot scroll it. 775px is the panel's top, its
-   min-height, the radio's top above the bottom and the gap: 64 + 340 + 363 + 8. */
-@media (max-height: 775px) {
-  #ui:has(> .info:not([style*="display: none"])) > .radio {
-    visibility: hidden;
-  }
-  /* With the radio away, the panel grows down to the log again. */
-  .info {
-    max-height: calc(100dvh - 64px - 234px - 8px);
-  }
+/* The radio steps away while the hover panel overlaps it. Hud.keepRadioClear decides. */
+#ui .radio.away {
+  visibility: hidden;
 }
 .info .bar {
   height: 4px;
@@ -997,7 +1003,8 @@ body {
   > .panel:not(.modal):not(.toast):not(.instruments):not(.log) {
   visibility: hidden;
 }
-#ui:has(.modal:not([style*="display: none"])) > .top-left {
+#ui:has(.modal:not([style*="display: none"])) > .top-left,
+#ui:has(.modal:not([style*="display: none"])) > .right-dock {
   visibility: hidden;
 }
 #ui:has(.modal:not([style*="display: none"])) > .instruments,
@@ -1446,8 +1453,7 @@ body {
     max-width: calc(100vw - 644px);
   }
   #ui .log,
-  #ui .radio,
-  #ui .contracts {
+  #ui .right-dock {
     width: 246px;
   }
 }
@@ -1481,9 +1487,6 @@ body {
     --radio-line: 12px;
     --radio-lines: 4;
     --knob-size: 22px;
-    bottom: 264px;
-    right: 14px;
-    width: 200px;
     gap: 4px;
     padding: 4px 6px;
   }
@@ -1494,8 +1497,9 @@ body {
   .knob-cell {
     font-size: 7px;
   }
-  #ui .contracts {
-    bottom: 393px;
+  /* 8px above the narrow log, whose top is 176 + 80 from the bottom. */
+  #ui .right-dock {
+    bottom: 264px;
     right: 14px;
     width: 200px;
   }
@@ -1505,16 +1509,7 @@ body {
   }
   .info {
     top: 190px;
-    max-height: calc(100dvh - 190px - 385px - 8px);
-  }
-  /* The same step away in the narrow layout, below 190 + 340 + 385 + 8. */
-  @media (max-height: 923px) {
-    #ui:has(> .info:not([style*="display: none"])) > .radio {
-      visibility: hidden;
-    }
-    .info {
-      max-height: calc(100dvh - 190px - 256px - 8px);
-    }
+    max-height: calc(100dvh - 190px - 256px - 8px);
   }
   #ui .modal {
     padding: 20px 16px;
