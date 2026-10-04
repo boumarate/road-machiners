@@ -235,9 +235,9 @@ function withMemories_11_12(world: SavedJson): SavedJson {
 
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
-// 12 to 13: a patch records the parts it lifts. Old patches were all stranded ones, so they get the client's parts at
+// 13 to 14: a patch records the parts it lifts. Old patches were all stranded ones, so they get the client's parts at
 // 0 HP. Settling keeps only those that are still patchable and below the target.
-function withPatchParts_12_13(world: SavedJson): SavedJson {
+function withPatchParts_13_14(world: SavedJson): SavedJson {
   const vehicles = world.vehicles as SavedJson[];
   const brokenIds = (id: string): string[] => {
     const client = vehicles.find((v) => v.id === id);
@@ -312,8 +312,10 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => world,
   // 11 to 12: a driver's last town becomes a memory of its prices.
   withMemories_11_12,
-  // 12 to 13: a patch records the parts it lifts.
-  withPatchParts_12_13,
+  // 12 to 13: the player gets the headlight switch, off as in a new game.
+  (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
+  // 13 to 14: a patch records the parts it lifts.
+  withPatchParts_13_14,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
