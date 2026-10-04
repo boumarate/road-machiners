@@ -7,7 +7,7 @@ a long door window, a quarter window and a near-vertical tail under a flat roof 
 The nose is a wide dark grille panel with round headlamps inset at each end, lamp blocks at the hood corners and a thick dark bumper.
 Wheels sit on rows 1 and 5 in the outer columns, radius 0.45 m, half width 0.18 m, mount 0.25 m below the center. Arches are cut on them.
 The sockets arch_front, arch_rear (the left arch center at the hub) and arch_front_top (its crown) let wheelArches.test.ts check them against physics.
-The sill hangs 0.43 m below the collider bottom as skin only.
+The sill hangs 0.21 m below the collider bottom as skin only.
 Run: blender --background --python tools/blender/base_niva.py -- public/models/base_niva.glb [tmp/base_niva.png]
 """
 

@@ -58,22 +58,16 @@ class Grid:
         return self.half_y - CELL_ACROSS * (x + 0.5)
 
 
-def arch_profile(
-    g: Grid, wheels_x: list[float], hub_z: float, radius: float, top: float, bottom: float | None = None
-) -> list[tuple[float, float]]:
-    """A side panel's XZ outline from the body bottom to top, with a low-poly arch cut up around each wheel.
-
-    bottom is where the outline starts, the grid bottom unless a sill hangs lower.
-    """
+def arch_profile(g: Grid, wheels_x: list[float], hub_z: float, radius: float, top: float) -> list[tuple[float, float]]:
+    """A side panel's XZ outline from the body bottom to top, with a low-poly arch cut up around each wheel."""
     r = radius + ARCH_CLEARANCE
-    low = g.bottom if bottom is None else bottom
-    pts = [(-g.half_x + INSET, low)]
+    pts = [(-g.half_x + INSET, g.bottom)]
     for wx in sorted(wheels_x):
         for k in range(ARCH_SEGMENTS + 1):
             a = math.pi * (1 - k / ARCH_SEGMENTS)
-            z = max(low, hub_z + r * math.sin(a))
+            z = max(g.bottom, hub_z + r * math.sin(a))
             pts.append((wx + r * math.cos(a), z))
-    pts += [(g.half_x - INSET, low), (g.half_x - INSET, top), (-g.half_x + INSET, top)]
+    pts += [(g.half_x - INSET, g.bottom), (g.half_x - INSET, top), (-g.half_x + INSET, top)]
     return pts
 
 
