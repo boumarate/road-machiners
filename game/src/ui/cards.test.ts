@@ -4,7 +4,7 @@ import { mountedParts } from "../sim/grid";
 import { playerVehicle } from "../sim/damage";
 import { newWorld } from "../sim/world";
 import type { PartInstance } from "../sim/types";
-import { baselinePart, chassisPortraitCell, chassisStats, compareBase, diffStats, gridIconFrame, itemIconCell, partStats } from "./cards";
+import { baselinePart, chassisPortraitCell, chassisStats, compareBase, diffStats, gridIconFrame, itemIconCell, partStats, toneStyle } from "./cards";
 import ICONS from "../data/item-icons.json";
 import { CHASSIS } from "../data/chassis";
 import { GOODS } from "../data/goods";
@@ -147,6 +147,23 @@ describe("grid item icons", () => {
     const scrap = itemIconCell("scrap");
     expect(scrap.view).toBe("diagonal");
     expect(gridIconFrame(scrap, sideways)).toEqual({ crop: scrap.box, turn: 0 });
+  });
+});
+
+describe("item tones", () => {
+  it("give each item its category's background as --tone", () => {
+    expect(["mg", "cage", "panniers", "salt", "stockEngine", "scanner"].map(toneStyle)).toEqual([
+      "--tone:#8c3a30",
+      "--tone:#686c6f",
+      "--tone:#6e5236",
+      "--tone:#6e5236",
+      "--tone:#35587a",
+      "--tone:#35587a",
+    ]);
+  });
+
+  it("fail on an id that is no item", () => {
+    expect(() => toneStyle("hoverPad")).toThrow(/hoverPad/);
   });
 });
 

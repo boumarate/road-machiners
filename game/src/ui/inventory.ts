@@ -43,7 +43,7 @@ import type {
 } from "../sim/types";
 import { el, isBrowserChord, panel } from "./dom";
 import type { UiHost } from "./host";
-import { baselinePart, conditionMeter, conditionRow, conditionTag, createIcon, diffStats, footprint as footprintEl, itemIconEl, partIconEl, partStats, statGrid } from "./cards";
+import { baselinePart, conditionMeter, conditionRow, conditionTag, createIcon, diffStats, footprint as footprintEl, itemIconEl, partIconEl, partStats, statGrid, toneStyle } from "./cards";
 import { vehicleMass } from "../sim/mass";
 import {
   blockerIds,
@@ -55,7 +55,6 @@ import {
   itemLabel,
   itemName,
   itemState,
-  KIND_CLASS,
   lootGoodItem,
   lootPartItem,
   partTitle,
@@ -531,7 +530,7 @@ export class InventoryView {
       const d = partDef(p.defId);
       const chip = el(
         "div",
-        { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
+        { class: "inv-chip", style: toneStyle(p.defId), title: partTitle(p) },
         partIconEl(p),
         el("span", {}, d.name),
         conditionTag(p),
@@ -561,7 +560,7 @@ export class InventoryView {
       const d = partDef(p.defId);
       const chip = el(
         "div",
-        { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
+        { class: "inv-chip", style: toneStyle(p.defId), title: partTitle(p) },
         partIconEl(p),
         el("span", {}, d.name),
         conditionTag(p),
@@ -585,7 +584,7 @@ export class InventoryView {
       const item = lootGoodItem(good);
       const chip = el(
         "div",
-        { class: "inv-chip k-good" },
+        { class: "inv-chip", style: toneStyle(good) },
         itemIconEl(item),
         `${GOODS[good].name} x${count}`,
       );

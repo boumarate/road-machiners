@@ -9,7 +9,8 @@ import { baseGrid, cellCount, mountedParts, plateSide, type Cell, type SideLette
 import { maxHp, partValue, wornDef } from "../sim/wear";
 import type { GridItem, PartInstance, Vehicle } from "../sim/types";
 import { GOODS } from "../data/goods";
-import { BODY_PARTS } from "../render/partLooks";
+import { BODY_PARTS, itemTone } from "../render/partLooks";
+import { ITEM_TONES } from "../render/palette";
 import ICONS from "../data/item-icons.json";
 import { el } from "./dom";
 import { conditionStatus, conditionTier, showsCondition, wearLabel } from "./format";
@@ -239,10 +240,17 @@ function sheetIcon(cell: IconCell, cls: string, crop: Box, turn: Turn = 0): HTML
   return icon;
 }
 
-// A part's or good's icon, upright and cropped to its drawing, named for screen readers and on hover.
+// A part's or good's icon, upright and cropped to its drawing, on its tone, named for screen readers and on hover.
 export function createItemIcon(id: string): HTMLElement {
   const cell = itemIconCell(id);
-  return sheetIcon(cell, "icon item-icon", cell.box);
+  const icon = sheetIcon(cell, "icon item-icon", cell.box);
+  icon.setAttribute("style", toneStyle(id));
+  return icon;
+}
+
+// The inline style that gives an item's box, chip, icon or card its category tone. The stylesheet reads --tone.
+export function toneStyle(id: string): string {
+  return `--tone:#${ITEM_TONES[itemTone(id)].toString(16).padStart(6, "0")}`;
 }
 
 // Cabs have no model of their own, are built in and never trade, so they keep the cab glyph.
@@ -337,7 +345,7 @@ export function partCard(o: PartCardOptions): HTMLElement {
   const diffs = diffStats(partStats(o.part), o.base ? partStats(o.base) : null);
   const card = el(
     "div",
-    { class: `card k-${def.kind}` },
+    { class: `card toned k-${def.kind}`, style: toneStyle(def.id) },
     el(
       "div",
       { class: "card-head" },
