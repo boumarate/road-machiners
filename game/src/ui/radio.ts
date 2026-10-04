@@ -133,8 +133,16 @@ export class RadioStation {
 
   // The best paid contract posted since the last world, on a found board to a found place.
   private contractNews(world: World): void {
-    const fresh = Object.values(world.shops).flatMap((s) => s.contracts).filter((c) => !this.board.has(c.id));
-    this.board = boardIds(world);
+    const old = this.board;
+    const fresh: Contract[] = [];
+    this.board = new Set();
+    for (const shop of Object.values(world.shops)) {
+      for (const c of shop.contracts) {
+        this.board.add(c.id);
+        if (!old.has(c.id)) fresh.push(c);
+      }
+    }
+    if (fresh.length === 0) return;
     const found = (id: string) => world.player.discovered.includes(id);
     const known = fresh.filter((c) => found(c.shop) && (c.kind !== 'haul' || found(c.to)));
     const best = known.sort((a, b) => b.reward - a.reward)[0];
@@ -145,6 +153,8 @@ export class RadioStation {
   private timeCall(prevTurn: number, turn: number): void {
     const from = hoursOf(prevTurn);
     const to = hoursOf(turn);
+    // Calls fall on whole hours, so none lies between two times in the same hour.
+    if (Math.floor(from) === Math.floor(to)) return;
     const latest = clockCalls(from, to).filter((c) => c.at > from && c.at <= to).at(-1);
     if (latest) this.push(latest.topic, {}, 'time');
   }
@@ -267,7 +277,8 @@ export class RadioPanel {
     const s = this.streaming;
     if (!s) return;
     const shown = revealed(s.text, now - s.start, RADIO.charsPerSecond);
-    this.text.textContent = shown;
+    // Several frames pass per character, so the screen is written only when one appears.
+    if (shown.length !== this.text.textContent?.length) this.text.textContent = shown;
     if (shown.length < s.text.length) {
       requestAnimationFrame(this.tick);
       return;
