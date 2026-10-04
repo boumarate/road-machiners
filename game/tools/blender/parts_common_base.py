@@ -58,28 +58,35 @@ class Grid:
         return self.half_y - CELL_ACROSS * (x + 0.5)
 
 
-def arch_profile(g: Grid, wheels_x: list[float], hub_z: float, radius: float, top: float) -> list[tuple[float, float]]:
-    """A side panel's XZ outline from the body bottom to top, with a low-poly arch cut up around each wheel."""
+def arch_profile(
+    g: Grid, wheels_x: list[float], hub_z: float, radius: float, top: float, bottom: float | None = None
+) -> list[tuple[float, float]]:
+    """A side panel's XZ outline from the body bottom to top, with a low-poly arch cut up around each wheel.
+
+    bottom is where the outline starts, the grid bottom unless a sill hangs lower.
+    """
     r = radius + ARCH_CLEARANCE
-    pts = [(-g.half_x + INSET, g.bottom)]
+    low = g.bottom if bottom is None else bottom
+    pts = [(-g.half_x + INSET, low)]
     for wx in sorted(wheels_x):
         for k in range(ARCH_SEGMENTS + 1):
             a = math.pi * (1 - k / ARCH_SEGMENTS)
-            z = max(g.bottom, hub_z + r * math.sin(a))
+            z = max(low, hub_z + r * math.sin(a))
             pts.append((wx + r * math.cos(a), z))
-    pts += [(g.half_x - INSET, g.bottom), (g.half_x - INSET, top), (-g.half_x + INSET, top)]
+    pts += [(g.half_x - INSET, low), (g.half_x - INSET, top), (-g.half_x + INSET, top)]
     return pts
 
 
-def flare(kit: Kit, name: str, g: Grid, wx: float, hub_z: float, radius: float, y0: float, y1: float) -> None:
-    """A dark low-poly ring over the top of one arch, from the body bottom on both sides."""
+def flare(kit: Kit, name: str, g: Grid, wx: float, hub_z: float, radius: float, y0: float, y1: float, bottom: float | None = None) -> None:
+    """A dark low-poly ring over the top of one arch, from the body bottom (or bottom) on both sides."""
+    low = g.bottom if bottom is None else bottom
     r0 = radius + ARCH_CLEARANCE
     r1 = r0 + FLARE
     inner, outer = [], []
     for k in range(ARCH_SEGMENTS + 1):
         a = math.pi * k / ARCH_SEGMENTS
-        inner.append((wx + r0 * math.cos(a), max(g.bottom, hub_z + r0 * math.sin(a))))
-        outer.append((wx + r1 * math.cos(a), max(g.bottom, hub_z + r1 * math.sin(a))))
+        inner.append((wx + r0 * math.cos(a), max(low, hub_z + r0 * math.sin(a))))
+        outer.append((wx + r1 * math.cos(a), max(low, hub_z + r1 * math.sin(a))))
     prism(kit, name, outer + list(reversed(inner)), y0, y1, "under")
 
 
@@ -146,6 +153,30 @@ def hull_mesh(name: str, points: list[Vec3]) -> bpy.types.Object:
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.scene.collection.objects.link(obj)
     return obj
+
+
+def hull_layers(name: str, layers: list[tuple[float, float, float, float, float]]) -> bpy.types.Object:
+    """A convex body from stacked plan outlines. Each layer is (z, x_front, x_back, half_y, chamfer): a rectangle with its corners cut."""
+    pts: list[Vec3] = []
+    for z, xf, xb, hy, c in layers:
+        for y in (hy, -hy):
+            pts += [(xf - c, y, z), (xb + c, y, z)]
+        for x in (xf, xb):
+            pts += [(x, hy - c, z), (x, -hy + c, z)]
+    return hull_mesh(name, pts)
+
+
+def arch_cut(obj: bpy.types.Object, wheels_x: list[float], hub_z: float, radius: float, wall_y: float, bottom: float) -> None:
+    """Cuts a low-poly arch around each wheel through both side walls, outside wall_y, from the body bottom up."""
+    r = radius + ARCH_CLEARANCE
+    cutters = []
+    for wx in wheels_x:
+        for sign in (1, -1):
+            ring = [(wx + r * math.cos(math.pi * k / ARCH_SEGMENTS), hub_z + r * math.sin(math.pi * k / ARCH_SEGMENTS)) for k in range(ARCH_SEGMENTS + 1)]
+            ring += [(wx + r, bottom - 0.1), (wx - r, bottom - 0.1)]
+            ys = (sign * wall_y, sign * (wall_y + 2.0))
+            cutters.append([(x, y, z) for x, z in ring for y in ys])
+    cut_hulls(obj, cutters)
 
 
 def cut_hulls(obj: bpy.types.Object, cutters: list[list[Vec3]]) -> None:
