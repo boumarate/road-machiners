@@ -197,7 +197,7 @@ describe('runAgent reference images', () => {
 });
 
 describe('stage prompts for reference images', () => {
-  const vars = { issue: '7', taskFile: 'f', branch: 'b', evidenceRules: '' };
+  const vars = { issue: '7', taskFile: 'f', branch: 'b', evidenceRules: '', visualRules: '' };
   it('tell every stage to read the images and what a missing one means', () => {
     for (const name of ['triage', 'design', 'implement', 'test', 'test-fix']) {
       const text = fillPrompt(name, vars);
@@ -220,6 +220,46 @@ describe('stage prompts for reference images', () => {
     expect(text).toContain('a gameplay test is not enough');
     expect(text).toContain('.factory/comparison.png');
     expect(text).toContain('up to three rounds');
+  });
+
+  it('make implementation capture and read real screenshots of any visible change, with or without a reference image', () => {
+    const text = fillPrompt('implement', vars);
+    expect(text).toContain('Visual self-review');
+    expect(text).toContain('with or without a reference image');
+    expect(text).toContain('Capture real in-game screenshots');
+    expect(text).toContain('Read every screenshot with the Read tool');
+    expect(text).toContain('game/docs/DESIGN.md');
+    expect(text).toContain('placeholder shapes');
+    expect(text).toContain('behind it');
+    expect(text).toContain('successive simulation points');
+    expect(text).toContain('Do not commit them');
+    expect(text).toContain('Never use a drawn or invented render');
+    expect(text).toContain('needs no screenshots');
+    expect(text).toContain('## Visual review findings');
+    // The reference-image rules stay.
+    expect(text).toContain('Read every available image with the Read tool before you build.');
+    expect(text).toContain('When the task file asks for a visual acceptance check');
+  });
+
+  it('make testing read the final images against the issue and the docs, with no reference image needed', () => {
+    const text = fillPrompt('visual-review', { taskFile: 'f' });
+    expect(text).toContain('independent of what the implementation stage claimed');
+    expect(text).toContain('Read each shown image with the Read tool');
+    expect(text).toContain('game/docs/DESIGN.md');
+    expect(text).toContain('with no concept image');
+    expect(text).toContain('`tune`');
+    expect(text).toContain('`rebuild`');
+    expect(text).toContain('`plan`');
+    expect(text).toContain('at most twice');
+    expect(text).toContain('Never set `visual` false while `.factory/evidence.json` lists features');
+    expect(text).toContain('Do not approve a look you did not see');
+    const test = fillPrompt('test', { ...vars, visualRules: text });
+    expect(test).toContain('Visual review of the final build');
+    expect(test).toContain('up to three rounds');
+  });
+
+  it('tell design how to read visual review findings', () => {
+    expect(fillPrompt('design', vars)).toContain('## Visual review findings');
   });
 });
 

@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import { pngBytes } from '../photo-fixtures';
 import { EMPTY_STATE, readState, writeState } from '../state';
 import type { AgentRun, Ctx } from '../types';
@@ -127,9 +128,23 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
   return fake as unknown as Ctx;
 }
 
-function writeOutputs(run: AgentRun, approval: string | null): void {
+// The agent's honest reading of images it opened: every image and feature judged, unless the test overrides a field.
+function visualReview(out: string, features: { name: string }[], files: string[], overrides: Partial<Record<string, unknown>> = {}): object {
+  const read = (file: string) => ({ file, sha256: createHash('sha256').update(readFileSync(`${out}/${file}`)).digest('hex'), observations: `The ${file} view shows the change as the issue describes.`, verdict: 'correct' });
+  return {
+    commit: 'abc1234', visual: true, repairs: 0, images: files.map(read),
+    decisions: features.map((feature) => ({ feature: feature.name, verdict: 'correct', notes: `${feature.name} fits the issue and DESIGN.md.` })),
+    mismatches: [], ...overrides,
+  };
+}
+
+const NONVISUAL = { commit: 'abc1234', visual: false, reason: 'A rule changed and nothing on screen moved.' };
+
+// By default the agent reports a change nobody can see, so the tests of the other rules need no images.
+function writeOutputs(run: AgentRun, approval: string | null, review: object = NONVISUAL): void {
   if (approval !== null) writeFileSync(`${run.clone}/${run.dir}/.factory/approval.json`, approval);
   writeFileSync(`${run.clone}/${run.dir}/.factory/screenshot.png`, 'png');
+  writeFileSync(`${run.clone}/${run.dir}/.factory/visual-review.json`, JSON.stringify(review));
 }
 
 describe('testing stage', () => {
@@ -499,7 +514,7 @@ describe('testing stage evidence', () => {
   const horn: Feature = { name: 'Horn', kind: 'other' };
   const yard: Feature = { name: 'Yard', kind: 'location' };
   // Writes real images view0..N-1 (view0 is screenshot.png) and a manifest. `covers[i]` names what image i shows.
-  function writeEvidence(run: AgentRun, features: Feature[], covers: string[][], commit = 'abc1234'): void {
+  function writeEvidence(run: AgentRun, features: Feature[], covers: string[][], commit = 'abc1234', review: Partial<Record<string, unknown>> = {}): void {
     const out = `${run.clone}/${run.dir}/.factory`;
     writeFileSync(`${out}/approval.json`, JSON.stringify({ description: 'd', howToTry: 'h' }));
     const images = covers.map((names, i) => {
@@ -508,6 +523,7 @@ describe('testing stage evidence', () => {
       return { file, description: `View ${i}`, covers: names };
     });
     writeFileSync(`${out}/evidence.json`, JSON.stringify({ commit, features, images }));
+    writeFileSync(`${out}/visual-review.json`, JSON.stringify(visualReview(out, features, images.map((image) => image.file), review)));
   }
   const items = (count: number): Feature[] => Array.from({ length: count }, (_, i) => ({ name: `Item ${i}`, kind: 'item' }));
   const each = (count: number): string[][] => Array.from({ length: count }, (_, i) => [`Item ${i}`]);
@@ -626,5 +642,172 @@ describe('patch stage', () => {
 
   it('refuses a card with no queued patch', async () => {
     await expect(runPatch(fakeCtx(() => undefined), 7)).rejects.toThrow('no patch queued');
+  });
+});
+
+describe('visual review of the candidate', () => {
+  const oil = [{ name: 'Oil patch', kind: 'other' }];
+  const state = () => readState(`${home}/state.json`);
+  // The agent captures the oil patch from the final head and reads it. `review` overrides what it decided.
+  function capture(run: AgentRun, review: Partial<Record<string, unknown>> = {}, seed = 0): void {
+    const out = `${run.clone}/${run.dir}/.factory`;
+    writeFileSync(`${out}/approval.json`, JSON.stringify({ description: 'd', howToTry: 'h' }));
+    writeFileSync(`${out}/screenshot.png`, pngBytes(seed));
+    writeFileSync(`${out}/view1.png`, pngBytes(seed + 1));
+    const images = [{ file: 'screenshot.png', description: 'Oil behind the truck', covers: ['Oil patch'] }, { file: 'view1.png', description: 'Oil from the side', covers: ['Oil patch'] }];
+    writeFileSync(`${out}/evidence.json`, JSON.stringify({ commit: 'abc1234', features: oil, images }));
+    writeFileSync(`${out}/visual-review.json`, JSON.stringify(visualReview(out, oil, images.map((image) => image.file), review)));
+  }
+  const wrongOil = (scope: string, repairs = 0): Partial<Record<string, unknown>> => ({
+    repairs,
+    decisions: [{ feature: 'Oil patch', verdict: 'wrong', notes: 'The oil is a perfect circle ahead of the truck.' }],
+    mismatches: [{ description: 'The oil is a perfect circle and lies ahead of the truck, the issue says behind it.', scope }],
+  });
+  const posted = (): boolean => calls.some((call) => call.startsWith('photo'));
+
+  it('posts a candidate whose images the agent read and found right', async () => {
+    await runStage(fakeCtx((run) => capture(run)), 7);
+    expect(posted()).toBe(true);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+  });
+
+  it('gives the agent the issue text and the visual review rules in the test round', async () => {
+    let prompt = '';
+    await runStage(fakeCtx((run) => { prompt = run.prompt; capture(run); }), 7);
+    expect(prompt).toContain('Visual review of the final build');
+    expect(readFileSync(`${home}/work/issue-7/game/.factory/issue.md`, 'utf8')).toContain('UNTRUSTED USER TEXT');
+  });
+
+  it.each([
+    ['rebuild', 'Implementation'],
+    ['plan', 'Design'],
+  ])('a visibly wrong %s mismatch makes no post and sends the card to %s with the mismatch report', async (scope, column) => {
+    await runStage(fakeCtx((run) => capture(run, wrongOil(scope))), 7);
+    expect(posted()).toBe(false);
+    expect(calls.some((call) => call.startsWith('openPullRequest'))).toBe(false);
+    expect(calls).not.toContain('checks');
+    expect(calls.at(-1)).toBe(`move 7 ${column}`);
+    expect(commentBodies[0]).toContain('## Visual review findings');
+    expect(commentBodies[0]).toContain(`(${scope}) The oil is a perfect circle and lies ahead of the truck`);
+    expect(state().testPhase).toEqual({});
+    expect(state().visualSendBacks).toEqual({ 7: 1 });
+    expect(state().approvalPosts).toEqual({});
+  });
+
+  it('sends a plan mismatch to Design even when a rebuild one is listed with it', async () => {
+    const mismatches = [{ description: 'The shape is a placeholder disc.', scope: 'rebuild' }, { description: 'The plan puts the drop ahead of the truck.', scope: 'plan' }];
+    await runStage(fakeCtx((run) => capture(run, { ...wrongOil('rebuild'), mismatches })), 7);
+    expect(calls.at(-1)).toBe('move 7 Design');
+  });
+
+  it('makes the agent repair a tune-sized mismatch itself instead of sending the card back', async () => {
+    await expect(runStage(fakeCtx((run) => capture(run, wrongOil('tune'))), 7)).rejects.toThrow('lists only tune-sized mismatches');
+    expect(calls.some((call) => call.startsWith('move'))).toBe(false);
+    expect(posted()).toBe(false);
+  });
+
+  it('sends a tune mismatch that two repair rounds did not fix to Implementation', async () => {
+    await runStage(fakeCtx((run) => capture(run, wrongOil('tune', 2))), 7);
+    expect(calls.at(-1)).toBe('move 7 Implementation');
+  });
+
+  it('refuses more repair rounds than the limit', async () => {
+    await expect(runStage(fakeCtx((run) => capture(run, { repairs: 3 })), 7)).rejects.toThrow('the limit is 2');
+  });
+
+  it('caps the send-backs of a card, then fails with the report and no move', async () => {
+    writeState(`${home}/state.json`, { ...state(), visualSendBacks: { 7: 2 } });
+    await expect(runStage(fakeCtx((run) => capture(run, wrongOil('rebuild'))), 7)).rejects.toThrow('after 2 send-backs already');
+    expect(calls.some((call) => call.startsWith('move'))).toBe(false);
+    expect(commentBodies).toEqual([]);
+    expect(posted()).toBe(false);
+  });
+
+  it('clears the send-back count once a corrected candidate passes', async () => {
+    await runStage(fakeCtx((run) => capture(run, wrongOil('rebuild'))), 7);
+    expect(state().visualSendBacks).toEqual({ 7: 1 });
+    calls = [];
+    await runStage(fakeCtx((run) => capture(run, {}, 10)), 7);
+    expect(state().visualSendBacks).toEqual({});
+    expect(calls.at(-1)).toBe('move 7 Approval');
+  });
+
+  it('regenerates and re-inspects the evidence of the final head: a reading of an older image fails', async () => {
+    const stale = (run: AgentRun): void => {
+      capture(run);
+      const out = `${run.clone}/${run.dir}/.factory`;
+      writeFileSync(`${out}/screenshot.png`, pngBytes(99));
+      writeFileSync(`${out}/view1.png`, pngBytes(98));
+    };
+    await expect(runStage(fakeCtx(stale), 7)).rejects.toThrow('read an older screenshot.png');
+    expect(posted()).toBe(false);
+  });
+
+  it('fails when the reading is from an older commit', async () => {
+    await expect(runStage(fakeCtx((run) => capture(run, { commit: 'deadbee' })), 7)).rejects.toThrow('visual-review.json is from commit deadbee');
+  });
+
+  it('inspects again after a check-fix round and sends a now-wrong candidate back, with no post', async () => {
+    let round = 0;
+    await runStage(fakeCtx((run) => capture(run, round++ === 0 ? {} : wrongOil('rebuild')), 1), 7);
+    expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+    expect(posted()).toBe(false);
+    expect(calls.at(-1)).toBe('move 7 Implementation');
+    expect(state().testPhase).toEqual({});
+  });
+
+  it('fails safely, with a diagnostic and no post, when the agent wrote no reading', async () => {
+    await expect(runStage(fakeCtx((run) => { capture(run); rmSync(`${run.clone}/${run.dir}/.factory/visual-review.json`); }), 7)).rejects.toThrow('wrote no .factory/visual-review.json');
+    expect(posted()).toBe(false);
+    expect(calls.some((call) => call.startsWith('move'))).toBe(false);
+  });
+
+  it('fails safely when an image is unreadable', async () => {
+    const run = (r: AgentRun): void => {
+      writeOutputs(r, JSON.stringify({ description: 'd', howToTry: 'h' }), { commit: 'abc1234', visual: true, images: [{ file: 'screenshot.png', sha256: 'x', observations: 'The truck sits on sand.', verdict: 'correct' }], decisions: [{ verdict: 'correct', notes: 'It fits the issue and the docs.' }] });
+    };
+    await expect(runStage(fakeCtx(run), 7)).rejects.toThrow('The image screenshot.png cannot be inspected');
+    expect(posted()).toBe(false);
+  });
+
+  it.each([
+    ['a missing image reading', { images: [] }, 'has no reading of the shown image screenshot.png'],
+    ['a missing feature decision', { decisions: [] }, 'no decision for the feature "Oil patch"'],
+    ['a thin note', { decisions: [{ feature: 'Oil patch', verdict: 'correct', notes: 'ok' }] }, 'at least 20 characters'],
+    ['a wrong verdict with no mismatch', { decisions: [{ feature: 'Oil patch', verdict: 'wrong', notes: 'The oil is a perfect circle.' }] }, 'lists no mismatch'],
+    ['a made-up verdict', { decisions: [{ feature: 'Oil patch', verdict: 'fine', notes: 'The oil looks fine to me.' }] }, 'verdict of correct or wrong'],
+  ])('refuses %s', async (_name, review, message) => {
+    await expect(runStage(fakeCtx((run) => capture(run, review)), 7)).rejects.toThrow(message);
+    expect(posted()).toBe(false);
+  });
+
+  it('refuses the nonvisual exemption when the manifest lists visible features', async () => {
+    await expect(runStage(fakeCtx((run) => capture(run, { visual: false, reason: 'Nothing changed on screen at all.' })), 7)).rejects.toThrow('lists visible features (Oil patch)');
+    expect(posted()).toBe(false);
+  });
+
+  it('refuses the nonvisual exemption without a reason', async () => {
+    await expect(runStage(fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' }), { commit: 'abc1234', visual: false })), 7)).rejects.toThrow('without a "reason"');
+  });
+
+  it('keeps a nonvisual task viable on its stated reason, with no images read', async () => {
+    await runStage(fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' }))), 7);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+  });
+
+  it('applies to the test round of a hotfix after its hardening round, and a wrong look makes no post', async () => {
+    labels = ['hotfix'];
+    const rounds: string[] = [];
+    await runStage(fakeCtx((run) => { rounds.push(run.prompt.split('\n')[0]); if (!run.prompt.startsWith('This is the hardening round')) capture(run, wrongOil('plan')); }), 7);
+    expect(rounds).toHaveLength(2);
+    expect(calls.at(-1)).toBe('move 7 Design');
+    expect(posted()).toBe(false);
+    expect(calls).not.toContain('checks');
+  });
+
+  it('does not ask a hardening round for a reading, so an approved card still queues its merge', async () => {
+    writeState(`${home}/state.json`, { ...state(), approvedResolving: { 7: 'Ann' } });
+    await runStage(fakeCtx(() => undefined), 7);
+    expect(readState(`${home}/state.json`).pendingApprovals).toEqual({ 7: 'Ann' });
   });
 });
