@@ -108,21 +108,27 @@ export function propBase(t: Terrain, o: Obstacle): number {
   return o.kind === 'wreck' ? heightAt(t, o.pos.x, o.pos.y) : groundAt(t, o.pos.x, o.pos.y);
 }
 
-// For a point between a deck's two ends, however far to the side, that deck and the distance along it,
-// or null past the ends of every deck. Of several decks, the nearest across wins.
-export function spanAt(x: number, y: number): DeckPoint | null {
+// For a point between a deck's two ends and at most reach tiles out from its sides, that deck and the distance
+// along it, or null away from every deck. Of several decks, the nearest across wins.
+export function spanAt(x: number, y: number, reach: number): DeckPoint | null {
   let best: DeckPoint | null = null;
   let bestAcross = Infinity;
   for (const deck of DECKS) {
     const along = alongOf(deck, x, y);
     if (along < 0 || along > deck.length) continue;
     const across = Math.abs(acrossOf(deck, x, y));
-    if (across < bestAcross) {
+    if (across <= deck.width / 2 + reach && across < bestAcross) {
       best = { deck, along };
       bestAcross = across;
     }
   }
   return best;
+}
+
+// Whether a map point lies between a deck's two ends and at most reach tiles out from its sides.
+export function besideDeck(deck: Deck, p: Vec, reach: number): boolean {
+  const along = alongOf(deck, p.x, p.y);
+  return along >= 0 && along <= deck.length && Math.abs(acrossOf(deck, p.x, p.y)) <= deck.width / 2 + reach;
 }
 
 // Share of the road and site flattening removed at a map point: 1 in the gap under a deck with a cut,

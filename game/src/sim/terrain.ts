@@ -4,7 +4,7 @@
 // The grid comes from the baked map file, decoded below. The game never builds it.
 
 import { MAPGEN, TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../data/terrain';
-import { deckAt, spanAt, type Deck } from './bridge';
+import { besideDeck, deckAt, spanAt, type Deck } from './bridge';
 import { clamp, type Vec } from './vec';
 
 export type Terrain = {
@@ -38,11 +38,12 @@ export function heightAt(t: Terrain, x: number, y: number): number {
 
 // Height of a mark drawn on the map around a truck at `origin`, like its throttle zones. Beside a deck,
 // a mark stays level with the deck where the truck is nearer the deck than the ground below, so it does
-// not hang down into a canyon like Canyon Bridge's.
+// not hang down into a canyon like Canyon Bridge's. Both the mark and the truck must lie beside that deck, within
+// the sight radius of its sides, since every mark lies within its truck's sight. A deck far away never lifts a mark.
 export function markHeightAt(t: Terrain, origin: Vec, x: number, y: number): number {
   const h = heightAt(t, x, y);
-  const span = spanAt(x, y);
-  if (span === null) return h;
+  const span = spanAt(x, y, T.vision.radius);
+  if (span === null || !besideDeck(span.deck, origin, T.vision.radius)) return h;
   const deck = deckHeight(t, span.deck, span.along);
   if (h >= deck) return h;
   const from = heightAt(t, origin.x, origin.y);

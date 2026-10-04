@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PHYSICS } from '../data/physics';
 import { BROKEN_WING, BROKEN_WING_POINT, REGION, scalePoint } from '../data/region';
 import { START_KITS } from '../data/start';
-import type { DeckSpec } from '../data/terrain';
+import { TERRAIN, type DeckSpec } from '../data/terrain';
 import { FALLEN_SUN_DECKS } from '../data/territory';
 import { bridgeCut, buildDecks, crossesRail, deckAt, deckById, DECKS, nearRail, propBase } from './bridge';
 import { blockingBoxes, boxDistance, propBoxes } from './mapgen';
@@ -134,6 +134,21 @@ describe('Canyon Bridge', () => {
     // Past the deck ends a mark lies on the ground.
     const past = at(-3, 0);
     expect(markHeightAt(t, onDeck, past.x, past.y)).toBe(heightAt(t, past.x, past.y));
+  });
+
+  it('lays every mark of a truck far from all decks on the map, however far a deck reaches between its ends', () => {
+    const far = (p: { x: number; y: number }) => DECKS.every((d) => segmentDist(p, d.from, d.to) > d.width / 2 + TERRAIN.vision.radius);
+    let checked = 0;
+    for (let y = 2; y < t.size - 2; y += 3)
+      for (let x = 2; x < t.size - 2; x += 3) {
+        const origin = { x, y };
+        if (!far(origin)) continue;
+        for (const [dx, dy] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) {
+          expect(markHeightAt(t, origin, x + dx, y + dy)).toBe(heightAt(t, x + dx, y + dy));
+          checked++;
+        }
+      }
+    expect(checked).toBeGreaterThan(1000);
   });
 
   it('makes deck tiles drivable road', () => {
