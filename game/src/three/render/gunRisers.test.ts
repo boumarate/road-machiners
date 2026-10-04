@@ -99,3 +99,23 @@ describe('placing any item on any cell', () => {
     expect(problems).toEqual([]);
   }, budget(120_000));
 });
+
+describe('guns on the issue 149 chassis', () => {
+  it.each(['lincoln', 'niva', 'bukhanka'])('%s: every gun spot on deck cells rests on the model', (id) => {
+    const cells = baseGrid(id).cells;
+    const perched: string[] = [];
+    for (const def of GUNS) {
+      for (const rot of [0, 1] as const) {
+        for (let y = 0; y < cells.length; y++) {
+          for (let x = 0; x < cells[y].length; x++) {
+            const item = { id: 'g', kind: 'part', x, y, rot, part: { id: 'p', defId: def.id, hp: 1, wear: 0 } } as unknown as GridItem;
+            const spot = itemCells(item);
+            if (!spot.every((c) => cells[c.y]?.[c.x] === 'D')) continue;
+            if (restOn(id, cellRect(id, spot)).perched) perched.push(`${def.id} rot ${rot} at ${x},${y}`);
+          }
+        }
+      }
+    }
+    expect(perched).toEqual([]);
+  });
+});
