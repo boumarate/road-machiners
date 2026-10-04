@@ -22,6 +22,10 @@ describe("turned", () => {
     expect(turned(0.5, -2)).toBeCloseTo(0.4);
     expect(turned(0.52, 0)).toBeCloseTo(0.5);
   });
+  it("gives exact step values, so stored settings hold no float noise", () => {
+    expect(turned(0.1, 1)).toBe(0.15);
+    expect(turned(0.65, 1)).toBe(0.7);
+  });
   it("stops at silence and full", () => {
     expect(turned(0.95, 3)).toBe(1);
     expect(turned(0.05, -3)).toBe(0);

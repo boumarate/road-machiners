@@ -24,8 +24,8 @@ export function parseSettings(raw: string | null): Settings {
   return s;
 }
 
-// Knobs turn in steps of this much volume.
-const STEP = 0.05;
+// Knob steps from silent to full volume.
+const STEPS = 20;
 // A knob's pointer swings this many degrees each side of straight up.
 const SWEEP = 135;
 // Pixels of vertical drag for one step.
@@ -33,7 +33,7 @@ const DRAG_PX = 6;
 
 // A volume turned some steps, clamped to the knob's range and snapped to whole steps.
 export function turned(value: number, steps: number): number {
-  return Math.min(1, Math.max(0, Math.round(value / STEP + steps) * STEP));
+  return Math.min(1, Math.max(0, Math.round(value * STEPS + steps) / STEPS));
 }
 
 // The pointer angle of a knob at a volume, from -SWEEP at 0 to +SWEEP at full.
@@ -53,12 +53,13 @@ export class SoundSettings {
     this.settings = parseSettings(storage.getItem(KEY));
     this.muteSwitch = el("div", { class: "radio-mute" });
     faceplate.append(...BUSES.map((b) => this.knob(b)), this.muteSwitch);
-    this.apply();
+    for (const b of BUSES) this.applyVolume(b);
+    this.applyMute();
   }
 
   toggleMute(): void {
     this.settings.muted = !this.settings.muted;
-    this.apply();
+    this.applyMute();
     this.save();
   }
 
@@ -95,17 +96,20 @@ export class SoundSettings {
   private setVolume(bus: Bus, value: number): void {
     if (value === this.settings.volume[bus]) return;
     this.settings.volume[bus] = value;
-    this.apply();
+    this.applyVolume(bus);
     this.save();
   }
 
-  private apply(): void {
-    for (const b of BUSES) {
-      this.mixer.setBusVolume(b, this.settings.volume[b]);
-      const knob = this.knobs.get(b)!;
-      knob.setAttribute("aria-valuenow", String(Math.round(this.settings.volume[b] * 100)));
-      knob.style.setProperty("--knob-angle", `${knobAngle(this.settings.volume[b])}deg`);
-    }
+  private applyVolume(bus: Bus): void {
+    const volume = this.settings.volume[bus];
+    this.mixer.setBusVolume(bus, volume);
+    const knob = this.knobs.get(bus)!;
+    knob.setAttribute("aria-valuenow", String(Math.round(volume * 100)));
+    knob.style.setProperty("--knob-angle", `${knobAngle(volume)}deg`);
+  }
+
+  // The switch is rebuilt only when the mute flips, not on a knob turn.
+  private applyMute(): void {
     this.mixer.setMuted(this.settings.muted);
     const muted = this.settings.muted;
     this.muteSwitch.replaceChildren(
