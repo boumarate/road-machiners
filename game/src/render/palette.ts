@@ -60,12 +60,6 @@ export const FACTION_COLORS: Record<Faction, { top: number; side: number; cab: n
   mercs: { top: 0x2a2a2c, side: 0x1a1a1c, cab: 0x5a6068, cabSide: 0x3e4248 }, // black with gunmetal
 };
 
-// The top-down equipment icons' three colors: line for outlines, creases and hatching, light and dark for fills. They are
-// hand-drawn glyph colors in src/ui/style.css: line and light are the `.icon svg` rule's stroke and fill, so the model
-// icons match the cab glyph beside them in the grid, and dark is the speed dial's `.dial-face` fill. The grid cells'
-// slates (`.inv-cell`) are too close to light's neighbors for a dark fill to read on them. Change them together.
-export const BLUEPRINT = { line: 0xe0d1b4, light: 0x6a7275, dark: 0x191e22 };
-
 // Item icon backgrounds by category tone, from itemTone() in partLooks.ts. The inventory grid boxes, loot chips, standalone
 // item icons and card borders set them as --tone, and the icon atlases fill their tiles with them. Each keeps at least
 // 4.5:1 contrast with LINE_STYLE.line.

@@ -330,7 +330,7 @@ export const ICON_SECTIONS: readonly IconSection[] = ['weapon', 'engine', 'armor
 
 // models: every model the icon draws. A weapon lists mount, receiver, barrel and extra, see weapon.
 // footprint: inventory cells before rotation. rank: 1..n among entries drawn by the same models, 0 when none share them.
-// The renderer draws rank 1 plain and hatches the silhouette denser for each rank above it.
+// The renderer draws rank 1 plain and one more thick 45° stripe across the silhouette for each rank above it.
 export type IconEntry = {
   id: string;
   section: IconSection;

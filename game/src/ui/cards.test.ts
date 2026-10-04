@@ -104,55 +104,39 @@ describe("item icons", () => {
 });
 
 describe("grid item icons", () => {
-  const straight = { rot: 0, side: null, weapon: false } as const;
-  const sideways = { rot: 1, side: null, weapon: false } as const;
-  const gunStraight = { rot: 0, side: null, weapon: true } as const;
-  const gunSideways = { rot: 1, side: null, weapon: true } as const;
+  const straight = { rot: 0, side: null } as const;
+  const sideways = { rot: 1, side: null } as const;
 
-  it("frame a gun lying sideways with its lying cell, unturned, so its barrel points up", () => {
-    const frame = gridIconFrame(itemIconCell("longRifle"), gunSideways);
-    expect(frame.turn).toBe(0);
-    expect(frame.cell.box).toEqual(boxOf(ICONS.items.longRifle.lying.box));
-    expect(frame.crop).toEqual(frame.cell.box);
+  it("turn a gun lying sideways a quarter with its box, cropped to its drawing", () => {
+    const rifle = itemIconCell("longRifle");
+    expect(gridIconFrame(rifle, sideways)).toEqual({ crop: boxOf(ICONS.items.longRifle.box), turn: 1 });
   });
 
-  it("frame a gun lying straight with its upright cell, unturned", () => {
-    const cell = itemIconCell("longRifle");
-    const frame = gridIconFrame(cell, gunStraight);
-    expect(frame).toEqual({ cell, crop: boxOf(ICONS.items.longRifle.box), turn: 0 });
+  it("leave a gun lying straight unturned, barrel up", () => {
+    const rifle = itemIconCell("longRifle");
+    const frame = gridIconFrame(rifle, straight);
+    expect(frame).toEqual({ crop: rifle.box, turn: 0 });
     expect(frame.crop.h).toBeGreaterThan(2 * frame.crop.w);
   });
 
-  it("frame a square gun at rot 1 with its lying cell too", () => {
-    const cell = itemIconCell("mg");
-    const frame = gridIconFrame(cell, gunSideways);
-    expect(frame.cell).toBe(cell.lying);
-    expect(frame.turn).toBe(0);
-    expect(frame.crop).toEqual(frame.cell.box);
+  it("turn a square gun at rot 1 a quarter too", () => {
+    expect(gridIconFrame(itemIconCell("mg"), sideways).turn).toBe(1);
   });
 
-  it("give a lying cell to guns only, on its own place on the sheet", () => {
-    const rifle = itemIconCell("longRifle");
-    expect(rifle.lying).toMatchObject({ label: rifle.label, view: "top", lying: null });
-    expect([rifle.lying?.col, rifle.lying?.row]).not.toEqual([rifle.col, rifle.row]);
-    expect(itemIconCell("stockEngine").lying).toBeNull();
-  });
-
-  it("fail on a gun with no lying cell, and on a lying cell for a part that is no gun", () => {
-    expect(() => gridIconFrame(itemIconCell("stockEngine"), gunSideways)).toThrow(/lying/);
-    expect(() => gridIconFrame(itemIconCell("longRifle"), sideways)).toThrow(/lying/);
+  it("give every item one cell, with no lying cell", () => {
+    for (const icon of Object.values(ICONS.items)) expect(icon).not.toHaveProperty("lying");
   });
 
   it("turn another top-down part a quarter with the part, and not when it lies straight", () => {
     const engine = itemIconCell("stockEngine");
-    expect(gridIconFrame(engine, sideways)).toEqual({ cell: engine, crop: engine.box, turn: 1 });
+    expect(gridIconFrame(engine, sideways)).toEqual({ crop: engine.box, turn: 1 });
     expect(gridIconFrame(engine, straight).turn).toBe(0);
   });
 
   it("turn armor, drawn as a front plate, to face the side it covers, whatever its rot", () => {
     const [, , w, h] = ICONS.items.cage.box;
     expect(w).toBeGreaterThan(h);
-    const frame = (id: string, rot: 0 | 1, side: "F" | "L" | "B" | "R") => gridIconFrame(itemIconCell(id), { rot, side, weapon: false });
+    const frame = (id: string, rot: 0 | 1, side: "F" | "L" | "B" | "R") => gridIconFrame(itemIconCell(id), { rot, side });
     const turn = (id: string, rot: 0 | 1, side: "F" | "L" | "B" | "R") => frame(id, rot, side).turn;
     expect([turn("cage", 1, "F"), turn("cage", 0, "L"), turn("cage", 1, "B"), turn("cage", 0, "R")]).toEqual([0, 1, 2, 3]);
     expect(turn("steelPlate", 0, "R")).toBe(3);
@@ -162,7 +146,7 @@ describe("grid item icons", () => {
   it("never turn a good, which is drawn diagonal", () => {
     const scrap = itemIconCell("scrap");
     expect(scrap.view).toBe("diagonal");
-    expect(gridIconFrame(scrap, sideways)).toEqual({ cell: scrap, crop: scrap.box, turn: 0 });
+    expect(gridIconFrame(scrap, sideways)).toEqual({ crop: scrap.box, turn: 0 });
   });
 });
 
