@@ -1,6 +1,6 @@
 # Factory infra
 
-pyinfra project for one Ubuntu 24.04 machine that runs the game factory. The machine is a laptop at home with a GTX 1080 Ti, dual booted with Windows.
+pyinfra project for one Ubuntu 24.04 machine that runs the game factory. The machine is a laptop at home with a GTX 1660 Ti, dual booted with Windows.
 
 The host needs at least 4 cores and 8 GB. With 2 cores, the full game test suite takes over 9 minutes and its long tests time out. The testing gate peaks near 2.6 GB, Hermes idles near 300 MB, and provision adds 4 GB of swap for spikes. The host needs IPv4 out, since GitHub has no IPv6. It takes no inbound traffic but ssh. The public domain reaches it through a Cloudflare Tunnel, which dials out.
 It follows `Steelman/infra`. Run every command from `factory/infra`.
@@ -24,7 +24,7 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 
 ## What each deploy does
 
-- Provision installs packages, Docker, Node 24, gh and butler. It opens port 22 only. It stops the lid and idle timers from suspending the laptop. It installs the NVIDIA 580 driver and the NVIDIA container toolkit, and checks that a container sees the GPU. It makes the `factory` user and the `/opt/factory` folders.
+- Provision installs packages, Docker, Node 24, gh and butler. It opens port 22 only. It stops the lid and idle timers from suspending the laptop. It installs the NVIDIA driver that `ubuntu-drivers` recommends for the card, and the NVIDIA container toolkit, and checks that a container sees the GPU. It makes the `factory` user and the `/opt/factory` folders.
 - Deploy clones `main` into `/opt/factory/repo` once. It never sends code after that.
 - Deploy runs `factory-layout.sh`, which makes the first release, the links and runs its `npm ci`. On a server that still has a real `/opt/factory/code` folder, it stops the timers, moves that folder to `repo` and its `.env` to `factory.env`, then makes the layout. Running jobs keep working, since a moved folder stays their working folder.
 - Deploy pushes the server-only factory env to `/opt/factory/factory.env` with mode 600. Each release links `factory/.env` to it. It holds the secrets, the committee ids and the host paths. `FACTORY_ENV_FILE` in `prod.env` names its source on your machine. Every other setting is in the tracked `factory/settings.env`.

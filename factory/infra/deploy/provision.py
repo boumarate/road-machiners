@@ -113,11 +113,11 @@ server.shell(
     _sudo=True,
 )
 
-# The GTX 1080 Ti is a Pascal card. 580 is the last driver branch for Pascal, and the open kernel modules do not support it.
+# ubuntu-drivers picks the driver Ubuntu recommends for the installed card. The full driver, not the headless one, since the playtest needs its GL libraries.
 # The driver loads only after a reboot, and only with Secure Boot off. The check stops provision until both hold.
 server.shell(
-    name="NVIDIA driver 580 (skipped if present)",
-    commands=["dpkg -s nvidia-driver-580 >/dev/null 2>&1 || timeout 1200 apt-get install -y nvidia-driver-580"],
+    name="NVIDIA driver (skipped if present)",
+    commands=["command -v nvidia-smi >/dev/null || (apt-get install -y ubuntu-drivers-common && timeout 1200 ubuntu-drivers install)"],
     _sudo=True,
 )
 server.shell(
