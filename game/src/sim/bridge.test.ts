@@ -215,11 +215,13 @@ describe('raised deck ends', () => {
     expect(wing.stations).toEqual([{ at: { x: 10, y: 50 }, along: 0, rise: 0 }, { at: { x: 18, y: 50 }, along: 8, rise: 1.5 }, { at: { x: 40, y: 50 }, along: 30, rise: 1.5 }, { at: { x: 48, y: 50 }, along: 38, rise: 0 }]);
   });
 
-  it('fails loudly on a deck with one station, a station off its line or out of order, a sunk station or a raised deck without a skirt', () => {
+  it('fails loudly on a deck with one station, a station that is not a number, a station off its line or out of order, a sunk station or a raised deck without a skirt', () => {
     expect(() => buildDecks([spec('one', [[10, 0]])])).toThrow('Deck one needs at least two stations');
     expect(() => buildDecks([{ ...spec('bent', [[10, 0], [20, 0]]), line: [{ at: { x: 10, y: 50 }, rise: 0 }, { at: { x: 15, y: 50.01 }, rise: 0 }, { at: { x: 20, y: 50 }, rise: 0 }] }])).toThrow('Deck bent has station 1 off its line');
     expect(() => buildDecks([spec('back', [[10, 0], [25, 0], [20, 0]])])).toThrow('Deck back has station 2 out of order');
     expect(() => buildDecks([spec('sunk', [[10, 0], [15, -0.2]])])).toThrow('Deck sunk has a negative rise');
+    expect(() => buildDecks([spec('blank', [[10, 0], [15, Number.NaN]])])).toThrow('Deck blank has a station that is not a number');
+    expect(() => buildDecks([{ ...spec('lost', [[10, 0], [20, 0]]), line: [{ at: { x: 10, y: 50 }, rise: 0 }, { at: { x: Number.NaN, y: 50 }, rise: 0 }, { at: { x: 20, y: 50 }, rise: 0 }] }])).toThrow('Deck lost has a station that is not a number');
     expect(() => buildDecks([spec('bare', [[10, 0], [15, 0.3]], false)])).toThrow('Deck bare is raised but not skirted');
   });
 

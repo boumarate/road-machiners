@@ -38,9 +38,10 @@ const CUT_REACH = REGION.roadWidth / 2 + TERRAIN.flattenMargin;
 // Tiles a station may lie off the straight line between its deck's ends.
 const OFF_LINE = 1e-3;
 
-// Decks with their geometry. A raised end is a lip. Fails loudly on a deck with fewer than two stations, a station off
-// the line between its ends or not past the one before it, a negative rise, a raised deck without a skirt, and on two
-// decks whose outlines touch, since one surface split into decks makes every reader find the seams.
+// Decks with their geometry. A raised end is a lip. Fails loudly on a deck with fewer than two stations, a station that
+// is not a number, a station off the line between its ends or not past the one before it, a negative rise, a raised
+// deck without a skirt, and on two decks whose outlines touch, since one surface split into decks makes every reader
+// find the seams.
 export function buildDecks(specs: readonly DeckSpec[]): Deck[] {
   const decks = specs.map(buildDeck);
   decks.forEach((a, k) => {
@@ -52,6 +53,7 @@ export function buildDecks(specs: readonly DeckSpec[]): Deck[] {
 function buildDeck(spec: DeckSpec): Deck {
   const { id, line } = spec;
   if (line.length < 2) throw new Error(`Deck ${id} needs at least two stations`);
+  if (line.some((s) => ![s.at.x, s.at.y, s.rise].every(Number.isFinite))) throw new Error(`Deck ${id} has a station that is not a number`);
   if (line.some((s) => s.rise < 0)) throw new Error(`Deck ${id} has a negative rise`);
   if (line.some((s) => s.rise > 0) && !spec.skirt) throw new Error(`Deck ${id} is raised but not skirted`);
   const from = line[0].at;
