@@ -25,10 +25,15 @@ import { dist } from './vec';
 export type PatchPlan = { parts: number; turns: number };
 type Roles = { patcher: Vehicle; client: Vehicle };
 
-// The broken parts that strand a truck and a patch can fix: the first engine, the transmission and the tank, unless junk.
-function brokenParts(v: Vehicle): PartInstance[] {
+// The parts a patch can fix: the first engine, the transmission and the tank, unless junk.
+function patchable(v: Vehicle): PartInstance[] {
   const engine = mountedParts(v, 'engine')[0];
-  return [engine, corePart(v, 'transmission'), corePart(v, 'tank')].filter((p): p is PartInstance => p !== undefined && p.hp === 0 && !isJunk(p));
+  return [engine, corePart(v, 'transmission'), corePart(v, 'tank')].filter((p): p is PartInstance => p !== undefined && !isJunk(p));
+}
+
+// The broken parts that strand a truck.
+function brokenParts(v: Vehicle): PartInstance[] {
+  return patchable(v).filter((p) => p.hp === 0);
 }
 
 // The target a patch lifts a part to.
@@ -36,10 +41,9 @@ function patchTarget(part: PartInstance): number {
   return Math.max(1, Math.round(maxHp(part) * PATCH.share));
 }
 
-// The core parts of a truck that still drives and sit below the patch target, unless junk. A holed tank at 0 HP counts.
+// The patchable parts of a truck that still drives and sit below the patch target. A holed tank at 0 HP counts.
 function wornParts(v: Vehicle): PartInstance[] {
-  const engine = mountedParts(v, 'engine')[0];
-  return [engine, corePart(v, 'transmission'), corePart(v, 'tank')].filter((p): p is PartInstance => p !== undefined && p.hp < patchTarget(p) && !isJunk(p));
+  return patchable(v).filter((p) => p.hp < patchTarget(p));
 }
 
 // A stranded truck gets its broken parts patched, a truck that drives its worn ones.
