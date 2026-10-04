@@ -6,7 +6,7 @@ import { vehicleValue } from './market';
 import { BUSY_LINE, TRAIT_TALK, END, HONK_RANGE, HUB, REFUSED, TOPICS, type Topic } from '../data/dialogue';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
-import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, honk, placeholders, raiseCalls } from './dialogue';
+import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, honk, onAir, placeholders, radioSpeakers, raiseCalls } from './dialogue';
 import { fireBlock, isHostile } from './combat';
 import { NPC_UPKEEP, NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';
@@ -898,5 +898,39 @@ describe('fuel and supply aid', () => {
     const next = hangUp(w);
     expect(playerAid(next)).toBeNull();
     expect(next.events).toContainEqual(expect.objectContaining({ t: 'stateEnded', ending: 'broken' }));
+  });
+});
+
+describe('trucks on the radio', () => {
+  it('lists both trucks of an open call, and the player while the beacon is on', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    expect(onAir(w)).toEqual([]);
+    const open = callVehicle(w, npc.id);
+    expect(onAir(open).sort()).toEqual([open.player.vehicleId, npc.id].sort());
+    const beacon = structuredClone(w);
+    beacon.player.beacon = true;
+    expect(onAir(beacon)).toEqual([w.player.vehicleId]);
+  });
+
+  it('reads the radio talk events and nothing else', () => {
+    const plea = { kind: 'surrender' } as never;
+    expect(radioSpeakers([{ t: 'say', speaker: 'a', text: '', vars: {} }], 'p')).toEqual(['a']);
+    expect(radioSpeakers([{ t: 'call', with: 'a', outcome: 'opened' }], 'p').sort()).toEqual(['a', 'p']);
+    expect(radioSpeakers([{ t: 'plea', from: 'a', to: 'b', plea, accepted: true }], 'p').sort()).toEqual(['a', 'b']);
+    expect(radioSpeakers([{ t: 'plea', from: 'a', to: 'p', plea, accepted: null }], 'p')).toEqual(['a']);
+    expect(radioSpeakers([{ t: 'escortHired', by: 'a', client: 'b', site: 's', fee: 1 }], 'p').sort()).toEqual(['a', 'b']);
+    expect(radioSpeakers([{ t: 'escortRefused', by: 'a', client: 'b' }], 'p').sort()).toEqual(['a', 'b']);
+    expect(radioSpeakers([{ t: 'towHitched', by: 'a', client: 'b', site: 's' }], 'p').sort()).toEqual(['a', 'b']);
+    expect(radioSpeakers([{ t: 'towOffer', by: 'a', town: 't', fee: 1 }], 'p')).toEqual(['a']);
+    expect(radioSpeakers([{ t: 'honk', vehicle: 'a' }, { t: 'aidStarted', giver: 'a', receiver: 'b' }, { t: 'patch', patcher: 'a', client: 'b', outcome: 'started' }], 'p')).toEqual([]);
+  });
+
+  it('a real call and hang up put both trucks on the radio', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    const open = callVehicle(w, npc.id);
+    expect(radioSpeakers(open.events, open.player.vehicleId).sort()).toEqual([npc.id, open.player.vehicleId].sort());
+    const done = hangUp(open);
+    expect(radioSpeakers(done.events, done.player.vehicleId)).toContain(npc.id);
+    expect(radioSpeakers(done.events, done.player.vehicleId)).toContain(done.player.vehicleId);
   });
 });

@@ -61,6 +61,7 @@ import { SiteMotion } from "./render/site-motion";
 import { addHullDecks } from "./render/hull-decks";
 import { terrainMesh } from "./render/terrain";
 import { VehicleView } from "./render/vehicle";
+import { RadioLights } from "./render/radioLight";
 import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
 import { WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
@@ -138,6 +139,7 @@ export class Game {
   private readonly loops: SoundLoops;
   private readonly combatWatch = new CombatWatch();
   private readonly views = new Map<string, VehicleView>();
+  private readonly radioLights = new RadioLights();
   private frames: Record<string, VehicleFrame> = {}; // last shown pose per vehicle
   // A played turn: physics movement, then shots in flight when there was combat, then time to read results.
   private anim: Playback | null = null;
@@ -1019,6 +1021,8 @@ export class Game {
     const frames: TurnFrames | null = step === null || !this.anim ? null : this.anim.result.frames;
     const landed = !this.anim || this.anim.impacts;
     const glass = daylightAt(this.lightTurn()).glass;
+    const now = performance.now();
+    this.radioLights.note(this.world, now);
     const shown = [...this.world.vehicles, ...(landed ? [] : this.world.removed)];
     const ids = new Set<string>();
     for (const v of shown) {
@@ -1042,6 +1046,7 @@ export class Game {
       }
       view.update(display, seen);
       view.lamps(lampsOn(v.id, this.lightTurn()));
+      view.radio(this.radioLights.lit(this.world, v.id, now));
       view.outline(look === "dark");
       view.windows(glass);
       view.pose(f, dt);
