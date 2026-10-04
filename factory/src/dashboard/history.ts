@@ -88,7 +88,7 @@ export class DashboardHistory {
   private consumeLine(text: string, now: Date): void {
     if (!text.trim()) return;
     const line = JSON.parse(text) as LedgerLine;
-    if (!['job', 'route', 'post'].includes(line.kind)) throw new Error('Invalid ledger line');
+    if (!['job', 'route', 'post', 'observation'].includes(line.kind)) throw new Error('Invalid ledger line');
     const at = lineTime(line);
     if (!Number.isFinite(Date.parse(at))) throw new Error('Invalid ledger timestamp');
     this.first ??= at;

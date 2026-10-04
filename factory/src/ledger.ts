@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'nod
 import { join } from 'node:path';
 import { withLockSync } from './lock';
 import type { JobStage, Route } from './types';
+import type { Observation } from './observability';
 
 // One agent run: its model, its cost in dollars and its run time.
 export type ModelUsage = { model: string; input: number; output: number; cacheRead: number; cacheWrite: number; cost: number };
@@ -10,6 +11,7 @@ export type JobOutcome = 'done' | 'failed' | 'died' | 'timeout';
 
 // One line per ended job and per routed committee reply. The waste review derives queue wait and reruns from these lines.
 export type LedgerLine =
+  | Observation
   | { kind: 'job'; id: string; stage: JobStage; issue: number | null; startedAt: string; endedAt: string; outcome: JobOutcome; agents: AgentUsage[] }
   | { kind: 'route'; issue: number; route: Route; by: string; at: string }
   | { kind: 'post'; id: number; channel?: string; text: string; at: string };
