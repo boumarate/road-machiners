@@ -5,7 +5,7 @@ import { loadConfig, readEnvFiles } from './config';
 
 const FULL = {
   FACTORY_REPO: 'o/r', FACTORY_PROJECT_OWNER: 'o', FACTORY_PROJECT_NUMBER: '3', FACTORY_HOME: '/h', FACTORY_WEB_ROOT: '/w',
-  FACTORY_PUBLIC_URL: 'http://x', FACTORY_IMAGE: 'img', CLAUDE_CODE_OAUTH_TOKEN: 't', ELEVENLABS_API_KEY: 'ek', SFX_MAX_GENERATIONS: '6', FACTORY_DESIGN_MODEL: 'opus',
+  FACTORY_PUBLIC_URL: 'http://x', FACTORY_IMAGE: 'img', FACTORY_GPU: 'on', CLAUDE_CODE_OAUTH_TOKEN: 't', ELEVENLABS_API_KEY: 'ek', SFX_MAX_GENERATIONS: '6', FACTORY_DESIGN_MODEL: 'opus',
   FACTORY_BUILD_MODEL: 'sonnet', FACTORY_MIN_VOTES: '5', FACTORY_MIN_AGE_HOURS: '24', FACTORY_COMMITTEE_BOOTSTRAP_GITHUB: 'boss',
   FACTORY_COMMITTEE_BOOTSTRAP: '1', TELEGRAM_BOT_TOKEN: 'bt', FACTORY_COMMITTEE_CHAT: '-1', FACTORY_PUBLIC_CHANNEL: '@c',
   FACTORY_TRIAGE_TIMEOUT_MINUTES: '30', FACTORY_DESIGN_TIMEOUT_MINUTES: '135', FACTORY_IMPLEMENT_TIMEOUT_MINUTES: '330', FACTORY_VERIFY_TIMEOUT_MINUTES: '240',
@@ -50,6 +50,13 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...FULL, FACTORY_MIN_VOTES: 'many' })).toThrow('FACTORY_MIN_VOTES');
   });
 
+  it('reads the GPU switch as on or off and rejects anything else', () => {
+    expect(loadConfig(FULL).gpu).toBe(true);
+    expect(loadConfig({ ...FULL, FACTORY_GPU: 'off' }).gpu).toBe(false);
+    expect(() => loadConfig({ ...FULL, FACTORY_GPU: 'yes' })).toThrow('FACTORY_GPU must be on or off');
+    expect(() => loadConfig({ ...FULL, FACTORY_GPU: '' })).toThrow('missing FACTORY_GPU');
+  });
+
   it('reads the CPU shares and rejects shares that add up to more than the server', () => {
     const cfg = loadConfig(FULL);
     expect([cfg.cpuLight, cfg.cpuImplement, cfg.cpuTest]).toEqual([0.25, 0.25, 0.5]);
@@ -77,7 +84,7 @@ describe('readEnvFiles', () => {
     const settings = readEnvFiles('settings.env', '.env.example');
     const tracked = Object.keys(readEnvFiles('settings.env', files('', '')[1]));
     expect(tracked.filter((key) => SECRET.test(key))).toEqual([]);
-    const filled = Object.fromEntries(Object.keys(settings).map((key) => [key, settings[key] || '1']));
+    const filled = Object.fromEntries(Object.keys(settings).map((key) => [key, settings[key] || (key === 'FACTORY_GPU' ? 'on' : '1')]));
     expect(() => loadConfig(filled)).not.toThrow();
   });
 });

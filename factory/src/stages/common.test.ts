@@ -197,7 +197,7 @@ describe('runAgent reference images', () => {
 });
 
 describe('stage prompts for reference images', () => {
-  const vars = { issue: '7', taskFile: 'f', branch: 'b', evidenceRules: '' };
+  const vars = { issue: '7', taskFile: 'f', branch: 'b', evidenceRules: '', playtest: 'npm run playtest' };
   it('tell every stage to read the images and what a missing one means', () => {
     for (const name of ['triage', 'design', 'implement', 'test', 'test-fix']) {
       const text = fillPrompt(name, vars);

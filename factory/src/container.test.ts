@@ -156,6 +156,18 @@ describe('dockerContainer', () => {
     expect(runCall(calls).args.join(' ')).toContain('-e TEST_TIMEOUTS=off');
   });
 
+  it('gives agent and shell containers the GPU with its graphics drivers only when the GPU is on', async () => {
+    const on = fakeRun();
+    const gpuCfg = { ...cfg, gpu: true };
+    await dockerContainer(on.run, gpuCfg, null).agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'p', log: '/l' });
+    await dockerContainer(on.run, gpuCfg, null).shell('/c', 'x', '/l');
+    const runs = on.calls.filter((call) => call.args[0] === 'run' && call.args[1] === '--rm');
+    expect(runs.map((call) => call.args.join(' '))).toEqual([expect.stringContaining('--gpus all -e NVIDIA_DRIVER_CAPABILITIES=all'), expect.stringContaining('--gpus all -e NVIDIA_DRIVER_CAPABILITIES=all')]);
+    const off = fakeRun();
+    await dockerContainer(off.run, { ...cfg, gpu: false }, null).shell('/c', 'x', '/l');
+    expect(runCall(off.calls).args).not.toContain('--gpus');
+  });
+
   it('fails loud when the proxy image is missing', async () => {
     const { run, calls } = fakeRun(0, { 'image inspect': { code: 1 } });
     await expect(dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' })).rejects.toThrow('inspect image img:1-proxy');

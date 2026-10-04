@@ -3,7 +3,7 @@ import { readEvidence } from '../evidence';
 import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type TestPhase } from '../types';
 import { reviewGate } from './review';
-import { HOTFIX_BASE, agentHome, baseBranchFor, fillPrompt, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir } from './common';
+import { HOTFIX_BASE, agentHome, baseBranchFor, fillPrompt, guardAndPush, playtestCommand, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir } from './common';
 
 export type Approval = { description: string; howToTry: string };
 
@@ -74,7 +74,7 @@ export async function requireBaseMerged(ctx: Ctx, issue: number, base: string, c
 // `round` names the session, so the review's fix and the checks' fix each resume their own conversation.
 // A round that `shows` leaves the approval and the evidence a post needs. The checks stage reads them, and the evidence must match the branch head.
 async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'harden' | 'test-fix', round: 'test' | 'harden' | 'review-fix' | 'checks-fix', base: string, shows: boolean): Promise<void> {
-  const vars = { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) };
+  const vars = { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), playtest: playtestCommand(ctx.cfg) };
   const evidenceRules = shows ? fillPrompt('test-fix-evidence', vars).trimEnd() : 'No post follows this round, so leave the approval and the evidence as they are.';
   await runAgent(ctx, issue, 'verify', round, fillPrompt(prompt, prompt === 'test-fix' ? { ...vars, evidenceRules } : vars));
   const home = agentHome(workDir(ctx, issue), GAME_DIR);

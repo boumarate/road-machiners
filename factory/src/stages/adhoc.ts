@@ -4,7 +4,7 @@ import { ARTIFACT_DIR, collectArtifacts, holdArtifacts, releaseArtifacts } from 
 import { roundSession } from '../sessions';
 import { readState, updateState } from '../state';
 import { GAME_DIR, OUT_DIR, type Ctx } from '../types';
-import { RESUME_NOTE, agentHome, fillPrompt, isResuming, prepareOutputs, readOutput, useOpenNetwork } from './common';
+import { RESUME_NOTE, agentHome, fillPrompt, isResuming, playtestCommand, prepareOutputs, readOutput, useOpenNetwork } from './common';
 
 // The agent reads the factory's own records here, so it can answer questions about the factory too.
 export const FACTORY_STATE_MOUNT = '/factory/state';
@@ -61,7 +61,7 @@ async function runAdhocAgent(ctx: Ctx, issue: number, dir: string): Promise<void
   const readOnly = { [dirname(ctx.statePath)]: FACTORY_STATE_MOUNT, [`${ctx.cfg.home}/logs`]: FACTORY_LOGS_MOUNT };
   const session = roundSession(ctx.cfg.home, issue, 'adhoc', isResuming(ctx, issue));
   if (session.resume) ctx.log('adhoc', issue, `resuming round adhoc, session ${session.id}`);
-  const prompt = session.resume ? RESUME_NOTE : fillPrompt('adhoc', { issue: String(issue), state: FACTORY_STATE_MOUNT, logs: FACTORY_LOGS_MOUNT, files: `${OUT_DIR}/${ARTIFACT_DIR}` });
+  const prompt = session.resume ? RESUME_NOTE : fillPrompt('adhoc', { issue: String(issue), state: FACTORY_STATE_MOUNT, logs: FACTORY_LOGS_MOUNT, files: `${OUT_DIR}/${ARTIFACT_DIR}`, playtest: playtestCommand(ctx.cfg) });
   await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt, log, openNetwork, readOnly, session });
 }
 

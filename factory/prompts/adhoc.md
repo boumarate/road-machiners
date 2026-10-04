@@ -6,7 +6,7 @@ Rules:
 
 - Follow `CLAUDE.md`.
 - For a game question, use the repo harnesses to get numbers: `npm run combat`, `npm run econ`, `npm run loadouts` and `npm run progression:*`.
-- Run the playtest with `--cpu` only. This machine has no GPU.
+- Run the playtest only as `{{playtest}}`.
 - Read the project skills in `.agents/skills` that fit the request. For a balance question, read `evaluating-gameplay-balance`.
 - Do not change game code. Do not commit. This is investigation only.
 

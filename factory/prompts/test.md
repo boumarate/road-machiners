@@ -18,7 +18,7 @@ Check that the feature works for a player: play it end to end in the browser, as
 Fix what breaks it or blocks it, and commit the fixes on the current branch.
 Do not review the code, fix nitpicks or optimize here. That runs after the committee approves, if they do.
 
-This machine has no GPU and is slow. Keep checks focused.
+This machine is shared and slow. Keep checks focused.
 
 Reference images from the issue are listed at the end of this prompt.
 Read every available image with the Read tool.
@@ -67,7 +67,7 @@ The howToTry text is the steps a committee member follows in the browser, under 
 They play the branch build from a link in the post, so start the steps from the loaded game, not from `npm run dev`.
 
 The factory checks your branch after you finish.
-It runs `npm test`, `npm run typecheck` and `npm run playtest -- --cpu` against the dev server.
+It runs `npm test`, `npm run typecheck` and `{{playtest}}` against the dev server.
 Every test must pass, not only the tests for this issue.
 Do not run the full suite or the playtest yourself.
 Run the tests near your changes with `npx vitest run <files>`, and `npm run typecheck`.

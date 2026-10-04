@@ -25,13 +25,13 @@ Look for a full scan in hot code, work repeated every frame or turn that could r
 Fix each cost the change added.
 Commit the fixes on the current branch.
 
-This machine has no GPU and is slow. Keep checks focused.
+This machine is shared and slow. Keep checks focused.
 
 No post follows this round, so do not write `.factory/approval.json`, `.factory/evidence.json` or screenshots.
 The factory reviews the change after you. That review blocks the merge when it finds a break.
 
 The factory checks your branch after you finish.
-It runs `npm test`, `npm run typecheck` and `npm run playtest -- --cpu` against the dev server.
+It runs `npm test`, `npm run typecheck` and `{{playtest}}` against the dev server.
 Every test must pass, not only the tests for this issue.
 Do not run the full suite or the playtest yourself.
 Run the tests near your changes with `npx vitest run <files>`, and `npm run typecheck`.

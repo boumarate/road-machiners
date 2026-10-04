@@ -63,6 +63,11 @@ export async function issueText(ctx: Ctx, issue: number, heading: string): Promi
   return [`${heading} ${item.title}`, item.body, ...comments.flatMap((comment) => [`${heading}# Comment by ${comment.login}`, comment.body])];
 }
 
+// On the GPU the playtest plays all its turns and checks the frame rate. Without one, --cpu draws in software, plays fewer turns and skips the frame rate.
+export function playtestCommand(cfg: FactoryConfig): string {
+  return cfg.gpu ? 'npm run playtest' : 'npm run playtest -- --cpu';
+}
+
 export function fillPrompt(name: string, vars: Record<string, string>): string {
   const path = fileURLToPath(new URL(`../../prompts/${name}.md`, import.meta.url));
   let text = readFileSync(path, 'utf8');

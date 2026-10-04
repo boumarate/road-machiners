@@ -203,7 +203,7 @@ describe('adhoc', () => {
     });
 
     it('tells the agent to refuse publication and to send files only as documents', () => {
-      const prompt = fillPrompt('adhoc', { issue: '7', state: '/s', logs: '/l', files: '.factory/files' });
+      const prompt = fillPrompt('adhoc', { issue: '7', state: '/s', logs: '/l', files: '.factory/files', playtest: 'npm run playtest' });
       expect(prompt).toMatch(/never publish an artifact/i);
       expect(prompt).toMatch(/refuse that part/);
       expect(prompt).toContain('/opt/factory/www');

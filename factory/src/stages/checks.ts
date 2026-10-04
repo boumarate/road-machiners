@@ -6,13 +6,13 @@ import { stripAnsi } from '../fail';
 import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, type Ctx, type InlineButton, type TestPhase } from '../types';
 import { bundleOf } from './bundle';
-import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, workDir } from './common';
+import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, playtestCommand, workDir } from './common';
 import { readApproval, setPhase, type Approval } from './verify';
 
 // Each step logs its start time, so the log shows where the time goes.
 // The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
 // Only the build gets SAVE_SCOPE, since the tests expect the default save key.
-const CHECK_SCRIPT = `set -e
+const checkScript = (playtest: string) => `set -e
 step() { echo "[checks] $(date -u +%T) $1"; }
 mkdir -p tmp
 step "npm ci"
@@ -34,7 +34,7 @@ done
 if [ "$ready" -ne 1 ]; then kill "$server"; exit 1; fi
 step "playtest"
 set +e
-npm run playtest -- --cpu
+${playtest}
 code=$?
 kill "$server"
 if [ "$code" -ne 0 ]; then exit "$code"; fi
@@ -115,7 +115,7 @@ async function runChecks(ctx: Ctx, issue: number, base: string, build: string): 
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, dir);
   const log = agentLog(ctx, issue, 'checks');
   try {
-    await ctx.container.shell(dir, CHECK_SCRIPT, log, { BUILD_SCOPE: build });
+    await ctx.container.shell(dir, checkScript(playtestCommand(ctx.cfg)), log, { BUILD_SCOPE: build });
     return null;
   } catch (error) {
     return checkFailure(log, error);

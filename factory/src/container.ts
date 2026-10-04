@@ -12,10 +12,12 @@ const FACTORY_LABEL = 'factory=1';
 // Every factory container carries the factory label. A job's containers also carry its own label, so a kill finds them.
 // A job's containers run on the CPUs of its pool. A run by hand has no pool, so its containers are not pinned.
 // TEST_TIMEOUTS=off takes the time limits off the game's tests and playtest. On this shared server they measure load, not hangs, and the job's own time limit stops a hung run.
-function baseArgs(jobId: string | null, cpus: string | null): string[] {
+// With the GPU on, every container gets the card. The graphics capability gives Chromium the NVIDIA Vulkan and GL drivers for WebGL.
+function baseArgs(jobId: string | null, cpus: string | null, gpu: boolean): string[] {
   const label = jobId === null ? [] : ['--label', jobLabel(jobId)];
   const pin = cpus === null ? [] : ['--cpuset-cpus', cpus];
-  return ['run', '--rm', '--label', FACTORY_LABEL, ...label, ...pin, '-e', 'TEST_TIMEOUTS=off'];
+  const card = gpu ? ['--gpus', 'all', '-e', 'NVIDIA_DRIVER_CAPABILITIES=all'] : [];
+  return ['run', '--rm', '--label', FACTORY_LABEL, ...label, ...pin, ...card, '-e', 'TEST_TIMEOUTS=off'];
 }
 const PROXY_URL = `http://${PROXY_NAME}:${PROXY_PORT}`;
 const NO_PROXY = 'localhost,127.0.0.1';
@@ -111,7 +113,7 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
       };
       const readOnlyArgs = Object.entries(readOnly).flatMap(([host, path]) => ['-v', `${host}:${path}:ro`]);
       const args = [
-        ...baseArgs(jobId, cpus), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount(session), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
+        ...baseArgs(jobId, cpus, cfg.gpu), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount(session), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
         'factory-agent', '-p', '--model', model, ...effortArgs(effort), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs(session),
       ];
       const input = [skill, outputsNote(dir), prompt].filter((part) => part !== undefined).join('\n\n');
@@ -121,7 +123,7 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
     },
     async shell(clone, script, log, env = {}) {
       await ensureProxy(run, cfg);
-      const args = [...baseArgs(jobId, cpus), ...mountArgs(cfg, clone, GAME_DIR), ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', script];
+      const args = [...baseArgs(jobId, cpus, cfg.gpu), ...mountArgs(cfg, clone, GAME_DIR), ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', script];
       const result = await run('docker', args, { logPath: log });
       must(result, `shell in ${clone}`);
     },

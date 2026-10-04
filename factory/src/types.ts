@@ -15,6 +15,7 @@ export type FactoryConfig = {
   webRoot: string;
   publicUrl: string; // base of play links, no trailing slash
   image: string; // Docker image of the agent container
+  gpu: boolean; // containers get the host's NVIDIA GPU, and the playtest draws on it
   oauthToken: string; // CLAUDE_CODE_OAUTH_TOKEN
   elevenlabsKey: string; // ELEVENLABS_API_KEY, for the game's sfx:gen in agent runs
   sfxMaxGenerations: number; // most ElevenLabs generations one sfx:gen run may make
