@@ -203,8 +203,14 @@ export type NpcBrain = {
     // The fight whim rolled last, held until turn `until`. angle is where around the target a veer drives.
     whim?: { kind: 'keep' | 'rush' | 'halt' | 'veer'; until: number; angle: number };
     farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
-    lastTown?: string; // id of the last town where this driver finished a service or trade
+    // Hidden facts the driver saw, oldest first, at most one per subject. Only src/sim/memory.ts writes them.
+    memories: Memory[];
 };
+
+// A fact a driver saw. Each kind has a subject rule and a lifetime in src/sim/memory.ts.
+// prices: a shop's standing pressure for each good it trades, when the driver did business there.
+export type MemoryFact = { kind: 'prices'; shop: string; pressure: Record<string, number> };
+export type Memory = { turn: number; fact: MemoryFact }; // turn: when the driver saw the fact
 
 export type Vehicle = {
   id: string;
@@ -237,8 +243,13 @@ export type Defeat = { phase: 'out' | 'retreat'; turns: number; unseen: number; 
 // Every baked prop but a rock is a landmark of its prop kind.
 export type LandmarkLook = Exclude<PropKind, "rock">;
 
+// The chassis a dead truck leaves as its wreck. yaw is the truck's heading when it died, in radians from map +x toward +y.
+export type Hulk = { chassisId: string; yaw: number };
+
 export type Obstacle =
-  | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site" }
+  // Only a kill wreck has a hulk. Map, road and convoy wrecks, and kill wrecks from saves before format 2.10, show the
+  // generic wreck.
+  | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site"; hulk?: Hulk }
   // yaw is the direction a landmark faces, in radians from map +x toward +y.
   | { id: string; pos: Vec; r: number; kind: "landmark"; look: LandmarkLook; yaw: number };
 
@@ -293,6 +304,7 @@ export type CallVar =
   | { kind: "deal"; deal: PatchDeal; patcher: "player" | "npc"; price: number; parts: number; turns: number }
   | { kind: "aid"; fuel: number; supplies: number } // units of fuel and supplies
   | { kind: "prices"; town: string; goods: { good: string; buy: number; sell: number }[] } // a town's goods prices
+  | { kind: "tip"; tip: { shop: string; good: string; dear: boolean } | null } // a trading tip, or none
   | { kind: "answer"; option: string }; // a driver's rolled answer, which picks the next line; never shown
 export type CallVars = Record<string, CallVar>;
 

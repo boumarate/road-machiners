@@ -1,5 +1,5 @@
 {
- "format": "2.11",
+ "format": "2.13",
  "shape": {
   "broken": [],
   "dustClouds": [],
@@ -799,6 +799,7 @@
       "y": "number"
      },
      "hurt": "number",
+     "memories": [],
      "noticed": {},
      "stepIndex": "number",
      "templateId": "string",
@@ -892,6 +893,7 @@
       "y": "number"
      },
      "hurt": "number",
+     "memories": [],
      "noticed": {},
      "stepIndex": "number",
      "templateId": "string",

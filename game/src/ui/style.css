@@ -373,9 +373,9 @@ body {
 }
 
 #ui .weapons {
-  left: 412px;
+  left: 457px;
   bottom: 14px;
-  max-width: calc(100vw - 542px);
+  max-width: calc(100vw - 587px);
   box-sizing: border-box;
   padding: 6px 8px 8px;
 }
@@ -1310,7 +1310,7 @@ body {
 @media (max-width: 1100px) {
   /* Room between the instruments and the narrower log. */
   #ui .weapons {
-    max-width: calc(100vw - 644px);
+    max-width: calc(100vw - 689px);
   }
   #ui .log {
     width: 246px;
