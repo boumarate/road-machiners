@@ -43,9 +43,13 @@ import { mountBought, Orders, rearm, upgradeGear, type BotTurn, type UpgradeStyl
 // goes looking for fights. The fast trader wants speed and mounts no armor. The hauler takes the best haul contract on
 // every board it reads and trades only with none. The markov bot plays a random one of the others, but the hauler, for
 // a stretch of turns, then draws again.
-export type Archetype = 'trader' | 'scavenger' | 'hunter' | 'fastTrader' | 'hauler' | 'markov';
-export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'hunter', 'fastTrader', 'hauler', 'markov'];
-type Goal = Exclude<Archetype, 'markov'>;
+// The climber plays a player's snowball: it hauls and scavenges until the truck mounts CLIMB_GUNS guns, then hunts.
+export type Archetype = 'trader' | 'scavenger' | 'hunter' | 'fastTrader' | 'hauler' | 'climber' | 'markov';
+export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'hunter', 'fastTrader', 'hauler', 'climber', 'markov'];
+type Goal = Exclude<Archetype, 'markov' | 'climber'>;
+
+// A player who snowballed hunted raiders from a convertible with two machine guns, a slug cannon and a shotgun.
+const CLIMB_GUNS = 3;
 const GOALS_PLAYED: readonly Goal[] = ['trader', 'scavenger', 'hunter', 'fastTrader'];
 
 // Traders and scavengers earn with cargo room, so their gear never takes it.
@@ -96,7 +100,12 @@ export function parkedOnPurpose(world: World): boolean {
   return playerVehicle(world).job !== null || patchDeal(world) !== null || shopAt(world) !== null;
 }
 
+function climberGoal(world: World): Goal {
+  return vehicleStats(world, playerVehicle(world)).weapons.length >= CLIMB_GUNS ? 'hunter' : 'hauler';
+}
+
 function goalOf(world: World, archetype: Archetype, options: BotOptions): Goal {
+  if (archetype === 'climber') return climberGoal(world);
   if (archetype !== 'markov') return archetype;
   const { markovTurns } = options;
   if (markovTurns === undefined || !Number.isInteger(markovTurns) || markovTurns <= 0) throw new Error(`The markov bot needs markovTurns as a positive whole number, got ${markovTurns}`);

@@ -515,6 +515,16 @@ describe('the hunter', () => {
     expect(botOrders(w, 'hauler').world.player.contracts.map((c) => c.id)).toEqual(['ct-haul']);
   });
 
+  it('has a climber with fewer than three guns haul, and take no bounty', () => {
+    const w = parkedAt('bowl');
+    w.shops.bowl.contracts = [
+      { id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 700, deadline: 5000, window: 600, tier: 1 },
+      { id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'scrap', units: 3, to: 'nose', reward: 600, deadline: 5000, window: 600, rush: false, tier: 2 },
+    ];
+
+    expect(botOrders(w, 'climber').world.player.contracts.map((c) => c.id)).toEqual(['ct-haul']);
+  });
+
   it('has a bot with a hot engine stop to cool, but keep driving while a raider fights it', () => {
     const hotAt = (fight: boolean) => {
       const w = emptyWorld({ x: 30, y: 30 });
