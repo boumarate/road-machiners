@@ -22,6 +22,17 @@ it('does not replace newer activity with an out-of-order report', () => {
   expect(() => observations.recordObservation(home, 'job-2', { ...data, phase: 'running' }, new Date('2026-10-04T12:00:00Z'))).toThrow('Out-of-order');
   expect(observations.readObservation(home, 'job-2')?.data).toEqual(data);
 });
+it('links repeat attempts without letting an old attempt replace a newer one', () => {
+  expect(observations).toHaveProperty('recordAttempt');
+  const home = createHome();
+  const first = { id: 'design-1-a', stage: 'design' as const, issue: 1, startedAt: '2026-10-04T12:00:00Z' };
+  observations.recordAttempt(home, first, 'started', new Date('2026-10-04T12:00:00Z'));
+  observations.recordAttempt(home, first, 'failed', new Date('2026-10-04T12:01:00Z'));
+  const second = { ...first, id: 'design-1-b', startedAt: '2026-10-04T12:02:00Z' };
+  expect(observations.recordAttempt(home, second, 'started', new Date('2026-10-04T12:02:00Z'))).toBe(first.id);
+  observations.recordAttempt(home, first, 'done', new Date('2026-10-04T12:03:00Z'));
+  expect(observations.readObservation(home, 'attempt-design-1')?.data).toMatchObject({ jobId: second.id, outcome: 'started', previousId: first.id });
+});
 it('rejects traversal and unknown activity names instead of persisting arbitrary text', () => {
   expect(observations).toHaveProperty('recordObservation');
   const home = createHome();

@@ -1,0 +1,124 @@
+import { parseAgentActivity, reportObservation, type Activity, type ActivityData } from './observability';
+import type { Run } from './types';
+
+type StreamBlock = { type?: string; name?: string; input?: { command?: string }; content?: unknown };
+type StreamEvent = { type?: string; message?: { content?: StreamBlock[] } };
+const CHECK_STEPS: Record<string, Activity> = { 'npm ci': 'install', 'tests and typecheck': 'tests', 'tests done': 'typecheck', 'dev server': 'starting', playtest: 'playtest', build: 'build', done: 'finished' };
+const TOOL_ACTIVITIES: Record<string, Activity> = { Read: 'reading', Glob: 'reading', Grep: 'reading', Edit: 'editing', Write: 'editing', Agent: 'model', Task: 'model' };
+function classifyCommand(command: string): Activity {
+  if (/\bnpm (?:run )?(?:test|test:)/.test(command)) return 'tests';
+  if (/\bnpm run typecheck\b/.test(command)) return 'typecheck';
+  if (/\bnpm run build\b/.test(command)) return 'build';
+  if (/\bnpm (?:ci|install)\b/.test(command)) return 'install';
+  if (/\bgit\b/.test(command)) return 'git';
+  return 'command';
+}
+function readToolActivity(block: StreamBlock): Activity | null {
+  if (block.type === 'tool_result') return readToolResultActivity(block.content);
+  if (block.type !== 'tool_use') return null;
+  if (block.name === 'Bash') return classifyToolCommand(block);
+  return TOOL_ACTIVITIES[block.name ?? ''] ?? 'command';
+}
+function classifyToolCommand(block: StreamBlock): Activity { return classifyCommand(block.input?.command ?? ''); }
+function readToolResultActivity(content: unknown): Activity {
+  if (typeof content === 'string') return parseAgentActivity(content.trim()) ?? 'model';
+  return 'model';
+}
+function readStreamActivity(event: StreamEvent): Activity | null {
+  if (event.type === 'result') return 'finished';
+  const blocks = event.message?.content;
+  if (!Array.isArray(blocks)) return null;
+  return blocks.map(readToolActivity).find((value) => value !== null) ?? null;
+}
+export function readActivityLine(line: string): Activity | null {
+  const step = /^\[checks\] \S+ (.+)$/.exec(line);
+  if (step) return CHECK_STEPS[step[1]] ?? null;
+  const reported = parseAgentActivity(line);
+  if (reported) return reported;
+  try { return readStreamActivity(JSON.parse(line) as StreamEvent); } catch { return null; }
+}
+function identifyOperation(command: string, args: string[]): Activity {
+  if (args.includes('factory-agent')) return 'model';
+  if (command === 'git' || command === 'gh') return 'git';
+  return classifyCommand([command, ...args].join(' '));
+}
+
+export class ActivityReporter {
+  private active = new Map<symbol, { activity: Activity; source: ActivityData['source'] }>();
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private progressAt: string | null = null;
+  constructor(private readonly home: string, private readonly producer: string, private readonly heartbeatMs: number) {
+    if (!Number.isFinite(heartbeatMs) || heartbeatMs <= 0) throw new Error('Invalid observation heartbeat interval');
+  }
+  private publish(activity: Activity, phase: ActivityData['phase'], source: ActivityData['source']): void {
+    reportObservation(this.home, this.producer, { type: 'activity', activity, phase, source, progressAt: this.progressAt });
+  }
+  private heartbeat(): void {
+    const current = [...this.active.values()].at(-1);
+    if (current) this.publish(current.activity, 'running', current.source);
+  }
+  start(activity: Activity): symbol {
+    const key = Symbol('operation');
+    this.active.set(key, { activity, source: 'runner' });
+    this.heartbeat();
+    this.timer ??= setInterval(() => this.heartbeat(), this.heartbeatMs);
+    this.timer.unref();
+    return key;
+  }
+  update(key: symbol, activity: Activity, source: ActivityData['source']): void {
+    if (['finished', 'model'].includes(activity) && source === 'runner') this.progressAt = new Date().toISOString();
+    this.active.set(key, { activity, source });
+    this.heartbeat();
+  }
+  finish(key: symbol, failed: boolean): void {
+    const current = this.active.get(key)!;
+    this.active.delete(key);
+    if (!failed) this.progressAt = new Date().toISOString();
+    this.publish(current.activity, failed ? 'failed' : 'completed', 'runner');
+    if (this.active.size) return this.heartbeat();
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+}
+
+class ActivityStream {
+  private buffer = '';
+  private dropping = false;
+  constructor(private readonly report: (activity: Activity, source: ActivityData['source']) => void, private readonly maxBytes: number) {
+    if (!Number.isFinite(maxBytes) || maxBytes <= 0) throw new Error('Invalid observation event size limit');
+  }
+  consume(chunk: string): void {
+    for (const part of chunk.split(/(?<=\n)/)) this.consumePart(part);
+  }
+  private consumePart(part: string): void {
+    const ended = part.endsWith('\n');
+    if (!this.dropping) this.buffer += part;
+    if (Buffer.byteLength(this.buffer) > this.maxBytes) this.dropOversize();
+    if (!ended) return;
+    this.finishLine();
+  }
+  private dropOversize(): void {
+    console.error('Factory activity event exceeded its configured size limit');
+    this.buffer = '';
+    this.dropping = true;
+  }
+  private finishLine(): void {
+    const activity = readActivityLine(this.buffer.trim());
+    if (activity) this.report(activity, this.buffer.includes('factory_status') ? 'agent' : 'runner');
+    this.buffer = '';
+    this.dropping = false;
+  }
+}
+export function createObservedRun(run: Run, home: string, producer: string, heartbeatMs: number, maxBytes: number): Run {
+  const reporter = new ActivityReporter(home, producer, heartbeatMs);
+  return async (command, args, opts = {}) => {
+    const key = reporter.start(identifyOperation(command, args));
+    const stream = new ActivityStream((activity, source) => reporter.update(key, activity, source), maxBytes);
+    let failed = true;
+    try {
+      const result = await run(command, args, { ...opts, onStdout: (chunk) => { stream.consume(chunk); opts.onStdout?.(chunk); } });
+      failed = result.code !== 0;
+      return result;
+    } finally { reporter.finish(key, failed); }
+  };
+}

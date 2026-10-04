@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+if [ "$#" -ne 1 ]; then
+    printf '%s\n' 'Usage: factory-status <activity>' >&2
+    exit 2
+fi
+case "$1" in
+    reading|editing|tests|typecheck|playtest|build|publish|install|git|review|design|investigate|waiting)
+        printf '{"type":"factory_status","activity":"%s"}\n' "$1"
+        ;;
+    *) printf '%s\n' 'Unknown activity' >&2; exit 2 ;;
+esac

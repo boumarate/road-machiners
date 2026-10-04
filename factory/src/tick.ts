@@ -7,7 +7,7 @@ import { freeGb } from './health';
 import { failureIssue, pruneFailures, reportFailure } from './fail';
 import { intake } from './intake';
 import { recordJob } from './ledger';
-import { reportScheduler } from './observability';
+import { reportAttempt, reportScheduler } from './observability';
 import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
@@ -274,6 +274,7 @@ function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): voi
   const pid = deps.spawn([pick.stage, String(pick.issue ?? '-')], codeDir, log, id, cpus);
   const job: Job = { ...pick, id, pid, startedAt: ctx.now().toISOString(), log };
   updateState(ctx.statePath, (state) => ({ ...state, jobs: [...state.jobs, job], jobStarts: countsAgainstCap(pick.stage) ? [...recentStarts(state, ctx.now()), job.startedAt] : state.jobStarts }));
+  reportAttempt(ctx.cfg.home, job, 'started', ctx.now());
   ctx.log('tick', pick.issue, `started ${pick.stage}, pid ${pid}, CPUs ${cpus}, log ${log}`);
 }
 

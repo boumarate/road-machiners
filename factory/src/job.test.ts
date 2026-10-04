@@ -30,7 +30,7 @@ describe('runJob', () => {
     expect(state.interrupted).toEqual([9]);
     expect(posts).toEqual([]);
     expect(state.failures).toMatchObject([{ stage: 'change', issue: null, error: 'offline' }]);
-    expect(readLedger(ROOT, new Date(0))).toMatchObject([{ kind: 'job', id: 'b', stage: 'change', issue: 9, outcome: 'failed', agents: [] }]);
+    expect(readLedger(ROOT, new Date(0)).filter((line) => line.kind === 'job')).toMatchObject([{ kind: 'job', id: 'b', stage: 'change', issue: 9, outcome: 'failed', agents: [] }]);
   });
 
   it('writes one ledger line with the agent runs of a job that finished', async () => {
@@ -45,7 +45,7 @@ describe('runJob', () => {
       container: { shell: async () => undefined },
     } as unknown as Ctx;
     await runJob(ctx, 'dev', null).catch(() => undefined);
-    expect(readLedger(ROOT, new Date(0))).toEqual([{ kind: 'job', id: 'dev-1', stage: 'dev', issue: null, startedAt: '2026-01-10T11:00:00Z', endedAt: '2026-01-10T12:00:00.000Z', outcome: expect.any(String), agents: [{ model: 'sonnet', costUsd: 0.5, minutes: 4 }] }]);
+    expect(readLedger(ROOT, new Date(0)).filter((line) => line.kind === 'job')).toEqual([{ kind: 'job', retryOf: null, id: 'dev-1', stage: 'dev', issue: null, startedAt: '2026-01-10T11:00:00Z', endedAt: '2026-01-10T12:00:00.000Z', outcome: expect.any(String), agents: [{ model: 'sonnet', costUsd: 0.5, minutes: 4 }] }]);
   });
 
   it('clears the queued ship after a failed ship, and reports on the tracking issue', async () => {

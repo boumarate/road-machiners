@@ -65,6 +65,7 @@
 - After explicit deployment approval, use native release/update paths and restart only the required services. Verify new observations arrive without stopping existing jobs, inspect public privacy and health, and confirm `/`, `/dev/` and existing build routes remain intact.
 
 ## Progress
+- Phase 2: reporting configuration and runner wiring are implemented after the owner restored settings access. Structured activity, heartbeats, agent activity categories, check phases, repository lock waits and repeat-attempt links are recorded without raw arguments. Tests passed: 149 focused checks and the repository quality gate. No paid agents or production jobs were run. Next: manager hooks, server attribution and public projections.
 - Phase 1: shared scheduling explanations and candidate gate are implemented. Atomic latest observations and change-only ledger records are wired into scheduler, pause and tick-error paths. Scheduling and existing lifecycle checks passed: 86 focused tests and the repository quality gate. Retry linkage and richer lifecycle events remain for the worker phase.
 
 ## Verification
