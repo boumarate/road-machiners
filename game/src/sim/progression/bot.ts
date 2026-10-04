@@ -609,16 +609,20 @@ function dangerOf(world: World, foe: Vehicle): number {
 
 // A bot under fire turns on a foe it judges no more dangerous than itself, as an NPC does, so its guns bear. From a
 // stronger foe it runs for the nearest town, where guards cover it. Only the hunter fights a foe it can outrun: a won
-// fight still costs repairs, and broken wheels leave the truck for the next raider. With no foe in sight the goal goes
-// on. True when the turn's command went to the fight.
+// fight still costs repairs, and broken wheels leave the truck for the next raider. A foe that drops out of sight
+// for a turn is still on its tail, so the bot keeps running until the combat ends. The hunter instead follows its
+// goal, which chases the foe it hears. True when the turn's command went to the fight.
 function defend(o: Orders, goal: Goal): boolean {
   if (!inCombat(o.world, o.me)) return false;
   const foe = weakestFoe(o.world);
-  if (!foe) return false;
-  const fights = dangerOf(o.world, foe) <= ownDanger(o.world, o.me) && (goal === 'hunter' || !outruns(o.world, o.me, foe));
-  if (fights) driveTo(o, foe.pos);
+  if (!foe && goal === 'hunter') return false;
+  if (foe && fights(o, foe, goal)) driveTo(o, foe.pos);
   else driveToSite(o, nearestTown(o.world));
   return true;
+}
+
+function fights(o: Orders, foe: Vehicle, goal: Goal): boolean {
+  return dangerOf(o.world, foe) <= ownDanger(o.world, o.me) && (goal === 'hunter' || !outruns(o.world, o.me, foe));
 }
 
 // A foe the bot can neither beat nor outrun takes the cargo anyway, and the gear with it after a knockout.

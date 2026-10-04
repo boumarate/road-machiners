@@ -450,6 +450,23 @@ describe('the hunter', () => {
     for (const r of runs) expect([r.turned, r.ran]).toEqual([r.faster, !r.faster]);
   });
 
+  // The raider dropped behind a ridge for a turn. Turning back to the trade route would drive into it again.
+  // Its cargo sells better at Nose, so its goal leads away from Bowl, the nearest town.
+  it('has a trader keep running for town while the combat lasts with the raider out of sight', () => {
+    const w = parkedAt('bowl');
+    const me = playerVehicle(w);
+    me.pos = { x: me.pos.x + 10, y: me.pos.y };
+    addGoods(w, me, 'electronics', 2);
+    w.player.costBasis.electronics = 100;
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 300, y: 300 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    startCombat(w, raider, me);
+
+    const order = playerVehicle(botOrders(w, 'trader').world).order;
+
+    expect(order).toEqual({ kind: 'stopAt', dest: nearestPad(nearestTown(w), me.pos) });
+  });
+
   // A raider demands the cargo. A trader too slow to get away hands it to a stronger raider and refuses a weaker one.
   it('has a trader hand its cargo only to a raider that outmatches it', () => {
     const demandedBy = (weapons: string[]) => {
