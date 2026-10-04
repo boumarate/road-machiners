@@ -21,7 +21,7 @@ const SHADOW_SOFTNESS = 3; // shadow-map texels of PCF blur, soft edges without 
 
 // Keyed by the sun's height in degrees, highest first. Negative is below the horizon.
 // By day the ground color is warm sand, so faces turned down catch light bounced off the desert. The day sky is a
-// light blue, so shadows on the orange sand go mauve-brown as in the reference image of issue 129.
+// light blue, so shadows on the orange sand go mauve-brown.
 type Key = {
   h: number;
   sun: number;

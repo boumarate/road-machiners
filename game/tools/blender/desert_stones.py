@@ -1,5 +1,5 @@
-"""A few loose grey and tan stones from the reference image of issue 129, scattered on open desert as decoration
-without collision.
+"""A few loose grey and tan stones from docs/concepts/wasteland-reference-issue-129.jpg, scattered on open desert
+as decoration without collision.
 
 Sized for a unit reference radius: the stones fit inside a 1 m footprint radius and stand about 0.45 m tall.
 The game scales it uniformly, turns it at random and tints it.

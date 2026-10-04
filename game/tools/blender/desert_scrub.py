@@ -1,5 +1,5 @@
-"""Desert scrub: an upright clump of olive stems, taller in the middle, from the reference image of issue 129.
-Decoration without collision.
+"""Desert scrub: an upright clump of olive stems, taller in the middle, from
+docs/concepts/wasteland-reference-issue-129.jpg. Decoration without collision.
 
 Sized for a unit reference radius: the stems fit inside a 1 m footprint radius and stand about 1.05 m tall,
 so the clump is about twice as wide as it is tall, as in the reference.

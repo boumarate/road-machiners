@@ -1,5 +1,6 @@
 // Map-space ground painter: tile type colors, a warm sand base with slow light and deep patches on open desert,
-// and hillshade. Open desert drops most of the per-pixel speckle, so the 3D ground's facets carry its texture. The ground shader draws roads over it, see render/roadPaint.ts. Pebbles and scrub are 3D, in
+// and hillshade. Open desert drops most of the per-pixel speckle, so the facets the ground shader tints carry its
+// texture. The ground shader draws roads over it, see render/roadPaint.ts. Stones, scrub and cacti are 3D, in
 // three/render/scatter.ts. The 3D terrain (three/render/terrain.ts) uses it as its texture.
 
 import { REGION } from "../data/region";

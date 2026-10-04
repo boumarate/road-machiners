@@ -1,6 +1,5 @@
-// Ground scatter: loose stones, scrub and short cacti on open ground. Open desert takes the grey stones, olive
-// scrub and cacti of the reference image of issue 129, as dense as the reference, with cacti gathered by rocks and
-// crags and road shoulders keeping stones only. Ground that takes no desert look keeps its small pebbles and dry
+// Ground scatter: loose stones, scrub and short cacti on open ground. Open desert takes grey stones, olive scrub
+// and cacti, with cacti gathered by rocks and crags and road shoulders keeping stones only. Ground that takes no desert look keeps its small pebbles and dry
 // scrub, as sparse as before. Decoration only, no collision. Placement comes from render noise per tile, so it is
 // the same on every load. Each terrain chunk draws its scatter as one instanced model per kind.
 
@@ -49,9 +48,9 @@ type ScatterModel = (typeof MODELS)[number];
 // and the small dry scrub off the desert stays as it was. Desert scrub stems are too thin to shadow each other
 // without turning the clump into a dark blot.
 const CASTS_SHADOW: ReadonlySet<ScatterModel> = new Set(['desert_scrub', 'cactus']);
-const NO_SHADOW_ON: ReadonlySet<ScatterModel> = new Set(['desert_scrub']);
+const RECEIVES_NO_SHADOW: ReadonlySet<ScatterModel> = new Set(['desert_scrub']);
 
-type Placed = { at: Vec; matrix: THREE.Matrix4; tint: number };
+type Placed = { matrix: THREE.Matrix4; tint: number };
 export type ScatterChunk = { center: Vec } & Record<ScatterModel, Placed[]>;
 
 export function addScatter(t: Terrain, obstacles: Obstacle[], scope: RenderScope): void {
@@ -63,7 +62,7 @@ export function addScatter(t: Terrain, obstacles: Obstacle[], scope: RenderScope
       const group = instancedModel(name, list.map((p) => p.matrix), list.map((p) => p.tint));
       for (const mesh of group.children) {
         mesh.castShadow = CASTS_SHADOW.has(name);
-        mesh.receiveShadow = !NO_SHADOW_ON.has(name);
+        mesh.receiveShadow = !RECEIVES_NO_SHADOW.has(name);
       }
       scope.add(group, chunk.center, reach);
     }
@@ -153,7 +152,7 @@ function placed(t: Terrain, x: number, y: number, kind: ScatterModel): Placed {
   place.rotation.y = hash2(x * 19, y * 23 + 1) * Math.PI * 2;
   place.scale.setScalar(size(kind, hash2(x * 11 + 1, y * 17 + 9)));
   place.updateMatrix();
-  return { at: p, matrix: place.matrix.clone(), tint: lerp(TINT, hash2(x * 29 + 4, y * 31)) };
+  return { matrix: place.matrix.clone(), tint: lerp(TINT, hash2(x * 29 + 4, y * 31)) };
 }
 
 const RADIUS: Record<Exclude<ScatterModel, 'cactus'>, { min: number; max: number }> = {

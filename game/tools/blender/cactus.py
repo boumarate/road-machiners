@@ -1,4 +1,4 @@
-"""Short columnar cactus: a cluster of ribbed columns from one base, as in the reference image of issue 129.
+"""Short columnar cactus: a cluster of ribbed columns from one base, as in docs/concepts/wasteland-reference-issue-129.jpg.
 Decoration without collision.
 
 Sized at 1 m tall at scale 1, with a footprint radius of about 0.2 m. The game scales it uniformly to at most

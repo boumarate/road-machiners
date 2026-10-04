@@ -10,7 +10,7 @@ import { heightAt, markHeightAt, type Terrain } from '../../sim/terrain';
 import type { Vec } from '../../sim/vec';
 
 const S = PHYSICS.metersPerTile;
-// Strong enough to read over the light desert sand, as the zones of the reference image of issue 129 do.
+// Strong enough to read over the light desert sand.
 const ZONE_ALPHA: Record<Throttle, number> = { brake: 0.24, hold: 0.28, accelerate: 0.28 };
 const SAMPLE_TILES = 0.5; // most tiles between ground samples, so a band follows the per-tile ground mesh
 const LIFT = 0.1; // meters above the ground, so bumps between samples do not swallow a band

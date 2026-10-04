@@ -17,6 +17,8 @@ const placed = chunks.flatMap(all);
 const scrub = chunks.flatMap((c) => [...c.scrub, ...c.desert_scrub]);
 const cacti = chunks.flatMap((c) => c.cactus);
 const pebbles = chunks.flatMap((c) => [...c.pebbles, ...c.desert_stones]);
+// Where a placement stands, in tiles, read back from its matrix.
+const at = (p: { matrix: THREE.Matrix4 }): Vec => ({ x: p.matrix.elements[12] / PHYSICS.metersPerTile, y: p.matrix.elements[14] / PHYSICS.metersPerTile });
 const roadDist = (x: number, y: number) => ROAD_INDEX.nearestWithin(x, y, ROAD_GAP + SHOULDER_TILES);
 const typeAt = (at: Vec) => t.types[Math.floor(at.y) * t.size + Math.floor(at.x)];
 const onShoulder = (at: Vec) => roadDist(at.x, at.y) < ROAD_GAP + SHOULDER_TILES;
@@ -33,11 +35,11 @@ for (const o of world.obstacles) {
 describe('scatterPlacements', () => {
   it('keeps scatter off roads and away from obstacles', () => {
     expect(placed.length).toBeGreaterThan(1000);
-    for (const p of placed) expect(roadDist(p.at.x, p.at.y)).toBeGreaterThanOrEqual(ROAD_GAP);
+    for (const p of placed) expect(roadDist(at(p).x, at(p).y)).toBeGreaterThanOrEqual(ROAD_GAP);
     const byTile = new Map<number, Vec[]>();
     for (const p of placed) {
-      const key = Math.floor(p.at.y) * t.size + Math.floor(p.at.x);
-      byTile.set(key, [...(byTile.get(key) ?? []), p.at]);
+      const key = Math.floor(at(p).y) * t.size + Math.floor(at(p).x);
+      byTile.set(key, [...(byTile.get(key) ?? []), at(p)]);
     }
     for (const o of world.obstacles) {
       // Tiles are blocked by their center, and a placement lies within half a tile diagonal of its tile's center.
@@ -56,23 +58,23 @@ describe('scatterPlacements', () => {
       if (d < ROAD_GAP + SHOULDER_TILES) shoulderTiles++;
       else openTiles++;
     }
-    const shoulderPebbles = pebbles.filter((p) => onShoulder(p.at)).length;
+    const shoulderPebbles = pebbles.filter((p) => onShoulder(at(p))).length;
     expect(shoulderPebbles / shoulderTiles).toBeGreaterThan((pebbles.length - shoulderPebbles) / openTiles);
-    for (const p of [...scrub, ...cacti]) if (desertWeight(typeAt(p.at)) > 0) expect(onShoulder(p.at)).toBe(false);
+    for (const p of [...scrub, ...cacti]) if (desertWeight(typeAt(at(p))) > 0) expect(onShoulder(at(p))).toBe(false);
   });
 
   it('grows a modest share of scrub on open hardpan', () => {
     let tiles = 0;
     for (let y = 0; y < t.size; y++) for (let x = 0; x < t.size; x++)
       if (t.types[y * t.size + x] === 'hardpan' && roadDist(x + 0.5, y + 0.5) >= ROAD_GAP + SHOULDER_TILES) tiles++;
-    const grown = scrub.filter((p) => typeAt(p.at) === 'hardpan' && !onShoulder(p.at)).length;
+    const grown = scrub.filter((p) => typeAt(at(p)) === 'hardpan' && !onShoulder(at(p))).length;
     expect(tiles).toBeGreaterThan(1000);
     expect(grown / tiles).toBeGreaterThan(0.08);
   });
 
   it('grows cacti only on desert ground, gathered by rocks and crags', () => {
     expect(cacti.length).toBeGreaterThan(20);
-    for (const p of cacti) expect(desertWeight(typeAt(p.at))).toBeGreaterThan(0);
+    for (const p of cacti) expect(desertWeight(typeAt(at(p)))).toBeGreaterThan(0);
     let rockTiles = 0;
     let openTiles = 0;
     for (let y = 0; y < t.size; y++) for (let x = 0; x < t.size; x++) {
@@ -80,7 +82,7 @@ describe('scatterPlacements', () => {
       if (nearRock.has(y * t.size + x)) rockTiles++;
       else openTiles++;
     }
-    const byRock = cacti.filter((p) => nearRock.has(tileKey(p.at))).length;
+    const byRock = cacti.filter((p) => nearRock.has(tileKey(at(p)))).length;
     expect(rockTiles).toBeGreaterThan(100);
     expect(byRock / rockTiles).toBeGreaterThan(2 * ((cacti.length - byRock) / openTiles));
   });
@@ -103,8 +105,8 @@ describe('scatterPlacements', () => {
         else if (d >= ROAD_GAP) shoulderTiles++;
       }
       expect(shoulderTiles).toBeGreaterThan(500);
-      const share = (list: { at: Vec }[], shoulder: boolean) =>
-        list.filter((p) => onShoulder(p.at) === shoulder).length / (shoulder ? shoulderTiles : openTiles);
+      const share = (list: { matrix: THREE.Matrix4 }[], shoulder: boolean) =>
+        list.filter((p) => onShoulder(at(p)) === shoulder).length / (shoulder ? shoulderTiles : openTiles);
       for (const [list, chance] of [[small, 0.3], [dry, 0.04]] as const) {
         expect(share(list, true), type).toBeCloseTo(chance, 1);
         expect(share(list, false), type).toBeCloseTo(chance, 1);
