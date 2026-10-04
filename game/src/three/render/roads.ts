@@ -3,14 +3,17 @@
 // takes the road look where the road mask covers its center, and the slow tone and a per-pixel dither fray
 // the edge. Past the edge, where the blurred mask is still above SHOULDER_FROM, the edge frays both ways:
 // the dither keeps road pixels out on the sand and light rim sand pixels with a few grey stones, more of
-// each the closer they lie to the road. Just inside the edge, a few road pixels take the rim sand too.
+// each the closer they lie to the road. Just inside the edge, a few road pixels take the rim sand too. The fray
+// and the rim scale with the desert weight of the ground beside the road, so salt, mud and old asphalt keep the
+// plain edge, a darker band just inside the road.
 // A pad is a paler floor of the same dirt inside a worn orange outline, where the road ends.
 
 import * as THREE from "three";
 import { PHYSICS } from "../../data/physics";
 import { REGION } from "../../data/region";
-import { ROAD_GROUND, type PaintCanvas } from "../../render/groundPaint";
+import { desertWeight, ROAD_GROUND, type PaintCanvas } from "../../render/groundPaint";
 import { sitePads } from "../../sim/sites";
+import type { Terrain } from "../../sim/terrain";
 import { PAL } from "../../render/palette";
 import { paintRoadDetail, paintRoadMask, paintRoadTone, ROAD_DETAIL_SIDE, ROAD_TONE_PIXELS, ROAD_TONE_SIDE, type RoadImage } from "../../render/roadPaint";
 
@@ -24,8 +27,8 @@ const RIM_INSIDE = 0.15; // share of road pixels that take the rim sand at the r
 const SHOULDER_STONES = 0.05; // share of shoulder pixels that are grey stones at the road edge
 
 // Paints the road mask on `mask`, which must map the map like the ground canvas, and draws roads and
-// pads on the ground material.
-export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas): void {
+// pads on the ground material of terrain `t`.
+export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas, t: Terrain): void {
   paintRoadMask(mask);
   const pixel = S / mask.res / PIXEL_SPLIT;
   const uniforms = {
@@ -38,6 +41,8 @@ export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas
     roadDetailMeters: { value: ROAD_DETAIL_SIDE * pixel },
     roadToneMeters: { value: ROAD_TONE_SIDE * ROAD_TONE_PIXELS * pixel },
     roadGroundLuma: { value: luma(new THREE.Color(ROAD_GROUND)) },
+    roadDesert: { value: desertTexture(t) },
+    roadDesertMeters: { value: t.size * S },
     shoulderFrom: { value: SHOULDER_FROM },
     roadFray: { value: ROAD_FRAY },
     rimShare: { value: RIM_SHARE },
@@ -73,6 +78,8 @@ uniform float roadMaskMeters;
 uniform float roadDetailMeters;
 uniform float roadToneMeters;
 uniform float roadGroundLuma;
+uniform sampler2D roadDesert;
+uniform float roadDesertMeters;
 uniform float shoulderFrom;
 uniform float roadFray;
 uniform float rimShare;
@@ -91,7 +98,8 @@ uniform vec3 padMark;`;
 // paint. Under 0.5 the mask is off the road. The tone moves that line by meters and the dither frays it.
 // Between shoulderFrom and the road edge the same dither picks shoulder pixels, fewer away from the road:
 // the bottom of its range takes the road color, the top grey stones, and the band below the stones rim
-// sand. Within 0.1 of mask cover inside the edge, the top of the range takes rim sand.
+// sand. Within 0.1 of mask cover inside the edge, the top of the range takes rim sand. Both scale with the
+// desert weight, and the darker inner band fades in as it drops, so zero-weight ground keeps the plain edge.
 // A pad covers the road under it. Its outline skips a few pixels, like worn paint.
 const ROAD_FRAGMENT = `{
   vec2 roadAt = roadOrigin + (floor((vRoadXZ - roadOrigin) / roadPixel) + 0.5) * roadPixel;
@@ -102,11 +110,13 @@ const ROAD_FRAGMENT = `{
   vec3 roadColor = roadLook.rgb * (0.94 + 0.12 * roadWander) * groundShade;
   float roadEdge = 0.5 + (roadWander - 0.5) * 0.4 + (roadLook.a - 0.5) * 0.1;
   vec3 rimSand = rimColor * groundShade;
+  float roadSand = texture2D(roadDesert, roadAt / roadDesertMeters).r;
   if (roadCover > roadEdge) {
     float inner = 1.0 - smoothstep(roadEdge, roadEdge + 0.1, roadCover);
-    diffuseColor.rgb = roadLook.a > 1.0 - inner * rimInside ? rimSand : roadColor;
+    float edgeDim = roadCover < roadEdge + 0.1 ? mix(0.92, 1.0, roadSand) : 1.0;
+    diffuseColor.rgb = roadLook.a > 1.0 - inner * rimInside * roadSand ? rimSand : roadColor * edgeDim;
   } else if (roadCover > shoulderFrom) {
-    float k = smoothstep(shoulderFrom, roadEdge, roadCover);
+    float k = smoothstep(shoulderFrom, roadEdge, roadCover) * roadSand;
     if (roadLook.a < k * roadFray) diffuseColor.rgb = roadColor;
     else if (roadLook.a > 1.0 - k * shoulderStones) diffuseColor.rgb = stoneColor * (0.8 + 0.4 * fract(roadLook.a * 13.0)) * groundShade;
     else if (roadLook.a > 1.0 - k * rimShare) diffuseColor.rgb = rimSand;
@@ -148,6 +158,17 @@ function maskTexture(c: PaintCanvas): THREE.DataTexture {
   const texture = new THREE.DataTexture(cover, c.size, c.size, THREE.RedFormat);
   texture.magFilter = THREE.LinearFilter;
   texture.minFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+// Desert weight per tile, unblended, so every pixel on a zero-weight tile keeps the plain edge, as scatter
+// reads each tile's own type.
+function desertTexture(t: Terrain): THREE.DataTexture {
+  const weight = new Uint8Array(t.size * t.size);
+  for (let i = 0; i < weight.length; i++) weight[i] = Math.round(desertWeight(t.types[i]) * 255);
+  const texture = new THREE.DataTexture(weight, t.size, t.size, THREE.RedFormat);
+  texture.unpackAlignment = 1;
   texture.needsUpdate = true;
   return texture;
 }
