@@ -15,8 +15,8 @@ export type Tier = 1 | 2 | 3;
 export type ItemKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'scanner' | 'store' | 'chassis' | 'good';
 
 export const EFFORT = {
-  // Net money per turn at each tier, from `npm run progression:report`. A value is the median of the trader and
-  // scavenger runs over seeds 1, 2 and 3 for 30 days.
+  // Net money per turn at each tier. Tier 1 is the salvage wage of the deleted econ harness. Tiers 2 and 3 are a
+  // guessed ratio to tier 1. `npm run progression:report` over 30-day runs is the measure that replaces them.
   wage: {
     1: 0.37,
     2: 1,
