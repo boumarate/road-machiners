@@ -168,9 +168,11 @@ export function nearRail(x: number, y: number, reach: number): boolean {
   });
 }
 
-// True when segment a-b comes within reach of any deck's rail or lip.
+// True when segment a-b comes within reach of any deck's rail or lip. Route checks ask this for every leg, and nearly
+// every leg lies far outside every deck's box.
 export function crossesRail(a: Vec, b: Vec, reach: number): boolean {
   return RAIL_BOXES.some((box) =>
+    Math.max(a.x, b.x) > box.minX - reach && Math.min(a.x, b.x) < box.maxX + reach && Math.max(a.y, b.y) > box.minY - reach && Math.min(a.y, b.y) < box.maxY + reach &&
     box.walls.some(([c, d]) => segmentsIntersect(a, b, c, d) || Math.min(segmentDist(a, c, d), segmentDist(b, c, d), segmentDist(c, a, b), segmentDist(d, a, b)) < reach),
   );
 }
