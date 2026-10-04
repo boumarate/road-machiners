@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
+import { propPose } from '../sim/mapgen';
 import { baseGrid, isMounted, placementError } from '../sim/grid';
 import { choosePerk, pendingPerkPairs, skillLevel } from '../sim/progress';
 import { emptyWorld } from '../sim/testkit';
-import type { Player, Vehicle } from '../sim/types';
+import type { Obstacle, Player, Vehicle } from '../sim/types';
 import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
 import FORMAT_2_2 from './save-fixtures/format-2-2.json';
@@ -15,6 +16,8 @@ import FORMAT_2_7 from './save-fixtures/format-2-7.json';
 import FORMAT_2_8 from './save-fixtures/format-2-8.json';
 import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import FORMAT_2_10 from './save-fixtures/format-2-10.json';
+import FORMAT_2_11 from './save-fixtures/format-2-11.json';
+import FORMAT_2_12 from './save-fixtures/format-2-12.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
@@ -245,16 +248,59 @@ describe('save migration 9 to 10', () => {
 });
 
 describe('save migration 10 to 11', () => {
+  const next = MIGRATIONS[10](FORMAT_2_10) as { obstacles: Obstacle[] };
+
+  it('keeps the world as it was', () => {
+    expect(next).toEqual(FORMAT_2_10);
+  });
+
+  it('leaves an old kill wreck without a hulk, so it draws as the generic wreck', () => {
+    const kill = next.obstacles.find((o) => o.id === 'wreck-npc7');
+
+    expect(kill).toBeDefined();
+    expect(kill && 'hulk' in kill).toBe(false);
+    expect(kill && propPose(kill).model).toBe('wreck');
+  });
+});
+
+describe('save migration 11 to 12', () => {
+  type Brain = { lastTown?: string; memories: unknown[] } | null;
+  const next = MIGRATIONS[11](FORMAT_2_11) as { vehicles: { brain: Brain }[]; removed: { brain: Brain }[] };
+  const noseMemory = { turn: 900, fact: { kind: 'prices', shop: 'nose', pressure: { salt: -0.2, scrap: 0.1 } } };
+
+  it('turns a last town into a memory of its saved prices, on the saved turn', () => {
+    expect(next.vehicles[1].brain!.memories).toEqual([noseMemory]);
+    expect(next.removed[0].brain!.memories).toEqual([noseMemory]);
+  });
+
+  it('copies the saved pressure rather than sharing it', () => {
+    const memory = next.vehicles[1].brain!.memories[0] as typeof noseMemory;
+    expect(memory.fact.pressure).not.toBe(FORMAT_2_11.shops.nose.pressure);
+  });
+
+  it('gives an empty memory to a brain without a last town or with an unknown one', () => {
+    expect(next.vehicles[2].brain!.memories).toEqual([]);
+    expect(next.vehicles[3].brain!.memories).toEqual([]);
+  });
+
+  it('drops lastTown from every brain and leaves a missing brain alone', () => {
+    for (const v of [...next.vehicles, ...next.removed]) expect(v.brain && 'lastTown' in v.brain).toBeFalsy();
+    expect(next.vehicles[0]).toEqual(FORMAT_2_11.vehicles[0]);
+    expect(next.vehicles[2].brain).toEqual({ ...FORMAT_2_11.vehicles[2].brain, memories: [] });
+  });
+});
+
+describe('save migration 12 to 13', () => {
   it('drops the circles of the fortress sites and the Bowl and Nose buildings, and keeps every other obstacle', () => {
-    const next = MIGRATIONS[10](FORMAT_2_10) as { obstacles: { id: string }[] };
+    const next = MIGRATIONS[12](FORMAT_2_12) as { obstacles: { id: string }[] };
 
     expect(next.obstacles.map((o) => o.id)).toEqual(['site-old-mill', 'bld-dustwell-1', 'pond-dustwell', 'cw-convoy-0', 'wreck4']);
-    expect(next.obstacles[0]).toEqual(FORMAT_2_10.obstacles[5]);
+    expect(next.obstacles[0]).toEqual(FORMAT_2_12.obstacles[5]);
   });
 
   it('drops the old salvage yard wrecks, which a fortress yard no longer has', () => {
-    const world = { ...FORMAT_2_10, obstacles: [{ id: 'cw-salvage-yard-0' }, { id: 'cw-convoy-0' }] };
-    const next = MIGRATIONS[10](world) as { obstacles: { id: string }[] };
+    const world = { ...FORMAT_2_12, obstacles: [{ id: 'cw-salvage-yard-0' }, { id: 'cw-convoy-0' }] };
+    const next = MIGRATIONS[12](world) as { obstacles: { id: string }[] };
 
     expect(next.obstacles.map((o) => o.id)).toEqual(['cw-convoy-0']);
   });

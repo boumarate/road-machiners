@@ -218,15 +218,30 @@ export function pooledSkills_9_10(skills: Record<string, number>): { xp: number;
   return { xp, ranks };
 }
 
+// A driver's last town became a memory of the prices it saw there, kept like any memory from now on. The saved
+// pressure stands in for what it saw, and the saved turn for when.
+function withMemories_11_12(world: SavedJson): SavedJson {
+  const shops = world.shops as Record<string, SavedJson>;
+  const turn = world.turn as number;
+  const remembering = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const { lastTown, ...brain } = v.brain as SavedJson;
+    const shop = typeof lastTown === 'string' ? shops[lastTown] : undefined;
+    const memories = shop ? [{ turn, fact: { kind: 'prices', shop: lastTown, pressure: { ...(shop.pressure as SavedJson) } } }] : [];
+    return { ...v, brain: { ...brain, memories } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(remembering), removed: (world.removed as SavedJson[]).map(remembering) };
+}
+
 // Old saves hold a circle for each of these sites and a ring of buildings for Bowl and Nose. The sites are fortresses now:
 // their walls come from the map file, and the town houses from the render. The salvage yard's wrecks are gone too.
-const FORTRESS_OBSTACLES_10_11 = new Set(
+const FORTRESS_OBSTACLES_12_13 = new Set(
   ['bowl', 'nose', 'dustwell', 'green-pit', 'pump-station', 'granary', 'salvage-yard', 'south-lock', 'scrapjaw', 'kiln'].map((id) => `site-${id}`),
 );
 
-function isGoneObstacle_10_11(o: SavedJson): boolean {
+function isGoneObstacle_12_13(o: SavedJson): boolean {
   const id = o.id as string;
-  return FORTRESS_OBSTACLES_10_11.has(id) || id.startsWith('bld-bowl-') || id.startsWith('bld-nose-') || id.startsWith('cw-salvage-yard-');
+  return FORTRESS_OBSTACLES_12_13.has(id) || id.startsWith('bld-bowl-') || id.startsWith('bld-nose-') || id.startsWith('cw-salvage-yard-');
 }
 
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
@@ -288,8 +303,12 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     const { skills, ...player } = world.player as SavedJson;
     return { ...world, player: { ...player, ...pooledSkills_9_10(skills as Record<string, number>) } };
   },
-  // 10 to 11: the fortress sites lose their circle obstacle, and Bowl and Nose their building rings.
-  (world) => ({ ...world, obstacles: (world.obstacles as SavedJson[]).filter((o) => !isGoneObstacle_10_11(o)) }),
+  // 10 to 11: a kill wreck may record its chassis as a hulk; older kill wrecks stay generic.
+  (world) => world,
+  // 11 to 12: a driver's last town becomes a memory of its prices.
+  withMemories_11_12,
+  // 12 to 13: the fortress sites lose their circle obstacle, and Bowl and Nose their building rings.
+  (world) => ({ ...world, obstacles: (world.obstacles as SavedJson[]).filter((o) => !isGoneObstacle_12_13(o)) }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

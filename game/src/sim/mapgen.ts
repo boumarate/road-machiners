@@ -10,6 +10,7 @@ import { PROP_KINDS, type BakedMap, type BakedProp, type PropKind } from './terr
 import { isFortress, siteGap } from './sites';
 import { TERRAIN } from '../data/terrain';
 import { randInt, randRange } from './rng';
+import { hulkBoxes } from './body';
 import { DECKS } from './bridge';
 import type { LandmarkLook, Obstacle, World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
@@ -127,7 +128,10 @@ export function clearOfSites(pos: Vec, r: number): boolean {
 // Scale from model meters on each model axis: x forward, y sideways, z up.
 export type PropScale = { x: number; y: number; z: number };
 // yaw turns the model's +x in radians from map +x toward +y.
-export type PropPose = { model: PropModel; pos: Vec; yaw: number; scale: PropScale };
+// A hulk is a dead truck's chassis model, see hulkBoxes() in src/sim/body.ts.
+export type PropPose =
+  | { model: PropModel; pos: Vec; yaw: number; scale: PropScale }
+  | { model: 'hulk'; chassisId: string; pos: Vec; yaw: number; scale: PropScale };
 // One box of a model's collision shape, in model meters: x forward, y sideways, z up.
 export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
 
@@ -188,9 +192,15 @@ export function propPose(o: Obstacle): PropPose {
   const pos = { ...o.pos };
   if (o.kind === 'landmark') return landmarkPose(o);
   if (o.kind === 'rock') return { model: 'rock', pos, yaw: -idHash(o.id) * TURN, scale: even(o.r * M) };
-  if (o.kind === 'wreck') return { model: 'wreck', pos, yaw: idHash(o.id) * TURN, scale: even(o.r / WRECK_RADIUS) };
+  if (o.kind === 'wreck') return wreckPose(o, pos);
   if (o.kind === 'building') return { model: 'building', pos, yaw: idHash(o.id) * Math.PI, scale: buildingScale(o) };
   throw new Error(`Obstacle ${o.id} of kind ${o.kind} has no prop model`);
+}
+
+// A kill wreck with a hulk lies as its dead truck did. Any other wreck is the generic model, turned by its id.
+function wreckPose(o: Exclude<Obstacle, Landmark>, pos: Vec): PropPose {
+  if (o.hulk) return { model: 'hulk', chassisId: o.hulk.chassisId, pos, yaw: o.hulk.yaw, scale: even(1) };
+  return { model: 'wreck', pos, yaw: idHash(o.id) * TURN, scale: even(o.r / WRECK_RADIUS) };
 }
 
 // The collision boxes of a prop model, from src/data/prop-shapes.json.
@@ -318,13 +328,14 @@ function posedShape(o: Obstacle): PosedShape {
 // model point (x, y) lands at map offset (x cos + y sin, x sin - y cos) after scaling.
 function localShape(pose: PropPose): PosedShape {
   const { x: sx, y: sy, z: sz } = pose.scale;
-  const key = `${pose.model}|${pose.yaw}|${sx}|${sy}|${sz}`;
+  const model = pose.model === 'hulk' ? `hulk:${pose.chassisId}` : pose.model;
+  const key = `${model}|${pose.yaw}|${sx}|${sy}|${sz}`;
   const hit = LOCAL_SHAPES.get(key);
   if (hit) return hit;
   const c = Math.cos(pose.yaw);
   const s = Math.sin(pose.yaw);
   let reach = 0;
-  const boxes = propShape(pose.model).map((b) => {
+  const boxes = poseBoxes(pose).map((b) => {
     const mx = ((b.x0 + b.x1) / 2) * sx;
     const my = ((b.y0 + b.y1) / 2) * sy;
     const half = { x: ((b.x1 - b.x0) / 2) * (sx / M), y: ((b.y1 - b.y0) / 2) * (sy / M) };
@@ -334,6 +345,11 @@ function localShape(pose: PropPose): PosedShape {
   const shape = { key, reach, boxes };
   LOCAL_SHAPES.set(key, shape);
   return shape;
+}
+
+// The model boxes a pose places.
+function poseBoxes(pose: PropPose): readonly ShapeBox[] {
+  return pose.model === 'hulk' ? hulkBoxes(pose.chassisId) : propShape(pose.model);
 }
 
 // Point p in the box's frame: tiles along its axis and across it, from its center.
