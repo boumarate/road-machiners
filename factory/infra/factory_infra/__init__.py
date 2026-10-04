@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     factory_ssh_user: str = "root"
     factory_ssh_key: str | None = None
     factory_domain: str
-    factory_acme_email: str
+    factory_tunnel_token: str
     factory_env_file: str
     factory_gh_token: str
 

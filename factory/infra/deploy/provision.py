@@ -1,9 +1,11 @@
 """Base host provisioning for the game factory. Idempotent. Re-run it safely after changes.
 
-Packages, Docker, Node 24, gh, butler, the firewall, the factory user and the /opt/factory dirs.
+Packages, Docker, Node 24, gh, butler, the firewall, the laptop power settings, the NVIDIA driver and container toolkit, the factory user and the /opt/factory dirs.
 """
 
 # pyright: reportMissingImports=false
+from io import StringIO
+
 from pyinfra.operations import apt, files, server, systemd
 
 from factory_infra import FACTORY_ROOT, FACTORY_UID, FACTORY_USER, HERMES_DIR, HOME_DIR, INFRA_DIR, REPO_DIR, WWW_DIR
@@ -85,16 +87,60 @@ server.shell(
     _sudo=True,
 )
 
+# The Cloudflare Tunnel dials out, so ssh is the only inbound port.
 server.shell(
-    name="UFW: allow ssh/http/https only",
+    name="UFW: allow ssh only",
     commands=[
         "timeout 60 ufw --force default deny incoming",
         "timeout 60 ufw --force default allow outgoing",
         "timeout 60 ufw allow 22/tcp",
-        "timeout 60 ufw allow 80/tcp",
-        "timeout 60 ufw allow 443/tcp",
         "timeout 60 ufw --force enable",
     ],
+    _sudo=True,
+)
+
+# The host is a laptop. A closed lid or an idle timer must not suspend it. logind reads the lid setting at the next boot, which the driver step below forces.
+files.put(
+    name="logind ignores the lid",
+    src=StringIO("[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\nHandleLidSwitchDocked=ignore\n"),
+    dest="/etc/systemd/logind.conf.d/factory-lid.conf",
+    mode="644",
+    _sudo=True,
+)
+server.shell(
+    name="Mask sleep targets",
+    commands=["timeout 60 systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target"],
+    _sudo=True,
+)
+
+# The GTX 1080 Ti is a Pascal card. 580 is the last driver branch for Pascal, and the open kernel modules do not support it.
+# The driver loads only after a reboot, and only with Secure Boot off. The check stops provision until both hold.
+server.shell(
+    name="NVIDIA driver 580 (skipped if present)",
+    commands=["dpkg -s nvidia-driver-580 >/dev/null 2>&1 || timeout 1200 apt-get install -y nvidia-driver-580"],
+    _sudo=True,
+)
+server.shell(
+    name="NVIDIA driver loaded",
+    commands=["timeout 60 nvidia-smi -L || { echo 'The NVIDIA driver is not loaded. Turn Secure Boot off, reboot the host, then run provision again.' >&2; exit 1; }"],
+    _sudo=True,
+)
+# The toolkit lets `docker run --gpus` hand the card to a container.
+server.shell(
+    name="NVIDIA container toolkit (skipped if present)",
+    commands=[
+        "command -v nvidia-ctk >/dev/null || (timeout 600 sh -c '"
+        "curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor --yes -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg && "
+        "curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | "
+        "sed \"s#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g\" "
+        "> /etc/apt/sources.list.d/nvidia-container-toolkit.list && "
+        "apt-get update && apt-get install -y nvidia-container-toolkit && systemctl restart docker')"
+    ],
+    _sudo=True,
+)
+server.shell(
+    name="A container sees the GPU",
+    commands=["timeout 600 docker run --rm --gpus all ubuntu:24.04 nvidia-smi -L"],
     _sudo=True,
 )
 
