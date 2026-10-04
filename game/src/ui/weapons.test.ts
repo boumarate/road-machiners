@@ -358,6 +358,7 @@ describe("weapon panel keys and the turn button", () => {
     const host = {
       world: () => world,
       apply: vi.fn(),
+      announce: vi.fn(),
       selectedWeapon: vi.fn<() => string | null>(() => null),
       selectWeapon: vi.fn(),
       selectedUtility: vi.fn<() => string | null>(() => null),
@@ -429,6 +430,7 @@ describe("the utility row", () => {
       apply: vi.fn((next: World) => { world.w = next; }),
       selectedWeapon: () => null,
       selectWeapon: vi.fn(),
+      announce: vi.fn((next: World) => { world.w = next; }),
       selectedUtility: vi.fn<() => string | null>(() => null),
       selectUtility: vi.fn(),
       pressTurn: vi.fn(),

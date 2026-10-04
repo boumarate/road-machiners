@@ -5,6 +5,7 @@ import type { World } from "../sim/types";
 export type UiHost = {
   world(): World;
   apply(next: World): void; // replace the world after a command and refresh the UI
+  announce(next: World): void; // apply, then log the command's events and play their sting
   selectedWeapon(): string | null;
   selectWeapon(id: string | null): void;
   selectedUtility(): string | null; // the truck or point utility waiting for its target click

@@ -5,7 +5,7 @@ import { CONDITION, PATCH, REPAIR } from '../data/wear';
 
 const PATCH_TURNS_PER_PART = REPAIR.turnsPerPart;
 import { RULES } from '../data/rules';
-import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions } from './dialogue';
 import { corePart, goodsCount, mountedParts } from './grid';
@@ -426,30 +426,30 @@ describe('social on patch prices', () => {
   // charge labor only, so the trade price spread of the same skill stays out of the price.
   function laborPrice(w: World, npcId: string, social: number): number {
     const copy = cloneWorld(w);
-    copy.player.skills.social = social;
+    copy.player.ranks.social = social;
     forceOption('patchDeal', 'ownParts');
     const terms = patchTerms(copy, find(copy, npcId));
     if (terms?.kind !== 'deal' || terms.deal !== 'ownParts') throw new Error(`Expected own-parts terms, got ${JSON.stringify(terms)}`);
     return terms.price;
   }
 
-  it('the player pays less for a patch at level 5', () => {
+  it('the player pays less for a patch at rank 5', () => {
     const { w, trader } = brokenPlayer(0);
     setParts(w, playerVehicle(w), 3);
     const base = laborPrice(w, trader.id, 0);
     const cut = 1 - 5 * SKILL_EFFECTS.social.patchPrice;
-    expect(laborPrice(w, trader.id, XP_TO_REACH[5])).toBe(Math.round(base * cut));
+    expect(laborPrice(w, trader.id, 5)).toBe(Math.round(base * cut));
     expect(Math.round(base * cut)).toBeLessThan(base);
   });
 
-  it('an NPC client pays the full price to a level 5 player', () => {
+  it('an NPC client pays the full price to a rank 5 player', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
     npc.resources!.money = 10000;
     addGoods(w, npc, 'parts', 3);
     breakEngine(npc);
-    expect(laborPrice(w, npc.id, XP_TO_REACH[5])).toBe(laborPrice(w, npc.id, 0));
+    expect(laborPrice(w, npc.id, 5)).toBe(laborPrice(w, npc.id, 0));
   });
 
   it("an NPC client pays for the player's parts at the base price", () => {
@@ -461,13 +461,13 @@ describe('social on patch prices', () => {
     setParts(w, playerVehicle(w), 3);
     const paidPrice = (social: number): number => {
       const copy = cloneWorld(w);
-      copy.player.skills.social = social;
+      copy.player.ranks.social = social;
       forceOption('patchDeal', 'paid');
       const terms = patchTerms(copy, find(copy, npc.id));
       if (terms?.kind !== 'deal' || terms.deal !== 'paid') throw new Error(`Expected paid terms, got ${JSON.stringify(terms)}`);
       return terms.price;
     };
-    expect(paidPrice(XP_TO_REACH[5])).toBe(paidPrice(0));
+    expect(paidPrice(5)).toBe(paidPrice(0));
   });
 });
 
@@ -519,7 +519,7 @@ describe('the Patcher crane on roadside patches', () => {
   // The player patches a hauler whose engine is dead. Its engine alone takes `parts` units of parts.
   function playerPatcher(machining: number, crane: boolean): { w: World; client: Vehicle } {
     const w = emptyWorld({ x: 30, y: 30 });
-    w.player.skills.machining = XP_TO_REACH[machining];
+    w.player.ranks.machining = machining;
     if (crane && !mountPart(w, playerVehicle(w), makePart(w, 'patcherCrane', 0))) throw new Error('No deck room for the crane');
     const client = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 34, y: 30 }, Math.PI);
     breakEngine(client);

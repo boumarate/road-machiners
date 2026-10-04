@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
 import { lootRefitTurns, moveItem, mountPart, dumpItem, refitTurns, removeAllGoods } from './inventory';
 import { advanceJobs, startJob } from './jobs';
 import { makePart } from './factory';
@@ -171,9 +171,9 @@ describe('field refits', () => {
 });
 
 describe('machining on refits', () => {
-  it('takes fewer refit turns for the player at level 5', () => {
+  it('takes fewer refit turns for the player at rank 5', () => {
     const w = emptyWorld();
-    w.player.skills.machining = XP_TO_REACH[5];
+    w.player.ranks.machining = 5;
     const weapon = getWeapon(w);
     const next = moveItem(w, weapon.id, { x: 1, y: CHASSIS.scout.layout.length, rot: 0 });
     const turns = Math.ceil(RULES.refitTurnsPerPart * 2 * (1 - 5 * SKILL_EFFECTS.machining.refit));
@@ -200,7 +200,7 @@ describe('the Patcher crane on refits', () => {
     { machining: 3, crane: true, install: 3, replace: 6 },
   ])('takes $install and $replace turns at Machining $machining, crane $crane', ({ machining, crane, install, replace }) => {
     const w = emptyWorld();
-    w.player.skills.machining = XP_TO_REACH[machining];
+    w.player.ranks.machining = machining;
     if (crane) mountCrane(w);
 
     expect(refitTurns(w, w.vehicles[0], INSTALL)).toBe(install);

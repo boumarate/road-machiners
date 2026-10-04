@@ -34,7 +34,7 @@ import { corePart, freeCells, goodsCount, mountedParts } from '../sim/grid';
 import { mountPart, spareParts } from '../sim/inventory';
 import { startStrip, stripYield } from '../sim/jobs';
 import { generateNpcLoadout } from '../sim/npc-loadout';
-import { skillLevel } from '../sim/progress';
+import { buyCheapestRanks, skillLevel } from '../sim/progress';
 import { chance, randInt } from '../sim/rng';
 import {
   acceptContract,
@@ -666,7 +666,7 @@ function runDeliver(world: World, telemetry: Telemetry, mem: Memory, contractId:
   return world;
 }
 
-// ---- Greedy: repairs and spends skill points when parked, tracks the upgrade wishlist, and each
+// ---- Greedy: repairs and upgrades when parked, tracks the upgrade wishlist, and each
 // trip follows a fixed priority: finish a haul or a contract in progress, else take a fresh
 // contract if the shops it knows post one, else haul, else fall back to salvage. This is a simple
 // stand-in for a computed money-per-turn score, not the full mix the design calls for (see report).
@@ -718,9 +718,9 @@ function maybeRepairAndUpgrade(world: World, telemetry: Telemetry): World {
   return maybeUpgrade(world, shopId, telemetry);
 }
 
-// Skills grow by practice, so the report tracks the sum of skill levels as the player's level.
+// The harness player buys ranks from its XP, so the report tracks the sum of skill ranks as the player's level.
 function playerLevel(world: World): number {
-  return (Object.keys(world.player.skills) as SkillId[]).reduce((sum, skill) => sum + skillLevel(world, skill), 0);
+  return (Object.keys(world.player.ranks) as SkillId[]).reduce((sum, skill) => sum + skillLevel(world, skill), 0);
 }
 
 function haveTier(v: Vehicle, kind: ItemKind): Tier {
@@ -867,7 +867,7 @@ export function runPolicy(seed: number, policy: PolicyName, days: number): RunRe
 
   while (world.turn < endTurn) {
     const before = world.turn;
-    world = takeOneTrip(world, policy, telemetry, mem, wishlist, day);
+    world = buyCheapestRanks(takeOneTrip(world, policy, telemetry, mem, wishlist, day));
     if (world.turn === before) passTurns(world, telemetry, 1, 0);
     while (world.turn >= nextDayAt && day < days) {
       day++;

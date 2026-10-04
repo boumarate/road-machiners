@@ -201,12 +201,44 @@ function withoutRetiredStock_8_9(world: SavedJson): SavedJson {
   };
 }
 
+// Total XP a skill needed for each level at format 2.9; index is the level.
+const XP_TO_REACH_9_10 = [0, 200, 600, 1200, 2000, 3000];
+
+// Step 9 to 10: each skill's old level becomes the same rank, and the XP past it goes to the shared pool. A level cost
+// what its rank costs now, so no earned XP is lost. Also read by the rescue of saves from before format 2.10.
+export function pooledSkills_9_10(skills: Record<string, number>): { xp: number; ranks: Record<string, number> } {
+  let xp = 0;
+  const ranks: Record<string, number> = {};
+  for (const [skill, total] of Object.entries(skills)) {
+    let level = 0;
+    while (level < XP_TO_REACH_9_10.length - 1 && total >= XP_TO_REACH_9_10[level + 1]) level++;
+    ranks[skill] = level;
+    xp += total - XP_TO_REACH_9_10[level];
+  }
+  return { xp, ranks };
+}
+
+// A driver's last town became a memory of the prices it saw there, kept like any memory from now on. The saved
+// pressure stands in for what it saw, and the saved turn for when.
+function withMemories_11_12(world: SavedJson): SavedJson {
+  const shops = world.shops as Record<string, SavedJson>;
+  const turn = world.turn as number;
+  const remembering = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const { lastTown, ...brain } = v.brain as SavedJson;
+    const shop = typeof lastTown === 'string' ? shops[lastTown] : undefined;
+    const memories = shop ? [{ turn, fact: { kind: 'prices', shop: lastTown, pressure: { ...(shop.pressure as SavedJson) } } }] : [];
+    return { ...v, brain: { ...brain, memories } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(remembering), removed: (world.removed as SavedJson[]).map(remembering) };
+}
+
 // Utility items arrive: every truck gets utility orders, the world gets empty utility effects and the search stream,
 // and every stock gets hidden loot. The stream comes from the world seed like a new game's.
-const SEARCH_SALT_9_10 = 0x73656172;
-const NO_HIDDEN_9_10 = (): SavedJson => ({ goods: {}, parts: [], fuel: 0, supplies: 0 });
+const SEARCH_SALT_12_13 = 0x73656172;
+const NO_HIDDEN_12_13 = (): SavedJson => ({ goods: {}, parts: [], fuel: 0, supplies: 0 });
 
-function withUtilities_9_10(world: SavedJson): SavedJson {
+function withUtilities_12_13(world: SavedJson): SavedJson {
   const ordered = (v: SavedJson): SavedJson => ({ ...v, utilityOrders: {} });
   return {
     ...world,
@@ -216,27 +248,27 @@ function withUtilities_9_10(world: SavedJson): SavedJson {
     fields: [],
     flares: [],
     lines: [],
-    searchRng: { rngState: (world.seed as number) ^ SEARCH_SALT_9_10 },
+    searchRng: { rngState: (world.seed as number) ^ SEARCH_SALT_12_13 },
   };
 }
 
 // Stocks rolled from loot tables at minor format 9: the sites that hold salvage, the loot spots of territories, whose
 // ids are <prop kind>-<n>, and the road wrecks, whose ids are wreck<n>. Truck wrecks (wreck-<vehicle>) and piles lie
 // in the open.
-const LOOT_SITES_9_10 = new Set(['burnt-convoy', 'podfield', 'canyon-bridge', 'glass-flats', 'south-lock', 'ridge-wrecks', 'broken-wing']);
-const LOOT_SPOT_9_10 = /^(farmhouse|barn|quonset|bunker|guardPost|armyTruck|armyCache|deckBay|shipCache)-\d+$/;
-const ROAD_WRECK_9_10 = /^wreck\d+$/;
+const LOOT_SITES_12_13 = new Set(['burnt-convoy', 'podfield', 'canyon-bridge', 'glass-flats', 'south-lock', 'ridge-wrecks', 'broken-wing']);
+const LOOT_SPOT_12_13 = /^(farmhouse|barn|quonset|bunker|guardPost|armyTruck|armyCache|deckBay|shipCache)-\d+$/;
+const ROAD_WRECK_12_13 = /^wreck\d+$/;
 
-function isRolledStock_9_10(stock: SavedJson): boolean {
+function isRolledStock_12_13(stock: SavedJson): boolean {
   const id = stock.id as string;
-  return !stock.pile && (LOOT_SITES_9_10.has(id) || LOOT_SPOT_9_10.test(id) || ROAD_WRECK_9_10.test(id));
+  return !stock.pile && (LOOT_SITES_12_13.has(id) || LOOT_SPOT_12_13.test(id) || ROAD_WRECK_12_13.test(id));
 }
 
 // A rolled stock the player has not searched hides all its loot, as a new game's does. Other stocks hide nothing.
-function withHiddenStock_9_10(world: SavedJson): SavedJson {
+function withHiddenStock_12_13(world: SavedJson): SavedJson {
   const searched = new Set((world.player as SavedJson).scavenged as string[]);
   const hide = (stock: SavedJson): SavedJson => {
-    if (searched.has(stock.id as string) || !isRolledStock_9_10(stock)) return { ...stock, hidden: NO_HIDDEN_9_10() };
+    if (searched.has(stock.id as string) || !isRolledStock_12_13(stock)) return { ...stock, hidden: NO_HIDDEN_12_13() };
     const hidden = { goods: stock.goods, parts: stock.parts, fuel: stock.fuel ?? 0, supplies: stock.supplies ?? 0 };
     return { ...stock, goods: {}, parts: [], fuel: 0, supplies: 0, hidden };
   };
@@ -297,8 +329,17 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withoutRetiredStock_7_8,
   // 8 to 9: Old Orchard is a territory, so its site stock goes.
   withoutRetiredStock_8_9,
-  // 9 to 10: utility orders and effects, the search stream, and hidden salvage in every unsearched rolled stock.
-  (world) => withHiddenStock_9_10(withUtilities_9_10(world)),
+  // 9 to 10: XP goes to one pool and levels become bought ranks.
+  (world) => {
+    const { skills, ...player } = world.player as SavedJson;
+    return { ...world, player: { ...player, ...pooledSkills_9_10(skills as Record<string, number>) } };
+  },
+  // 10 to 11: a kill wreck may record its chassis as a hulk; older kill wrecks stay generic.
+  (world) => world,
+  // 11 to 12: a driver's last town becomes a memory of its prices.
+  withMemories_11_12,
+  // 12 to 13: utility orders and effects, the search stream, and hidden salvage in every unsearched rolled stock.
+  (world) => withHiddenStock_12_13(withUtilities_12_13(world)),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

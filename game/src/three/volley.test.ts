@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Break, Crash, Landing } from "../phys/drive";
-import type { GameEvent } from "../sim/types";
+import { addVehicle, emptyWorld } from "../sim/testkit";
+import type { GameEvent, ShotRound } from "../sim/types";
 import type { V3 } from "../phys/frames";
-import { CollisionCues, collisionSteps, playUtilitySounds } from "./volley";
+import { BreakCues, type PartBreak, type ShotLike } from "./breakCues";
+import { CollisionCues, collisionSteps, playUtilitySounds, playVolley, type VolleyHost } from "./volley";
 
 const hit = (a: string, b: string): GameEvent => ({ t: "collision", a, b, hitsA: [], hitsB: [] });
 const crash = (a: string, b: string, step: number) => ({ a, b, impact: 5, step }) as Crash;
@@ -86,5 +88,42 @@ describe("playUtilitySounds", () => {
 
   it("stays silent for unseen users and for utilities whose sound plays elsewhere or not at all", () => {
     expect(played([use("hidden", "mortar"), pulse("hidden"), use("a", "sprout"), use("a", "harpoon"), use("a", "claymore")])).toEqual([]);
+  });
+});
+
+describe("playVolley breaks", () => {
+  const rd = (hits: { part: string; damage: number }[]): ShotRound => ({ hit: hits.length > 0, crit: false, offset: 0, struck: hits.length ? "t" : null, hits, blast: [] });
+  const GUN = (() => { const w = emptyWorld(); const v = addVehicle(w, "raiders", "buggy", ["mg", "stockEngine"], { x: 33, y: 30 }, 0); const it = v.items.find((i) => i.kind === "part" && i.part.defId === "mg"); return it && it.kind === "part" ? it.part.id : ""; })();
+  const event = { t: "shot", shooter: "s", weapon: "mg", target: "t", aim: "center", chance: 1, damageChance: 1, side: "front", rounds: [rd([]), rd([{ part: GUN, damage: 2 }]), rd([{ part: GUN, damage: 3 }])] } as ShotLike;
+  const partOff: GameEvent = { t: "partDisabled", vehicle: "t", part: GUN };
+
+  function play() {
+    const landed: (() => void)[] = [];
+    const broken: PartBreak[] = [];
+    const p = { x: 0, y: 0, z: 0 };
+    const world = emptyWorld();
+    const target = addVehicle(world, "raiders", "buggy", ["mg", "stockEngine"], { x: 33, y: 30 }, 0);
+    target.id = "t";
+    const host = {
+      world,
+      fx: { shot: (_s: unknown, _m: unknown, _p: unknown, _r: unknown, cues: { landed: () => void }) => landed.push(cues.landed), label: () => {} },
+      sound: { at: () => {} },
+      eventPoint: () => p,
+      breakPart: (b: PartBreak) => broken.push(b),
+    } as unknown as VolleyHost;
+    return { landed, broken, host };
+  }
+
+  it("breaks the part as its breaking round lands, once", () => {
+    const { landed, broken, host } = play();
+    const breaks = new BreakCues([partOff, event]);
+    playVolley(host, { x: 0, y: 0, z: 0 }, () => ({ pos: { x: 0, y: 1, z: 0 }, dir: { x: 1, y: 0, z: 0 } }) as never, { x: 5, y: 0, z: 0 }, event, breaks, "mg", "t", new Map(), false);
+    expect(landed).toHaveLength(3);
+    landed[0]();
+    landed[1]();
+    expect(broken).toEqual([]);
+    landed[2]();
+    landed[2]();
+    expect(broken).toEqual([{ vehicle: "t", part: GUN }]);
   });
 });

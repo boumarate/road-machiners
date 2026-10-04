@@ -8,7 +8,6 @@ import {
   buildDrive,
   freeDrive,
   restFrame,
-  simulateTurn,
   syncDrive,
   TURN_STEPS,
   type Drive,
@@ -21,20 +20,18 @@ import {
   type V3,
   type VehicleFrame,
 } from "../phys/frames";
-import { applyTurn, type PreparedTurn } from "../phys/turn";
+import { type PreparedTurn } from "../phys/turn";
 import { playerVehicle, vehicleById } from "../sim/damage";
 
 import { isStranded, maxTurn, vehicleStats } from "../sim/stats";
-import { clickOrder, throttleFor } from "../sim/steering";
-import { routeBlockers } from "../sim/ai";
-import { route } from "../sim/path";
+import { clickOrder } from "../sim/steering";
 import type { Vehicle, World } from "../sim/types";
 import { grayRadius, playerSees, tileOf, visibleTiles } from "../sim/vision";
 import { dist, type Vec } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
 import { isTowed, setBeacon, unhitch } from "../sim/tow";
 import { inCombat } from "../sim/combat";
-import { cloneWorld, hostileToPlayer, playerCanAct, setMoveOrder } from "../sim/world";
+import { hostileToPlayer, playerCanAct, setMoveOrder } from "../sim/world";
 import { TruckContext, TruckControls } from "./truck-controls";
 import { PAL } from "../render/palette";
 import { READY_ARC_BIT } from "./render/models";
@@ -53,13 +50,15 @@ import { Fx3D, TruckFx } from "./render/fx";
 import { CollisionCues, collisionSteps, playCrashes, playDryGuns, playShotFx, playUtilitySounds, type CombatHost } from "./volley";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
-import { playBreaks } from "./render/partDebris";
+import { playBreak } from "./render/partDebris";
+import { BreakCues, shownItems, type PartBreak } from "./breakCues";
 import { PathView } from "./render/path";
+import { previewPlan, throttleColor } from "./plan-preview";
 import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
 import { addHullDecks } from "./render/hull-decks";
 import { terrainMesh } from "./render/terrain";
-import { VehicleView } from "./render/vehicle";
+import { RadioLights, VehicleView } from "./render/vehicle";
 import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
 import { WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
@@ -71,6 +70,7 @@ import { DustCloudsView } from "./render/dust";
 import { HazardViews } from "./render/hazards";
 import { UtilityAim } from "./utility-aim";
 import { ShadeView } from "./render/shade";
+import { BeaconPulseView } from "./render/beaconPulse";
 import { SoundRingView } from "./render/soundRing";
 import { reportError } from "./crash";
 import type { SlotId } from "./save-slots";
@@ -83,7 +83,6 @@ import type { SoundPlayer } from "../audio/player";
 import { isBrowserChord, uiRoot } from "../ui/dom";
 import { Travel, type Playback, type LiveVision } from "./travel";
 
-const PLAN_TURNS = 3; // turns of path preview
 
 const PICK_PX = 30; // click radius around a vehicle's screen position
 const MIN_ZONE_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that barely turn
@@ -131,6 +130,7 @@ export class Game {
   private readonly hazards = new HazardViews();
   private readonly utilityAim = new UtilityAim({ world: () => this.world, apply: (next) => this.apply(next), note: (text) => this.hud.note(this.world, text, "bad") });
   private readonly soundRing = new SoundRingView();
+  private readonly beaconPulse = new BeaconPulseView();
   private readonly path: PathView;
   private readonly fx: Fx3D;
   private readonly truckFx: TruckFx;
@@ -140,10 +140,12 @@ export class Game {
   private readonly loops: SoundLoops;
   private readonly combatWatch = new CombatWatch();
   private readonly views = new Map<string, VehicleView>();
+  private readonly radioLights = new RadioLights();
   private frames: Record<string, VehicleFrame> = {}; // last shown pose per vehicle
   // A played turn: physics movement, then shots in flight when there was combat, then time to read results.
   private anim: Playback | null = null;
   private crashCues: CollisionCues | null = null; // collisions of the playing turn, due at their physics step
+  private breakCues = new BreakCues([]); // part breaks of the playing turn, due as their round lands
   private readonly travel = new Travel(CONFIG.travelHoldMs);
   private phase: TurnPhase = null;
   private readonly weaponRange = new WeaponRangeView(PAL.select, READY_ARC_BIT);
@@ -241,6 +243,7 @@ export class Game {
       this.hazards.root,
       this.utilityAim.root,
       this.soundRing.root,
+      this.beaconPulse.root,
     );
     this.overlay = overlay;
     this.markers = new VehicleMarkers(overlay, this.rig);
@@ -314,7 +317,13 @@ export class Game {
   private uiHost(): UiHost {
     return {
       world: () => this.displayWorld(),
-      apply: (next) => { this.apply(next); if (!this.saves.held) saveInTown(window.localStorage, next, Date.now()); },
+      apply: (next) => this.applyCommand(next),
+      announce: (next) => {
+        this.applyCommand(next);
+        this.hud.pushEvents(next);
+        const sting = stingOf(next.events, playerVehicle(next).id);
+        if (sting) this.sound.ui(sting);
+      },
       selectedWeapon: () => this.selected,
       selectWeapon: (id) => { if (this.anim || this.modalOpen()) return; this.selected = id; this.refreshUi(); },
       selectedUtility: () => this.utilityAim.selectedId,
@@ -346,6 +355,12 @@ export class Game {
 
   // Whether a turn is playing, so the debug console waits instead of changing the world under it.
   get busy(): boolean { return this.anim !== null; }
+
+  // A command from a panel: apply it, and save at once on a town pad.
+  private applyCommand(next: World): void {
+    this.apply(next);
+    if (!this.saves.held) saveInTown(window.localStorage, next, Date.now());
+  }
 
   apply(next: World): void {
     this.travel.pause();
@@ -707,7 +722,8 @@ export class Game {
     timed("fog", () => this.fog.update(this.combatFogWorld()));
     const host = this.combatHost();
     playCrashes(host, this.crashCues, null);
-    playDryGuns(host, playShotFx(host));
+    this.breakCues = new BreakCues(this.world.events);
+    playDryGuns(host, playShotFx(host, this.breakCues));
     playUtilitySounds(host);
     this.weapons.render();
   }
@@ -728,12 +744,13 @@ export class Game {
     if (searched) this.inventory.openLoot(searched.stock);
     this.uiStale = true;
     // Last, so a failed lookup in the cosmetic effects cannot skip the rest of the landing.
-    playBreaks(this.world, this.obstacles.parts, this.fx, this.views, (id) => this.eventPoint(id));
+    for (const b of this.breakCues.rest()) this.playBreak(b);
   }
 
   private finishPlayback(): void {
     this.anim = null;
     this.crashCues = null;
+    this.breakCues = new BreakCues([]);
     this.phase = null;
     this.idleSince = performance.now();
     this.saves.finishTurn();
@@ -779,14 +796,11 @@ export class Game {
     this.sound.honk({ x: f.pos.x, y: f.pos.y + GUN_HEIGHT, z: f.pos.z }, delayMs, v.chassisId);
   }
 
-  // Explosions and broken parts where they happen, then one result sting for the turn.
+  // Explosions where they happen, then one result sting for the turn.
   private playImpactSounds(): void {
     for (const e of this.world.events) {
-      const id =
-        e.t === "destroyed" || e.t === "partDisabled" ? e.vehicle : null;
-      const p = id && this.eventPoint(id);
-      if (p)
-        this.sound.at(e.t === "destroyed" ? "explosion" : "part-broken", p, 0);
+      const p = e.t === "destroyed" && this.eventPoint(e.vehicle);
+      if (p) this.sound.at("explosion", p, 0);
     }
     const sting = stingOf(this.world.events, playerVehicle(this.world).id);
     if (sting) this.sound.ui(sting);
@@ -841,7 +855,14 @@ export class Game {
   }
 
   private combatHost(): CombatHost {
-    return { world: this.world, fx: this.fx, sound: this.sound, eventPoint: (id) => this.eventPoint(id), views: this.views };
+    return { world: this.world, fx: this.fx, sound: this.sound, eventPoint: (id) => this.eventPoint(id), views: this.views, breakPart: (b) => this.playBreak(b) };
+  }
+
+  // Scrap, the part's own burst and the break sound, for a truck the player may see.
+  private playBreak(b: PartBreak): void {
+    if (this.eventPoint(b.vehicle) === null) return;
+    const p = playBreak(this.world, this.obstacles.parts, this.fx, this.views.get(b.vehicle), b);
+    if (p) this.sound.at("part-broken", p, 0);
   }
 
   // The path preview chains physics turns from the current state, so it shows what will happen.
@@ -860,41 +881,8 @@ export class Game {
   }
 
   private planPath(me: Vehicle): void {
-    const turns: VehicleFrame[][] = [];
-    const w = cloneWorld(this.world);
-    let d = this.drive;
-    let v = me;
-    for (let i = 0; i < PLAN_TURNS; i++) {
-      const r = simulateTurn(d, w);
-      turns.push(r.frames[me.id]);
-      w.events = [];
-      applyTurn(w, r);
-      if (d !== this.drive) freeDrive(d);
-      d = r.next;
-      v = w.vehicles.find((x) => x.id === me.id)!;
-      if (!v.order && v.speed < 0.05) break;
-    }
-    if (d !== this.drive) freeDrive(d);
-    // A course longer than the simulated turns continues as the route the driver will take.
-    const order = v.order?.kind === "brake" ? null : v.order;
-    const course = order
-      ? v.direct
-        ? [v.pos, order.dest]
-        : [v.pos, ...route(w, v.pos, order.dest, vehicleStats(w, v).radius, routeBlockers(w, v), v)]
-      : null;
-    const first =
-      me.order?.kind === "through"
-        ? PAL.throttle[
-            throttleFor(
-              Math.hypot(
-                me.order.dest.x - me.pos.x,
-                me.order.dest.y - me.pos.y,
-              ),
-              me.speed,
-            )
-          ]
-        : PAL.plan;
-    this.path.set(turns, first, course, !v.direct);
+    const plan = previewPlan(this.drive, this.world, me);
+    this.path.set(plan.turns, plan.first, plan.course, plan.waypoint);
   }
 
   // One refresh for everything this frame changed, so a frame that ends a turn and begins the next refreshes once.
@@ -1017,6 +1005,8 @@ export class Game {
     const frames: TurnFrames | null = step === null || !this.anim ? null : this.anim.result.frames;
     const landed = !this.anim || this.anim.impacts;
     const glass = daylightAt(this.lightTurn()).glass;
+    const now = performance.now();
+    this.radioLights.note(this.world, now);
     const shown = [...this.world.vehicles, ...(landed ? [] : this.world.removed)];
     const ids = new Set<string>();
     for (const v of shown) {
@@ -1030,7 +1020,7 @@ export class Game {
       const look = this.lookOf(v, f, seen);
       if (!look) continue;
       const before = !landed && this.anim!.before.vehicles.find((x) => x.id === v.id);
-      const display = before ? { ...v, items: before.items } : v;
+      const display = before ? { ...v, items: shownItems(before.items, v.items, this.breakCues.shown(v.id)) } : v;
       ids.add(v.id);
       let view = this.views.get(v.id);
       if (!view) {
@@ -1040,6 +1030,7 @@ export class Game {
       }
       view.update(display, seen);
       view.lamps(lampsOn(v.id, this.lightTurn()));
+      view.radio(this.radioLights.lit(this.world, v.id, now));
       view.outline(look === "dark");
       view.windows(glass);
       view.pose(f, dt);
@@ -1111,13 +1102,9 @@ export class Game {
     this.hazards.update(this.world, this.world.terrain, this.views, performance.now());
     this.utilityAim.draw(this.world, this.world.terrain, this.hoverGround, !steer);
     const meFrame = this.frames[playerVehicle(this.world).id];
-    this.soundRing.update(
-      this.world.terrain,
-      this.world.player.contacts,
-      meFrame ? toMap(meFrame.pos) : playerVehicle(this.world).pos,
-      this.world.turn,
-      performance.now(),
-    );
+    const listener = meFrame ? toMap(meFrame.pos) : playerVehicle(this.world).pos;
+    this.soundRing.update(this.world.terrain, this.world.player.contacts, listener, this.world.turn, performance.now());
+    this.beaconPulse.update(this.world.terrain, this.world.player.beacon, listener, performance.now());
     if (hide) return;
     const me = playerVehicle(this.world);
     const s = vehicleStats(this.world, me);
@@ -1131,14 +1118,7 @@ export class Game {
       Math.max(MIN_ZONE_HALF_ANGLE, maxTurn(s, me.speed) / 2),
     );
     const hover = this.hoverGround;
-    const color = hover
-      ? PAL.throttle[
-          throttleFor(
-            Math.hypot(hover.x - me.pos.x, hover.y - me.pos.y),
-            me.speed,
-          )
-        ]
-      : PAL.plan;
+    const color = hover ? throttleColor(me, hover) : PAL.plan;
     this.zones.hover(this.world.terrain, hover, color);
   }
 }

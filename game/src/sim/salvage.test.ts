@@ -29,6 +29,7 @@ import { isLootSpot, spotTable, territoryAt, territoryOfStock } from './territor
 import { freeCells } from './grid';
 import { endTurn } from './world';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 describe('player piles', () => {
   it('goods the player dumps and takes back keep their cost basis', () => {
@@ -332,7 +333,7 @@ describe('road wreck salvage', () => {
       expect(stock).toBeDefined();
       expect(hasSalvage(stock!)).toBe(true);
     }
-  }, 30_000);
+  }, budget(30_000));
 });
 
 describe('loot piles', () => {
@@ -751,7 +752,7 @@ describe('territory loot spots', () => {
     const ids = new Set(w.obstacles.map((o) => o.id));
     for (const s of w.salvage.filter((entry) => territoryOfStock(entry))) expect(ids.has(s.id), s.id).toBe(true);
     expect(w.salvage.some((s) => s.id === 'fallen-sun')).toBe(false);
-  }, 30_000);
+  }, budget(30_000));
 
   it('gives every orchard spot its own stock from the table of its look, and the orchard no stock of its own', async () => {
     const w = await realWorld();
@@ -768,7 +769,7 @@ describe('territory loot spots', () => {
       expect(stocks[0].hidden.goods.parts ?? 0, o.id).toBeLessThanOrEqual(table.parts[1]);
     }
     expect(w.salvage.some((s) => s.id === 'orchard')).toBe(false);
-  }, 30_000);
+  }, budget(30_000));
 
   it('rolls deck bays from the landmark table and field spots from the hull scrap table', async () => {
     const w = await realWorld();
@@ -781,7 +782,7 @@ describe('territory loot spots', () => {
       expect(stock.hidden.fuel).toBeLessThanOrEqual(table.fuel[1]);
       expect(stock.radius).toBeCloseTo(propReach(o), 6);
     }
-  }, 30_000);
+  }, budget(30_000));
 
   it('refills an emptied spot over days and never past its table', async () => {
     const w = await realWorld();
@@ -799,7 +800,7 @@ describe('territory loot spots', () => {
       expect(stock.hidden.fuel, bays[k].id).toBe(SALVAGE.landmark.fuel[1]);
       expect(stockOf(w, bays[k].id).hidden.parts.length, bays[k].id).toBeLessThanOrEqual(1);
     }
-  }, 30_000);
+  }, budget(30_000));
 
   it('lets a parked player beside a spot search it, and not a moving one', async () => {
     const w = await realWorld();
@@ -810,11 +811,11 @@ describe('territory loot spots', () => {
     expect(canScavenge(w, o.id)).toBe(true);
     me.speed = RULES.parkedSpeed + 1;
     expect(canScavenge(w, o.id)).toBe(false);
-  }, 30_000);
+  }, budget(30_000));
 
   it('leaves road wreck and site stock alone', async () => {
     const w = await realWorld();
     expect(w.salvage.filter((s) => isSiteStock(s)).length).toBeGreaterThan(0);
     for (const o of spotsOf(w)) expect(isSiteStock(stockOf(w, o.id))).toBe(false);
-  }, 30_000);
+  }, budget(30_000));
 });
