@@ -45,10 +45,9 @@ const TINT = { min: 0.85, max: 1.15 };
 const MODELS = ['pebbles', 'scrub', 'desert_stones', 'desert_scrub', 'cactus'] as const;
 type ScatterModel = (typeof MODELS)[number];
 // Scrub and cacti on desert cast shadows so they stand on the ground. Pebbles are too small to need it, and many,
-// and the small dry scrub off the desert stays as it was. Desert scrub stems are too thin to shadow each other
-// without turning the clump into a dark blot.
+// and the small dry scrub off the desert stays as it was. Every model receives shadows, so scrub in the shadow of a
+// crag or a truck goes dark with the ground under it.
 const CASTS_SHADOW: ReadonlySet<ScatterModel> = new Set(['desert_scrub', 'cactus']);
-const RECEIVES_NO_SHADOW: ReadonlySet<ScatterModel> = new Set(['desert_scrub']);
 
 type Placed = { matrix: THREE.Matrix4; tint: number };
 export type ScatterChunk = { center: Vec } & Record<ScatterModel, Placed[]>;
@@ -62,7 +61,7 @@ export function addScatter(t: Terrain, obstacles: Obstacle[], scope: RenderScope
       const group = instancedModel(name, list.map((p) => p.matrix), list.map((p) => p.tint));
       for (const mesh of group.children) {
         mesh.castShadow = CASTS_SHADOW.has(name);
-        mesh.receiveShadow = !RECEIVES_NO_SHADOW.has(name);
+        mesh.receiveShadow = true;
       }
       scope.add(group, chunk.center, reach);
     }
