@@ -51,6 +51,7 @@ export class BeaconPulseView {
       );
       mesh.rotation.x = -Math.PI / 2;
       mesh.renderOrder = RENDER_ORDER;
+      mesh.frustumCulled = false; // the vertices move, so the bounding sphere from the first radii would cull a spread ring
       mesh.visible = false;
       this.root.add(mesh);
       return mesh;
@@ -74,14 +75,17 @@ export class BeaconPulseView {
   }
 }
 
+const UNIT = Array.from({ length: PULSE.segments + 1 }, (_, i) => {
+  const a = (i / PULSE.segments) * Math.PI * 2;
+  return { c: Math.cos(a), s: Math.sin(a) };
+});
+
 // RingGeometry lists the inner circle's vertices first, then the outer circle's.
 function setRadii(mesh: THREE.Mesh, inner: number, outer: number): void {
   const pos = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
   const n = pos.count / 2;
   for (let i = 0; i < n; i++) {
-    const a = (i / (n - 1)) * Math.PI * 2;
-    const c = Math.cos(a);
-    const s = Math.sin(a);
+    const { c, s } = UNIT[i];
     pos.setXY(i, c * inner, s * inner);
     pos.setXY(n + i, c * outer, s * outer);
   }
