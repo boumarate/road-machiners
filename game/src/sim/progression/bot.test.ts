@@ -241,6 +241,16 @@ describe('botOrders', () => {
     expect(dest(bare)).toEqual(toward(bare, 'nose'));
   });
 
+  // A raider took the haul's goods, so the haul can never be handed in.
+  it('has a trader whose haul goods are gone trade on', () => {
+    const w = saltGlut(parkedAt('nose'));
+    w.player.contracts.push({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'fuel', units: 12, to: 'nose', reward: 300, deadline: 5000, window: 5000, rush: false, tier: 1 });
+
+    const turn = botOrders(w, 'trader');
+
+    expect(Object.keys(goodsCount(playerVehicle(turn.world)))).toEqual(['salt']);
+  });
+
   it('has a bot in debt in town sell gear to clear it', () => {
     const w = parkedAt('bowl');
     w.player.money = -60;

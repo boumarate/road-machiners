@@ -393,8 +393,10 @@ function traderGoal(o: Orders): void {
 
 type Haul = Extract<Contract, { kind: 'haul' }>;
 
+// A haul whose goods a raider took cannot be handed in. It runs out at its deadline, and the trader works on.
 function heldHaul(world: World): Haul | null {
-  return world.player.contracts.find((c): c is Haul => c.kind === 'haul') ?? null;
+  const goods = goodsCount(playerVehicle(world));
+  return world.player.contracts.find((c): c is Haul => c.kind === 'haul' && (goods[c.good] ?? 0) >= c.units) ?? null;
 }
 
 // Drives the goods to the contract's shop and hands them in.
