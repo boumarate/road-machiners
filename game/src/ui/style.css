@@ -1904,8 +1904,10 @@ canvas.view {
 .chassis-portrait {
   display: block;
   flex: none;
-  /* The grid's height, from the same cell, gap and padding sizes as .chassis-map. */
+  /* The grid's height, from the same cell, gap and padding sizes as .chassis-map. The width follows the drawing's
+     aspect-ratio, which chassisPortrait() sets inline. */
   height: calc(var(--rows) * (var(--map-cell) + var(--map-gap)) - var(--map-gap) + 2 * var(--map-pad));
+  width: auto;
 }
 .chassis-portrait svg {
   display: block;

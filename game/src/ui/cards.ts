@@ -143,23 +143,41 @@ type View = "top" | "diagonal";
 
 // A share of a cell: x, y, w, h.
 export type Box = { x: number; y: number; w: number; h: number };
-const WHOLE: Box = { x: 0, y: 0, w: 1, h: 1 };
 
 // Where one icon sits on its sheet, as a share of the sheet: col and row of cols and rows cells. box is the share of
-// the cell that holds its drawn pixels, and view how npm run icons drew it.
-export type IconCell = { sheet: Sheet; label: string; col: number; row: number; cols: number; rows: number; box: Box; view: View };
+// the cell that holds its drawn pixels, and view how npm run icons drew it. A weapon has a second, lying cell: its
+// mount laid on the rot 1 footprint with the head still facing the nose. Every other cell has lying null.
+export type IconCell = {
+  sheet: Sheet;
+  label: string;
+  col: number;
+  row: number;
+  cols: number;
+  rows: number;
+  box: Box;
+  view: View;
+  lying: IconCell | null;
+};
+
+type ManifestCell = { index: number; box: number[] };
+type ManifestItem = ManifestCell & { lying?: ManifestCell };
 
 export function itemIconCell(id: string): IconCell {
   const good = id in GOODS;
   const label = good ? GOODS[id].name : partDef(id).name;
-  const cell = cellOf("items", id, label);
-  const boxes: Record<string, { box: number[] }> = ICONS.items;
-  const [x, y, w, h] = boxes[id].box;
-  return { ...cell, box: { x, y, w, h }, view: viewOf(good ? ICONS.views.good : ICONS.views.part) };
+  const icons: Record<string, ManifestItem> = ICONS.items;
+  const icon = icons[id];
+  if (!icon) throw new Error(`No items icon for ${id}. Run npm run icons.`);
+  const view = viewOf(good ? ICONS.views.good : ICONS.views.part);
+  const lying = icon.lying ? { ...sheetCell("items", icon.lying, label), view, lying: null } : null;
+  return { ...sheetCell("items", icon, label), view, lying };
 }
 
 export function chassisPortraitCell(chassisId: string): IconCell {
-  return { ...cellOf("chassis", chassisId, chassisDef(chassisId).name), box: WHOLE, view: viewOf(ICONS.views.chassis) };
+  const icons: Record<string, ManifestCell> = ICONS.chassis;
+  const icon = icons[chassisId];
+  if (!icon) throw new Error(`No chassis icon for ${chassisId}. Run npm run icons.`);
+  return { ...sheetCell("chassis", icon, chassisDef(chassisId).name), view: viewOf(ICONS.views.chassis), lying: null };
 }
 
 function viewOf(view: string): View {
@@ -167,19 +185,19 @@ function viewOf(view: string): View {
   return view;
 }
 
-function cellOf(sheet: Sheet, id: string, label: string): Omit<IconCell, "box" | "view"> {
-  const icons: Record<string, { index: number; lying?: { index: number } }> = ICONS[sheet];
-  const icon = icons[id];
-  if (!icon) throw new Error(`No ${sheet} icon for ${id}. Run npm run icons.`);
+function sheetCell(sheet: Sheet, icon: ManifestCell, label: string): Omit<IconCell, "view" | "lying"> {
+  const icons: Record<string, ManifestItem> = ICONS[sheet];
   const cols = ICONS.cols[sheet];
   // A weapon's lying cell sits after every upright cell, so the sheet holds one cell per entry and per lying cell.
   const cells = Object.values(icons).reduce((n, entry) => n + (entry.lying ? 2 : 1), 0);
   const rows = Math.ceil(cells / cols);
-  return { sheet, label, col: icon.index % cols, row: Math.floor(icon.index / cols), cols, rows };
+  const [x, y, w, h] = icon.box;
+  return { sheet, label, col: icon.index % cols, row: Math.floor(icon.index / cols), cols, rows, box: { x, y, w, h } };
 }
 
-// How an item lies in its grid box: rot, and for armor the side the truck lays it on, from plateSide().
-export type GridLie = { rot: 0 | 1; side: SideLetter | null };
+// How an item lies in its grid box: rot, for armor the side the truck lays it on, from plateSide(), and whether it is a
+// weapon.
+export type GridLie = { rot: 0 | 1; side: SideLetter | null; weapon: boolean };
 // Quarter turns counter-clockwise.
 export type Turn = 0 | 1 | 2 | 3;
 
@@ -187,19 +205,33 @@ export type Turn = 0 | 1 | 2 | 3;
 // src/three/render/vehicle.ts), so its icon turns to face the same way.
 const SIDE_TURN: Record<SideLetter, Turn> = { F: 0, L: 1, B: 2, R: 3 };
 
-// How an item's icon fills its grid box: cropped to its drawing, and a top-down part laid sideways turned a quarter
-// counter-clockwise, nose to the truck's left as the 3D part does. A part lies sideways with rot 1. Armor turns to the
-// side it covers, whatever its rot. Goods are drawn diagonal and never turn.
-export function gridIconFrame(cell: IconCell, lie: GridLie): { crop: Box; turn: Turn } {
-  if (cell.view !== "top") return { crop: cell.box, turn: 0 };
-  return { crop: cell.box, turn: lie.side ? SIDE_TURN[lie.side] : lie.rot };
+// How an item's icon fills its grid box: the cell to draw, cropped to its drawing, and quarter turns counter-clockwise,
+// so the icon lies as the 3D part does. The truck view turns a weapon's mount with rot but never its head, which faces
+// the nose, so a weapon never turns and shows its lying cell at rot 1. Another top-down part laid sideways (rot 1)
+// turns a quarter, nose to the truck's left. Armor turns to the side it covers, whatever its rot. Goods are drawn
+// diagonal and never turn.
+export function gridIconFrame(cell: IconCell, lie: GridLie): { cell: IconCell; crop: Box; turn: Turn } {
+  if (lie.weapon) return weaponFrame(cell, lie.rot);
+  if (cell.lying) throw new Error(`${cell.label} has a lying cell but is no weapon. Run npm run icons.`);
+  return { cell, crop: cell.box, turn: partTurn(cell, lie) };
+}
+
+function weaponFrame(cell: IconCell, rot: GridLie["rot"]): { cell: IconCell; crop: Box; turn: Turn } {
+  if (!cell.lying) throw new Error(`Weapon ${cell.label} has no lying cell. Run npm run icons.`);
+  const shown = rot === 1 ? cell.lying : cell;
+  return { cell: shown, crop: shown.box, turn: 0 };
+}
+
+function partTurn(cell: IconCell, lie: GridLie): Turn {
+  if (cell.view !== "top") return 0;
+  return lie.side ? SIDE_TURN[lie.side] : lie.rot;
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 // The cell drawn into an SVG. A nested svg clips to the cell, and the outer one fits it to any box like the glyphs.
 // crop: the share of the cell to show. turn: quarter turns counter-clockwise.
-function sheetIcon(cell: IconCell, cls: string, crop = WHOLE, turn: Turn = 0): HTMLElement {
+function sheetIcon(cell: IconCell, cls: string, crop: Box, turn: Turn = 0): HTMLElement {
   const icon = el("span", { class: cls, role: "img", "aria-label": cell.label, title: cell.label });
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", turn % 2 ? `0 0 ${crop.h} ${crop.w}` : `0 0 ${crop.w} ${crop.h}`);
@@ -225,9 +257,10 @@ function sheetIcon(cell: IconCell, cls: string, crop = WHOLE, turn: Turn = 0): H
   return icon;
 }
 
-// A part's or good's icon, named for screen readers and on hover.
+// A part's or good's icon, upright and cropped to its drawing, named for screen readers and on hover.
 export function createItemIcon(id: string): HTMLElement {
-  return sheetIcon(itemIconCell(id), "icon item-icon");
+  const cell = itemIconCell(id);
+  return sheetIcon(cell, "icon item-icon", cell.box);
 }
 
 // Cabs have no model of their own, are built in and never trade, so they keep the cab glyph.
@@ -244,15 +277,18 @@ export function itemIconEl(item: GridItem): HTMLElement {
 export function gridItemIcon(item: GridItem, chassisId: string): HTMLElement {
   if (item.kind === "part" && BODY_PARTS.has(item.part.defId)) return createIcon("cab");
   const cell = itemIconCell(item.kind === "good" ? item.good : item.part.defId);
-  const plate = item.kind === "part" && partDef(item.part.defId).kind === "armor";
-  const { crop, turn } = gridIconFrame(cell, { rot: item.rot, side: plate ? plateSide(chassisId, item) : null });
-  return sheetIcon(cell, "icon item-icon", crop, turn);
+  const kind = item.kind === "part" ? partDef(item.part.defId).kind : null;
+  const side = kind === "armor" ? plateSide(chassisId, item) : null;
+  const frame = gridIconFrame(cell, { rot: item.rot, side, weapon: kind === "weapon" });
+  return sheetIcon(frame.cell, "icon item-icon", frame.crop, frame.turn);
 }
 
-// A truck seen as the shop shows it, beside its grid, as its whole cell.
+// A truck seen as the shop shows it, beside its grid, cropped to its drawing. The stylesheet gives it the grid's
+// height, and its width follows the drawing's aspect.
 export function chassisPortrait(chassisId: string): HTMLElement {
-  const portrait = sheetIcon(chassisPortraitCell(chassisId), "chassis-portrait");
-  portrait.style.aspectRatio = "1";
+  const cell = chassisPortraitCell(chassisId);
+  const portrait = sheetIcon(cell, "chassis-portrait", cell.box);
+  portrait.style.aspectRatio = `${cell.box.w} / ${cell.box.h}`;
   return portrait;
 }
 

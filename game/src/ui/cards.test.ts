@@ -12,6 +12,7 @@ import { PARTS } from "../data/parts";
 import { BODY_PARTS } from "../render/partLooks";
 import { TEST_MAP } from "../test/map";
 
+const boxOf = ([x, y, w, h]: number[]) => ({ x, y, w, h });
 const part = (defId: string, wear = 0): PartInstance => ({ id: defId, defId, hp: 1, wear });
 
 describe("part stats and their change against the player's part", () => {
@@ -103,30 +104,70 @@ describe("item icons", () => {
 });
 
 describe("grid item icons", () => {
-  const straight = { rot: 0, side: null } as const;
-  const sideways = { rot: 1, side: null } as const;
+  const straight = { rot: 0, side: null, weapon: false } as const;
+  const sideways = { rot: 1, side: null, weapon: false } as const;
+  const gunStraight = { rot: 0, side: null, weapon: true } as const;
+  const gunSideways = { rot: 1, side: null, weapon: true } as const;
 
-  it("crop a gun to its drawn extent, so it fills its footprint box", () => {
-    const [x, y, w, h] = ICONS.items.longRifle.box;
-    expect(gridIconFrame(itemIconCell("longRifle"), straight).crop).toEqual({ x, y, w, h });
-    expect(h).toBeGreaterThan(2 * w);
+  it("frame a gun lying sideways with its lying cell, unturned, so its barrel points up", () => {
+    const frame = gridIconFrame(itemIconCell("longRifle"), gunSideways);
+    expect(frame.turn).toBe(0);
+    expect(frame.cell.box).toEqual(boxOf(ICONS.items.longRifle.lying.box));
+    expect(frame.crop).toEqual(frame.cell.box);
   });
 
-  it("turn a top-down part a quarter with the part, and not when it lies straight", () => {
-    expect(gridIconFrame(itemIconCell("longRifle"), sideways).turn).toBe(1);
-    expect(gridIconFrame(itemIconCell("longRifle"), straight).turn).toBe(0);
+  it("frame a gun lying straight with its upright cell, unturned", () => {
+    const cell = itemIconCell("longRifle");
+    const frame = gridIconFrame(cell, gunStraight);
+    expect(frame).toEqual({ cell, crop: boxOf(ICONS.items.longRifle.box), turn: 0 });
+    expect(frame.crop.h).toBeGreaterThan(2 * frame.crop.w);
+  });
+
+  it("frame a square gun at rot 1 with its lying cell too", () => {
+    const cell = itemIconCell("mg");
+    const frame = gridIconFrame(cell, gunSideways);
+    expect(frame.cell).toBe(cell.lying);
+    expect(frame.turn).toBe(0);
+    expect(frame.crop).toEqual(frame.cell.box);
+  });
+
+  it("give a lying cell to guns only, on its own place on the sheet", () => {
+    const rifle = itemIconCell("longRifle");
+    expect(rifle.lying).toMatchObject({ label: rifle.label, view: "top", lying: null });
+    expect([rifle.lying?.col, rifle.lying?.row]).not.toEqual([rifle.col, rifle.row]);
+    expect(itemIconCell("stockEngine").lying).toBeNull();
+  });
+
+  it("fail on a gun with no lying cell, and on a lying cell for a part that is no gun", () => {
+    expect(() => gridIconFrame(itemIconCell("stockEngine"), gunSideways)).toThrow(/lying/);
+    expect(() => gridIconFrame(itemIconCell("longRifle"), sideways)).toThrow(/lying/);
+  });
+
+  it("turn another top-down part a quarter with the part, and not when it lies straight", () => {
+    const engine = itemIconCell("stockEngine");
+    expect(gridIconFrame(engine, sideways)).toEqual({ cell: engine, crop: engine.box, turn: 1 });
+    expect(gridIconFrame(engine, straight).turn).toBe(0);
   });
 
   it("turn armor, drawn as a front plate, to face the side it covers, whatever its rot", () => {
     const [, , w, h] = ICONS.items.cage.box;
     expect(w).toBeGreaterThan(h);
-    const turn = (id: string, rot: 0 | 1, side: "F" | "L" | "B" | "R") => gridIconFrame(itemIconCell(id), { rot, side }).turn;
+    const frame = (id: string, rot: 0 | 1, side: "F" | "L" | "B" | "R") => gridIconFrame(itemIconCell(id), { rot, side, weapon: false });
+    const turn = (id: string, rot: 0 | 1, side: "F" | "L" | "B" | "R") => frame(id, rot, side).turn;
     expect([turn("cage", 1, "F"), turn("cage", 0, "L"), turn("cage", 1, "B"), turn("cage", 0, "R")]).toEqual([0, 1, 2, 3]);
     expect(turn("steelPlate", 0, "R")).toBe(3);
+    expect(frame("cage", 1, "L").crop).toEqual(boxOf(ICONS.items.cage.box));
   });
 
   it("never turn a good, which is drawn diagonal", () => {
-    expect(itemIconCell("scrap").view).toBe("diagonal");
-    expect(gridIconFrame(itemIconCell("scrap"), sideways).turn).toBe(0);
+    const scrap = itemIconCell("scrap");
+    expect(scrap.view).toBe("diagonal");
+    expect(gridIconFrame(scrap, sideways)).toEqual({ cell: scrap, crop: scrap.box, turn: 0 });
+  });
+});
+
+describe("chassis portraits", () => {
+  it.each(Object.keys(CHASSIS))("crop the %s portrait to its drawing", (id) => {
+    expect(chassisPortraitCell(id).box).toEqual(boxOf(ICONS.chassis[id as keyof typeof ICONS.chassis].box));
   });
 });
