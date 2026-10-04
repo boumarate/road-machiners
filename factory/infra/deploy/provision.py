@@ -125,6 +125,15 @@ server.shell(
     commands=["timeout 60 nvidia-smi -L || { echo 'The NVIDIA driver is not loaded. Turn Secure Boot off, reboot the host, then run provision again.' >&2; exit 1; }"],
     _sudo=True,
 )
+# A driver update replaces the libraries but keeps the old module loaded, and every GPU container fails until a reboot. A kernel update can pull a new driver module with it.
+# So unattended upgrades skip both. Update them by hand with a reboot right after.
+files.put(
+    name="Unattended upgrades skip the NVIDIA driver and the kernel",
+    src=StringIO('Unattended-Upgrade::Package-Blacklist {\n    ".*nvidia.*";\n    "linux-.*";\n};\n'),
+    dest="/etc/apt/apt.conf.d/51factory-hold-driver",
+    mode="644",
+    _sudo=True,
+)
 # The toolkit lets `docker run --gpus` hand the card to a container.
 server.shell(
     name="NVIDIA container toolkit (skipped if present)",
@@ -136,6 +145,23 @@ server.shell(
         "> /etc/apt/sources.list.d/nvidia-container-toolkit.list && "
         "apt-get update && apt-get install -y nvidia-container-toolkit && systemctl restart docker')"
     ],
+    _sudo=True,
+)
+# The toolkit's device list names the persistence daemon's socket. Ubuntu stops the daemon when no unit needs it, and then every GPU container fails to start.
+nvidia_persistence = files.put(
+    name="nvidia-persistenced always runs",
+    src=StringIO("[Unit]\nStopWhenUnneeded=false\n\n[Install]\nWantedBy=multi-user.target\n"),
+    dest="/etc/systemd/system/nvidia-persistenced.service.d/factory.conf",
+    mode="644",
+    create_remote_dir=True,
+    _sudo=True,
+)
+systemd.service(
+    name="nvidia-persistenced running + enabled",
+    service="nvidia-persistenced",
+    running=True,
+    enabled=True,
+    daemon_reload=nvidia_persistence.did_change,
     _sudo=True,
 )
 server.shell(
