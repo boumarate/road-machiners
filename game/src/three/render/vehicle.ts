@@ -14,10 +14,11 @@ import { headingOf, headingQuat, type V3, type VehicleFrame } from '../../phys/f
 import { FACTION_COLORS, PAL } from '../../render/palette';
 import { BODY_PARTS, baseModel, grayShare, grayed, jagOffset, partModel, weaponLook, wearLookStep } from '../../render/partLooks';
 import { baseGrid, isMounted, itemCells, itemSize, sideOf, type SideLetter } from '../../sim/grid';
-import type { GridItem, Vehicle } from '../../sim/types';
+import type { GridItem, Vehicle, World } from '../../sim/types';
 import { angleDiff, DEG } from '../../sim/vec';
 import { model, outlineOf, socket, TRUCK_BIT, type ModelName } from './models';
 import { hashStr } from '../../render/noise';
+import { onAir, radioSpeakers } from '../../sim/dialogue';
 import { TruckMotion, WHIPS } from './truckMotion';
 
 const T = PHYSICS.truck;
@@ -797,8 +798,8 @@ function tint(obj: THREE.Object3D, paint: number, look: Look): void {
 }
 
 // Moves each vertex by an offset seeded by the part id and its position in the model's own space, so it ignores how the
-// model is placed. Corners that share a position move together, so faces stay closed.
-function jag(obj: THREE.Object3D, partId: string, step: number): void {
+// model is placed. Corners that share a position move together, so faces stay closed. The hulks in obstacles.ts share it.
+export function jag(obj: THREE.Object3D, partId: string, step: number): void {
   obj.updateMatrixWorld(true);
   const toModel = obj.matrixWorld.clone().invert();
   const box = new THREE.Box3();
@@ -816,10 +817,11 @@ function jag(obj: THREE.Object3D, partId: string, step: number): void {
     const pos = geo.getAttribute('position') as THREE.BufferAttribute;
     const toMesh = toModel.clone().multiply(o.matrixWorld).invert();
     const p = new THREE.Vector3();
+    const offset = new THREE.Vector3();
     for (let i = 0; i < pos.count; i++) {
       p.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld).applyMatrix4(toModel);
       const d = jagOffset(partId, p.x, p.y, p.z, step, thinnest);
-      p.add(new THREE.Vector3(d.x, d.y, d.z)).applyMatrix4(toMesh);
+      p.add(offset.set(d.x, d.y, d.z)).applyMatrix4(toMesh);
       pos.setXYZ(i, p.x, p.y, p.z);
     }
     pos.needsUpdate = true;
@@ -946,4 +948,36 @@ function disposeChildren(group: THREE.Group): void {
 // Every wheel part, whatever its size, hangs on a wheel mount.
 function isWheel(def: PartDef): boolean {
   return def.kind === 'core' && def.role === 'wheel';
+}
+
+// Wall-clock timing of the antenna radio light, so a call that freezes turns still blinks.
+export const RADIO_LIGHT = {
+  periodMs: 700, // one on and off cycle
+  spokeMs: 3000, // how long a truck keeps blinking after it talked in a turn
+};
+
+// Who blinks: the trucks on air now, and trucks that talked in a recently seen world.
+export class RadioLights {
+  private readonly until = new Map<string, number>();
+  private noted: World | null = null;
+  private air: { world: World; ids: Set<string> } | null = null; // onAir of the last world asked, once per world
+
+  note(world: World, now: number): void {
+    for (const [id, end] of this.until) if (end <= now) this.until.delete(id);
+    if (world === this.noted) return;
+    this.noted = world;
+    for (const id of radioSpeakers(world.events, world.player.vehicleId)) this.until.set(id, now + RADIO_LIGHT.spokeMs);
+  }
+
+  lit(world: World, id: string, now: number): boolean {
+    const end = this.until.get(id);
+    if (!this.onAir(world).has(id) && (end === undefined || end <= now)) return false;
+    const phase = (now / RADIO_LIGHT.periodMs + hashStr(id)) % 1;
+    return phase < 0.5;
+  }
+
+  private onAir(world: World): Set<string> {
+    if (this.air?.world !== world) this.air = { world, ids: new Set(onAir(world)) };
+    return this.air.ids;
+  }
 }
