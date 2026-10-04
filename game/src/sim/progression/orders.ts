@@ -57,8 +57,9 @@ const WORKING_CAPITAL = startKit('standard').money;
 const NEVER: readonly PartKind[] = ['core', 'scanner'];
 
 // skip names the part kinds a bot also leaves alone. chassis is what a better chassis means to the bot. keepRoom
-// marks a bot that lives off its cargo: it takes no part that leaves less room for goods.
-export type UpgradeStyle = { skip: readonly PartKind[]; chassis: 'value' | 'speed'; keepRoom: boolean };
+// marks a bot that lives off its cargo: it takes no part that leaves less room for goods. A bot with chassis keep stays
+// on the chassis it has, since every swap pays the shop's spread.
+export type UpgradeStyle = { skip: readonly PartKind[]; chassis: 'value' | 'speed' | 'keep'; keepRoom: boolean };
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;
 type Option = { gain: number; cost: number; take: (o: Orders) => void };
@@ -105,7 +106,7 @@ function quality(part: PartInstance): number {
 
 // A chassis change moves the cargo through the new grid, and goods may not fit. So the bot changes chassis only empty.
 function chassisOptions(o: Orders, style: UpgradeStyle): Option[] {
-  if (Object.keys(goodsCount(o.me)).length > 0) return [];
+  if (style.chassis === 'keep' || Object.keys(goodsCount(o.me)).length > 0) return [];
   const current = chassisDef(o.me.chassisId);
   return PLAYER_CHASSIS.filter((id) => id !== current.id).flatMap((id) => {
     const def = chassisDef(id);

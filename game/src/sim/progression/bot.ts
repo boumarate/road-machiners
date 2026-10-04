@@ -14,6 +14,7 @@ import { TOPICS, type TopicId } from '../../data/dialogue';
 import { maxHp, partValue } from '../wear';
 import { inCombat, isHostile } from '../combat';
 import { startStrip, stripYield } from '../jobs';
+import { aimGuns, isSoftTarget } from './aim';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder, setWeaponOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
 import { isKnockedOut } from '../defeat';
@@ -58,8 +59,8 @@ const CARGO_GEAR: UpgradeStyle = { skip: [], chassis: 'value', keepRoom: true };
 const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
   trader: CARGO_GEAR,
   scavenger: CARGO_GEAR,
-  // A hunter drives to catch a foe it can beat and away from one it cannot, so it buys speed, not the dearest chassis.
-  hunter: { skip: [], chassis: 'speed', keepRoom: false },
+  // A hunter keeps the chassis it starts with: a swap pays the shop's spread, and gear is where its edge comes from.
+  hunter: { skip: [], chassis: 'keep', keepRoom: false },
   fastTrader: { skip: ['armor'], chassis: 'speed', keepRoom: true },
   hauler: CARGO_GEAR,
 };
@@ -613,8 +614,9 @@ function engageFoe(o: Orders): boolean {
 const HUNT_MARGIN = 4;
 
 function engageSeen(o: Orders, foe: Vehicle): boolean {
-  if (dangerOf(o.world, foe) * HUNT_MARGIN > ownDanger(o.world, o.me)) return false;
+  if (dangerOf(o.world, foe) * HUNT_MARGIN > ownDanger(o.world, o.me) || !isSoftTarget(o.world, foe)) return false;
   setFire(o, true);
+  aimGuns(o, foe);
   if (!demandYield(o, foe)) driveTo(o, foe.pos);
   return true;
 }
@@ -678,9 +680,15 @@ function defend(o: Orders, goal: Goal): boolean {
   if (!inCombat(o.world, o.me)) return false;
   const foe = weakestFoe(o.world);
   if (!foe && goal === 'hunter') return false;
-  if (foe && fights(o, foe, goal)) driveTo(o, foe.pos);
+  if (foe && fights(o, foe, goal)) charge(o, foe, goal);
   else driveToSite(o, nearestTown(o.world));
   return true;
+}
+
+// Drives at the foe. A hunter also aims its guns at the foe's critical parts.
+function charge(o: Orders, foe: Vehicle, goal: Goal): void {
+  if (goal === 'hunter') aimGuns(o, foe);
+  driveTo(o, foe.pos);
 }
 
 function fights(o: Orders, foe: Vehicle, goal: Goal): boolean {
