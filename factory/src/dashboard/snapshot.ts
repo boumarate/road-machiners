@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { ghClient } from '../github';
@@ -15,7 +15,8 @@ import type { HostSampler, HostLoad } from './host';
 
 const runFile = promisify(execFile);
 export type Source<T> = { value: T | null; at: string | null; status: 'ok' | 'stale' | 'unavailable' };
-export type Operations = ReturnType<typeof buildOperations>;
+type PauseReason = 'agent-usage-limit' | 'operator';
+export type Operations = ReturnType<typeof buildOperations> & { pauseReason: PauseReason | null };
 export type PublicCard = { issue: number; title: string; column: string; blocked: boolean; releaseTask: boolean };
 export type GithubSnapshot = { cards: PublicCard[]; features: Feature[]; releaseKey: string; provisional: boolean };
 export type Analytics = { ranges: ReturnType<DashboardHistory['summarize']>[]; posts: ReturnType<DashboardHistory['readPosts']> };
@@ -132,6 +133,15 @@ export function createGithubRun(timeoutMs: number, env: NodeJS.ProcessEnv): Run 
   };
 }
 
+function readPauseReason(home: string): PauseReason | null {
+  let note: string;
+  try { note = readFileSync(join(home, 'paused'), 'utf8'); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+  return /^Hermes: Claude weekly usage limit(?:[;.\n]|$)/i.test(note) ? 'agent-usage-limit' : 'operator';
+}
 function projectHostResources(host: HostLoad): HostLoad {
   if (!host.containers?.value) return host;
   const value = host.containers.value.map((row) => ({ ...row, jobId: row.jobId === null ? null : createWorkerKey(row.jobId) }));
@@ -154,7 +164,8 @@ export class SnapshotCollector {
       const path = join(this.config.home, 'state', 'state.json');
       if (!existsSync(path)) throw new Error('Factory state missing');
       this.state = readState(path);
-      this.operations = recordSuccess(buildOperations(this.state, existsSync(join(this.config.home, 'paused')), this.config));
+      const pauseReason = readPauseReason(this.config.home);
+      this.operations = recordSuccess({ ...buildOperations(this.state, pauseReason !== null, this.config), pauseReason });
     } catch (error) { this.operations = recordFailure(this.operations, 'state', error); }
   }
   private async refreshAnalytics(): Promise<void> {

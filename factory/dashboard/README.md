@@ -18,6 +18,8 @@ From `factory/`, run `npm ci`, copy `dashboard/.env.example` to `dashboard/.env`
 
 ## Display and reporting
 
+A pause appears in an amber banner on both tabs, directly from the pause file rather than the last scheduler tick. The recognized Hermes Claude weekly-limit note becomes a fixed public reason with its next decision. Other pause notes show an operator pause with no public reason recorded. Raw notes never leave the server. Free slots show that starts are paused instead of claiming no eligible work.
+
 Overview fits 1440×900 and 1366×768 at normal zoom. Growing lists use counted pagination. Narrow screens scroll instead of hiding panels. Focus truncated text to read it, then press Enter to focus its full-text view and Escape to return. Tabs support arrow keys. Analytics counters expose exact values on focus.
 
 `FACTORY_OBSERVATION_HEARTBEAT_MS` and `FACTORY_OBSERVATION_MAX_EVENT_BYTES` in `settings.env` control liveness sampling and structured-event bounds. `factory-status <activity>` lets workers report a phase change without free text. Native Hermes hooks supply manager activity. The standard updater rebuilds both images when their source changes. Existing workers continue on their original release, so their new readings can remain unavailable until later jobs start.
