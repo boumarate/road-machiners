@@ -28,12 +28,12 @@ The [awesome-gamedev-agent-skills](https://github.com/gamedev-skills/awesome-gam
 
 ## Claude Code skills
 
-`game/.claude/skills/` holds skills only Claude Code reads. Each imported directory has its upstream license and an `UPSTREAM.json` with the source revision and file hashes.
+`game/.claude/skills/` holds skills only Claude Code reads. Each imported directory has an `UPSTREAM.json` with the source revision and file hashes, and the upstream license when there is one.
 
-- Three.js: `threejs-scene-setup`, `threejs-materials-lighting` and `threejs-gltf-loading` from [awesome-gamedev-agent-skills](https://github.com/gamedev-skills/awesome-gamedev-agent-skills), and `threejs-debug-profiler` from [threejs-game-skills](https://github.com/majidmanzarpour/threejs-game-skills).
-- Game development: `game-ai`, `ai-behavior-trees-utility-ai`, `camera-systems`, `performance-optimization`, `procedural-gen`, `physics-tuning` and `rpg` from awesome-gamedev-agent-skills.
+- Three.js: `threejs-scene-setup`, `threejs-materials-lighting` and `threejs-gltf-loading` from [awesome-gamedev-agent-skills](https://github.com/gamedev-skills/awesome-gamedev-agent-skills). `threejs-debug-profiler`, `threejs-aaa-graphics-builder` and `threejs-qa-release` from [threejs-game-skills](https://github.com/majidmanzarpour/threejs-game-skills). `threejs-fundamentals`, `threejs-geometry`, `threejs-materials`, `threejs-lighting`, `threejs-textures`, `threejs-loaders`, `threejs-shaders`, `threejs-postprocessing`, `threejs-animation` and `threejs-interaction` from [threejs-skills](https://github.com/CloudAI-X/threejs-skills).
+- Game development: `game-ai`, `ai-behavior-trees-utility-ai`, `camera-systems`, `performance-optimization`, `procedural-gen`, `physics-tuning`, `shader-programming` and `rpg` from awesome-gamedev-agent-skills.
 - Game UI: `game-ui-ux` from awesome-gamedev-agent-skills and `threejs-game-ui-designer` from threejs-game-skills. Start interface work with `game-ui-design` above.
-- Blender: `blender-image-to-3d` from [blender-game-skills](https://github.com/majidmanzarpour/blender-game-skills), the skill the factory image also carries. `blender-python-scripting`, `blender-modeling-modifiers`, `blender-scene-rendering` and `blender-shader-nodes` from [blender-claude-plugin](https://github.com/ra100/blender-claude-plugin).
+- Blender: `blender-image-to-3d` from [blender-game-skills](https://github.com/majidmanzarpour/blender-game-skills), the skill the factory image also carries. `blender-python-scripting`, `blender-modeling-modifiers`, `blender-scene-rendering` and `blender-shader-nodes` from [blender-claude-plugin](https://github.com/ra100/blender-claude-plugin). `blender` from [AI-SKILL-blender](https://github.com/LevyBytes/AI-SKILL-blender) is the Blender manual and Python API reference, read on demand through its six area indexes.
 
 The same boundaries apply. Their examples target generic games and other engines. The project's docs, its sim and render split and the [Art pipeline](../../docs/art.md) win over them.
 
