@@ -62,7 +62,8 @@ function smooth(t: number): number {
   return t * t * (3 - 2 * t);
 }
 
-function alongOf(deck: Deck, x: number, y: number): number {
+// Tiles along a deck from its from end to a map point's foot on the deck axis, negative before it.
+export function alongOf(deck: Deck, x: number, y: number): number {
   return (x - deck.from.x) * deck.axis.x + (y - deck.from.y) * deck.axis.y;
 }
 

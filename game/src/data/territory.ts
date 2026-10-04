@@ -202,7 +202,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { look: 'shipBow', at: { x: 18, y: -22.9 }, yaw: -1.481, r: 16.5 },
         // Hub with its ring: (495,285), 12 tiles across. Its spine stub points at the bow's aft break.
         { look: 'shipHub', at: { x: -0.8, y: 1.4 }, yaw: -0.356, r: 6 },
-        // Ribcage tube: south end (300,430) to north end (465,335), axis north to south. A 3-tile gap to the hub lets
+        // Cage, the open ribcage tube: south end (300,430) to north end (465,335), axis north to south. A 3-tile gap to the hub lets
         // trucks leave its north end.
         { look: 'shipCage', at: { x: 4.4, y: 22.9 }, yaw: -1.61, r: 12.5 },
         // Upright shards along the spine: (578,250), moved 3.5 tiles north along the spine line from (0.4,-9.5) so the

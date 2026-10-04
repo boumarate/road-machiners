@@ -9,7 +9,7 @@ import { PHYSICS } from '../../data/physics';
 import { FALLEN_SUN_DECKS } from '../../data/territory';
 import { hash2 } from '../../render/noise';
 import { PAL } from '../../render/palette';
-import { deckById, type Deck } from '../../sim/bridge';
+import { alongOf, deckById, type Deck } from '../../sim/bridge';
 import { deckHeight, groundAt, type Terrain } from '../../sim/terrain';
 import { dist, type Vec } from '../../sim/vec';
 import { poseOnDeck } from './sites';
@@ -81,8 +81,9 @@ function deckModel(deck: Deck): THREE.Object3D {
 function skirt(t: Terrain, deck: Deck): THREE.Mesh {
   const positions: number[] = [];
   const colors: number[] = [];
-  const edges = [...(deck.skirt ? deck.rails.map((rail, i) => ({ line: rail, inward: railInward(deck, i), inset: RAIL_INSET })) : []), ...deck.lips.map((lip) => ({ line: lip, inward: lipInward(deck, lip), inset: LIP_INSET }))];
-  edges.forEach(({ line: [a, b], inward, inset }, e) => {
+  const edges = [...(deck.skirt ? deck.rails.map((line) => ({ line, inset: RAIL_INSET })) : []), ...deck.lips.map((line) => ({ line, inset: LIP_INSET }))];
+  edges.forEach(({ line: [a, b], inset }, e) => {
+    const inward = inwardOf(deck, a, b);
     const steps = Math.max(1, Math.ceil(dist(a, b)));
     const cols = Array.from({ length: steps + 1 }, (_, k) => column(t, deck, { x: a.x + ((b.x - a.x) * k) / steps + (inward.x * inset) / S, y: a.y + ((b.y - a.y) * k) / steps + (inward.y * inset) / S }));
     for (let k = 0; k < steps; k++) {
@@ -106,21 +107,17 @@ function skirt(t: Terrain, deck: Deck): THREE.Mesh {
 // A strip column at a map point, in meters: its top under the deck line and its bottom under the ground. Where the
 // deck line dips under the ground the column is empty, its bottom at its top.
 function column(t: Terrain, deck: Deck, p: Vec): { top: [number, number, number]; bottom: [number, number, number] } {
-  const along = Math.min(deck.length, Math.max(0, (p.x - deck.from.x) * deck.axis.x + (p.y - deck.from.y) * deck.axis.y));
+  const along = Math.min(deck.length, Math.max(0, alongOf(deck, p.x, p.y)));
   const top = deckHeight(t, deck, along) * S - TOP_DROP;
   const bottom = Math.min(top, groundAt(t, p.x, p.y) * S - PHYSICS.rockSink);
   return { top: [p.x * S, top, p.y * S], bottom: [p.x * S, bottom, p.y * S] };
 }
 
-// Rail i lies on side -1 or +1 of the axis turned a quarter toward +y (src/sim/bridge.ts); inward points back across.
-function railInward(deck: Deck, i: number): Vec {
-  const side = i === 0 ? -1 : 1;
-  return { x: deck.axis.y * side, y: -deck.axis.x * side };
-}
-
-// A lip lies across the from or the to end; inward points back along the deck.
-function lipInward(deck: Deck, [a, b]: [Vec, Vec]): Vec {
-  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-  const sign = dist(mid, deck.to) < dist(mid, deck.from) ? -1 : 1;
-  return { x: deck.axis.x * sign, y: deck.axis.y * sign };
+// The unit vector from the middle of a rail or lip a-b toward the deck's middle: back across the deck from a rail,
+// back along it from a lip.
+function inwardOf(deck: Deck, a: Vec, b: Vec): Vec {
+  const mid = { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 };
+  const edge = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const d = dist(edge, mid);
+  return { x: (mid.x - edge.x) / d, y: (mid.y - edge.y) / d };
 }
