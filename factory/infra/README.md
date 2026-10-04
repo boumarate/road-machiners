@@ -5,11 +5,13 @@ pyinfra project for one Ubuntu 24.04 machine that runs the game factory. The mac
 The host needs at least 4 cores and 8 GB. With 2 cores, the full game test suite takes over 9 minutes and its long tests time out. The testing gate peaks near 2.6 GB, Hermes idles near 300 MB, and provision adds 4 GB of swap for spikes. The host needs IPv4 out, since GitHub has no IPv6. It takes no inbound traffic but ssh. The public domain reaches it through a Cloudflare Tunnel, which dials out.
 It follows `Steelman/infra`. Run every command from `factory/infra`.
 
+The host is the laptop at `192.168.1.93`, and it is reachable only from the home network. Run pyinfra from the main checkout, where `prod.env` and `server.env` live. Git ignores both files, so a worktree has none. In a worktree, link them with `ln -s <main checkout>/factory/infra/prod.env prod.env` and the same for `server.env`. Check the link with the status command below.
+
 ## Layout
 
     inventory.py         host from prod.env
     factory_infra/       settings and the check of the factory .env and settings.env
-    deploy/              provision.py, deploy.py, status.py
+    deploy/              provision.py, deploy.py, dashboard.py, status.py
     files/               systemd units and config pushed to the host
     stacks/caddy/        compose file of Caddy and the tunnel, and the Caddyfile
     prod.env.example     copy to prod.env
@@ -18,6 +20,7 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 
 - Set up the host, once and after host changes: `uv run pyinfra -y inventory.py deploy/provision.py`
 - Set up the factory, and roll out a new secret or an infra change: `uv run pyinfra -y inventory.py deploy/deploy.py`
+- Install the public dashboard service and its Caddy route, once and after a change to either: `uv run pyinfra -y inventory.py deploy/dashboard.py`. Run it after the factory is deployed, since it links into the current release.
 - Roll out factory code or settings: merge them into `main` on GitHub. The server deploys them by itself.
 - Read the host state, changes nothing: `uv run pyinfra -y inventory.py deploy/status.py`
 - Test the pure helpers: `uv run pytest`
