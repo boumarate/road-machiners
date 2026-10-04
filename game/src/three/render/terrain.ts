@@ -123,7 +123,8 @@ export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
 }
 
 // Tints each ground triangle by a hash of its tile and its half, so flat ground shows facets like slopes do.
-// PlaneGeometry splits each tile quad along its anti-diagonal, where the tile fractions sum to 1.
+// PlaneGeometry splits each tile quad along its anti-diagonal, where the tile fractions sum to 1. It reads the
+// world XZ varying vRoadXZ that drawRoads adds, so it runs after drawRoads.
 function facetGround(material: THREE.MeshLambertMaterial): void {
   const before = material.onBeforeCompile.bind(material);
   const key = material.customProgramCacheKey.bind(material);
@@ -131,11 +132,8 @@ function facetGround(material: THREE.MeshLambertMaterial): void {
     before(shader, renderer);
     shader.uniforms.facetTile = { value: S };
     shader.uniforms.facetTint = { value: FACET_TINT };
-    shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec2 vFacetXZ;")
-      .replace("#include <project_vertex>", "#include <project_vertex>\nvFacetXZ = (modelMatrix * vec4(transformed, 1.0)).xz;");
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying vec2 vFacetXZ;\nuniform float facetTile;\nuniform float facetTint;")
+      .replace("#include <common>", "#include <common>\nuniform float facetTile;\nuniform float facetTint;")
       .replace("#include <color_fragment>", `#include <color_fragment>\n${FACET_FRAGMENT}`);
   };
   material.customProgramCacheKey = () => `${key()}|facets`;
@@ -143,7 +141,7 @@ function facetGround(material: THREE.MeshLambertMaterial): void {
 }
 
 const FACET_FRAGMENT = `{
-  vec2 facetAt = vFacetXZ / facetTile;
+  vec2 facetAt = vRoadXZ / facetTile;
   vec2 facetCell = floor(facetAt);
   vec2 facetIn = facetAt - facetCell;
   float facetHalf = facetIn.x + facetIn.y > 1.0 ? 1.0 : 0.0;
