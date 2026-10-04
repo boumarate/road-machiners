@@ -1,5 +1,5 @@
 // Map-space ground painter: tile type colors, a warm sand base with slow light and deep patches on open desert,
-// and hillshade. Open desert drops most of the per-pixel speckle, so the facets the ground shader tints carry its
+// and hillshade. A road tile takes the desert weight of the ground beside the road, see lookTypes(). Open desert drops most of the per-pixel speckle, so the facets the ground shader tints carry its
 // texture. The ground shader draws roads over it, see render/roadPaint.ts. Stones, scrub and cacti are 3D, in
 // three/render/scatter.ts. The 3D terrain (three/render/terrain.ts) uses it as its texture.
 
@@ -20,9 +20,9 @@ const DESERT_CALM = 0.85; // share of the speckle and fine noise that full deser
 const PATCH_OFFSET = 41.5; // lattice cells; keeps the patch noise from sharing corners with the other ground noise
 
 // How much each ground type takes the warm sand and its patches. Farmland and its tracks, canals and slabs, old
-// highways, hull plating and pools keep their color, so the marks of a place read against the desert.
-const DESERT_WEIGHT: Record<TerrainTypeId, number> = {
-  road: 1, // road tiles paint as hardpan
+// highways, hull plating and pools keep their color, so the marks of a place read against the desert. Road tiles
+// have no weight of their own: they take the look of the ground beside the road, see lookTypes().
+const DESERT_WEIGHT: Record<LookType, number> = {
   hardpan: 1,
   sand: 0.6,
   scrub: 0.5,
@@ -41,12 +41,69 @@ const DESERT_WEIGHT: Record<TerrainTypeId, number> = {
   concrete: 0,
 };
 
-// The ground paint of hardpan at mean noise, before hillshade and patches. Roads lie on hardpan, and the road
-// shader takes the ground's shade relative to this color.
-export const ROAD_GROUND = mix(mix(TERRAIN_TYPES.hardpan.color, PAL.sand[3], 0.1), PAL.desertSand, SAND_WARM);
+// The ground paint under a road at mean noise, before hillshade and patches, on ground with no desert look. Road
+// tiles paint as hardpan, and the road shader takes the ground's shade relative to this color.
+export const ROAD_PLAIN = mix(TERRAIN_TYPES.hardpan.color, PAL.sand[3], 0.1);
+// The same at full desert weight. The road shader blends the two by the desert weight under the road.
+export const ROAD_SAND = mix(ROAD_PLAIN, PAL.desertSand, SAND_WARM);
 
-export function desertWeight(type: TerrainTypeId): number {
+// The ground type whose look a tile takes. A road tile has none of its own, since the bake lays it over whatever
+// ground the road crosses.
+export type LookType = Exclude<TerrainTypeId, "road">;
+
+export function desertWeight(type: LookType): number {
   return DESERT_WEIGHT[type];
+}
+
+const lookCache = new WeakMap<Terrain, readonly LookType[]>();
+
+// The ground type each tile's paint, road edge and scatter follow. A tile off the road takes its own type. A road
+// tile takes the type of the nearest tile off the road, in 4-neighbour steps, so each edge of a road follows the
+// ground beside it. Ties go to the tile reached first in a flood seeded in tile index order, the same on every load.
+// On a map that is all road every tile takes hardpan, the type road tiles paint as. Built once per terrain.
+export function lookTypes(t: Terrain): readonly LookType[] {
+  const cached = lookCache.get(t);
+  if (cached) return cached;
+  const look = new Array<LookType | undefined>(t.size * t.size);
+  const queue = new Int32Array(look.length);
+  flood(look, queue, seedOffRoad(t, look, queue), t.size);
+  const result = Array.from(look, (type) => type ?? "hardpan");
+  lookCache.set(t, result);
+  return result;
+}
+
+// Gives every tile off the road its own type and queues it, in tile index order. Returns the queue length.
+function seedOffRoad(t: Terrain, look: (LookType | undefined)[], queue: Int32Array): number {
+  let tail = 0;
+  for (let i = 0; i < look.length; i++) {
+    const type = t.types[i];
+    if (type === "road") continue;
+    look[i] = type;
+    queue[tail++] = i;
+  }
+  return tail;
+}
+
+// Spreads each queued tile's type to its 4-neighbours that have none yet, breadth first.
+function flood(look: (LookType | undefined)[], queue: Int32Array, tail: number, size: number): void {
+  for (let head = 0; head < tail; head++) {
+    const i = queue[head];
+    for (const n of neighbours(i, size)) {
+      if (look[n] !== undefined) continue;
+      look[n] = look[i];
+      queue[tail++] = n;
+    }
+  }
+}
+
+function neighbours(i: number, size: number): number[] {
+  const x = i % size;
+  const out: number[] = [];
+  if (x > 0) out.push(i - 1);
+  if (x < size - 1) out.push(i + 1);
+  if (i >= size) out.push(i - size);
+  if (i < size * (size - 1)) out.push(i + size);
+  return out;
 }
 
 // A map-space canvas: canvas pixel (px, py) covers map point (from + px / res, from + py / res).
@@ -133,9 +190,10 @@ function tileLook(t: Terrain, hillshadeStrength: number): TileLook {
   const color = new Int32Array(count);
   const desert = new Float32Array(count);
   const shadeBy = new Float64Array(count);
+  const look = lookTypes(t);
   for (let i = 0; i < count; i++) {
     color[i] = paintColor(t.types[i]);
-    desert[i] = desertWeight(t.types[i]);
+    desert[i] = desertWeight(look[i]);
     shadeBy[i] = hillshade(t, i, hillshadeStrength);
   }
   return { t, color, desert, shade: shadeBy, broad: new CellNoise(), fine: new CellNoise(), patch: new CellNoise() };

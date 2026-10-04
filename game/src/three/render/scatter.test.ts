@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { PHYSICS } from '../../data/physics';
 import { START_KITS } from '../../data/start';
-import { desertWeight } from '../../render/groundPaint';
+import { desertWeight, lookTypes } from '../../render/groundPaint';
 import { ROAD_INDEX } from '../../sim/road-index';
 import type { Vec } from '../../sim/vec';
 import { newWorld } from '../../sim/world';
@@ -21,6 +21,8 @@ const pebbles = chunks.flatMap((c) => [...c.pebbles, ...c.desert_stones]);
 const at = (p: { matrix: THREE.Matrix4 }): Vec => ({ x: p.matrix.elements[12] / PHYSICS.metersPerTile, y: p.matrix.elements[14] / PHYSICS.metersPerTile });
 const roadDist = (x: number, y: number) => ROAD_INDEX.nearestWithin(x, y, ROAD_GAP + SHOULDER_TILES);
 const typeAt = (at: Vec) => t.types[Math.floor(at.y) * t.size + Math.floor(at.x)];
+const look = lookTypes(t);
+const lookAt = (at: Vec) => look[Math.floor(at.y) * t.size + Math.floor(at.x)];
 const onShoulder = (at: Vec) => roadDist(at.x, at.y) < ROAD_GAP + SHOULDER_TILES;
 const tileKey = (at: Vec) => Math.floor(at.y) * t.size + Math.floor(at.x);
 // Tiles whose center lies within CACTUS_NEAR_ROCK of a rock or a crag.
@@ -60,7 +62,7 @@ describe('scatterPlacements', () => {
     }
     const shoulderPebbles = pebbles.filter((p) => onShoulder(at(p))).length;
     expect(shoulderPebbles / shoulderTiles).toBeGreaterThan((pebbles.length - shoulderPebbles) / openTiles);
-    for (const p of [...scrub, ...cacti]) if (desertWeight(typeAt(at(p))) > 0) expect(onShoulder(at(p))).toBe(false);
+    for (const p of [...scrub, ...cacti]) if (desertWeight(lookAt(at(p))) > 0) expect(onShoulder(at(p))).toBe(false);
   });
 
   it('grows a modest share of scrub on open hardpan', () => {
@@ -74,11 +76,11 @@ describe('scatterPlacements', () => {
 
   it('grows cacti only on desert ground, gathered by rocks and crags', () => {
     expect(cacti.length).toBeGreaterThan(20);
-    for (const p of cacti) expect(desertWeight(typeAt(at(p)))).toBeGreaterThan(0);
+    for (const p of cacti) expect(desertWeight(lookAt(at(p)))).toBeGreaterThan(0);
     let rockTiles = 0;
     let openTiles = 0;
     for (let y = 0; y < t.size; y++) for (let x = 0; x < t.size; x++) {
-      if (desertWeight(t.types[y * t.size + x]) === 0) continue;
+      if (desertWeight(look[y * t.size + x]) === 0) continue;
       if (nearRock.has(y * t.size + x)) rockTiles++;
       else openTiles++;
     }
@@ -111,6 +113,15 @@ describe('scatterPlacements', () => {
         expect(share(list, true), type).toBeCloseTo(chance, 1);
         expect(share(list, false), type).toBeCloseTo(chance, 1);
       }
+    }
+  });
+
+  it('keeps the base pebbles and dry scrub on road tiles beside ground without a desert look', () => {
+    for (const type of ['saltCrust', 'field'] as const) {
+      const types = t.types.map((own) => (own === 'road' ? own : type));
+      const kept = scatterPlacements({ ...t, types }, []);
+      expect(kept.flatMap((c) => [...c.desert_stones, ...c.desert_scrub, ...c.cactus]), type).toEqual([]);
+      expect(kept.flatMap((c) => c.pebbles).length, type).toBeGreaterThan(100);
     }
   });
 

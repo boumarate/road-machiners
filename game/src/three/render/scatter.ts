@@ -1,13 +1,14 @@
 // Ground scatter: loose stones, scrub and short cacti on open ground. Open desert takes grey stones, olive scrub
-// and cacti, with cacti gathered by rocks and crags and road shoulders keeping stones only. Ground that takes no desert look keeps its small pebbles and dry
-// scrub, as sparse as before. Decoration only, no collision. Placement comes from render noise per tile, so it is
+// and cacti, with cacti gathered by rocks and crags and road shoulders keeping stones only. Ground that takes no
+// desert look keeps its small pebbles and dry scrub, as sparse as before. Road tiles scatter as the ground beside
+// the road, see lookTypes(). Decoration only, no collision. Placement comes from render noise per tile, so it is
 // the same on every load. Each terrain chunk draws its scatter as one instanced model per kind.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
-import { TERRAIN_TYPES, type TerrainTypeId } from '../../data/terrain';
+import { TERRAIN_TYPES } from '../../data/terrain';
 import { REGION } from '../../data/region';
-import { desertWeight } from '../../render/groundPaint';
+import { desertWeight, lookTypes, type LookType } from '../../render/groundPaint';
 import { hash2 } from '../../render/noise';
 import { ROAD_INDEX } from '../../sim/road-index';
 import { groundAt, type Terrain } from '../../sim/terrain';
@@ -72,18 +73,19 @@ export function addScatter(t: Terrain, obstacles: Obstacle[], scope: RenderScope
 export function scatterPlacements(t: Terrain, obstacles: Obstacle[]): ScatterChunk[] {
   const blocked = blockedTiles(t.size, obstacles);
   const rocky = rockyTiles(t.size, obstacles);
+  const look = lookTypes(t);
   const chunks: ScatterChunk[] = [];
-  for (let cy = 0; cy < t.size; cy += TERRAIN_CHUNK) for (let cx = 0; cx < t.size; cx += TERRAIN_CHUNK) chunks.push(chunkScatter(t, blocked, rocky, cx, cy));
+  for (let cy = 0; cy < t.size; cy += TERRAIN_CHUNK) for (let cx = 0; cx < t.size; cx += TERRAIN_CHUNK) chunks.push(chunkScatter(t, look, blocked, rocky, cx, cy));
   return chunks;
 }
 
-function chunkScatter(t: Terrain, blocked: Uint8Array, rocky: Uint8Array, cx: number, cy: number): ScatterChunk {
+function chunkScatter(t: Terrain, look: readonly LookType[], blocked: Uint8Array, rocky: Uint8Array, cx: number, cy: number): ScatterChunk {
   const chunk: ScatterChunk = { center: { x: cx + TERRAIN_CHUNK / 2, y: cy + TERRAIN_CHUNK / 2 }, pebbles: [], scrub: [], desert_stones: [], desert_scrub: [], cactus: [] };
   for (let y = cy; y < Math.min(cy + TERRAIN_CHUNK, t.size); y++) for (let x = cx; x < Math.min(cx + TERRAIN_CHUNK, t.size); x++) {
     const i = y * t.size + x;
-    const kind = blocked[i] ? null : tileScatter(t, x, y, rocky[i] === 1);
+    const kind = blocked[i] ? null : tileScatter(look[i], x, y, rocky[i] === 1);
     if (kind === null) continue;
-    const model = modelOf(kind, desertWeight(t.types[i]) > 0);
+    const model = modelOf(kind, desertWeight(look[i]) > 0);
     chunk[model].push(placed(t, x, y, model));
   }
   return chunk;
@@ -96,10 +98,10 @@ function modelOf(kind: ScatterKind, desert: boolean): ScatterModel {
   return kind === 'pebbles' ? 'desert_stones' : 'desert_scrub';
 }
 
-// What tile x, y holds. Road shoulders take their own chances.
-function tileScatter(t: Terrain, x: number, y: number, byRock: boolean): ScatterKind | null {
+// What tile x, y, which takes the look of ground type look, holds. Road shoulders take their own chances.
+function tileScatter(look: LookType, x: number, y: number, byRock: boolean): ScatterKind | null {
   const h = hash2(x * 7 + 3, y * 13 + 5);
-  const odds = CHANCES[t.types[y * t.size + x]];
+  const odds = CHANCES[look];
   const open = byRock ? odds.byRock : odds.open;
   // Nothing can land here whatever the road distance, so skip the road lookup.
   if (pick(h, open) === null && pick(h, odds.shoulder) === null) return null;
@@ -114,7 +116,7 @@ type Chances = { pebbles: number; scrub: number; cactus: number };
 // look keeps the sparse base chances, shoulders included. Open desert moves from them toward the desert chances by
 // its desert weight, and its shoulders hold stones only. Hull plating lies over the ground, so nothing grows there
 // and pebbles would poke through it.
-function chances(type: TerrainTypeId, shoulder: boolean, byRock: boolean): Chances {
+function chances(type: LookType, shoulder: boolean, byRock: boolean): Chances {
   if (type === 'hull') return { pebbles: 0, scrub: 0, cactus: 0 };
   const w = desertWeight(type);
   if (w === 0) return { pebbles: PEBBLE_CHANCE, scrub: SCRUB_ELSEWHERE, cactus: 0 };
@@ -124,13 +126,13 @@ function chances(type: TerrainTypeId, shoulder: boolean, byRock: boolean): Chanc
   return { pebbles, scrub, cactus: (byRock ? CACTUS_BY_ROCK : CACTUS_ON_DESERT) * w };
 }
 
-// The chances of each ground type, worked out once rather than per tile.
+// The chances of each look type, worked out once rather than per tile.
 const CHANCES = Object.fromEntries(
-  (Object.keys(TERRAIN_TYPES) as TerrainTypeId[]).map((type) => [
+  (Object.keys(TERRAIN_TYPES) as (keyof typeof TERRAIN_TYPES)[]).filter((type) => type !== 'road').map((type) => [
     type,
     { open: chances(type, false, false), byRock: chances(type, false, true), shoulder: chances(type, true, false) },
   ]),
-) as Record<TerrainTypeId, { open: Chances; byRock: Chances; shoulder: Chances }>;
+) as Record<LookType, { open: Chances; byRock: Chances; shoulder: Chances }>;
 
 // Pebbles take the low end of the tile hash, cacti the range above them and scrub the high end.
 function pick(h: number, c: Chances): ScatterKind | null {
