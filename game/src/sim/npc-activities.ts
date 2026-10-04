@@ -260,9 +260,11 @@ function serviceTrip(world: World, vehicle: Vehicle, profile: NpcProfile, need: 
 }
 
 // A raider is served at its camps. Anyone else is fuelled and repaired in a town or at a stall, a broke driver only in a town.
+// A stall cannot refit a truck with no working engine, so such a driver measures to a town like a broke one. Else it
+// would finish service at the stall it is parked at and ask for service again every turn.
 function serviceStops(world: World, vehicle: Vehicle, profile: NpcProfile): string[] {
   if (profile.bases.length > 0) return profile.bases;
-  return pumpsOf(vehicle, profile, isBroke(world, vehicle));
+  return pumpsOf(vehicle, profile, isBroke(world, vehicle) || isStrandedForGood(vehicle));
 }
 
 // The market that pays most for the carried cargo, of the driver's markets. Nearest wins a tie.

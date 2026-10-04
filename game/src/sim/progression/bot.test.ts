@@ -520,6 +520,20 @@ describe('the hunter', () => {
     expect(turnOf('trader').ledger.lootSales).toBeGreaterThan(0);
   });
 
+  it('has an engineless hunter sell a spare for the engine money where it would otherwise strip it', () => {
+    const w = parkedAt('bowl');
+    const me = playerVehicle(w);
+    me.items = me.items.filter((it) => !(it.kind === 'part' && partDef(it.part.defId).kind === 'engine'));
+    expect(stowPart(w, me, makePart(w, 'mg', 0))).toBe(true);
+    w.shops.bowl.stock.push(makePart(w, 'stockEngine', 0));
+    w.player.money = 0;
+
+    const turn = botOrders(w, 'hunter');
+
+    expect(turn.ledger.lootSales).toBeGreaterThan(0);
+    expect(playerVehicle(turn.world).job?.kind).not.toBe('strip');
+  });
+
   it('has a hunter leave a worn gun to field repair where a trader pays the garage', () => {
     const repairsOf = (archetype: 'hunter' | 'trader') => {
       const w = parkedAt('bowl');

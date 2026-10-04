@@ -66,7 +66,8 @@ States are timed relations between two trucks. Each ends as expired, fulfilled o
 - A feud makes both trucks hostile. Sight or shots between them keep it going. It expires after some turns without either, and a failed robber then backs off.
 - A tow runs from the offer to arrival in town, where the fee is paid. It breaks for free when the player refuses, unhitches or drives away from an offer, or when the tower meets danger or the trucks turn hostile.
 - A tower the player turned down rarely offers again.
-- A tower that dropped a tow for danger comes back with the same deal, until the truck drives again.
+- A tower that dropped a tow for danger comes back with the same deal, until the truck drives again. It waits ten turns beside the truck before it hitches or offers again, so a hostile at the edge of sight does not make it hitch and drop on every turn.
+- A driver with no working engine is serviced in a town, never at a stall, since a stall cannot refit it.
 - Only one driver answers a stranded player at a time. Near a town gate, fewer drivers offer a tow.
 
 ## Escorts

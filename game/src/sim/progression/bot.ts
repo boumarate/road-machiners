@@ -417,12 +417,13 @@ function serviceHere(o: Orders): void {
     const n = Math.min(supplyRoom(o.world, kind), Math.floor(o.world.player.money / ECONOMY.supplyPrice[kind]));
     if (n > 0) o.run((w) => buySupply(w, kind, n), kind);
   }
-  if (!o.fieldRepair) repairAtGarage(o);
+  repairAtGarage(o);
 }
 
+// A field repairer pays the garage for the built-in parts at every visit and leaves guns and armor to the field.
 function repairAtGarage(o: Orders): void {
-  const cost = repairCost(o.world);
-  if (cost > 0 && cost <= o.world.player.money && !underFire(o.world, o.me)) o.run(repairAll, 'repairs');
+  const cost = o.fieldRepair ? basicsRepairCost(o.world) : repairCost(o.world);
+  if (cost > 0 && cost <= o.world.player.money && !underFire(o.world, o.me)) o.run(o.fieldRepair ? repairBasics : repairAll, 'repairs');
 }
 
 // ---- Goals.
@@ -576,7 +577,7 @@ function findSalvageSite(o: Orders): boolean {
 function hunterGoal(o: Orders): void {
   // Without a working gun it scavenges, which needs no money, until a town sells it one it can pay for.
   if (firepower(o.world, o.me) === 0) return scavengerGoal(o);
-  if (townAt(o.world) && hasCargo(o.world, o.me)) sellCargo(o);
+  if (townAt(o.world) && hasCargo(o.world, o.me)) sellCargo(o, true);
   takeBounties(o);
   if (stripDowned(o) || engageFoe(o)) return;
   lootHere(o);
@@ -824,16 +825,21 @@ function hasCargo(world: World, v: Vehicle): boolean {
   return Object.keys(cargoForSale(world, v)).length > 0 || spareItems(v).length > 0;
 }
 
-// Sells the goods for sale and the spare parts. Every shop buys both.
-function sellCargo(o: Orders): void {
-  for (const [good, n] of Object.entries(cargoForSale(o.world, o.me))) if (!o.fieldRepair || good !== 'parts') o.run((w) => sellGood(w, good, n), 'goodsSold');
-  for (const { partId } of spareItems(o.me)) if (!stripForRepair(o, partId)) o.run((w) => sellPart(w, partId), 'lootSales');
+// Sells the goods for sale and the spare parts. Every shop buys both. A field repairer with stripping on keeps its
+// repair parts and strips its spares instead of selling them. A bot that needs the money now sells everything.
+function sellCargo(o: Orders, stripping = false): void {
+  const keep = stripping && o.fieldRepair;
+  for (const [good, n] of Object.entries(cargoForSale(o.world, o.me))) if (!keep || good !== 'parts') o.run((w) => sellGood(w, good, n), 'goodsSold');
+  sellSpares(o, keep);
+}
+
+function sellSpares(o: Orders, keep: boolean): void {
+  for (const { partId } of spareItems(o.me)) if (!(keep && stripForRepair(o, partId))) o.run((w) => sellPart(w, partId), 'lootSales');
 }
 
 // A field repairer turns a spare part into repair parts, one strip at a time, while the truck has room for the yield
 // and no strip is running. The strip job holds the truck, so the bot sells the other spares on later visits.
 function stripForRepair(o: Orders, partId: string): boolean {
-  if (!o.fieldRepair) return false;
   if (o.me.job) return true;
   if (!canStrip(o, partId)) return false;
   o.run((w) => startStrip(w, partId));
