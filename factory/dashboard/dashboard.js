@@ -54,7 +54,10 @@ function getReleaseData() {
 function renderHeader() {
   getElement('github-link').href = snapshot.repoUrl;
   getElement('play-link').href = snapshot.playUrl;
-  getElement('channel-link').href = snapshot.channelUrl;
+  const showChannel = snapshot.channelUrl !== null;
+  getElement('channel').hidden = !showChannel;
+  getElement('channel-tab').hidden = !showChannel;
+  if (showChannel) getElement('channel-link').href = snapshot.channelUrl;
   const operations = snapshot.operations.value;
   if (operations === null) {
     setText('factory-status', 'Factory state unavailable');
@@ -230,7 +233,7 @@ function renderAnalytics() {
   renderDailyChart(summary);
   renderUsageBreakdown(summary);
   renderEvents(analytics.ranges.find((range) => range.days === 30));
-  renderPosts(analytics.posts);
+  if (snapshot.channelUrl !== null) renderPosts(analytics.posts);
 }
 function formatTokenSplit(tokens) {
   if (tokens === null) return 'Token breakdown unavailable.';

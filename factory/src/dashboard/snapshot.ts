@@ -19,7 +19,7 @@ export type PublicCard = { issue: number; title: string; column: string; blocked
 export type GithubSnapshot = { cards: PublicCard[]; features: Feature[]; releaseKey: string; provisional: boolean };
 export type Analytics = { ranges: ReturnType<DashboardHistory['summarize']>[]; posts: ReturnType<DashboardHistory['readPosts']> };
 export type Snapshot = {
-  generatedAt: string; repoUrl: string; playUrl: string; channelUrl: string;
+  generatedAt: string; repoUrl: string; playUrl: string; channelUrl: string | null;
   operations: Source<Operations>; github: Source<GithubSnapshot>; analytics: Source<Analytics>; host: Source<HostLoad>;
 };
 export type Commit = { sha: string; parents: { sha: string }[]; commit: { message: string } };
@@ -152,7 +152,7 @@ export class SnapshotCollector {
       const now = new Date();
       await this.history.refresh(now);
       const ranges = [1, 7, 30].map((days) => this.history.summarize(now, days));
-      this.analytics = recordSuccess({ ranges, posts: this.history.readPosts(now) });
+      this.analytics = recordSuccess({ ranges, posts: this.config.publicChannel === null ? [] : this.history.readPosts(now, this.config.publicChannel) });
     } catch (error) { this.analytics = recordFailure(this.analytics, 'analytics', error); }
   }
   async refreshLocal(): Promise<void> {
