@@ -660,15 +660,16 @@ export const TOPICS: Record<TopicId, Topic> = {
   },
 };
 
-// Patch terms in the NPC's words. `npcPatches` when the NPC does the work, `playerPatches` when it asks the player
-// to. Filled with {price}, and with {parts} as a count with its unit, like "2 parts". Lines never name turns.
-// A trading tip in words. {site} is the shop's site and {good} the good's name. The tip never names a number.
+// A trading tip in words. {site} is the shop's site, {good} the good's name and {was} its verb, "was" or "were".
+// The tip never names a number.
 export const TIP_LINES = {
-  dear: 'Last time I was at {site}, {good} was very overpriced.',
-  cheap: 'Last time I was at {site}, {good} was going cheap.',
+  dear: 'Last time I was at {site}, {good} {was} very overpriced.',
+  cheap: 'Last time I was at {site}, {good} {was} going cheap.',
   none: 'Nothing worth telling.',
 };
 
+// Patch terms in the NPC's words. `npcPatches` when the NPC does the work, `playerPatches` when it asks the player
+// to. Filled with {price}, and with {parts} as a count with its unit, like "2 parts". Lines never name turns.
 export const DEAL_LINES: Record<PatchDeal, { npcPatches: string; playerPatches: string }> = {
   paid: {
     npcPatches: 'I have the parts. {parts} and the work, {price} all in.',

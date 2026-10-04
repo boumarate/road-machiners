@@ -68,7 +68,8 @@ function aidText(v: Extract<CallVar, { kind: 'aid' }>): string {
 export function tipText(v: Extract<CallVar, { kind: 'tip' }>): string {
   if (!v.tip) return TIP_LINES.none;
   const line = v.tip.dear ? TIP_LINES.dear : TIP_LINES.cheap;
-  return line.replace('{site}', siteName(v.tip.shop)).replace('{good}', GOODS[v.tip.good].name.toLowerCase());
+  const good = GOODS[v.tip.good];
+  return line.replace('{site}', siteName(v.tip.shop)).replace('{good}', good.name.toLowerCase()).replace('{was}', good.plural ? 'were' : 'was');
 }
 
 type VarText = { [K in CallVar['kind']]: (v: Extract<CallVar, { kind: K }>) => string };
