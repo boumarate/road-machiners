@@ -136,6 +136,7 @@ export type FactoryState = {
   testPhase: Record<string, TestPhase>; // issue number -> where its Testing card stands. No entry means verify runs next.
   patching: Record<string, string>; // issue number -> the commit of its last posted build. Its Implementation card runs a patch, not an implementation.
   unroutedReplies: Record<string, UnroutedReply>; // Telegram message id of a plain approval reply -> what it answered. A route clears it, and a late one becomes a failure.
+  visualSendBacks: Record<string, number>; // issue number -> times the visual review sent its card back to Design or Implementation. It caps the loop, and a passed review clears it.
   lastWasteReview: string | null; // ISO start of the last waste review. The tick sets it when it first sees it empty, so the first review waits a full period.
 };
 
@@ -286,6 +287,8 @@ export const FEEDBACK_HEADING = '## Committee feedback';
 // An approval reply routed as an answer. Design reads it as context, never as a change request.
 export const QUESTION_HEADING = '## Committee question';
 export const REVIEW_HEADING = '## Review findings';
+// The testing agent's reading of the captured gameplay images found the look wrong. The agent that gets the card back reads it as a mismatch report.
+export const VISUAL_HEADING = '## Visual review findings';
 // Agent containers sit on an internal Docker network. The proxy container is their only way out.
 export const AGENT_NETWORK = 'roam-factory-agents';
 export const PROXY_NAME = 'roam-factory-proxy';

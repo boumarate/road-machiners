@@ -64,6 +64,8 @@ They mean the review blocked the built change twice.
 Treat them as a sign of a core flaw in the design, not as bugs to patch.
 Find the root cause behind them and revise the design to remove it.
 
+Visual review findings sit in the issue comments too, under "## Visual review findings". The testing agent looked at the captured gameplay of the build and found a mismatch with the issue or the game docs that the plan caused. Revise the plan so the mismatch cannot come back. Say in the plan how the result must look and where it goes, and how a player will check it.
+
 Triage already refused most requests that go against DESIGN.md.
 If one still does, do not plan it.
 Write the reason in plain words to `.factory/wont-do.md`.

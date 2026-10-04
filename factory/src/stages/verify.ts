@@ -3,7 +3,8 @@ import { readEvidence } from '../evidence';
 import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type TestPhase } from '../types';
 import { reviewGate } from './review';
-import { HOTFIX_BASE, agentHome, baseBranchFor, fillPrompt, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir } from './common';
+import { visualGate } from './visual';
+import { HOTFIX_BASE, agentHome, baseBranchFor, fillPrompt, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 
 export type Approval = { description: string; howToTry: string };
 
@@ -30,15 +31,17 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   if (readState(ctx.statePath).testPhase[String(issue)] === 'fix') return fixRound(ctx, issue, base, mode);
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   prepareOutputs(ctx, issue, home);
+  await writeIssueInput(ctx, issue, home);
   const merged = await mergeBase(ctx, issue, base, home);
   if (mode === 'preview') {
-    await agentRound(ctx, issue, 'test', 'test', base, true);
+    const shown = await agentRound(ctx, issue, 'test', 'test', base, true);
     await requireBaseMerged(ctx, issue, base, merged);
+    if (!shown) return;
   } else {
     await agentRound(ctx, issue, 'harden', 'harden', base, false);
     await requireBaseMerged(ctx, issue, base, merged);
-    if (!(await reviewGate(ctx, issue, base, () => agentRound(ctx, issue, 'test-fix', 'review-fix', base, false)))) return;
-    if (mode === 'full') await agentRound(ctx, issue, 'test', 'test', base, true);
+    if (!(await reviewGate(ctx, issue, base, async () => { await agentRound(ctx, issue, 'test-fix', 'review-fix', base, false); }))) return;
+    if (mode === 'full' && !(await agentRound(ctx, issue, 'test', 'test', base, true))) return;
   }
   setPhase(ctx, issue, 'checks');
 }
@@ -47,7 +50,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
 // A hardening fix leaves no evidence, since no post follows it.
 async function fixRound(ctx: Ctx, issue: number, base: string, mode: TestMode): Promise<void> {
   if (readOutput(agentHome(workDir(ctx, issue), GAME_DIR), 'check-failure.md') === null) throw new Error(`Issue #${issue} waits for a check fix, but its work clone has no .factory/check-failure.md`);
-  await agentRound(ctx, issue, 'test-fix', 'checks-fix', base, mode !== 'harden');
+  if (!(await agentRound(ctx, issue, 'test-fix', 'checks-fix', base, mode !== 'harden'))) return;
   setPhase(ctx, issue, 'checks-after-fix');
 }
 
@@ -73,15 +76,19 @@ export async function requireBaseMerged(ctx: Ctx, issue: number, base: string, c
 
 // `round` names the session, so the review's fix and the checks' fix each resume their own conversation.
 // A round that `shows` leaves the approval and the evidence a post needs. The checks stage reads them, and the evidence must match the branch head.
-async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'harden' | 'test-fix', round: 'test' | 'harden' | 'review-fix' | 'checks-fix', base: string, shows: boolean): Promise<void> {
+// It also leaves the agent's reading of those images. Returns false when that reading sent the card back, so no post follows.
+async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'harden' | 'test-fix', round: 'test' | 'harden' | 'review-fix' | 'checks-fix', base: string, shows: boolean): Promise<boolean> {
   const vars = { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) };
-  const evidenceRules = shows ? fillPrompt('test-fix-evidence', vars).trimEnd() : 'No post follows this round, so leave the approval and the evidence as they are.';
-  await runAgent(ctx, issue, 'verify', round, fillPrompt(prompt, prompt === 'test-fix' ? { ...vars, evidenceRules } : vars));
+  const visualRules = fillPrompt('visual-review', { taskFile: TASK_FILE(issue) }).trimEnd();
+  const evidenceRules = shows ? `${fillPrompt('test-fix-evidence', vars).trimEnd()}\n\n${visualRules}` : 'No post follows this round, so leave the approval and the evidence as they are.';
+  await runAgent(ctx, issue, 'verify', round, fillPrompt(prompt, prompt === 'test-fix' ? { ...vars, evidenceRules } : prompt === 'test' ? { ...vars, visualRules } : vars));
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
   throwIfNeedsCommittee(home);
   if (shows) readApproval(home);
   await guardAndPush(ctx, issue, base, 'verify');
-  if (shows) readEvidence(home, await ctx.repo.headHash(BRANCH(issue)));
+  if (!shows) return true;
+  const head = await ctx.repo.headHash(BRANCH(issue));
+  return visualGate(ctx, issue, home, head, readEvidence(home, head));
 }
 
 export function readApproval(home: string): Approval {

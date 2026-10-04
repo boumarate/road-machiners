@@ -60,6 +60,8 @@ A `location` needs three images. A `system` needs an image with `"sheet": true`.
 Files are plain relative names inside `.factory/`, PNG, JPEG or WebP, under 10 MB, and a PNG's sides add up to under 10000 pixels.
 The factory rejects the manifest when `commit` is not the final head of the branch, so write it last, after your final commit.
 
+{{visualRules}}
+
 Write `.factory/approval.json` with this shape.
 `{"description": "...", "howToTry": "..."}`
 The description is plain text about what changed, under 300 characters.

@@ -18,7 +18,8 @@ type Feature = { name: string; kind: Kind };
 // `covers` names the features the image shows. `sheet` marks a labeled contact sheet built from real screenshots.
 export type EvidenceImage = { path: string; description: string; covers: string[]; sheet: boolean };
 // The ordered images of one task. The first is the primary, `.factory/screenshot.png`.
-export type Evidence = { images: EvidenceImage[] };
+// `features` names what the manifest says changed. It is empty when there is no manifest.
+export type Evidence = { images: EvidenceImage[]; features: string[] };
 
 // The agent's manifest `.factory/evidence.json`:
 // {"commit": "<git rev-parse HEAD>", "features": [{"name": "Salvage yard", "kind": "location"}],
@@ -27,13 +28,13 @@ export type Evidence = { images: EvidenceImage[] };
 export function readEvidence(home: string, head: string | null): Evidence {
   const out = join(home, OUT_DIR);
   const manifest = join(out, MANIFEST_FILE);
-  if (!existsSync(manifest)) return { images: [{ path: join(out, PRIMARY_FILE), description: '', covers: [], sheet: false }] };
+  if (!existsSync(manifest)) return { images: [{ path: join(out, PRIMARY_FILE), description: '', covers: [], sheet: false }], features: [] };
   const data = JSON.parse(readFileSync(manifest, 'utf8')) as Record<string, unknown>;
   if (head !== null) requireHead(data.commit, head);
   const features = parseFeatures(data.features);
   const images = parseImages(data.images, features, out);
   requireCoverage(features, images);
-  return { images };
+  return { images, features: features.map((feature) => feature.name) };
 }
 
 // The evidence must come from the final branch. An agent that changed code after it captured has to capture again.
