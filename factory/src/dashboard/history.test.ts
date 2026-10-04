@@ -12,7 +12,7 @@ it('streams new ledger lines once and keeps private routes out of public history
       { model: 'sonnet', costUsd: 1.5, minutes: 5, modelUsage: [{ model: 'sonnet', input: 10, output: 20, cacheRead: 30, cacheWrite: 40, cost: 1.5 }] },
     ] });
     appendLedger(home, { kind: 'route', issue: 12, route: 'answer', by: 'PRIVATE', at: '2026-10-10T11:00:00Z' });
-    const history = new DashboardHistory(home);
+    const history = new DashboardHistory(home, 60000);
     await history.refresh(now);
     await history.refresh(now);
     const summary = history.summarize(now, 1);
@@ -33,11 +33,12 @@ it('reports token coverage as missing for older cost-only records', async () => 
   try {
     const now = new Date('2026-10-10T12:00:00Z');
     appendLedger(home, { kind: 'job', id: 'old', stage: 'verify', issue: 9, startedAt: '2026-10-10T10:00:00Z', endedAt: '2026-10-10T11:00:00Z', outcome: 'timeout', agents: [{ model: 'sonnet', costUsd: 2, minutes: 1 }] });
-    const history = new DashboardHistory(home);
+    const history = new DashboardHistory(home, 60000);
     await history.refresh(now);
     const summary = history.summarize(now, 1);
     expect(summary.tokens).toBeNull();
     expect(summary.cost).toBe(2);
+    expect(summary.daily).toEqual([{ day: '2026-10-10', cost: 2, tokens: null }]);
     expect(summary.missingUsage).toBe(1);
     expect(summary.timeouts).toBe(1);
   } finally { rmSync(home, { recursive: true, force: true }); }

@@ -151,7 +151,8 @@ def test_write_inbox_is_atomic(tmp_path, monkeypatch):
 
 def env(tmp_path):
     return {
-        "FACTORY_INBOX": "/in", "FACTORY_STATE_DIR": "/st", "FACTORY_COMMITTEE_CHAT": "-100",
+        "FACTORY_INBOX": "/in", "FACTORY_STATE_DIR": str(tmp_path / "state"), "FACTORY_COMMITTEE_CHAT": "-100",
+        "FACTORY_OBSERVATION_HEARTBEAT_MS": "10000",
         "FACTORY_COMMITTEE_DIR": str(tmp_path / "committee"),
         "FACTORY_COMMITTEE_BOOTSTRAP": "1", "FACTORY_COMMITTEE_BOOTSTRAP_GITHUB": "boss",
     }
@@ -159,7 +160,7 @@ def env(tmp_path):
 
 def test_load_config(tmp_path):
     cfg = plugin.load_config(env(tmp_path))
-    assert (cfg.inbox, cfg.state_dir, cfg.chat) == ("/in", "/st", "-100")
+    assert (cfg.inbox, cfg.state_dir, cfg.chat) == ("/in", str(tmp_path / "state"), "-100")
     assert cfg.committee.bootstrap == "1"
 
 
@@ -181,7 +182,7 @@ def test_register_seeds_the_file(tmp_path):
     finally:
         plugin.os.environ.clear()
         plugin.os.environ.update(old)
-    assert hooks == ["pre_gateway_dispatch"]
+    assert hooks == ["pre_gateway_dispatch", "pre_llm_call", "pre_api_request", "pre_tool_call", "post_tool_call", "on_session_end", "on_session_finalize"]
     data = json.loads((tmp_path / "committee" / "committee.json").read_text())
     assert data == {"members": [{"telegram": "1", "github": "boss", "name": None}]}
 

@@ -3,7 +3,7 @@ import { isAbsolute } from 'node:path';
 export type DashboardConfig = {
   home: string; repo: string; projectOwner: string; projectNumber: number; publicUrl: string;
   playUrl: string; channelUrl: string | null; publicChannel: string | null; socket: string | null; port: number | null;
-  refreshMs: number; githubRefreshMs: number; commandTimeoutMs: number;
+  refreshMs: number; githubRefreshMs: number; commandTimeoutMs: number; observationHeartbeatMs: number; tickIntervalMs: number;
   triageWorkers: number; designWorkers: number; implementWorkers: number; verifyWorkers: number; testWorkers: number;
 };
 function requireValue(env: NodeJS.ProcessEnv, key: string): string {
@@ -60,6 +60,7 @@ export function loadDashboardConfig(env: NodeJS.ProcessEnv): DashboardConfig {
     ...readChannel(env),
     ...readListener(env), refreshMs: readPositive(env, 'DASHBOARD_REFRESH_MS'), githubRefreshMs: readPositive(env, 'DASHBOARD_GITHUB_REFRESH_MS'),
     commandTimeoutMs: readPositive(env, 'DASHBOARD_COMMAND_TIMEOUT_MS'),
+    observationHeartbeatMs: readPositive(env, 'FACTORY_OBSERVATION_HEARTBEAT_MS'), tickIntervalMs: readPositive(env, 'FACTORY_TICK_MINUTES') * 60000,
     triageWorkers: readPositive(env, 'FACTORY_TRIAGE_WORKERS'), designWorkers: readPositive(env, 'FACTORY_DESIGN_WORKERS'),
     implementWorkers: readPositive(env, 'FACTORY_IMPLEMENT_WORKERS'), verifyWorkers: readPositive(env, 'FACTORY_VERIFY_WORKERS'),
     testWorkers: readPositive(env, 'FACTORY_TEST_WORKERS'),

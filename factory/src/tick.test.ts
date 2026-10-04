@@ -222,7 +222,7 @@ describe('tick', () => {
     expect(readState(h.ctx.statePath).failures[0].error).toBe('timed out after 30 minutes');
     expect(h.sent).toEqual([]);
     expect(readState(h.ctx.statePath).jobs).toEqual([]);
-    expect(readLedger(h.ctx.cfg.home, new Date(0))).toEqual([{ kind: 'job', id: 'design-job', stage: 'design', issue: 5, startedAt: '2026-01-10T11:00:00Z', endedAt: NOW.toISOString(), outcome: 'timeout', agents: [] }]);
+    expect(readLedger(h.ctx.cfg.home, new Date(0)).filter((line) => line.kind === 'job')).toEqual([{ kind: 'job', retryOf: null, id: 'design-job', stage: 'design', issue: 5, startedAt: '2026-01-10T11:00:00Z', endedAt: NOW.toISOString(), outcome: 'timeout', agents: [] }]);
   });
 
   it('times a job by the limit of its own queue', async () => {
@@ -269,7 +269,7 @@ describe('tick', () => {
     expect(h.labels).toEqual([]);
     expect(readState(h.ctx.statePath).failures).toMatchObject([{ stage: 'change', issue: null, error: 'job process died without finishing' }]);
     expect(readState(h.ctx.statePath).jobs).toEqual([]);
-    expect(readLedger(h.ctx.cfg.home, new Date(0))).toMatchObject([{ id: 'change-job', outcome: 'died' }]);
+    expect(readLedger(h.ctx.cfg.home, new Date(0)).filter((line) => line.kind === 'job')).toMatchObject([{ id: 'change-job', outcome: 'died' }]);
   });
 
   it('starts the chosen jobs and records each with its id', async () => {
@@ -452,7 +452,7 @@ describe('tick', () => {
       expect(after.failures).toEqual([]);
       expect(h.labels).toEqual([]);
       expect(after.jobs.map((j) => j.pid)).toEqual([77]);
-      expect(readLedger(h.ctx.cfg.home, new Date(0))).toMatchObject([{ id: 'design-job', outcome: 'died' }]);
+      expect(readLedger(h.ctx.cfg.home, new Date(0)).filter((line) => line.kind === 'job')).toMatchObject([{ id: 'design-job', outcome: 'died' }]);
     });
 
     it('resumes a test job too', async () => {

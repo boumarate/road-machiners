@@ -32,6 +32,7 @@ services:
       TELEGRAM_HOME_CHANNEL: ${FACTORY_COMMITTEE_CHAT:?set FACTORY_COMMITTEE_CHAT}
       FACTORY_INBOX: /factory/home/inbox
       FACTORY_STATE_DIR: /factory/home/state
+      FACTORY_OBSERVATION_HEARTBEAT_MS: ${FACTORY_OBSERVATION_HEARTBEAT_MS:?set FACTORY_OBSERVATION_HEARTBEAT_MS}
     volumes:
       - ${FACTORY_HERMES_DIR:-${FACTORY_HOME:?set FACTORY_HOME}/hermes}:/opt/data
       # Hermes manages the factory: it reads and edits the whole factory home and reads the factory code. SOUL.md names these paths.

@@ -8,6 +8,8 @@ export type ReleaseStage = 'release' | 'candidate' | 'ship' | 'remove';
 export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste' | 'intake' | 'tick';
 
 export type FactoryConfig = {
+  observationHeartbeatMs: number;
+  observationMaxEventBytes: number;
   repo: string; // "owner/name" on GitHub
   projectOwner: string;
   projectNumber: number;
@@ -54,7 +56,7 @@ export type FactoryConfig = {
   cpuTest: number; // share of the server's CPUs for testing
 };
 
-export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string };
+export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string; onStdout?: (chunk: string) => void };
 export type RunResult = { code: number; stdout: string; stderr: string };
 // Runs a program without a shell. Tests pass a fake that records calls.
 export type Run = (cmd: string, args: string[], opts?: RunOptions) => Promise<RunResult>;

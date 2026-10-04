@@ -1,6 +1,6 @@
 # Factory dashboard
 
-The read-only dashboard exposes factory jobs, release contents, cost and token estimates, public Telegram announcements and host measurements at `/factory/`. It does not run factory jobs or grant visitors controls.
+The read-only dashboard explains factory work at `/factory/`. Overview shows activity, scheduling waits, release gates and server load. Analytics shows measured usage and time. Visitors cannot start jobs or change state.
 
 ## Local use
 
@@ -9,10 +9,18 @@ From `factory/`, run `npm ci`, copy `dashboard/.env.example` to `dashboard/.env`
 ## Measurements and privacy
 
 - The existing factory ledger owns job outcomes, durations and CLI cost estimates. New agent entries also record final whole-tree `modelUsage` token totals. Older ledger entries have cost but no token counts. Missing token counts display as unavailable, not zero.
-- Today, seven days and thirty days use rolling UTC windows. Worker time sums completed jobs. Concurrent time counts once per worker. Factory-managed jobs exclude Hermes chat, external agent runs, audio and hosting charges.
-- CPU uses host counter changes. Linux RAM uses `MemAvailable`. GPU requires `nvidia-smi`. SSD describes the filesystem containing `FACTORY_HOME`. Unsupported or failed readings are unavailable.
-- The Telegram panel is hidden while `DASHBOARD_HIDE_TELEGRAM=1`. The API returns no channel link or posts. When enabled, only records tagged with the configured public chat are shown. Earlier untagged records and records sent to another chat are excluded, even after the channel changes.
+- The 24-hour, seven-day and thirty-day ranges use rolling UTC windows. Worker time sums completed job durations, including concurrent workers separately. Factory-managed usage excludes Hermes chat, external agent runs, audio and hosting charges. Resumed cumulative sessions contribute only their additional reported usage. Repeat attempts group time and cost by their previous outcome.
+- Waiting time sums observed non-running task intervals, once per task and stage even when several reasons apply. Gaps beyond three tick intervals are excluded and counted. Older history has no waiting measurements. Daily charts distinguish missing measurements from zero.
+- Runner heartbeats establish liveness. Completed operations establish progress. Agent activity reports are labelled separately and do not prove a successful check. Scheduler explanations come from job selection, not dashboard inference. Hermes hooks report safe categories, with optional intent from `factory_report_activity`.
+- CPU uses host counter changes. Container CPU uses Docker measurements divided by the host CPU count, so both use whole-host percentages. Container labels associate measurements with workers or Hermes. Linux RAM uses `MemAvailable`. GPU requires `nvidia-smi`. SSD describes the filesystem containing `FACTORY_HOME`. Host-process attribution, CPU-pool pressure and GPU ownership are not measured. Unsupported or failed readings stay unavailable, and attributed totals need not equal host totals.
+- The dashboard has no Telegram panel. While `DASHBOARD_HIDE_TELEGRAM=1`, the API returns no channel link or posts. If enabled separately, the API includes only records tagged with the configured public chat. Untagged records and other chats stay excluded.
 - The collector reads the ledger incrementally. It retains up to thirty days of records in memory. A failed source keeps its last successful snapshot with a stale marker.
+
+## Display and reporting
+
+Overview fits 1440×900 and 1366×768 at normal zoom. Growing lists use counted pagination. Narrow screens scroll instead of hiding panels. Focus truncated text to read it, then press Enter to focus its full-text view and Escape to return. Tabs support arrow keys. Analytics counters expose exact values on focus.
+
+`FACTORY_OBSERVATION_HEARTBEAT_MS` and `FACTORY_OBSERVATION_MAX_EVENT_BYTES` in `settings.env` control liveness sampling and structured-event bounds. `factory-status <activity>` lets workers report a phase change without free text. Native Hermes hooks supply manager activity. The standard updater rebuilds both images when their source changes. Existing workers continue on their original release, so their new readings can remain unavailable until later jobs start.
 
 ## First production installation
 
@@ -21,6 +29,15 @@ After a dashboard code change reaches `main`, the standard updater installs the 
 The dashboard listens on `/opt/factory/dashboard/http.sock`. Caddy mounts this directory read-only and proxies `/factory/` to the socket. The existing root redirect and game build paths stay in Caddy. Later main updates create a release-local link to the persistent dashboard configuration and restart the dashboard after switching releases. A failed dashboard restart leaves the updater's restart marker for inspection. The factory release swap still follows its existing rules.
 
 Check `systemctl status roam-factory-dashboard.service`, `/opt/factory/home/logs/dashboard.log`, `https://<domain>/factory/health` and `https://<domain>/factory/` after installation. The public page should update through `/factory/api/events`. A `POST` must return 405 and a private path must return 404. Deployment requires a reachable host. Tests do not establish live service health.
+
+## Browser checks
+
+From the repository root, with root, factory and game dependencies installed, run the isolated fixture check below. The image must match the installed Playwright version. It reads the checkout, writes screenshots only under `tmp/browser-evidence`, and has no network access. It tests desktop fit, pagination, live updates, keyboard details, missing data and escaped markup.
+
+```sh
+mkdir -p tmp/browser-evidence
+docker run --rm --init --network none --memory 2g --cpus 2 --shm-size 512m --mount type=bind,src="$PWD",dst=/work,readonly --mount type=bind,src="$PWD/tmp/browser-evidence",dst=/evidence --workdir /work mcr.microsoft.com/playwright:v1.63.0-noble node factory/dashboard/browser.test.mjs /work/game/node_modules/playwright/index.mjs /evidence
+```
 
 ## Fonts
 

@@ -16,7 +16,7 @@ it('publishes only explicit operational fields, never private state or raw error
   };
   const result = buildOperations(state, false, { triageWorkers: 1, designWorkers: 2, implementWorkers: 2, verifyWorkers: 2, testWorkers: 2, publicUrl: 'https://example.org' });
   expect(result.status).toBe('blocked');
-  expect(result.jobs).toEqual([{ stage: 'change', issue: null, startedAt: '2026-01-01T00:00:00Z', queue: 'branch' }]);
+  expect(result.jobs).toEqual([{ key: expect.stringMatching(/^[a-f0-9]{64}$/), stage: 'change', issue: null, startedAt: '2026-01-01T00:00:00Z', queue: 'branch' }]);
   expect(JSON.stringify(result)).not.toContain('PRIVATE');
   expect(JSON.stringify(result)).not.toContain('private-job-id');
   expect(result.queues.branch).toEqual({ busy: 1, total: 1 });
@@ -31,7 +31,7 @@ it('only publishes a candidate link while the current candidate is valid', () =>
 });
 
 function createConfig(home: string): DashboardConfig {
-  return { home, repo: 'owner/game', projectOwner: 'owner', projectNumber: 1, publicUrl: 'https://example.org', playUrl: 'https://owner.itch.io/game', channelUrl: 'https://t.me/roam_public', publicChannel: '@roam_public', socket: null, port: 8787, refreshMs: 2000, githubRefreshMs: 60000, commandTimeoutMs: 15000, triageWorkers: 1, designWorkers: 2, implementWorkers: 2, verifyWorkers: 2, testWorkers: 2 };
+  return { home, repo: 'owner/game', projectOwner: 'owner', projectNumber: 1, publicUrl: 'https://example.org', playUrl: 'https://owner.itch.io/game', channelUrl: 'https://t.me/roam_public', publicChannel: '@roam_public', socket: null, port: 8787, refreshMs: 2000, githubRefreshMs: 60000, commandTimeoutMs: 15000, observationHeartbeatMs: 10000, tickIntervalMs: 60000, triageWorkers: 1, designWorkers: 2, implementWorkers: 2, verifyWorkers: 2, testWorkers: 2 };
 }
 class FixtureGithub extends PublicGitHub {
   failed = false;

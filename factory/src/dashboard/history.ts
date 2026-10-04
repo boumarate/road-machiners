@@ -2,6 +2,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { lineTime, type AgentUsage, type LedgerLine, type ModelUsage } from '../ledger';
 import type { JobStage } from '../types';
+import type { Observation, SchedulerData } from '../observability';
 
 const DAY_MS = 86_400_000;
 type Job = Extract<LedgerLine, { kind: 'job' }>;
@@ -11,8 +12,10 @@ type Summary = {
   cost: number | null; tokens: Counts | null; missingUsage: number; collectionFaults: number;
   models: ModelUsage[]; stages: { stage: string; workerMs: number; cost: number | null }[];
   issues: { issue: number; workerMs: number; cost: number | null }[];
-  daily: { day: string; cost: number; tokens: Counts }[];
+  daily: { day: string; cost: number; tokens: Counts | null }[];
   activity: { stage: JobStage; issue: number | null; outcome: string; at: string }[];
+  waitingMs: number | null; waitingStages: { stage: string; workerMs: number }[]; waitingGaps: number;
+  retries: { outcome: string; runs: number; workerMs: number; cost: number | null }[];
 };
 type StageRow = Summary['stages'][number];
 type IssueRow = Summary['issues'][number];
@@ -29,7 +32,7 @@ function getPublicIssue(job: Job): number | null {
   return job.stage === 'change' || job.stage === 'adhoc' ? null : job.issue;
 }
 function createSummary(days: number, since: string | null): Summary {
-  return { days, since, completed: 0, failed: 0, timeouts: 0, workerMs: 0, cost: null, tokens: null, missingUsage: 0, collectionFaults: 0, models: [], stages: [], issues: [], daily: [], activity: [] };
+  return { days, since, completed: 0, failed: 0, timeouts: 0, workerMs: 0, cost: null, tokens: null, missingUsage: 0, collectionFaults: 0, waitingMs: null, waitingStages: [], waitingGaps: 0, retries: [], models: [], stages: [], issues: [], daily: [], activity: [] };
 }
 function addCost(summary: Summary, stage: StageRow, issue: IssueRow | null, cost: number): void {
   summary.cost = (summary.cost ?? 0) + cost;
@@ -38,14 +41,16 @@ function addCost(summary: Summary, stage: StageRow, issue: IssueRow | null, cost
 }
 function addAgent(summary: Summary, totals: Totals, job: Job, agent: AgentUsage, stage: StageRow, issue: IssueRow | null): void {
   addCost(summary, stage, issue, agent.costUsd);
-  if (!agent.modelUsage?.length) { summary.missingUsage++; return; }
-  addMeasuredUsage(summary, totals, job.endedAt.slice(0, 10), agent.costUsd, agent.modelUsage);
-}
-function addMeasuredUsage(summary: Summary, totals: Totals, day: string, cost: number, measurements: ModelUsage[]): void {
-  summary.tokens ??= createCounts();
-  const daily = totals.daily.get(day) ?? { day, cost: 0, tokens: createCounts() };
-  daily.cost += cost;
+  const day = job.endedAt.slice(0, 10);
+  const daily = totals.daily.get(day) ?? { day, cost: 0, tokens: null };
+  daily.cost += agent.costUsd;
   totals.daily.set(day, daily);
+  if (!agent.modelUsage?.length) { summary.missingUsage++; return; }
+  addMeasuredUsage(summary, totals, daily, agent.modelUsage);
+}
+function addMeasuredUsage(summary: Summary, totals: Totals, daily: DailyRow, measurements: ModelUsage[]): void {
+  summary.tokens ??= createCounts();
+  daily.tokens ??= createCounts();
   for (const usage of measurements) addModel(summary.tokens, totals.models, daily.tokens, usage);
 }
 function addModel(tokens: Counts, models: Map<string, ModelUsage>, daily: Counts, usage: ModelUsage): void {
@@ -66,7 +71,11 @@ function addJob(summary: Summary, totals: Totals, job: Job): void {
   const publicIssue = getPublicIssue(job);
   summary.activity.push({ stage: job.stage, issue: publicIssue, outcome: job.outcome === 'done' ? 'finished' : job.outcome, at: job.endedAt });
   const { stage, issue } = getJobRows(totals, job, publicIssue, duration);
+  summary.missingUsage += countMissingRuns(job);
   for (const agent of job.agents) addAgent(summary, totals, job, agent, stage, issue);
+}
+function countMissingRuns(job: Job): number {
+  return Number(!job.agents.length && ['triage', 'design', 'implement', 'patch', 'verify', 'change', 'adhoc', 'incident', 'waste'].includes(job.stage));
 }
 function getJobRows(totals: Totals, job: Job, publicIssue: number | null, duration: number): { stage: StageRow; issue: IssueRow | null } {
   const stage = totals.stages.get(job.stage) ?? { stage: job.stage, workerMs: 0, cost: null };
@@ -79,19 +88,95 @@ function getJobRows(totals: Totals, job: Job, publicIssue: number | null, durati
   return { stage, issue };
 }
 
+function subtractMeasurement(current: number, previous: number): number {
+  const value = current - previous;
+  if (!Number.isFinite(value) || value < 0) throw new Error('Cumulative usage decreased');
+  return value;
+}
+function subtractModel(current: ModelUsage, previous: ModelUsage): ModelUsage {
+  return { model: current.model, cost: subtractMeasurement(current.cost, previous.cost), input: subtractMeasurement(current.input, previous.input), output: subtractMeasurement(current.output, previous.output), cacheRead: subtractMeasurement(current.cacheRead, previous.cacheRead), cacheWrite: subtractMeasurement(current.cacheWrite, previous.cacheWrite) };
+}
+function reconcileModels(current: AgentUsage, previous: AgentUsage): ModelUsage[] | undefined {
+  if (!current.modelUsage || !previous.modelUsage) return undefined;
+  return current.modelUsage.map((model) => {
+    const prior = previous.modelUsage!.find((row) => row.model === model.model);
+    return prior ? subtractModel(model, prior) : model;
+  });
+}
+function reconcileAgent(agent: AgentUsage, sessions: Map<string, AgentUsage>): AgentUsage {
+  if (!agent.sessionId) return agent;
+  const prior = sessions.get(agent.sessionId);
+  sessions.set(agent.sessionId, agent);
+  if (!agent.resumed || !prior) return agent;
+  return { ...agent, costUsd: subtractMeasurement(agent.costUsd, prior.costUsd), modelUsage: reconcileModels(agent, prior) };
+}
+function reconcileJobs(records: LedgerLine[]): Job[] {
+  const sessions = new Map<string, AgentUsage>();
+  return records.filter((line): line is Job => line.kind === 'job').map((job) => ({ ...job, agents: job.agents.map((agent) => reconcileAgent(agent, sessions)) }));
+}
+function addRetry(summary: Summary, jobs: Job[], job: Job): void {
+  if (!job.retryOf) return;
+  const outcome = readPreviousOutcome(jobs, job.retryOf);
+  const row = summary.retries.find((item) => item.outcome === outcome) ?? { outcome, runs: 0, workerMs: 0, cost: null };
+  if (!summary.retries.includes(row)) summary.retries.push(row);
+  row.runs++;
+  row.workerMs += Date.parse(job.endedAt) - Date.parse(job.startedAt);
+  for (const agent of job.agents) row.cost = (row.cost ?? 0) + agent.costUsd;
+}
+function readPreviousOutcome(jobs: Job[], id: string): string { return jobs.find((job) => job.id === id)?.outcome ?? 'unknown'; }
+function retainRecord(line: LedgerLine): boolean { return line.kind !== 'observation' || line.data.type === 'scheduler'; }
+type SchedulerPoint = Observation & { data: SchedulerData };
+function addWaitInterval(summary: Summary, point: SchedulerPoint, duration: number): void {
+  if (point.data.report === null) return;
+  summary.waitingMs ??= 0;
+  const waiting = point.data.report.decisions.filter((decision) => decision.reasons.length && !decision.reasons.includes('issue-running'));
+  const issues = new Set<string>();
+  for (const decision of waiting) {
+    const key = `${decision.stage}:${decision.issue}`;
+    if (issues.has(key)) continue;
+    issues.add(key);
+    addStageWait(summary, decision.stage, duration);
+  }
+}
+function addStageWait(summary: Summary, stage: string, duration: number): void {
+  const row = summary.waitingStages.find((item) => item.stage === stage) ?? { stage, workerMs: 0 };
+  if (!summary.waitingStages.includes(row)) summary.waitingStages.push(row);
+  row.workerMs += duration;
+  summary.waitingMs = (summary.waitingMs ?? 0) + duration;
+}
+function addWaiting(summary: Summary, records: LedgerLine[], now: Date, days: number, budgetMs: number): void {
+  const points = records.filter((line): line is SchedulerPoint => line.kind === 'observation' && line.data.type === 'scheduler');
+  const start = now.getTime() - days * DAY_MS;
+  for (let index = 0; index < points.length; index++) {
+    const point = points[index];
+    const at = Date.parse(point.at);
+    const end = index + 1 < points.length ? Date.parse(points[index + 1].at) : now.getTime();
+    if (end < start) continue;
+    if (end - at > budgetMs) summary.waitingGaps++;
+    const duration = Math.max(0, Math.min(end, at + budgetMs, now.getTime()) - Math.max(at, start));
+    addWaitInterval(summary, point, duration);
+  }
+}
+
+function parseHistoryRecord(text: string): LedgerLine {
+  const line = JSON.parse(text) as LedgerLine;
+  if (!['job', 'route', 'post', 'observation'].includes(line.kind)) throw new Error('Invalid ledger line');
+  if (!Number.isFinite(Date.parse(lineTime(line)))) throw new Error('Invalid ledger timestamp');
+  return line;
+}
+
 export class DashboardHistory {
   private offset = 0;
   private remainder = '';
   private records: LedgerLine[] = [];
   private first: string | null = null;
-  constructor(private readonly home: string) {}
+  constructor(private readonly home: string, private readonly tickIntervalMs: number) {}
   private consumeLine(text: string, now: Date): void {
     if (!text.trim()) return;
-    const line = JSON.parse(text) as LedgerLine;
-    if (!['job', 'route', 'post'].includes(line.kind)) throw new Error('Invalid ledger line');
+    const line = parseHistoryRecord(text);
     const at = lineTime(line);
-    if (!Number.isFinite(Date.parse(at))) throw new Error('Invalid ledger timestamp');
     this.first ??= at;
+    if (!retainRecord(line)) return;
     if (Date.parse(at) >= now.getTime() - 30 * DAY_MS) this.records.push(line);
   }
   private consumeChunk(chunk: string, now: Date): void {
@@ -114,9 +199,13 @@ export class DashboardHistory {
   summarize(now: Date, days: number): Summary {
     const summary = createSummary(days, this.first);
     const totals: Totals = { stages: new Map(), issues: new Map(), models: new Map(), daily: new Map() };
-    for (const line of this.records) {
-      if (line.kind === 'job' && Date.parse(line.endedAt) >= now.getTime() - days * DAY_MS) addJob(summary, totals, line);
+    const jobs = reconcileJobs(this.records);
+    for (const job of jobs) {
+      if (Date.parse(job.endedAt) < now.getTime() - days * DAY_MS) continue;
+      addJob(summary, totals, job);
+      addRetry(summary, jobs, job);
     }
+    addWaiting(summary, this.records, now, days, this.tickIntervalMs * 3);
     summary.stages = [...totals.stages.values()];
     summary.issues = [...totals.issues.values()].sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0));
     summary.models = [...totals.models.values()];

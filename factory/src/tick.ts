@@ -7,6 +7,7 @@ import { freeGb } from './health';
 import { failureIssue, pruneFailures, reportFailure } from './fail';
 import { intake } from './intake';
 import { recordJob } from './ledger';
+import { reportAttempt, reportScheduler } from './observability';
 import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
@@ -86,13 +87,20 @@ function cardCandidates(state: FactoryState, cards: Card[]): Candidate[] {
 }
 
 // The candidate waits until the tracking issue is healthy and every release task is done.
-function candidateJob(state: FactoryState, cards: Card[]): JobPick | null {
+export type ReleaseGate = { reason: 'uncut' | 'tracking-missing' | 'failed' | 'release-tasks' | 'candidate' | 'ship-approval'; issues: number[] };
+export function readReleaseGate(state: FactoryState, cards: Card[]): ReleaseGate {
   const release = state.release;
-  if (release === null || release.postId !== null) return null;
+  if (release === null) return { reason: 'uncut', issues: [] };
+  if (release.postId !== null) return { reason: 'ship-approval', issues: [] };
   const tracking = cards.find((card) => card.issue === release.issue);
-  if (!tracking || tracking.labels.includes(STUCK_LABEL)) return null;
-  if (cards.some((card) => card.labels.includes(RELEASE_TASK_LABEL) && card.column !== 'Done')) return null;
-  return { stage: 'candidate', issue: release.issue };
+  if (!tracking) return { reason: 'tracking-missing', issues: [] };
+  if (tracking.labels.includes(STUCK_LABEL)) return { reason: 'failed', issues: [release.issue] };
+  const issues = cards.filter((card) => card.labels.includes(RELEASE_TASK_LABEL) && card.column !== 'Done').map((card) => card.issue);
+  return issues.length ? { reason: 'release-tasks', issues } : { reason: 'candidate', issues: [] };
+}
+function candidateJob(state: FactoryState, cards: Card[]): JobPick | null {
+  if (readReleaseGate(state, cards).reason !== 'candidate' || state.release === null) return null;
+  return { stage: 'candidate', issue: state.release.issue };
 }
 
 // An empty lastWasteReview waits: the tick sets it to now, so the first review covers a full period of ledger.
@@ -134,25 +142,51 @@ function limits(cfg: Due): Record<Queue, number> {
 }
 
 // A job fits when its queue has a free worker and no other job works on its issue.
-function fits(pick: JobPick, running: JobPick[], cfg: Due): boolean {
+export type WaitReason = 'queue-full' | 'issue-running' | 'daily-cap' | 'needs-info' | 'failed' | 'approval';
+export type ScheduleDecision = JobPick & { reasons: WaitReason[] };
+export type ScheduleReport = { picks: JobPick[]; decisions: ScheduleDecision[]; nextCapAt: string | null; release: ReleaseGate };
+function findCapacityReasons(pick: JobPick, running: JobPick[], cfg: Due): WaitReason[] {
   const queue = QUEUE_OF[pick.stage];
-  const busy = running.filter((job) => QUEUE_OF[job.stage] === queue).length >= limits(cfg)[queue];
-  return !busy && (pick.issue === null || !running.some((job) => job.issue === pick.issue));
+  const reasons: WaitReason[] = [];
+  if (running.filter((job) => QUEUE_OF[job.stage] === queue).length >= limits(cfg)[queue]) reasons.push('queue-full');
+  if (pick.issue !== null && running.some((job) => job.issue === pick.issue)) reasons.push('issue-running');
+  return reasons;
+}
+function readCardWait(state: FactoryState, card: Card): ScheduleDecision[] {
+  const reasons: WaitReason[] = [];
+  if (card.labels.includes(STUCK_LABEL)) reasons.push('failed');
+  if (card.labels.includes(NEEDS_INFO_LABEL)) reasons.push('needs-info');
+  if (card.column === 'Approval') reasons.push('approval');
+  return reasons.length ? [{ stage: readWaitingStage(state, card), issue: card.issue, reasons }] : [];
+}
+function readWaitingStage(state: FactoryState, card: Card): JobStage {
+  return card.column === 'Approval' ? 'approve' : cardStage(state, card);
+}
+function readNextCapAt(state: FactoryState, now: Date, cfg: Due): string | null {
+  if (!atCap(state, now, cfg)) return null;
+  return new Date(Date.parse(recentStarts(state, now).sort()[0]) + DAY_MS).toISOString();
 }
 
 // Picks the jobs to start now, in priority order within each queue, next to the jobs that already run.
 // At the daily cap only the uncapped jobs start. `devHead` is the short hash of dev on origin, or null to skip the /dev/ check.
-export function chooseJobs(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): JobPick[] {
+export function evaluateSchedule(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): ScheduleReport {
   let capLeft = cfg.maxJobsPerDay - recentStarts(state, now).length;
-  const chosen: JobPick[] = [];
+  const picks: JobPick[] = [];
+  const decisions = cards.filter((card) => card.column !== 'Done' && !card.labels.includes(RELEASE_LABEL)).flatMap((card) => readCardWait(state, card));
   for (const candidate of [...branchCandidates(state, cards, now, cfg, devHead), ...wasteReview(state, now, cfg), ...cardCandidates(state, cards)]) {
     const pick = { stage: candidate.stage, issue: candidate.issue };
     const capped = candidate.uncapped ? 0 : 1;
-    if (capped > capLeft || !fits(pick, [...state.jobs, ...chosen], cfg)) continue;
+    const reasons = findCapacityReasons(pick, [...state.jobs, ...picks], cfg);
+    if (capped > capLeft) reasons.push('daily-cap');
+    decisions.push({ ...pick, reasons });
+    if (reasons.length) continue;
     capLeft -= capped;
-    chosen.push(pick);
+    picks.push(pick);
   }
-  return chosen;
+  return { picks, decisions, nextCapAt: readNextCapAt(state, now, cfg), release: readReleaseGate(state, cards) };
+}
+export function chooseJobs(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): JobPick[] {
+  return evaluateSchedule(state, cards, now, cfg, devHead).picks;
 }
 
 // Process control the tick uses. The CLI uses the real ones, and tests pass fakes.
@@ -243,6 +277,7 @@ function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): voi
   const pid = deps.spawn([pick.stage, String(pick.issue ?? '-')], codeDir, log, id, cpus);
   const job: Job = { ...pick, id, pid, startedAt: ctx.now().toISOString(), log };
   updateState(ctx.statePath, (state) => ({ ...state, jobs: [...state.jobs, job], jobStarts: countsAgainstCap(pick.stage) ? [...recentStarts(state, ctx.now()), job.startedAt] : state.jobStarts }));
+  reportAttempt(ctx.cfg.home, job, 'started', ctx.now());
   ctx.log('tick', pick.issue, `started ${pick.stage}, pid ${pid}, CPUs ${cpus}, log ${log}`);
 }
 
@@ -330,11 +365,15 @@ export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS
   updateState(ctx.statePath, pruneCaptions);
   updateState(ctx.statePath, pruneFailures(ctx.now()));
   const free = freeGb(ctx.cfg.home);
-  if (free < ctx.cfg.minFreeGb) return ctx.log('tick', null, `disk low: ${free} GB free, under ${ctx.cfg.minFreeGb} GB, starts nothing`);
+  if (free < ctx.cfg.minFreeGb) {
+    reportScheduler(ctx.cfg.home, 'disk-low', ctx.now());
+    return ctx.log('tick', null, `disk low: ${free} GB free, under ${ctx.cfg.minFreeGb} GB, starts nothing`);
+  }
   await ctx.repo.fetch();
   const devHead = await ctx.repo.headHash('dev');
   await noteCap(ctx, cards, devHead);
-  const picks = chooseJobs(readState(ctx.statePath), cards, ctx.now(), ctx.cfg, devHead);
-  if (picks.length === 0) return ctx.log('tick', null, 'nothing to start');
-  for (const pick of picks) startJob(ctx, codeDir, pick, deps);
+  const report = evaluateSchedule(readState(ctx.statePath), cards, ctx.now(), ctx.cfg, devHead);
+  reportScheduler(ctx.cfg.home, 'ready', ctx.now(), report, cards);
+  if (report.picks.length === 0) return ctx.log('tick', null, 'nothing to start');
+  for (const pick of report.picks) startJob(ctx, codeDir, pick, deps);
 }
