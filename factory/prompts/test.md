@@ -14,7 +14,8 @@ Then commit the merge with `git commit --no-edit`.
 The factory fails the stage if the merge is left unfinished.
 
 This round gets the change ready to show to the committee. They play it and approve it, send feedback or deny it.
-Check that the feature works for a player: play it end to end in the browser, as the task file describes it.
+Check that the feature works for a player: play it end to end, as the task file describes it.
+Playtest game behavior with the progression recorder, as `CLAUDE.md` says. Use the browser for what the screen shows.
 Fix what breaks it or blocks it, and commit the fixes on the current branch.
 Do not review the code, fix nitpicks or optimize here. That runs after the committee approves, if they do.
 

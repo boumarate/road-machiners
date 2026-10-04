@@ -1049,7 +1049,8 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   plea: 20,
   // A driver the player turned down holds it until it offers that player a tow again.
   turnedDown: null,
-  // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that player.
+  // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that truck, or until the
+  // truck drives again.
   towPromise: null,
   // A grudge against the player fades after 10 days, unless the driver settles it first.
   revenge: 2000,

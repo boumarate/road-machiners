@@ -14,7 +14,7 @@ import { hashRandom } from '../rng';
 import type { Obstacle, Vehicle, World } from '../types';
 import { siteGap } from '../sites';
 import { dist, type Vec } from '../vec';
-import { ObstacleBuckets, type Blocker } from './buckets';
+import { marksOf, ObstacleBuckets, sameMarks, type Blocker, type ObstacleMark } from './buckets';
 
 export const CELL = 0.5; // tiles per grid cell
 export const CLEARANCE = 0.4; // extra gap from obstacles on top of the vehicle radius; covers RULES.maxBulge
@@ -134,13 +134,20 @@ export function nearCliff(nav: TerrainNav, x: number, y: number, reach: number):
   return c[tileIndex(s, x, y)] === 1 || c[tileIndex(s, x + reach, y)] === 1 || c[tileIndex(s, x - reach, y)] === 1 || c[tileIndex(s, x, y + reach)] === 1 || c[tileIndex(s, x, y - reach)] === 1;
 }
 
-// Built once per obstacles array and its content. Props break and grow back in place during a turn, so a hit
-// needs the same obstacle objects in the same order.
-const staticSets = new WeakMap<Obstacle[], { items: Obstacle[]; set: StaticSet }>();
+// Built once per obstacle list. The world is cloned every turn, so the list is keyed by each obstacle's id and place
+// in order, not by identity. Props break and grow back during play, which changes the list and rebuilds the set.
+// A live world and a preview world can alternate, so a few sets stay.
+const STATIC_SETS_KEPT = 4;
+const staticSets: { marks: ObstacleMark[]; size: number; set: StaticSet }[] = [];
 
 export function staticSet(obstacles: Obstacle[], size: number): StaticSet {
-  const hit = staticSets.get(obstacles);
-  if (hit && sameItems(hit.items, obstacles)) return hit.set;
+  const at = staticSets.findIndex((e) => e.size === size && sameMarks(e.marks, obstacles));
+  if (at === 0) return staticSets[0].set;
+  if (at > 0) {
+    const [hit] = staticSets.splice(at, 1);
+    staticSets.unshift(hit);
+    return hit.set;
+  }
   const statics = obstacles.filter((o) => isDriveObstacle(o) && !isTransientWreck(o));
   // A hazard zone blocks routes like a rock, but not driving: the player may still go in by hand.
   const all = [...statics.map(driveBlocker), ...hazardZones().map((z) => ({ pos: z.pos, r: z.radius }))];
@@ -153,14 +160,9 @@ export function staticSet(obstacles: Obstacle[], size: number): StaticSet {
     costly: all.filter((_, i) => breakable[i]),
     buckets: new ObstacleBuckets(all, size),
   };
-  staticSets.set(obstacles, { items: obstacles.slice(), set });
+  staticSets.unshift({ marks: marksOf(obstacles), size, set });
+  staticSets.length = Math.min(staticSets.length, STATIC_SETS_KEPT);
   return set;
-}
-
-function sameItems(a: readonly Obstacle[], b: readonly Obstacle[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-  return true;
 }
 
 // Blockers that change during play: road and kill wrecks and the caller's extra circles.
