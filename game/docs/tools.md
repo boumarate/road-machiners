@@ -4,7 +4,7 @@ Details of the `npm run` commands and debug tools. Run them from `game/`.
 
 ## Commands
 
-- `npm run playtest` boots the game in headless Chromium on the Metal GPU, plays turns, and fails on page errors, the crash screen or low FPS. It needs the dev server running, at `--url` or the default port. Screenshots go to `.playtest/`. `--cpu` draws in software, skips the FPS check, plays 4 turns and gives each turn 60 seconds. Use it on machines without a GPU, like the factory server.
+- `npm run playtest` boots the game in headless Chromium on the GPU, plays turns, and fails on page errors, the crash screen or low FPS. The GPU is Metal on a Mac and Vulkan on Linux. It fails when Chromium falls back to software drawing. It needs the dev server running, at `--url` or the default port. Screenshots go to `.playtest/`. `--cpu` draws in software, skips the FPS check, plays 4 turns and gives each turn 60 seconds. Use it on machines without a GPU.
 - `TEST_TIMEOUTS=off` removes every time limit from `npm test` and `npm run playtest`. The factory sets it on its shared server, where a slow test is load, not a hang. There the factory's job time limit stops a hung run.
 - `npm run econ -- --seeds 1,2,3 --days 30 --policy all` plays the sim economy with bot policies and writes wages, progression and the effort of every item to `tmp/econ/`. Travel and fights are abstract, with assumption numbers in `HARNESS` in `src/data/market.ts`.
 - `npm run combat -- --enemies buggy,gunwagon,buggy+buggy --policy all --seeds 1-20` plays fights on flat open ground through the real turn pipeline and physics. The player truck stands, circles, charges or kites with auto fire. A kiting truck closes to near its longest gun range, then backs away nose first toward the foe, and NPCs run their own brains. It writes outcomes, hit rates and damage per lineup and policy to `tmp/combat/`. `--set RULES.leadError=3` changes one balance number for the run, so a tuning idea is measured before any code changes. `--trace` prints every turn.
@@ -28,7 +28,7 @@ Details of the `npm run` commands and debug tools. Run them from `game/`.
 
 ## Browser checks
 
-Drive the game with a Playwright script in `tmp/`. Launch Chromium with `--use-angle=metal --enable-gpu --ignore-gpu-blocklist`, so it renders on the real GPU. SwiftShader renders on the CPU at 10 to 20 fps, so its frame rate says nothing about the game. The game is on `window.__ROAM__` in dev. Its world is `__ROAM__.state`. To set up a situation, clone that world, edit it, and pass it to `apply()`. `debugScreenOf(x, y)` gives the screen point of a map point on the ground, for clicks.
+Drive the game with a Playwright script in `tmp/`. Launch Chromium with `--use-angle=metal --enable-gpu --ignore-gpu-blocklist`, so it renders on the real GPU. On Linux with an NVIDIA card, use `--use-angle=vulkan --enable-features=Vulkan --disable-vulkan-surface --enable-gpu --ignore-gpu-blocklist`. SwiftShader renders on the CPU at 10 to 20 fps, so its frame rate says nothing about the game. The game is on `window.__ROAM__` in dev. Its world is `__ROAM__.state`. To set up a situation, clone that world, edit it, and pass it to `apply()`. `debugScreenOf(x, y)` gives the screen point of a map point on the ground, for clicks.
 
 ## Debugging
 

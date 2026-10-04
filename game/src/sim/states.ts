@@ -54,7 +54,7 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
       // A feud that went quiet failed. Hostility ends, and the holder backs off from the other party.
       expired: (w, s) => { addState(w, 'backedOff', s.holder, s.other, { kind: 'none' }); },
       // A won robbery sends the robber to loot what the other party left behind.
-      fulfilled: (w, s) => { if (feudData(s).robbery) lootRobbed(w, s.holder, s.other); },
+      fulfilled: (w, s) => { if (isRobberyFeud(s)) lootRobbed(w, s.holder, s.other); },
     },
     work: noWork,
     binds: false,
@@ -243,6 +243,17 @@ function partyMissing(w: World, s: NpcState): boolean {
 export function feudData(s: NpcState): Extract<StateData, { kind: 'feud' }> {
   if (s.data.kind !== 'feud') throw new Error(`State ${s.id} holds no feud`);
   return s.data;
+}
+
+// Whether the state is a robbery feud. The one test of the robbery marker.
+export function isRobberyFeud(s: NpcState): boolean {
+  return s.kind === 'feud' && feudData(s).robbery;
+}
+
+// Whether the robber holds a robbery feud on the target. Drivers fighting back hold feuds that are not robberies.
+export function robbing(w: World, robberId: string, targetId: string): boolean {
+  const feud = stateOf(w, 'feud', robberId, targetId);
+  return feud !== null && isRobberyFeud(feud);
 }
 
 export function pleaData(s: NpcState): Extract<StateData, { kind: 'plea' }> {

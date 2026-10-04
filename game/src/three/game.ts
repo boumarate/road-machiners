@@ -43,6 +43,7 @@ import { HitCard } from "../ui/hitCard";
 import type { UiHost } from "../ui/host";
 import { Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
+import type { RadioPanel } from "../ui/radio";
 import { TownScreen, TruckTradeScreen } from "../ui/town";
 import { aimAtPart, HoverHold, toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
@@ -191,6 +192,7 @@ export class Game {
     overlay: HTMLElement,
     player: SoundPlayer,
     private toggleMute: () => void,
+    radio: RadioPanel,
   ) {
     this.world = world;
     this.drive = buildDrive(this.world);
@@ -295,7 +297,7 @@ export class Game {
       dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.runKey("KeyF"),
       aimPart: (vehicleId, partId) => this.anim === null && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
-    });
+    }, radio);
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
     const saves = saveStore(window.localStorage, window.sessionStorage, () => this.world, CONFIG.saveSlots);
