@@ -8,7 +8,7 @@ import { CONDITION } from '../../data/wear';
 import { playerVehicle } from '../damage';
 import { makePart } from '../factory';
 import { goodsCount, mountedParts } from '../grid';
-import { addGoods, removeAllGoods, stowPart } from '../inventory';
+import { addGoods, mountPart, removeAllGoods, stowPart } from '../inventory';
 import { siteOf } from '../market';
 import { nearestPad, nearestTown } from '../sites';
 import { isStranded, vehicleStats } from '../stats';
@@ -290,6 +290,32 @@ describe('botOrders', () => {
     expect(mountedParts(after, 'core').every((p) => p.hp === maxHp(p))).toBe(true);
     expect(turn.ledger.gear).toBeGreaterThan(0);
     expect(turn.ledger.repairs).toBeLessThan(0);
+  });
+
+  // Haul goods ride on the roof rack's row, so the rack cannot come off for the repair money.
+  it('has a broke bot keep a rack that carries its haul when it sells gear for a repair', () => {
+    const w = parkedAt('bowl');
+    const me = playerVehicle(w);
+    expect(mountPart(w, me, makePart(w, 'rack', 0))).toBe(true);
+    const units = addGoods(w, me, 'tools', 99);
+    w.player.contracts.push({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'tools', units, to: 'nose', reward: 300, deadline: 5000, window: 5000, rush: false, tier: 1 });
+    for (const p of mountedParts(me, 'core')) if (partDef(p.defId).id === 'transmission') p.hp = 0;
+    w.player.money = 0;
+
+    const turn = botOrders(w, 'trader');
+
+    expect(mountedParts(playerVehicle(turn.world)).map((p) => p.defId)).toContain('rack');
+  });
+
+  // A bill the gear cannot cover leaves the gear on, since selling it buys no repair.
+  it('has a broke bot keep its gear when selling it cannot pay the repair', () => {
+    const w = parkedAt('bowl');
+    for (const p of mountedParts(playerVehicle(w), 'core')) p.hp = 0;
+    w.player.money = 0;
+
+    const turn = botOrders(w, 'trader');
+
+    expect(turn.ledger.gear).toBe(0);
   });
 
   // Below the working capital a bot buys no upgrade, but a gun it lost it buys back.

@@ -21,7 +21,7 @@ import { offeredSurrenderBy } from '../parley';
 import { hashRandom } from '../rng';
 import { affordableBuyCount, basicsRepairCost, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairBasics, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
 import { corePart, findSpot, freeCells, goodsCount, gridOf, isMounted, itemCells, MOUNT_CELLS, mountedItems, mountedParts, type Spot } from '../grid';
-import { stowSpot, storePart } from '../inventory';
+import { getLayoutError, stowSpot, storePart } from '../inventory';
 import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
 import { shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
@@ -201,7 +201,7 @@ function takesTowOffer(world: World): boolean {
 // truck without an engine needs a shop that stocks one. A broken engine or transmission needs a garage.
 function towFixes(world: World, siteId: string): boolean {
   if (!(siteId in SHOPS) || shopAt(world) === siteId) return false;
-  const budget = engineBudget(world, siteId);
+  const budget = saleBudget(world, siteId);
   if (mountedParts(playerVehicle(world), 'engine').length === 0) return stockEngine(world, siteId, budget) !== null;
   return repairFits(world, siteId, budget);
 }
@@ -250,7 +250,7 @@ function needsOf(world: World): string {
 // sent the bot back to a shop that had none, again and again.
 function nearestEngineShop(world: World): Site | null {
   const pos = playerVehicle(world).pos;
-  const stocked = SHOP_SITES.filter((s) => stockEngine(world, s.id, engineBudget(world, s.id)) !== null);
+  const stocked = SHOP_SITES.filter((s) => stockEngine(world, s.id, saleBudget(world, s.id)) !== null);
   return stocked.reduce<Site | null>((best, s) => (!best || dist(pos, s.pos) < dist(pos, best.pos) ? s : best), null);
 }
 
@@ -267,7 +267,8 @@ function stockEngine(world: World, shopId: string, budget: number): { part: Part
   return engines[0] ?? null;
 }
 
-function engineBudget(world: World, shopId: string): number {
+// The money, plus what the gear for sale at this shop brings.
+function saleBudget(world: World, shopId: string): number {
   return world.player.money + gearForSale(world, shopId).reduce((sum, g) => sum + g.price, 0);
 }
 
@@ -283,8 +284,13 @@ function gearForSale(world: World, shopId: string): GearSale[] {
   const spares = spareItems(me).map((s) => sale(partOf(me, s.partId), null)).sort(byPrice);
   if (shopDef(shopId).kind !== 'garage') return spares;
   const stored = world.player.storage.map((part) => sale(part, null)).sort(byPrice);
-  const mounted = mountedItems(me).filter((it) => !['core', 'engine'].includes(partDef(it.part.defId).kind)).map((it) => sale(it.part, it.id)).sort(byPrice);
+  const mounted = mountedItems(me).filter((it) => !['core', 'engine'].includes(partDef(it.part.defId).kind) && removable(me, it)).map((it) => sale(it.part, it.id)).sort(byPrice);
   return [...spares, ...stored, ...mounted];
+}
+
+// A part that carries other items, such as a rack, cannot come off while they ride on it.
+function removable(v: Vehicle, item: GridItem): boolean {
+  return getLayoutError(v, v.items.filter((it) => it.id !== item.id)) === null;
 }
 
 function partOf(v: Vehicle, partId: string): PartInstance {
@@ -297,7 +303,7 @@ function partOf(v: Vehicle, partId: string): PartInstance {
 // gear, cheapest first, until the money covers the engine.
 function restoreEngine(o: Orders, shopId: string): void {
   if (mountedParts(o.me, 'engine').length > 0) return;
-  const engine = stockEngine(o.world, shopId, engineBudget(o.world, shopId));
+  const engine = stockEngine(o.world, shopId, saleBudget(o.world, shopId));
   if (!engine) return;
   if (o.world.player.money < engine.price || !engineSpot(o.me, engine.part.defId)) sellCargo(o);
   sellGearFor(o, shopId, engine.price);
@@ -308,18 +314,21 @@ function restoreEngine(o: Orders, shopId: string): void {
 }
 
 // Badly damaged built-in parts get fixed before fuel and supplies, with cargo and then gear sold for the bill, since
-// the truck must drive to earn. The repair waits for the end of a fight.
+// the truck must drive to earn. Gear sells only when it covers the whole bill. The repair waits for the end of a fight.
 function restoreBasics(o: Orders, shopId: string): void {
   if (inCombat(o.world, o.me) || !mountedParts(o.me, 'core').some(isBadlyDamaged)) return;
   const cost = basicsRepairCost(o.world);
   if (o.world.player.money < cost) sellCargo(o);
+  if (saleBudget(o.world, shopId) < cost) return;
   sellGearFor(o, shopId, cost);
-  if (o.world.player.money >= cost) o.run(repairBasics, 'repairs');
+  o.run(repairBasics, 'repairs');
 }
 
+// Each sale can change what else comes off, so the list is drawn again after every one.
 function sellGearFor(o: Orders, shopId: string, price: number): void {
-  for (const g of gearForSale(o.world, shopId)) {
-    if (o.world.player.money >= price) return;
+  while (o.world.player.money < price) {
+    const g = gearForSale(o.world, shopId)[0];
+    if (!g) return;
     const mounted = g.mountedItem;
     if (mounted) o.run((w) => storePart(w, mounted));
     o.run((w) => sellPart(w, g.part.id), 'gear');
