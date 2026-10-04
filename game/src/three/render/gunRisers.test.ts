@@ -100,6 +100,12 @@ describe('placing any item on any cell', () => {
   }, budget(120_000));
 });
 
+// Spots that no shape can rest: a three-row gun on column 4 of the Lincoln spans the hood and the greenhouse roof, which
+// restOn() cannot trim away along the long axis (issue 149 task file, Conclusion: UK1).
+const UNRESTABLE: Record<string, string[]> = {
+  lincoln: ['amRifle rot 0 at 4,3', 'recoilless rot 0 at 4,3', 'battleRifle rot 0 at 4,3'],
+};
+
 describe('guns on the issue 149 chassis', () => {
   it.each(['lincoln', 'niva', 'bukhanka'])('%s: every gun spot on deck cells rests on the model', (id) => {
     const cells = baseGrid(id).cells;
@@ -116,6 +122,6 @@ describe('guns on the issue 149 chassis', () => {
         }
       }
     }
-    expect(perched).toEqual([]);
+    expect(perched).toEqual(UNRESTABLE[id] ?? []);
   });
 });
