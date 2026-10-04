@@ -17,8 +17,8 @@ from kit import Kit, parse_args  # noqa: E402
 from shapes import taper  # noqa: E402
 
 COLORS = {
-    "body": 0x8A9450,  # PAL.cactus.body
-    "shade": 0x6E7840,  # PAL.cactus.shade
+    "body": 0x70764A,  # PAL.cactus.body
+    "shade": 0x585E3A,  # PAL.cactus.shade
 }
 SEED = 31
 RADIUS = 0.06  # m, column radius, about an eighth of the cluster's height as in the reference

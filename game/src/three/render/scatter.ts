@@ -30,16 +30,16 @@ const PEBBLE_ON_SHOULDER = 0.6; // share of desert road shoulder tiles with a st
 const SCRUB_ON_SCRUB = 0.45;
 // Share of other open tiles with a scrub tuft. Sparse, so bare ground still shows a stray bush.
 const SCRUB_ELSEWHERE = 0.04;
-const SCRUB_ON_DESERT = 0.35; // share of open desert tiles with a scrub clump, at full desert weight
-const CACTUS_ON_DESERT = 0.02; // share of open desert tiles with a cactus, at full desert weight. Sparse, as trucks pass through.
-const CACTUS_BY_ROCK = 0.12; // share of desert tiles by a rock or crag with a cactus, at full desert weight
+const SCRUB_ON_DESERT = 0.14; // share of open desert tiles with a scrub clump, at full desert weight
+const CACTUS_ON_DESERT = 0.01; // share of open desert tiles with a cactus, at full desert weight. Sparse, as trucks pass through.
+const CACTUS_BY_ROCK = 0.06; // share of desert tiles by a rock or crag with a cactus, at full desert weight
 const PEBBLE_RADIUS = { min: 0.025, max: 0.045 }; // tiles
 const SCRUB_RADIUS = { min: 0.07, max: 0.12 }; // tiles
 // Desert sizes: big enough to read at the default zoom, small enough that a truck driving over them does not look
 // like a crash.
 const DESERT_STONES_RADIUS = { min: 0.07, max: 0.14 }; // tiles, so the main stone is 0.2-0.4 m across as in the reference
-const DESERT_SCRUB_RADIUS = { min: 0.15, max: 0.24 }; // tiles, a clump 1.2-1.9 m across as in the reference
-const CACTUS_HEIGHT = { min: 1.1, max: 1.8 }; // meters, under the truck clearance so driving through does not look like a crash
+const DESERT_SCRUB_RADIUS = { min: 0.11, max: 0.17 }; // tiles, a clump 0.9-1.4 m across, small so it recedes
+const CACTUS_HEIGHT = { min: 0.8, max: 1.3 }; // meters, under the truck clearance so driving through does not look like a crash
 const TINT = { min: 0.85, max: 1.15 };
 
 // The models scatter draws. Desert ground takes desert stones and desert scrub in place of pebbles and scrub.
