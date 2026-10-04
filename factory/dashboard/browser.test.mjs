@@ -89,6 +89,22 @@ async function checkPagination(page) {
   assert.equal(await page.locator('#worker-rows tr').count(), 1);
   assert.ok((await page.locator('#worker-rows').textContent()).includes('Task 1 '));
 }
+async function checkPause(page) {
+  const paused = structuredClone(fixture);
+  paused.operations.value.status = 'paused';
+  paused.operations.value.pauseReason = 'agent-usage-limit';
+  await sendSnapshot(page, paused);
+  assert.match(await page.locator('#source-status').textContent(), /Paused.*Claude weekly usage limit/);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight), false);
+  await page.screenshot({ path: `${evidence}/paused-${page.viewportSize().width}.png` });
+  assert.ok(!(await page.locator('#capacity-rows').textContent()).includes('No eligible work'));
+  await page.locator('#analytics-tab').click();
+  await waitForRender(page);
+  assert.match(await page.locator('#source-status').textContent(), /Paused/);
+  await sendSnapshot(page, fixture);
+  assert.ok(!(await page.locator('#source-status').textContent()).includes('Paused'));
+  await page.locator('#overview-tab').click();
+}
 async function checkUntrustedAndMissingData(page) {
   const malicious = structuredClone(fixture);
   malicious.github.value.cards[0].title = '<img src=x onerror="window.injected=true">';
@@ -128,6 +144,7 @@ try {
     await checkLayout(page, size);
     await checkCounters(page);
     await checkPagination(page);
+    await checkPause(page);
     await checkUntrustedAndMissingData(page);
     assert.deepEqual(errors, []);
     await page.close();

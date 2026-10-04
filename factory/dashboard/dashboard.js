@@ -118,6 +118,10 @@ function renderWorkers() {
   renderCapacity(operations);
 }
 function readQueueReason(queue) {
+  if (readOperations()?.status === 'paused') return 'Starts paused';
+  return readScheduledQueueReason(queue);
+}
+function readScheduledQueueReason(queue) {
   const scheduler = readLive()?.scheduler;
   if (!scheduler || scheduler.freshness !== 'ok') return 'Reason unavailable';
   if (scheduler.status !== 'ready') return readSchedulerStatus(scheduler.status);
@@ -315,13 +319,22 @@ function renderAnalytics() {
   renderTable('retry', summary?.retries ?? [], createRetryRow, summary ? 'No linked repeat attempts' : 'Unavailable', 4);
   renderTable('model', summary?.models ?? [], createModelRow, 'No reported models', 3);
 }
+function readPauseNotice() {
+  const operations = readOperations();
+  if (operations?.status !== 'paused') return '';
+  const prefix = snapshot.operations.status === 'ok' ? 'Paused' : 'Last known state: paused';
+  const reason = operations.pauseReason === 'agent-usage-limit' ? 'Claude weekly usage limit reported. Awaiting quota reset or committee decision.' : 'Operator pause. No public reason recorded.';
+  return `${prefix}: ${reason}`;
+}
 function renderFreshness() {
   if (!snapshot) return;
   if (renderFailed) return setText('connection', 'Invalid data');
   setText('connection', connected ? `Updated ${formatAge(snapshot.generatedAt)} ago` : 'Reconnecting');
   const sources = [['State', snapshot.operations], ['GitHub', snapshot.github], ['Usage', snapshot.analytics], ['Host', snapshot.host], ['Activity', snapshot.live]];
   const failures = sources.filter(([, source]) => source?.status !== 'ok').map(([name, source]) => `${name} ${source?.status ?? 'unavailable'}`);
-  setText('source-status', failures.join(', '));
+  const pause = readPauseNotice();
+  setText('source-status', [pause, ...failures].filter(Boolean).join(' / '));
+  getElement('source-status').classList.toggle('paused', Boolean(pause));
   getElement('connection').classList.toggle('bad', !connected);
 }
 function renderOverview() { renderWorkers(); renderFunnel(); renderRelease(); renderManager(); renderServer(); renderEvents(); }
@@ -334,7 +347,7 @@ function renderSnapshot() {
   updateOverflow();
 }
 function updateOverflow() {
-  for (const node of document.querySelectorAll('td,th,.event,.capacity-row span,.clamp,.clipped,.counter strong,.funnel strong,.server-totals strong')) {
+  for (const node of document.querySelectorAll('td,th,.event,.capacity-row span,.clamp,.clipped,.counter strong,.funnel strong,.server-totals strong,.source-status')) {
     if (!node.getClientRects().length) continue;
     if (node.dataset.exact) { node.dataset.detail = node.dataset.exact; node.tabIndex = 0; continue; }
     const truncated = node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight;

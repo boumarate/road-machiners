@@ -75,6 +75,27 @@ it('retains the last good snapshot with stale markers when its sources fail', as
     expect(JSON.stringify(stale)).not.toContain('PRIVATE');
   } finally { vi.useRealTimers(); rmSync(home, { recursive: true, force: true }); }
 });
+it('reports a safe pause reason and clears it when the pause is removed', async () => {
+  const home = mkdtempSync(resolve('tmp/snapshot-'));
+  try {
+    mkdirSync(join(home, 'state'));
+    writeState(join(home, 'state', 'state.json'), structuredClone(EMPTY_STATE));
+    const config = createConfig(home);
+    const collector = new SnapshotCollector(config, new FixtureGithub(config, async () => { throw new Error('No network'); }), new FixtureHost(home, 100));
+    const pause = join(home, 'paused');
+    writeFileSync(pause, 'Hermes: Claude weekly usage limit; PRIVATE committee notes');
+    await collector.refreshLocal();
+    expect(collector.getSnapshot().operations.value).toMatchObject({ status: 'paused', pauseReason: 'agent-usage-limit' });
+    expect(JSON.stringify(collector.getSnapshot())).not.toContain('PRIVATE');
+    writeFileSync(pause, 'PRIVATE operator investigation');
+    await collector.refreshLocal();
+    expect(collector.getSnapshot().operations.value).toMatchObject({ status: 'paused', pauseReason: 'operator' });
+    expect(JSON.stringify(collector.getSnapshot())).not.toContain('PRIVATE');
+    rmSync(pause);
+    await collector.refreshLocal();
+    expect(collector.getSnapshot().operations.value).toMatchObject({ status: 'idle', pauseReason: null });
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
 it('does not expose committee posts when Telegram is hidden', async () => {
   const home = mkdtempSync(resolve('tmp/snapshot-'));
   try {
