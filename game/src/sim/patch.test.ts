@@ -598,6 +598,20 @@ describe('patching a worn truck that still drives', () => {
     expect(tank.hp).toBe(target(tank));
   });
 
+  it('breaks, with no payment, when a leaking holed tank strands the client mid-deal', () => {
+    const { w: start, npc } = wornNpc();
+    corePart(npc, 'tank')!.hp = 0;
+    npc.resources!.fuel = 4;
+    const money = npc.resources!.money;
+    let w = agree(start, npc.id, 'paid');
+    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: find(w, npc.id).pos.x - 1.5, y: find(w, npc.id).pos.y } });
+    w = runUntil(w, 80, (x) => !patchOpen(x, npc.id)).w;
+    const after = find(w, npc.id);
+    expect(isStranded(w, after)).toBe(true);
+    expect(mountedParts(after, 'engine')[0].hp).toBeLessThan(target(mountedParts(after, 'engine')[0]));
+    expect(after.resources!.money).toBe(money);
+  });
+
   it('offers nothing for a healthy, sound, junk, self-fixing, towing or player-stranded case', () => {
     const { w, npc } = wornNpc();
     expect(offered(w, npc.id)).toBe(true);

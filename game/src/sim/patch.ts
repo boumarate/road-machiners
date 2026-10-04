@@ -195,8 +195,15 @@ export function checkPatch(world: World, s: NpcState): 'fulfilled' | 'broken' | 
   if (!partiesPresent(world, s)) return null;
   const data = patchData(s);
   const roles = { patcher: vehicleById(world, s.holder), client: vehicleById(world, s.other) };
-  if (!canStillPay(world, data, roles)) return 'broken';
+  if (!canStillPay(world, data, roles) || !termsHold(world, data, roles)) return 'broken';
   return data.workLeft <= 0 ? 'fulfilled' : null;
+}
+
+// The terms were priced on one part list. A client that strands mid-deal switches lists, and then the work no longer
+// matches what was paid for.
+function termsHold(world: World, data: Extract<StateData, { kind: 'patch' }>, roles: Roles): boolean {
+  const plan = patchPlan(world, roles);
+  return plan.parts === data.parts && plan.turns === data.work;
 }
 
 function canStillPay(world: World, data: Extract<StateData, { kind: 'patch' }>, roles: Roles): boolean {
