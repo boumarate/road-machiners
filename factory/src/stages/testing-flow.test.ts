@@ -69,7 +69,7 @@ const TIMEOUT_FAILURE = ' FAIL  src/phys/drive.test.ts > climbs a hill\nError: T
 function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText = 'npm test failed: 1 failed'): Ctx {
   let failuresLeft = shellFailures;
   const fake = {
-    cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat' },
+    cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat', gpu: false },
     log: () => undefined,
     statePath: `${home}/state.json`,
     github: {
@@ -171,6 +171,14 @@ describe('testing stage', () => {
     await runStage(ctx, 7);
     expect(calls.some((call) => call.startsWith('openPullRequest'))).toBe(false);
     expect(calls.find((call) => call.startsWith('photo'))).toContain('PR: https://github.com/o/r/pull/12');
+  });
+
+  it('plays every turn with the frame rate check when the host has a GPU', async () => {
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' })));
+    ctx.cfg.gpu = true;
+    await runStage(ctx, 7);
+    expect(shellScript).toContain('\nnpm run playtest\n');
+    expect(shellScript).not.toContain('--cpu');
   });
 
   it('posts one photo with everything in the caption, records it and moves to Approval', async () => {

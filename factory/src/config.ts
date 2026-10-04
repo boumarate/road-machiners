@@ -22,6 +22,7 @@ const KEYS = {
   webRoot: 'FACTORY_WEB_ROOT',
   publicUrl: 'FACTORY_PUBLIC_URL',
   image: 'FACTORY_IMAGE',
+  gpu: 'FACTORY_GPU',
   oauthToken: 'CLAUDE_CODE_OAUTH_TOKEN',
   elevenlabsKey: 'ELEVENLABS_API_KEY',
   sfxMaxGenerations: 'SFX_MAX_GENERATIONS',
@@ -78,13 +79,20 @@ function checkCpuShares(cfg: FactoryConfig): void {
   if (sum > 1) throw new Error(`FACTORY_CPU_LIGHT, FACTORY_CPU_IMPLEMENT and FACTORY_CPU_TEST add up to ${sum}. They split the server's CPUs, so they must add up to 1 or less.`);
 }
 
-function read(field: keyof FactoryConfig, key: string, raw: string | undefined): string | number | null {
+function read(field: keyof FactoryConfig, key: string, raw: string | undefined): string | number | boolean | null {
   return raw ? parse(field, key, raw) : null;
 }
 
-function parse(field: keyof FactoryConfig, key: string, raw: string): string | number {
+function parse(field: keyof FactoryConfig, key: string, raw: string): string | number | boolean {
+  if (field === 'gpu') return onOff(key, raw);
   if (!NUMBERS.has(field)) return raw;
   const value = Number(raw);
   if (!Number.isFinite(value) || value <= 0) throw new Error(`${key} must be a positive number, got "${raw}".`);
   return value;
+}
+
+function onOff(key: string, raw: string): boolean {
+  if (raw === 'on') return true;
+  if (raw === 'off') return false;
+  throw new Error(`${key} must be on or off, got "${raw}".`);
 }

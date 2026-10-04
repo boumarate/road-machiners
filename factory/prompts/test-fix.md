@@ -9,7 +9,7 @@ Run `npm ci` before anything else. The factory removes installed packages from c
 
 If `.factory/check-failure.md` exists, the factory ran its own checks and they failed.
 The end of the check log is in that file.
-The checks are `npm ci`, `npm test`, `npm run typecheck` and `npm run playtest -- --cpu` against the dev server.
+The checks are `npm ci`, `npm test`, `npm run typecheck` and `{{playtest}}` against the dev server.
 Find the cause of every failure and fix it.
 Fix failures your change did not cause too.
 Do not raise a test's time limit to make it pass, unless your change made that test slower. The factory reruns checks that only timed out by itself, so a timeout here comes with a real failure.
@@ -31,8 +31,7 @@ Follow Save migrations in CLAUDE.md.
 Add the step, its fixture and its test, then run `npm run save:shape`.
 
 Run all the checks yourself until they pass.
-Never run the playtest without `--cpu`.
-This machine has no GPU.
+Run the playtest only as `{{playtest}}`.
 
 Reference images from the issue are listed at the end of this prompt.
 If your fixes change what a player sees and the issue wants the result to look like an image, redo the visual comparison.

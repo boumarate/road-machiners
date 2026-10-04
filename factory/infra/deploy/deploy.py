@@ -23,6 +23,8 @@ settings_path = f"{CODE_DIR}/factory/settings.env"
 as_factory = {"_sudo": True, "_sudo_user": FACTORY_USER}
 UPDATE_SCRIPT = f"{FACTORY_ROOT}/factory-update.sh"
 LAYOUT_SCRIPT = f"{FACTORY_ROOT}/factory-layout.sh"
+# The caddy stack's compose file names this path for the tunnel's env.
+TUNNEL_ENV = f"{FACTORY_ROOT}/tunnel.env"
 UPDATE_MINUTES = 2
 
 # The repo dir is the git clone of GitHub's main. A server that still has a real code folder keeps it, and factory-layout.sh moves it to the repo dir.
@@ -187,10 +189,18 @@ files.sync(
     delete=True,
     _sudo=True,
 )
+files.put(
+    name="Push the tunnel token",
+    src=StringIO(f"TUNNEL_TOKEN={settings.factory_tunnel_token}\n"),
+    dest=TUNNEL_ENV,
+    mode="600",
+    add_deploy_dir=False,
+    _sudo=True,
+)
 server.shell(
-    name="compose up: caddy",
+    name="compose up: caddy and the tunnel",
     commands=[
-        f"cd {FACTORY_ROOT}/stacks/caddy && FACTORY_DOMAIN={shlex.quote(settings.factory_domain)} FACTORY_ACME_EMAIL={shlex.quote(settings.factory_acme_email)} "
+        f"cd {FACTORY_ROOT}/stacks/caddy && FACTORY_DOMAIN={shlex.quote(settings.factory_domain)} "
         f"FACTORY_ITCH_URL={shlex.quote(itch_url)} "
         "timeout 300 docker compose up -d --remove-orphans --wait --wait-timeout 120"
     ],
@@ -203,7 +213,7 @@ server.shell(
     _sudo=True,
 )
 
-# Docker skips UFW for published ports. Fail the deploy on any published port except Caddy's 80 and 443.
+# Docker skips UFW for published ports. Fail the deploy on any published port.
 files.put(
     name="Push the published port check",
     src=str(FILES / "check-ports.sh"),
@@ -212,7 +222,7 @@ files.put(
     _sudo=True,
 )
 server.shell(
-    name="No published ports but Caddy 80 and 443",
+    name="No published ports",
     commands=[f"timeout 30 {FACTORY_ROOT}/check-ports.sh"],
     _sudo=True,
 )

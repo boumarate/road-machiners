@@ -6,7 +6,7 @@ import { postWithEvidence } from '../evidence-post';
 import { readState, updateState } from '../state';
 import { GAME_DIR, OUT_DIR, type Ctx } from '../types';
 import { bundleOf } from './bundle';
-import { agentHome, fillPrompt, readOutput, resetOutputs } from './common';
+import { agentHome, fillPrompt, playtestCommand, readOutput, resetOutputs } from './common';
 import { candidateDir, changeLines, featureLine, openReleaseTasks, releaseFeatures, releaseLog, requireRelease, trackingLink, type Feature } from './release-common';
 
 // The build of the candidate lives under this web folder, kept while the tracking card waits in Approval.
@@ -14,8 +14,8 @@ export const CANDIDATE_SCOPE = 'rc';
 
 const SERVER_TRIES = 60;
 
-// Starts the dev server with a bounded wait, plays the game on the CPU, keeps the newest screenshot, then stops the server.
-const PLAYTEST_SCRIPT = `set -u
+// Starts the dev server with a bounded wait, plays the game, keeps the newest screenshot, then stops the server.
+const playtestScript = (playtest: string) => `set -u
 mkdir -p ${OUT_DIR}
 npm ci
 npm run dev > ${OUT_DIR}/dev-server.log 2>&1 &
@@ -28,7 +28,7 @@ done
 status=1
 if [ "$ready" = 1 ]; then
   status=0
-  npm run playtest -- --cpu || status=$?
+  ${playtest} || status=$?
 else
   echo "dev server did not start in ${SERVER_TRIES} seconds"
 fi
@@ -51,7 +51,7 @@ export async function candidate(ctx: Ctx, issue: number): Promise<void> {
   resetOutputs(home);
   writeFileSync(join(home, OUT_DIR, 'changelog.md'), await changelogInput(ctx, features));
   const log = releaseLog(ctx, 'candidate');
-  await ctx.container.shell(dir, PLAYTEST_SCRIPT, log);
+  await ctx.container.shell(dir, playtestScript(playtestCommand(ctx.cfg)), log);
   await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt: fillPrompt('release', {}), log });
   const notes = readOutput(home, 'release.md');
   if (notes === null) throw new Error('release agent wrote no .factory/release.md');

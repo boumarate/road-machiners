@@ -34,7 +34,7 @@ Fix those first, then run the self-review above on every view the findings name.
 Modeling an asset from a reference image
 Use the `blender-image-to-3d` skill when the work builds or reshapes a game model that a reference image shows.
 Read its SKILL.md, then only the reference files for your asset category.
-Blender 5.2.2 is on the path, with no GPU, so pass `--engine cycles` to its review_render.py.
+Blender 5.2.2 is on the path. Pass `--engine cycles` to its review_render.py.
 ROAM models are low-poly scripts in `tools/blender/` that write a committed `.glb`.
 CLAUDE.md says how to write and build them, and it wins over the skill's build template.
 Take from the skill what a reference-driven model needs.

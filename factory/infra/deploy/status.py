@@ -28,6 +28,8 @@ checks = {
     "web root": f"timeout 20 sh -c 'ls {FACTORY_ROOT}/www | head -20' 2>&1 || true",
     "published ports": "timeout 30 docker ps --format '{{.Names}}\t{{.Ports}}' 2>&1 || true",
     "firewall": "timeout 20 ufw status 2>&1 | head -1 || true",
+    "tunnel": "timeout 30 docker inspect --format '{{.Name}}\t{{.State.Status}}\t{{.RestartCount}} restarts' factory-tunnel 2>&1 || true",
+    "gpu": "timeout 30 nvidia-smi --query-gpu=name,driver_version,temperature.gpu,utilization.gpu,memory.used --format=csv 2>&1 || true",
     "disk": "timeout 20 df -h / 2>&1 || true",
 }
 

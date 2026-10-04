@@ -26,7 +26,7 @@ Check only what you changed since the played build.
 `git diff {{played}}..HEAD` shows it.
 Run the focused tests near your change, and the typecheck.
 Do not run the full test suite or the playtest. The factory runs them right after you.
-This machine has no GPU and is slow.
+This machine is shared and slow.
 
 Commit on the current branch.
 Never push.
