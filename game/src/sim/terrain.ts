@@ -40,6 +40,8 @@ export function heightAt(t: Terrain, x: number, y: number): number {
 // a mark stays level with the deck where the truck is nearer the deck than the ground below, so it does
 // not hang down into a canyon like Canyon Bridge's. Both the mark and the truck must lie beside that deck, within
 // the sight radius of its sides, since every mark lies within its truck's sight. A deck far away never lifts a mark.
+// One drivable surface is one deck, however it climbs and falls, so a truck on it shares the deck with every mark
+// beside it.
 export function markHeightAt(t: Terrain, origin: Vec, x: number, y: number): number {
   const h = heightAt(t, x, y);
   const span = spanAt(x, y, T.vision.radius);
@@ -68,26 +70,53 @@ export function groundAt(t: Terrain, x: number, y: number): number {
   return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
 }
 
-// Deck surface height at a distance along it: a straight line between its two end heights.
+// Tiles a distance along a deck may lie past its ends, for rounding.
+const ALONG_SLACK = 1e-6;
+
+// Deck surface height at a distance along it: a straight line between the heights of the two stations around it.
+// A distance off the deck is a bug, since callers clamp it or test the outline first.
 export function deckHeight(t: Terrain, deck: Deck, along: number): number {
-  const [from, to] = deckEnds(t, deck);
-  return from + (to - from) * (along / deck.length);
+  if (along < -ALONG_SLACK || along > deck.length + ALONG_SLACK) throw new Error(`Deck ${deck.id} has no point ${along} tiles along it`);
+  const [a, b] = stationsAround(deck, along);
+  const h0 = stationHeight(t, a);
+  const h1 = stationHeight(t, b);
+  return h0 + (h1 - h0) * ((along - a.along) / (b.along - a.along));
 }
 
-// Deck line height at the deck's from and to ends: the ground there plus the end's rise. The only source of a
-// deck's end heights, so decks that meet end to end with one rise meet at one height.
-export function deckEnds(t: Terrain, deck: Deck): [number, number] {
-  return [groundAt(t, deck.from.x, deck.from.y) + deck.rise[0], groundAt(t, deck.to.x, deck.to.y) + deck.rise[1]];
+// The two neighbouring stations whose piece holds a distance along a deck.
+function stationsAround(deck: Deck, along: number): [Deck['stations'][number], Deck['stations'][number]] {
+  const { stations } = deck;
+  let k = 0;
+  while (k < stations.length - 2 && along > stations[k + 1].along) k++;
+  return [stations[k], stations[k + 1]];
 }
 
-// Height change per tile along x and y. A tile centered on the deck takes the deck's grade.
+// A straight piece of a deck between two neighbouring stations: its end points on the axis, its tiles along the deck
+// from the from end to its start, its length in tiles and the deck line's height at its two ends.
+export type DeckSegment = { from: Vec; to: Vec; along: number; length: number; h0: number; h1: number };
+
+// A deck's straight pieces in order, one per pair of neighbouring stations. The only source of a deck's pieces and
+// their end heights, which its slope, physics, models and pick quads follow.
+export function deckSegments(t: Terrain, deck: Deck): DeckSegment[] {
+  return deck.stations.slice(1).map((b, k) => {
+    const a = deck.stations[k];
+    return { from: a.at, to: b.at, along: a.along, length: b.along - a.along, h0: stationHeight(t, a), h1: stationHeight(t, b) };
+  });
+}
+
+// The deck line at a station: the ground there plus its rise.
+function stationHeight(t: Terrain, s: { at: Vec; rise: number }): number {
+  return groundAt(t, s.at.x, s.at.y) + s.rise;
+}
+
+// Height change per tile along x and y. A tile centered on a deck takes the grade of the deck's piece under its centre.
 export function tileSlope(t: Terrain, tile: number): Vec {
   const i = tile % t.size;
   const j = Math.floor(tile / t.size);
   const on = deckAt(i + 0.5, j + 0.5);
   if (on === null) return groundSlope(t, tile);
-  const [from, to] = deckEnds(t, on.deck);
-  const grade = (to - from) / on.deck.length;
+  const [a, b] = stationsAround(on.deck, on.along);
+  const grade = (stationHeight(t, b) - stationHeight(t, a)) / (b.along - a.along);
   return { x: grade * on.deck.axis.x, y: grade * on.deck.axis.y };
 }
 

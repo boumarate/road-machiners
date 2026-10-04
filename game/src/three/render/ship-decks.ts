@@ -1,5 +1,6 @@
-// The Fallen Sun's wing and flaps: a ship_wing_deck plate on each wing deck and a ship_flap on each flap, posed on the
-// deck line like Broken Wing's deck, and a skirt strip under each rail and lip down into the ground, mirroring the
+// The Fallen Sun's wing and flaps: a plate of each deck's look on each of its straight pieces, a ship_wing_deck along
+// the wing and a ship_flap on each flap, posed on the deck line like Broken Wing's deck, and a skirt strip under its
+// rails and lips down into the ground, mirroring the
 // physics skirt (addDeck() in src/phys/drive.ts). src/sim/bridge.ts owns the decks; this view only draws them. The
 // strips stand a little inside the deck edge, behind the models' own torn skirt plates and lip beams, so the two never
 // share a face.
@@ -9,8 +10,8 @@ import { PHYSICS } from '../../data/physics';
 import { FALLEN_SUN_DECKS } from '../../data/territory';
 import { hash2 } from '../../render/noise';
 import { PAL } from '../../render/palette';
-import { alongOf, deckById, type Deck } from '../../sim/bridge';
-import { deckHeight, groundAt, type Terrain } from '../../sim/terrain';
+import { alongOf, deckById, railOffset, type Deck } from '../../sim/bridge';
+import { deckHeight, deckSegments, groundAt, type Terrain } from '../../sim/terrain';
 import { dist, type Vec } from '../../sim/vec';
 import { poseOnDeck } from './sites';
 import { model } from './models';
@@ -26,32 +27,39 @@ const LIP_INSET = 0.6; // meters a lip's strip stands inside the deck end, behin
 const TOP_DROP = 0.1; // meters the strip's top lies under the deck line, inside the model's plate
 const SKIRT_COLORS = [PAL.hull.grey, PAL.hull.dark, PAL.hull.dark, PAL.hull.rust];
 
-// Every Fallen Sun deck's model and skirt, one group per deck, for inspection.
+type ShipDeck = { deck: Deck; look: (typeof FALLEN_SUN_DECKS)[number]['look'] };
+
+// Every Fallen Sun deck's models and skirt, one group per deck, for inspection.
 export function buildShipDecks(t: Terrain): THREE.Group {
   const root = new THREE.Group();
-  for (const deck of shipDecks()) root.add(buildShipDeck(t, deck));
+  for (const ship of shipDecks()) root.add(buildShipDeck(t, ship));
   return root;
 }
 
-// Registers each Fallen Sun deck's model and skirt with the scope at the deck's middle.
+// Registers each Fallen Sun deck's models and skirt with the scope at the deck's middle.
 export function addShipDecks(t: Terrain, scope: RenderScope): void {
-  for (const deck of shipDecks()) {
+  for (const ship of shipDecks()) {
+    const { deck } = ship;
     const mid = { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 };
-    scope.add(buildShipDeck(t, deck), mid, Math.hypot(deck.length, deck.width) / 2);
+    scope.add(buildShipDeck(t, ship), mid, Math.hypot(deck.length, deck.width) / 2);
   }
 }
 
-function shipDecks(): Deck[] {
-  return FALLEN_SUN_DECKS.map((spec) => deckById(spec.id));
+function shipDecks(): ShipDeck[] {
+  return FALLEN_SUN_DECKS.map((spec) => ({ deck: deckById(spec.id), look: spec.look }));
 }
 
-function buildShipDeck(t: Terrain, deck: Deck): THREE.Group {
+function buildShipDeck(t: Terrain, ship: ShipDeck): THREE.Group {
+  const { deck } = ship;
   const root = new THREE.Group();
   root.name = `ship-deck-${deck.id}`;
-  const plate = deckModel(deck);
-  plate.name = 'ship-deck-model';
-  poseOnDeck(plate, t, deck, 0);
-  root.add(plate, skirt(t, deck));
+  for (const seg of deckSegments(t, deck)) {
+    const plate = deckModel(ship, seg.length);
+    plate.name = 'ship-deck-model';
+    poseOnDeck(plate, deck, seg, 0);
+    root.add(plate);
+  }
+  root.add(skirt(t, deck));
   root.traverse((o) => {
     o.updateMatrix();
     o.matrixAutoUpdate = false;
@@ -59,21 +67,19 @@ function buildShipDeck(t: Terrain, deck: Deck): THREE.Group {
   return root;
 }
 
-// The wing plate or the flap, stretched to the deck. Deck ids tell the wing's segments from the flaps.
-function deckModel(deck: Deck): THREE.Object3D {
-  if (deck.id.includes('-wing-')) {
+// The deck's look stretched over one straight piece length tiles long: a wing plate, or a flap.
+function deckModel({ deck, look }: ShipDeck, length: number): THREE.Object3D {
+  if (look === 'ship_wing_deck') {
     const obj = model('ship_wing_deck');
-    obj.scale.set((deck.length * S) / WING.length, 1, (deck.width * S) / WING.width);
+    obj.scale.set((length * S) / WING.length, 1, (deck.width * S) / WING.width);
     return obj;
   }
-  if (deck.id.includes('-flap-')) {
-    // The flap model has its hinge on the ground at -x and its lip at +x, which poseOnDeck puts at the to end.
-    if (deck.rise[0] !== 0 || deck.rise[1] <= 0) throw new Error(`Flap ${deck.id} must rise from 0 at its from end to its lip, not [${deck.rise.join(', ')}]`);
-    const obj = model('ship_flap');
-    obj.scale.set((deck.length * S) / FLAP.length, (deck.rise[1] * S) / FLAP.rise, (deck.width * S) / FLAP.width);
-    return obj;
-  }
-  throw new Error(`Deck ${deck.id} is neither a wing segment nor a flap`);
+  // The flap model has its hinge on the ground at -x and its lip at +x, which poseOnDeck puts at the to end.
+  const rises = deck.stations.map((s) => s.rise);
+  if (rises.length !== 2 || rises[0] !== 0 || rises[1] <= 0) throw new Error(`Flap ${deck.id} must rise from 0 at its from end to its lip, not [${rises.join(', ')}]`);
+  const obj = model('ship_flap');
+  obj.scale.set((length * S) / FLAP.length, (rises[1] * S) / FLAP.rise, (deck.width * S) / FLAP.width);
+  return obj;
 }
 
 // A strip from just under the deck line down past the ground, sampled every tile, along each rail of a skirted deck
@@ -81,9 +87,8 @@ function deckModel(deck: Deck): THREE.Object3D {
 function skirt(t: Terrain, deck: Deck): THREE.Mesh {
   const positions: number[] = [];
   const colors: number[] = [];
-  const edges = [...(deck.skirt ? deck.rails.map((line) => ({ line, inset: RAIL_INSET })) : []), ...deck.lips.map((line) => ({ line, inset: LIP_INSET }))];
-  edges.forEach(({ line: [a, b], inset }, e) => {
-    const inward = inwardOf(deck, a, b);
+  const edges = [...(deck.skirt ? railPieces(deck) : []), ...deck.lips.map((line) => ({ line, inward: lipInward(deck, line), inset: LIP_INSET }))];
+  edges.forEach(({ line: [a, b], inward, inset }, e) => {
     const steps = Math.max(1, Math.ceil(dist(a, b)));
     const cols = Array.from({ length: steps + 1 }, (_, k) => column(t, deck, { x: a.x + ((b.x - a.x) * k) / steps + (inward.x * inset) / S, y: a.y + ((b.y - a.y) * k) / steps + (inward.y * inset) / S }));
     for (let k = 0; k < steps; k++) {
@@ -113,11 +118,21 @@ function column(t: Terrain, deck: Deck, p: Vec): { top: [number, number, number]
   return { top: [p.x * S, top, p.y * S], bottom: [p.x * S, bottom, p.y * S] };
 }
 
-// The unit vector from the middle of a rail or lip a-b toward the deck's middle: back across the deck from a rail,
-// back along it from a lip.
-function inwardOf(deck: Deck, a: Vec, b: Vec): Vec {
-  const mid = { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 };
-  const edge = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-  const d = dist(edge, mid);
-  return { x: (mid.x - edge.x) / d, y: (mid.y - edge.y) / d };
+// Each rail cut at the deck's stations, so its strip's top follows each change of grade, with the unit vector back
+// across the deck.
+function railPieces(deck: Deck): { line: [Vec, Vec]; inward: Vec; inset: number }[] {
+  return [-1, 1].flatMap((side) => {
+    const off = railOffset(deck.axis, deck.width, side);
+    const inward = { x: (-off.x * 2) / deck.width, y: (-off.y * 2) / deck.width };
+    return deck.stations.slice(1).map((b, k): { line: [Vec, Vec]; inward: Vec; inset: number } => {
+      const a = deck.stations[k];
+      return { line: [{ x: a.at.x + off.x, y: a.at.y + off.y }, { x: b.at.x + off.x, y: b.at.y + off.y }], inward, inset: RAIL_INSET };
+    });
+  });
+}
+
+// The unit vector from a lip back along the deck toward its middle.
+function lipInward(deck: Deck, [a, b]: [Vec, Vec]): Vec {
+  const atTo = alongOf(deck, (a.x + b.x) / 2, (a.y + b.y) / 2) > deck.length / 2;
+  return atTo ? { x: -deck.axis.x, y: -deck.axis.y } : deck.axis;
 }

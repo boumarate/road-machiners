@@ -5,14 +5,13 @@ import { SALVAGE, type LootTable } from '../data/salvage';
 import { FALLEN_SUN_DECKS, inFurrow, TERRITORIES, type FarmRoad } from '../data/territory';
 import { PHYSICS } from '../data/physics';
 import { TERRAIN } from '../data/terrain';
-import { TEST_MAP } from '../test/map';
 import { deckById, type Deck } from './bridge';
 import { boxDistance, propBoxes, segmentCrossesBox, type PosedBox } from './mapgen';
 import { ROAD_INDEX } from './road-index';
 import { boxesOverlap } from '../test/boxes';
 import { siteGap } from './sites';
 import { hazardZones, isLootSpot, landingStrips, reactorPos, spotTable, territoryAt, territoryCaches, territoryEntries, territoryGrounds, territoryPieces, territoryRoads, type LandingStrip } from './territory';
-import { deckEnds, heightAt, type PropKind } from './terrain';
+import type { PropKind } from './terrain';
 import type { LandmarkLook, Obstacle } from './types';
 import { dist, lerp, polylineDist, type Vec } from './vec';
 
@@ -327,27 +326,19 @@ describe("the Fallen Sun's dirt roads, wing and flaps", () => {
     expect(dist(onMap(inFurrow(dist(head, tail), 0)), tail)).toBeLessThan(1e-9);
   });
 
-  it('lays the wing as a chain of decks end to end, up from the ground, level over the piers and down, with no lip (IV1)', () => {
-    const span = wing[1];
-    const top = span.rise[0];
-    expect(top).toBeGreaterThan(0);
-    expect(wing[0].rise).toEqual([0, top]);
-    expect(span.rise).toEqual([top, top]);
-    expect(wing.at(-1)!.rise[1]).toBe(0);
-    for (const d of wing.slice(2)) expect(d.rise[1]).toBeLessThan(d.rise[0]);
-    for (const [a, b] of wing.slice(1).map((b, k) => [wing[k], b])) {
-      expect(dist(a.to, b.from)).toBeLessThan(1e-9);
-      expect(a.rise[1]).toBe(b.rise[0]);
-      expect(deckEnds(TEST_MAP.terrain, a)[1]).toBe(deckEnds(TEST_MAP.terrain, b)[0]);
-      for (let across = -b.width / 2 + 0.2; across < b.width / 2; across += 0.5) {
-        const at = (k: number) => ({ x: b.from.x + b.axis.x * k - b.axis.y * across, y: b.from.y + b.axis.y * k + b.axis.x * across });
-        expect(heightAt(TEST_MAP.terrain, at(-1e-6).x, at(-1e-6).y)).toBeCloseTo(heightAt(TEST_MAP.terrain, at(1e-6).x, at(1e-6).y), 5);
-      }
-    }
+  it('lays the wing as one deck that rises from the ground, runs level at 1.5 over the piers and comes down to 0, with no lip (IV1)', () => {
+    expect(wing).toHaveLength(1);
+    const rises = wing[0].stations.map((st) => st.rise);
+    expect(rises[0]).toBe(0);
+    expect(rises[1]).toBe(1.5);
+    expect(rises[2]).toBe(1.5);
+    expect(rises.at(-1)).toBe(0);
+    for (let k = 3; k < rises.length; k++) expect(rises[k]).toBeLessThan(rises[k - 1]);
+    expect(wing[0].lips).toEqual([]);
   });
 
   it('lays the wing across two hull piers that stick out past both rails (AS2)', () => {
-    const span = wing[1];
+    const span = wing[0];
     const piers = pieces.map((p, k) => k).filter((k) => underWing(pieces[k].pos));
     expect(piers).toHaveLength(2);
     for (const k of piers) {

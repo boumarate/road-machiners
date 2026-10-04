@@ -66,31 +66,35 @@ export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   concrete: { id: "concrete", name: "Cracked concrete", speed: 0.98, wear: 0.6, dust: 0.3, color: 0xa39e94 },
 };
 
-// A straight road deck. width is tiles between its two rails. cut, when set, removes the road's
-// flattening in the gap under the deck: abutment is tiles of causeway left under each deck end, and ramp
-// tiles over which the cut ground falls away. skirt makes the physics rails reach down past the lowest
-// ground beside the deck, so trucks on open ground cannot drive in under it. rise is height units over the ground at
-// the from and to ends: 0 rests an end on the ground, and a raised end that meets no other deck is a lip a truck
-// drives off and flies from. A deck with a raised end is skirted.
+// A deck station: a map point on the deck's axis and the deck line's rise there, in height units over the ground.
+export type DeckStation = { at: Vec; rise: number };
+
+// A straight deck, one drivable surface. line runs from its from end to its to end through stations on the straight
+// line between them, in order: the deck line stands each station's rise over the ground there and runs straight between
+// neighbouring stations, so one deck can climb, run level and come down. width is tiles between its two rails. cut,
+// when set, removes the road's flattening in the gap under the deck: abutment is tiles of causeway left under each
+// deck end, and ramp tiles over which the cut ground falls away. skirt makes the physics rails reach down past the
+// lowest ground beside the deck, so trucks on open ground cannot drive in under it. An end raised over the ground is a
+// lip a truck drives off and flies from. A deck with a raised station is skirted, and no deck touches another: a
+// surface is never split into decks (buildDecks() in src/sim/bridge.ts throws).
 export type DeckSpec = {
   id: string;
-  from: Vec;
-  to: Vec;
+  line: DeckStation[];
   width: number;
   cut: { abutment: number; ramp: number } | null;
   skirt: boolean;
-  rise: [number, number];
 };
 
 // Canyon Bridge: the road's causeway is cut away under the deck, so the canyon runs below it.
 const CANYON_BRIDGE: DeckSpec = {
   id: "canyon-bridge",
-  from: scalePoint({ x: 97.9, y: 75.1 }),
-  to: scalePoint({ x: 101.5, y: 71.5 }),
+  line: [
+    { at: scalePoint({ x: 97.9, y: 75.1 }), rise: 0 },
+    { at: scalePoint({ x: 101.5, y: 71.5 }), rise: 0 },
+  ],
   width: 8, // the widest truck keeps its clearance from both rails
   cut: { abutment: 1, ramp: 1.5 },
   skirt: false,
-  rise: [0, 0],
 };
 
 // The Broken Wing deck: the wing's top, with the road on it. The road's flattening stays under it, so the graded
@@ -98,12 +102,13 @@ const CANYON_BRIDGE: DeckSpec = {
 // and pylons, so trucks on the ground beside it cannot drive in under it.
 const WING_DECK: DeckSpec = {
   id: "broken-wing",
-  from: BROKEN_WING_POINT(-BROKEN_WING.deckHalf, 0),
-  to: BROKEN_WING_POINT(BROKEN_WING.deckHalf, 0),
+  line: [
+    { at: BROKEN_WING_POINT(-BROKEN_WING.deckHalf, 0), rise: 0 },
+    { at: BROKEN_WING_POINT(BROKEN_WING.deckHalf, 0), rise: 0 },
+  ],
   width: REGION.roadWidth, // as wide as the road, from the concept art: about 4 truck lengths
   cut: null,
   skirt: true,
-  rise: [0, 0],
 };
 
 // A raised bowl: a crater with its depth turned to height, cut by the same rule. Roads do not flatten it, and road
@@ -701,7 +706,7 @@ export const MAPGEN = {
   closeUpPxPerTile: 8,
   closeUps: [
     ...[...REGION.towns, ...REGION.locations].map((site) => ({ name: site.id, center: site.pos, side: 2 * (site.radius + SITE_SURROUND) })),
-    { name: 'bridge', center: { x: (CANYON_BRIDGE.from.x + CANYON_BRIDGE.to.x) / 2, y: (CANYON_BRIDGE.from.y + CANYON_BRIDGE.to.y) / 2 }, side: 60 },
+    { name: 'bridge', center: { x: (CANYON_BRIDGE.line[0].at.x + CANYON_BRIDGE.line[1].at.x) / 2, y: (CANYON_BRIDGE.line[0].at.y + CANYON_BRIDGE.line[1].at.y) / 2 }, side: 60 },
     // The whole Broken Wing stretch: hoop, ramps, deck, trench and site.
     { name: 'wing', center: BROKEN_WING_POINT(0, -2), side: 120 },
     { name: 'dry-river', center: scalePoint({ x: 48, y: 87 }), side: 120 },

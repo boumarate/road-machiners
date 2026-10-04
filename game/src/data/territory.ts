@@ -11,7 +11,7 @@ import type { PropKind } from '../sim/terrain';
 import type { LandmarkLook } from '../sim/types';
 import type { Vec } from '../sim/vec';
 import { onOrchardRoad, REGION } from './region';
-import type { DeckSpec } from './terrain';
+import type { DeckSpec, DeckStation } from './terrain';
 
 export { onOrchardRoad };
 
@@ -33,9 +33,10 @@ export type Patch = { at: Vec; radius: number; debris: DebrisRule[]; spots: numb
 // Rim rocks, chunks of crater wall drawn on the bank of the territory's basin: along its floor vertices from..to,
 // wrapping past the last, and out[0] to out[1] tiles out from the floor edge. size is a rock's radius in tiles.
 export type RimRocks = { from: number; to: number; out: [number, number]; count: number; size: [number, number] };
-// A deck of a wreck in tiles from the territory centre: a straight span width tiles wide, rise height units over the
-// ground at its from and to ends. FALLEN_SUN_DECKS lists them on the map, src/sim/bridge.ts gives their geometry.
-export type WreckDeck = { id: string; from: Vec; to: Vec; width: number; rise: [number, number] };
+// A deck of a wreck in tiles from the territory centre: a straight span width tiles wide, through the stations of its
+// line (DeckStation in src/data/terrain.ts). look is the model the view stretches over each straight piece.
+// FALLEN_SUN_DECKS lists them on the map, src/sim/bridge.ts gives their geometry.
+export type WreckDeck = { id: string; line: DeckStation[]; width: number; look: 'ship_wing_deck' | 'ship_flap' };
 // The reactor prop. Its position is also the hazard's centre.
 export type Reactor = { look: PropKind; at: Vec; radius: number; hazard: Hazard | null };
 // An authored farm laid out in its road's frame. Every at and point is tiles from the territory centre, written as
@@ -438,19 +439,28 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         // its wheels losing less than a breakdown takes; at 0.45 the landing costs more than that
         // (src/phys/props.test.ts).
         // Inside the south-west ring, launching east-north-east along it toward the cage.
-        { id: 'fallen-sun-flap-sw', from: { x: -32.9, y: 26 }, to: { x: -28.5, y: 28.4 }, width: 3, rise: [0, 0.35] },
+        { id: 'fallen-sun-flap-sw', line: [{ at: { x: -32.9, y: 26 }, rise: 0 }, { at: { x: -28.5, y: 28.4 }, rise: 0.35 }], width: 3, look: 'ship_flap' },
         // Inside the south-east ring, launching north-east along it toward the east hill.
-        { id: 'fallen-sun-flap-se', from: { x: 32.6, y: 23 }, to: { x: 35.7, y: 19.1 }, width: 3, rise: [0, 0.35] },
+        { id: 'fallen-sun-flap-se', line: [{ at: { x: 32.6, y: 23 }, rise: 0 }, { at: { x: 35.7, y: 19.1 }, rise: 0.35 }], width: 3, look: 'ship_flap' },
         // On the furrow's two lanes at its head, launching down the furrow beside the wing's up-ramp.
-        { id: 'fallen-sun-flap-furrow-e', from: inFurrow(0, -10.25), to: inFurrow(5, -10.25), width: 3, rise: [0, 0.35] },
-        { id: 'fallen-sun-flap-furrow-w', from: inFurrow(0, 10.25), to: inFurrow(5, 10.25), width: 3, rise: [0, 0.35] },
-        // The torn wing lying along the furrow, 8 tiles wide: an up-ramp from the ground to 1.5 units (6 m) over 9
-        // tiles, a level span over the two piers, and a way down over 10 that eases over its crest. The furrow floor rises gently toward its tail,
-        // so both ramps climb under a grade of 0.2 on the baked map, which a loaded hauler still climbs.
-        { id: 'fallen-sun-wing-up', from: inFurrow(WING.up, 0), to: inFurrow(WING.span, 0), width: 8, rise: [0, 1.5] },
-        { id: 'fallen-sun-wing-span', from: inFurrow(WING.span, 0), to: inFurrow(WING.down, 0), width: 8, rise: [1.5, 1.5] },
-        { id: 'fallen-sun-wing-ease', from: inFurrow(WING.down, 0), to: inFurrow(WING.ease, 0), width: 8, rise: [1.5, WING_EASE_RISE] },
-        { id: 'fallen-sun-wing-down', from: inFurrow(WING.ease, 0), to: inFurrow(WING.end, 0), width: 8, rise: [WING_EASE_RISE, 0] },
+        { id: 'fallen-sun-flap-furrow-e', line: [{ at: inFurrow(0, -10.25), rise: 0 }, { at: inFurrow(5, -10.25), rise: 0.35 }], width: 3, look: 'ship_flap' },
+        { id: 'fallen-sun-flap-furrow-w', line: [{ at: inFurrow(0, 10.25), rise: 0 }, { at: inFurrow(5, 10.25), rise: 0.35 }], width: 3, look: 'ship_flap' },
+        // The torn wing lying along the furrow, one deck 8 tiles wide: an up-ramp from the ground to 1.5 units (6 m)
+        // over 9 tiles, a level span over the two piers, and a way down over 10 that eases over its crest. The furrow
+        // floor rises gently toward its tail, so both ramps climb under a grade of 0.2 on the baked map, which a loaded
+        // hauler still climbs.
+        {
+          id: 'fallen-sun-wing',
+          line: [
+            { at: inFurrow(WING.up, 0), rise: 0 }, // the up-ramp's foot, on the ground
+            { at: inFurrow(WING.span, 0), rise: 1.5 }, // the up-ramp's top, where the level span starts
+            { at: inFurrow(WING.down, 0), rise: 1.5 }, // the span's end, just past the piers' pits
+            { at: inFurrow(WING.ease, 0), rise: WING_EASE_RISE }, // the way down's easing over the crest ends
+            { at: inFurrow(WING.end, 0), rise: 0 }, // the way down's foot, on the ground
+          ],
+          width: 8,
+          look: 'ship_wing_deck',
+        },
       ],
       // A landing strip runs 12 tiles past each lip: the truck lands about 4 tiles out and rolls on.
       landing: 12,
@@ -660,9 +670,10 @@ function fallenSunCentre(): Vec {
   return site.pos;
 }
 
-// The Fallen Sun's decks in map tiles, listed in TERRAIN.features.decks after the road decks. Each is skirted, so
-// nothing drives in under a raised end, and none cuts the ground.
-export const FALLEN_SUN_DECKS: DeckSpec[] = fallenSunWreck().decks.map((d) => {
+// The Fallen Sun's decks in map tiles, listed in TERRAIN.features.decks after the road decks, each with its look. Each
+// is skirted, so nothing drives in under a raised end, and none cuts the ground.
+export const FALLEN_SUN_DECKS: (DeckSpec & Pick<WreckDeck, 'look'>)[] = fallenSunWreck().decks.map((d) => {
   const c = fallenSunCentre();
-  return { ...d, from: { x: c.x + d.from.x, y: c.y + d.from.y }, to: { x: c.x + d.to.x, y: c.y + d.to.y }, cut: null, skirt: true };
+  const line = d.line.map((s) => ({ at: { x: c.x + s.at.x, y: c.y + s.at.y }, rise: s.rise }));
+  return { id: d.id, line, width: d.width, look: d.look, cut: null, skirt: true };
 });

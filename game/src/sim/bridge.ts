@@ -1,8 +1,9 @@
-// Deck geometry: straight decks like Canyon Bridge, the Broken Wing deck and the Fallen Sun's flaps, listed in
-// TERRAIN.features.decks. The map stays one level on every deck: inside a deck outline, the deck is the ground.
-// Each end stands its rise over the ground (deckEnds() in terrain.ts). Both side rails of each deck block driving,
-// and so does a lip, a raised end that meets no other deck: trucks get on and off only over an end on the ground or
-// a joint with the next deck, and a truck that drives off a lip flies. Whatever lies under a deck is out of reach:
+// Deck geometry: straight decks like Canyon Bridge, the Broken Wing deck and the Fallen Sun's wing and flaps, listed in
+// TERRAIN.features.decks. One drivable surface is one deck, and no deck touches another. The map stays one level on
+// every deck: inside a deck outline, the deck is the ground. Each station stands its rise over the ground, and the
+// deck line runs straight between neighbouring stations (deckSegments() in terrain.ts). Both side rails of each deck
+// block driving, and so does a lip, a raised end: trucks get on and off only over an end on the ground, and a truck
+// that drives off a lip flies. Whatever lies under a deck is out of reach:
 // a prop box inside a deck outline whose top is under the deck line blocks nothing (underDeck()). A prop stands on the
 // land under a deck, but a wreck a truck left on a deck stands on the deck (propBase()).
 
@@ -12,12 +13,21 @@ import { TERRAIN, type DeckSpec } from '../data/terrain';
 import type { PosedBox } from './mapgen';
 import { deckHeight, groundAt, heightAt, type Terrain } from './terrain';
 import type { Obstacle } from './types';
-import { dist, segmentDist, type Vec } from './vec';
+import { segmentDist, type Vec } from './vec';
 
-// A deck with its derived geometry. axis is the unit vector from the from end to the to end; across is
-// axis turned a quarter toward +y. rails holds each rail as a map segment along a deck edge, and lips each lip as a
-// map segment across a deck end, from the end of one rail to the end of the other.
-export type Deck = DeckSpec & { axis: Vec; length: number; rails: [Vec, Vec][]; lips: [Vec, Vec][] };
+// A deck with its derived geometry. from and to are its first and last stations' points, and axis is the unit vector
+// from the from end to the to end; across is axis turned a quarter toward +y. stations holds each station's point,
+// its tiles along the deck from the from end and its rise, in order. rails holds each rail as a map segment along a
+// deck edge, and lips each lip as a map segment across a deck end, from the end of one rail to the end of the other.
+export type Deck = DeckSpec & {
+  from: Vec;
+  to: Vec;
+  axis: Vec;
+  length: number;
+  stations: { at: Vec; along: number; rise: number }[];
+  rails: [Vec, Vec][];
+  lips: [Vec, Vec][];
+};
 
 // A point's deck and its distance along that deck from the from end.
 export type DeckPoint = { deck: Deck; along: number };
@@ -25,28 +35,54 @@ export type DeckPoint = { deck: Deck; along: number };
 // The road's flattening reaches this far across; a cut clears all of it.
 const CUT_REACH = REGION.roadWidth / 2 + TERRAIN.flattenMargin;
 
-// Two deck ends this close, in tiles, are one joint.
-const JOINT = 1e-3;
+// Tiles a station may lie off the straight line between its deck's ends.
+const OFF_LINE = 1e-3;
 
-// Decks with their geometry. A raised end is a lip unless another deck in the list has an end at the same point.
+// Decks with their geometry. A raised end is a lip. Fails loudly on a deck with fewer than two stations, a station off
+// the line between its ends or not past the one before it, a negative rise, a raised deck without a skirt, and on two
+// decks whose outlines touch, since one surface split into decks makes every reader find the seams.
 export function buildDecks(specs: readonly DeckSpec[]): Deck[] {
-  return specs.map((spec) => buildDeck(spec, specs));
+  const decks = specs.map(buildDeck);
+  decks.forEach((a, k) => {
+    for (const b of decks.slice(k + 1)) if (decksTouch(a, b)) throw new Error(`Decks ${a.id} and ${b.id} touch: one surface is one deck`);
+  });
+  return decks;
 }
 
-function buildDeck(spec: DeckSpec, all: readonly DeckSpec[]): Deck {
-  if (spec.rise.some((r) => r < 0)) throw new Error(`Deck ${spec.id} has a negative rise`);
-  const length = Math.hypot(spec.to.x - spec.from.x, spec.to.y - spec.from.y);
-  const axis = { x: (spec.to.x - spec.from.x) / length, y: (spec.to.y - spec.from.y) / length };
-  const half = spec.width / 2;
-  const offs = [-1, 1].map((side) => ({ x: -axis.y * side * half, y: axis.x * side * half }));
-  const rails = offs.map((off): [Vec, Vec] => [{ x: spec.from.x + off.x, y: spec.from.y + off.y }, { x: spec.to.x + off.x, y: spec.to.y + off.y }]);
-  const ends = [spec.from, spec.to].filter((end, k) => spec.rise[k] > 0 && !meetsOtherDeck(spec, end, all));
+function buildDeck(spec: DeckSpec): Deck {
+  const { id, line } = spec;
+  if (line.length < 2) throw new Error(`Deck ${id} needs at least two stations`);
+  if (line.some((s) => s.rise < 0)) throw new Error(`Deck ${id} has a negative rise`);
+  if (line.some((s) => s.rise > 0) && !spec.skirt) throw new Error(`Deck ${id} is raised but not skirted`);
+  const from = line[0].at;
+  const to = line[line.length - 1].at;
+  const length = Math.hypot(to.x - from.x, to.y - from.y);
+  const axis = { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
+  const stations = line.map((s, k) => {
+    const along = k === 0 ? 0 : k === line.length - 1 ? length : (s.at.x - from.x) * axis.x + (s.at.y - from.y) * axis.y;
+    if (Math.abs((s.at.y - from.y) * axis.x - (s.at.x - from.x) * axis.y) > OFF_LINE) throw new Error(`Deck ${id} has station ${k} off its line`);
+    return { at: s.at, along, rise: s.rise };
+  });
+  stations.forEach((s, k) => {
+    if (k > 0 && s.along <= stations[k - 1].along) throw new Error(`Deck ${id} has station ${k} out of order`);
+  });
+  const offs = [-1, 1].map((side) => railOffset(axis, spec.width, side));
+  const rails = offs.map((off): [Vec, Vec] => [{ x: from.x + off.x, y: from.y + off.y }, { x: to.x + off.x, y: to.y + off.y }]);
+  const ends = [stations[0], stations[stations.length - 1]].filter((s) => s.rise > 0).map((s) => s.at);
   const lips = ends.map((end): [Vec, Vec] => [{ x: end.x + offs[0].x, y: end.y + offs[0].y }, { x: end.x + offs[1].x, y: end.y + offs[1].y }]);
-  return { ...spec, axis, length, rails, lips };
+  return { ...spec, from, to, axis, length, stations, rails, lips };
 }
 
-function meetsOtherDeck(spec: DeckSpec, end: Vec, all: readonly DeckSpec[]): boolean {
-  return all.some((other) => other !== spec && (dist(other.from, end) < JOINT || dist(other.to, end) < JOINT));
+// The offset in tiles from a deck's axis to its rail on one side: -1 for the rail first in Deck.rails, 1 for the other.
+export function railOffset(axis: Vec, width: number, side: number): Vec {
+  return { x: -axis.y * side * (width / 2), y: axis.x * side * (width / 2) };
+}
+
+// Whether two deck outlines touch or overlap, judged by the capsules round their axes: a deck's outline lies inside
+// its capsule, so decks whose capsules part never touch.
+function decksTouch(a: Deck, b: Deck): boolean {
+  const gap = segmentsIntersect(a.from, a.to, b.from, b.to) ? 0 : Math.min(segmentDist(a.from, b.from, b.to), segmentDist(a.to, b.from, b.to), segmentDist(b.from, a.from, a.to), segmentDist(b.to, a.from, a.to));
+  return gap <= (a.width + b.width) / 2;
 }
 
 export const DECKS: readonly Deck[] = buildDecks(TERRAIN.features.decks);
@@ -109,26 +145,32 @@ export function propBase(t: Terrain, o: Obstacle): number {
 }
 
 // For a point between a deck's two ends and at most reach tiles out from its sides, that deck and the distance
-// along it, or null away from every deck. Of several decks, the nearest across wins.
+// along it, or null away from every deck. Of several decks, the nearest across wins. Marks ask this for every vertex
+// every frame, so decks whose bounding box lies farther than reach from the point are skipped first.
 export function spanAt(x: number, y: number, reach: number): DeckPoint | null {
   let best: DeckPoint | null = null;
   let bestAcross = Infinity;
-  for (const deck of DECKS) {
-    const along = alongOf(deck, x, y);
-    if (along < 0 || along > deck.length) continue;
-    const across = Math.abs(acrossOf(deck, x, y));
-    if (across <= deck.width / 2 + reach && across < bestAcross) {
-      best = { deck, along };
-      bestAcross = across;
-    }
+  for (const box of RAIL_BOXES) {
+    const across = inBox(box, x, y, reach + BOX_SLACK) ? acrossBeside(box.deck, x, y, reach) : null;
+    if (across === null || across >= bestAcross) continue;
+    best = { deck: box.deck, along: alongOf(box.deck, x, y) };
+    bestAcross = across;
   }
   return best;
 }
 
 // Whether a map point lies between a deck's two ends and at most reach tiles out from its sides.
 export function besideDeck(deck: Deck, p: Vec, reach: number): boolean {
-  const along = alongOf(deck, p.x, p.y);
-  return along >= 0 && along <= deck.length && Math.abs(acrossOf(deck, p.x, p.y)) <= deck.width / 2 + reach;
+  return acrossBeside(deck, p.x, p.y, reach) !== null;
+}
+
+// Tiles from a deck's axis to a map point between its two ends and at most reach tiles out from its sides, or null
+// for a point elsewhere.
+function acrossBeside(deck: Deck, x: number, y: number, reach: number): number | null {
+  const along = alongOf(deck, x, y);
+  if (along < 0 || along > deck.length) return null;
+  const across = Math.abs(acrossOf(deck, x, y));
+  return across <= deck.width / 2 + reach ? across : null;
 }
 
 // Share of the road and site flattening removed at a map point: 1 in the gap under a deck with a cut,

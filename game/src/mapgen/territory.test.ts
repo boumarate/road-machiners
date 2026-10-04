@@ -298,7 +298,7 @@ describe("the Fallen Sun's dirt roads, decks and lanes on the baked map", () => 
     const wing = decks.filter((d) => d.lips.length === 0);
     const flaps = decks.filter((d) => d.lips.length > 0);
     // The wing's feet, where its ramps meet the ground, and a point 3 tiles before each flap's foot.
-    const goals = [wing[0].from, wing.at(-1)!.to, ...flaps.map((f) => (f.rise[0] === 0 ? { x: f.from.x - f.axis.x * 3, y: f.from.y - f.axis.y * 3 } : { x: f.to.x + f.axis.x * 3, y: f.to.y + f.axis.y * 3 }))];
+    const goals = [wing[0].from, wing.at(-1)!.to, ...flaps.map((f) => (f.stations[0].rise === 0 ? { x: f.from.x - f.axis.x * 3, y: f.from.y - f.axis.y * 3 } : { x: f.to.x + f.axis.x * 3, y: f.to.y + f.axis.y * 3 }))];
     for (const entry of territoryEntries(t)) {
       for (const goal of goals) {
         const end = route(w, entry, goal, 0.6, []).at(-1)!;

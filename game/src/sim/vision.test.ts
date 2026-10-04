@@ -340,8 +340,10 @@ describe('a dust screen', () => {
 
 // UK3: sight from the Fallen Sun's wing, on the real map. The span stands 1.5 height units (6 m) over the furrow.
 describe('sight from the wing', () => {
-  const span = DECKS.find((d) => d.id === 'fallen-sun-wing-span')!;
-  const mid = { x: (span.from.x + span.to.x) / 2, y: (span.from.y + span.to.y) / 2 };
+  const span = DECKS.find((d) => d.id === 'fallen-sun-wing')!;
+  // The middle of the level span, between the wing's second and third stations.
+  const [top, end] = [span.stations[1].at, span.stations[2].at];
+  const mid = { x: (top.x + end.x) / 2, y: (top.y + end.y) / 2 };
   const across = { x: -span.axis.y, y: span.axis.x };
   const at = (p: Vec, along: number, side: number): Vec => ({ x: p.x + span.axis.x * along + across.x * side, y: p.y + span.axis.y * along + across.y * side });
 
@@ -374,7 +376,7 @@ describe('sight from the wing', () => {
     const w = wingWorld();
     const piers = w.obstacles.filter((o) => o.kind === 'landmark' && o.look === 'hullDrum' && deckAt(o.pos.x, o.pos.y)?.deck.id === span.id);
     expect(piers).toHaveLength(2);
-    const from = at(span.from, 1, 0);
+    const from = at(top, 1, 0);
     const to = at(from, 15, 0);
     expect(deckAt(to.x, to.y)?.deck.id).toBe(span.id);
 

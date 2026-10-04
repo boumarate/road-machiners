@@ -3,7 +3,7 @@ import { Mesh, Vector3, type Object3D } from 'three';
 import { PHYSICS } from '../../data/physics';
 import { FALLEN_SUN_DECKS } from '../../data/territory';
 import { deckById, type Deck } from '../../sim/bridge';
-import { deckHeight, groundAt } from '../../sim/terrain';
+import { deckHeight, deckSegments, groundAt } from '../../sim/terrain';
 import { segmentDist, type Vec } from '../../sim/vec';
 import { TEST_MAP } from '../../test/map';
 import { loadModels } from './models';
@@ -25,11 +25,17 @@ await loadModels(async (name) => {
 const decks = buildShipDecks(t);
 decks.updateMatrixWorld(true);
 
-function part(deck: Deck, name: string): Object3D {
+// The parts of a drawn deck with this name, in drawing order.
+function parts(deck: Deck, name: string): Object3D[] {
   const group = decks.getObjectByName(`ship-deck-${deck.id}`);
   if (!group) throw new Error(`No drawn deck ${deck.id}`);
-  const obj = group.getObjectByName(name);
-  if (!obj) throw new Error(`Deck ${deck.id} has no ${name}`);
+  const found = group.children.filter((o) => o.name === name);
+  if (found.length === 0) throw new Error(`Deck ${deck.id} has no ${name}`);
+  return found;
+}
+
+function part(deck: Deck, name: string): Object3D {
+  const [obj] = parts(deck, name);
   return obj;
 }
 
@@ -55,19 +61,34 @@ describe('Fallen Sun deck models', () => {
   for (const spec of FALLEN_SUN_DECKS) {
     const deck = deckById(spec.id);
 
-    it(`keeps every part of ${deck.id} under its deck line, but for panel dents`, () => {
-      const worst = Math.max(...vertices(part(deck, 'ship-deck-model')).map((v) => overLine(deck, v).over));
-      expect(worst).toBeLessThanOrEqual(PANEL_DENT);
+    it(`draws one plate of ${deck.id} on each straight piece`, () => {
+      expect(parts(deck, 'ship-deck-model')).toHaveLength(deckSegments(t, deck).length);
     });
 
-    it(`lays the top of ${deck.id} on the deck line at both ends`, () => {
-      const points = vertices(part(deck, 'ship-deck-model')).map((v) => overLine(deck, v));
-      const end = deck.length * 0.15;
-      const topNear = (lo: number, hi: number) => Math.max(...points.filter((p) => p.along >= lo && p.along <= hi).map((p) => p.over));
-      expect(topNear(0, end)).toBeGreaterThanOrEqual(-0.02);
-      expect(topNear(deck.length - end, deck.length)).toBeGreaterThanOrEqual(-0.02);
+    it(`keeps every plate of ${deck.id} under its deck line, but for panel dents`, () => {
+      for (const plate of parts(deck, 'ship-deck-model')) {
+        const worst = Math.max(...vertices(plate).map((v) => overLine(deck, v).over));
+        expect(worst).toBeLessThanOrEqual(PANEL_DENT);
+      }
+    });
+
+    it(`lays the top of each plate of ${deck.id} on its piece's deck line at both ends`, () => {
+      const plates = parts(deck, 'ship-deck-model');
+      deckSegments(t, deck).forEach((seg, k) => {
+        const points = vertices(plates[k]).map((v) => overLine(deck, v));
+        const end = seg.length * 0.15;
+        const topNear = (lo: number, hi: number) => Math.max(...points.filter((p) => p.along >= lo && p.along <= hi).map((p) => p.over));
+        expect(topNear(seg.along, seg.along + end), `${deck.id} piece ${k}`).toBeGreaterThanOrEqual(-0.02);
+        expect(topNear(seg.along + seg.length - end, seg.along + seg.length), `${deck.id} piece ${k}`).toBeGreaterThanOrEqual(-0.02);
+      });
     });
   }
+
+  it('draws the wing as one group of four plates, one per pair of its five stations', () => {
+    const wing = deckById('fallen-sun-wing');
+    expect(wing.stations).toHaveLength(5);
+    expect(parts(wing, 'ship-deck-model')).toHaveLength(4);
+  });
 });
 
 describe('Fallen Sun deck skirts', () => {
