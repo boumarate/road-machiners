@@ -21,6 +21,7 @@ import { fillFarm } from './farm';
 import { BUILT_CANAL, BUILT_PAD, BUILT_TRACK } from './newworld';
 import { BUILT_FIELD, BUILT_OLD_ROAD, ruleRng, tileOf, tilesWithin } from './oldworld';
 import { territoryLayer } from './territory';
+import { budget } from '../test/budget';
 
 const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
 const t = fallenSun as never;
@@ -593,7 +594,7 @@ describe('the orchard farm', () => {
       const end = route(w, entry, goal, 0.6, []).at(-1)!;
       expect(dist(end, goal), `road end at ${goal.x},${goal.y}`).toBeLessThanOrEqual(1);
     }
-  }, 120_000);
+  }, budget(120_000));
 
   it('throws on a building off the outline', () => {
     const moved = structuredClone(rules);

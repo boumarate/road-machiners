@@ -10,6 +10,7 @@ import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import { dist } from './vec';
 import { endTurn, newWorld } from './world';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 const NEUTRAL_SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'camp')];
 const nearestSite = (pos: { x: number; y: number }) =>
@@ -27,13 +28,13 @@ describe('NPC spawns', () => {
     expect(new Set(npcs.map((v) => v.brain!.driver)).size).toBeGreaterThan(1);
     const later = endTurn(endTurn(w, testDrive), testDrive);
     for (const v of npcs) expect(later.vehicles.find((x) => x.id === v.id)?.brain?.driver).toBe(v.brain!.driver);
-  }, 15_000);
+  }, budget(15_000));
 
   it('places the first drivers by the world seed', () => {
     const spots = (seed: number) => newWorld(seed, START_KITS.standard, TEST_MAP).vehicles.filter((v) => v.brain).map((v) => v.pos);
     expect(spots(1337)).toEqual(spots(1337));
     expect(spots(1337)).not.toEqual(spots(42));
-  }, 15_000);
+  }, budget(15_000));
 
   it('starts the whole roster on every seed, with at most one dealt neutral driver per site', () => {
     const guards = SPAWN.initial.filter((id) => id === 'convoy').map(() => 'convoyGuard');
@@ -51,7 +52,7 @@ describe('NPC spawns', () => {
         expect(count).toBeLessThanOrEqual(1 + traffic);
       }
     }
-  }, 60_000);
+  }, budget(60_000));
 
   it('starts traders at the gate of the town the start road leaves', () => {
     const w = newWorld(2, START_KITS.standard, TEST_MAP);
@@ -60,7 +61,7 @@ describe('NPC spawns', () => {
     const gate = siteGates(town).reduce((a, b) => (dist(player.pos, a) <= dist(player.pos, b) ? a : b));
     const atGate = w.vehicles.filter((v) => v.brain?.templateId === 'trader' && dist(v.pos, gate) <= SPAWN.gateSpread + 3);
     expect(atGate.length).toBeGreaterThanOrEqual(SPAWN.startTraffic.templates.length);
-  }, 15_000);
+  }, budget(15_000));
 
   it('never respawns a driver close to the player', () => {
     const bowl = REGION.towns.find((t) => t.id === 'bowl')!;

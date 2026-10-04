@@ -18,6 +18,7 @@ import { editableTerrain, emptyWorld, npcBrain } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
+import { budget } from '../test/budget';
 
 // Shared read-only across every test below that needs a real generated map on this seed: newWorld
 // repeats obstacle generation, NPC spawns and vision on top of the terrain build, so building it once
@@ -745,7 +746,7 @@ describe('nav layers match the old grid rules', () => {
     }
     // Random points often land in closed cliff basins; some pairs still need a real search.
     expect(searched).toBeGreaterThanOrEqual(4);
-  }, 60_000);
+  }, budget(60_000));
 
   it('straightClear equals the reference line check', () => {
     let clear = 0;
@@ -781,7 +782,7 @@ describe('nav layers match the old grid rules', () => {
       expect(routeLength(from, again)).toBeLessThanOrEqual(1.1 * routeLength(from, ref));
     }
     expect(perfSnapshot()['route-cache-hit'].calls).toBeGreaterThan(0);
-  }, 60_000);
+  }, budget(60_000));
 
   it('a new kill wreck changes the route without rebuilding the static layer', () => {
     const a = { x: 30, y: 30 };
@@ -891,7 +892,7 @@ describe('long routes search a coarse corridor', () => {
     const ms = performance.now() - t;
     expect(got).toBeNull();
     expect(ms).toBeLessThan(5);
-  }, 60_000);
+  }, budget(60_000));
 
   it('a corridor cut by a kill wreck wall falls back to the full search', () => {
     const w = emptyWorld();
@@ -931,5 +932,5 @@ describe('long routes search a coarse corridor', () => {
     expect(found).toBeGreaterThanOrEqual(5);
     // Without kill wrecks or parked vehicles a chain of linked regions always holds a fine path.
     expect(perfSnapshot()['route-corridor-miss']).toBeUndefined();
-  }, 60_000);
+  }, budget(60_000));
 });

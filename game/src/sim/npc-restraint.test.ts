@@ -16,6 +16,7 @@ import { vehicleStats } from './stats';
 import { cloneWorld, endTurn } from './world';
 import { addVehicle, emptyWorld, npcBrain, testDrive  } from './testkit';
 import { siteGates, sitePads } from './sites';
+import { budget } from '../test/budget';
 import type { NpcActivity, Vehicle, World } from './types';
 
 const TRAITS_OF: Record<string, TraitId[]> = { scavenger: ['scavenger'], buggy: ['raider'], trader: ['trader'] };
@@ -90,7 +91,7 @@ describe('NPC restraint', () => {
       return fights;
     });
     expect(fought).toBeGreaterThan(0.9);
-  }, 90_000); // planning over every seed takes 10s alone and over 30s when the whole suite shares the cores
+  }, budget(90_000)); // planning over every seed takes 10s alone and over 30s when the whole suite shares the cores
 
   it('rarely attacks prey at a guarded town gate, and holds fire when it does not', () => {
     const { world, npc } = createNpc('buggy');

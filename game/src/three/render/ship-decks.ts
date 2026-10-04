@@ -12,7 +12,7 @@ import { PAL } from '../../render/palette';
 import { deckById, type Deck } from '../../sim/bridge';
 import { deckHeight, groundAt, type Terrain } from '../../sim/terrain';
 import { dist, type Vec } from '../../sim/vec';
-import { poseOnDeck } from './deck-pose';
+import { poseOnDeck } from './sites';
 import { model } from './models';
 import type { RenderScope } from './scope';
 

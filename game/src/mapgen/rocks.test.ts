@@ -9,6 +9,7 @@ import { dist, segmentDist } from '../sim/vec';
 import { newDraft, rockLayer, type MapDraft } from './bake';
 import { BUILT_TRACK } from './newworld';
 import { tileOf, tilesWithin } from './oldworld';
+import { budget } from '../test/budget';
 
 const SIZE = REGION.size;
 const O = REGION.obstacles;
@@ -164,18 +165,18 @@ describe('boulders on the baked map', () => {
 
   it('keeps every boulder clear of roads, sites, the bridge, the margin and other rocks', () => {
     expectClear(boulders);
-  }, 120_000); // checks every boulder against every road and site, slow when the suite runs in parallel
+  }, budget(120_000)); // checks every boulder against every road and site, slow when the suite runs in parallel
 
   it('puts no boulder on or beside a dirt track tile', () => {
     const terrain: Terrain = map.terrain;
     const onTrack = boulders.filter((rock) => [tileAt(terrain, rock.pos), ...tilesWithin(terrain.size, rock.pos, rock.r)].some((tile) => terrain.types[tile] === 'track'));
 
     expect(onTrack).toEqual([]);
-  }, 120_000);
+  }, budget(120_000));
 
   it('puts no boulder on a cliff tile', () => {
     const onCliff = boulders.filter((rock) => isCliff(map.terrain, tileAt(map.terrain, rock.pos)));
 
     expect(onCliff).toEqual([]);
-  }, 120_000); // decoding and checking the baked map takes 25s alone and near 40s when the whole suite shares the cores
+  }, budget(120_000)); // decoding and checking the baked map takes 25s alone and near 40s when the whole suite shares the cores
 });

@@ -7,10 +7,9 @@ import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
 import { siteGates } from '../../sim/sites';
-import { deckById } from '../../sim/bridge';
-import { heightAt, type Terrain } from '../../sim/terrain';
+import { deckById, type Deck } from '../../sim/bridge';
+import { deckEnds, heightAt, type Terrain } from '../../sim/terrain';
 import { angleDiff, segmentDist } from '../../sim/vec';
-import { poseOnDeck } from './deck-pose';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
 
@@ -511,4 +510,17 @@ export function addSites(t: Terrain, scope: RenderScope): void {
   for (const site of SITES) scope.add(buildSite(t, site), site.pos, site.radius);
   const deck = deckById('broken-wing');
   scope.add(buildWingDeck(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
+}
+
+// Poses a deck model on its sim deck. Broken Wing, Canyon Bridge and the Fallen Sun's wing and flaps share it, so
+// every drawn deck follows the deck line from sim/terrain.ts, which the physics deck also follows. It puts the model's
+// middle on the deck's middle, pitched along the deck line and turned along the deck axis, so its +x runs from the
+// deck's from end to its to end. `top` is meters from the model origin up to its deck top, after scaling.
+export function poseOnDeck(obj: THREE.Object3D, terrain: Terrain, deck: Deck, top: number): void {
+  const { from, axis, length } = deck;
+  const [h0, h1] = deckEnds(terrain, deck);
+  const pitch = Math.atan2((h1 - h0) * S, length * S);
+  obj.position.set((from.x + (axis.x * length) / 2) * S, ((h0 + h1) / 2) * S - top, (from.y + (axis.y * length) / 2) * S);
+  // YXZ applies the pitch about the model's own z first, then the yaw.
+  obj.rotation.set(0, -Math.atan2(axis.y, axis.x), pitch, 'YXZ');
 }
