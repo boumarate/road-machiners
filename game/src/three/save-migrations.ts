@@ -220,7 +220,7 @@ export function pooledSkills_9_10(skills: Record<string, number>): { xp: number;
 
 // A driver's last town became a memory of the prices it saw there, kept like any memory from now on. The saved
 // pressure stands in for what it saw, and the saved turn for when.
-function withMemories_10_11(world: SavedJson): SavedJson {
+function withMemories_11_12(world: SavedJson): SavedJson {
   const shops = world.shops as Record<string, SavedJson>;
   const turn = world.turn as number;
   const remembering = (v: SavedJson): SavedJson => {
@@ -292,8 +292,10 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     const { skills, ...player } = world.player as SavedJson;
     return { ...world, player: { ...player, ...pooledSkills_9_10(skills as Record<string, number>) } };
   },
-  // 10 to 11: a driver's last town becomes a memory of its prices.
-  withMemories_10_11,
+  // 10 to 11: a kill wreck may record its chassis as a hulk; older kill wrecks stay generic.
+  (world) => world,
+  // 11 to 12: a driver's last town becomes a memory of its prices.
+  withMemories_11_12,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

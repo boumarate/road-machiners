@@ -1,15 +1,10 @@
 {
-  "turn": 900,
-  "shops": {
-    "nose": { "contracts": [], "pressure": { "salt": -0.2, "scrap": 0.1 }, "stock": [], "restockAt": 1000 }
-  },
-  "vehicles": [
-    { "id": "player", "brain": null },
-    { "id": "npc1", "brain": { "templateId": "trader", "goals": [], "lastTown": "nose" } },
-    { "id": "npc2", "brain": { "templateId": "scavenger", "goals": [] } },
-    { "id": "npc3", "brain": { "templateId": "trader", "goals": [], "lastTown": "atlantis" } }
+  "turn": 52,
+  "obstacles": [
+    { "id": "wreck-npc7", "pos": { "x": 100, "y": 100 }, "r": 0.9, "kind": "wreck" },
+    { "id": "wreck3", "pos": { "x": 120, "y": 90 }, "r": 0.8, "kind": "wreck" }
   ],
-  "removed": [
-    { "id": "npc4", "brain": { "templateId": "courier", "goals": [], "lastTown": "nose" } }
+  "salvage": [
+    { "id": "wreck-npc7", "pos": { "x": 100, "y": 100 }, "radius": 1, "goods": { "scrap": 2 }, "parts": [] }
   ]
 }
