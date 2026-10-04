@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { TERRAIN } from '../data/terrain';
-import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { PHYSICS } from '../data/physics';
+import { hulkBoxes } from './body';
+import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
 import { WEATHER } from '../data/weather';
 import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { contactsOf, soundRange } from './detect';
@@ -68,6 +70,22 @@ describe('vision', () => {
 
     expect(canVehicleSee(w, npc, { x: 36.5, y: 30 })).toBe(true);
     expect(hasLineOfFire(w, { x: 30, y: 30 }, { x: 36.5, y: 30 })).toBe(true);
+  });
+
+  // A hulk hides what lies past it only where its chassis boxes reach eye height, so a tall tractor cab hides and a low buggy hulk is seen over.
+  it('is blocked by a kill wreck hulk only where its chassis reaches eye height', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const eye = TERRAIN.vision.eyeHeight * PHYSICS.metersPerTile;
+    const line = (chassisId: string) => {
+      w.obstacles = [{ id: 'wreck-npc7', pos: { x: 33, y: 30 }, r: 0.9, kind: 'wreck', hulk: { chassisId, yaw: Math.PI / 2 } }];
+      return hasLineOfFire(w, { x: 30, y: 30 }, { x: 36.5, y: 30 });
+    };
+    const reachesEye = (chassisId: string) => hulkBoxes(chassisId).some((b) => b.z0 <= eye && b.z1 >= eye && b.x0 <= 0 && b.x1 >= 0);
+
+    expect(reachesEye('tractor')).toBe(true);
+    expect(reachesEye('buggy')).toBe(false);
+    expect(line('tractor')).toBe(false);
+    expect(line('buggy')).toBe(true);
   });
 
   it('sees over a junk pile lower than the eye', () => {
@@ -201,18 +219,18 @@ describe('contact practice', () => {
 });
 
 describe('perception sight', () => {
-  it('reaches farther for the player at level 5', () => {
+  it('reaches farther for the player at rank 5', () => {
     const w = emptyWorld({ x: 60, y: 60 });
     const me = w.vehicles[0];
     const base = sightRadius(w, me);
-    w.player.skills.perception = XP_TO_REACH[5];
+    w.player.ranks.perception = 5;
     expect(sightRadius(w, me)).toBeCloseTo(base * (1 + 5 * SKILL_EFFECTS.perception.sight));
   });
 
-  it('shows the player more tiles at level 5', () => {
+  it('shows the player more tiles at rank 5', () => {
     const w = emptyWorld({ x: 60, y: 60 });
     const base = visibleTiles(w, { x: 60, y: 60 }).size;
-    w.player.skills.perception = XP_TO_REACH[5];
+    w.player.ranks.perception = 5;
     expect(visibleTiles(w, { x: 60, y: 60 }).size).toBeGreaterThan(base);
   });
 
@@ -220,7 +238,7 @@ describe('perception sight', () => {
     const w = emptyWorld({ x: 60, y: 60 });
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
     const base = sightRadius(w, npc);
-    w.player.skills.perception = XP_TO_REACH[5];
+    w.player.ranks.perception = 5;
     expect(sightRadius(w, npc)).toBe(base);
   });
 });

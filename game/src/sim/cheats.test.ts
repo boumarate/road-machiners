@@ -9,13 +9,12 @@ import { REGION } from '../data/region';
 import { CHEATS, RULES } from '../data/rules';
 import { START_KITS } from '../data/start';
 import {
-  addSkillXp, applyGodMode, CheatError, kitChoices, randomKit, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
+  addXp, applyGodMode, CheatError, kitChoices, randomKit, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
   repairAll, revealMap, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
   noclipMove, startBattle, startWeather, teleport, toggleFullLog, toggleGod,
 } from './cheats';
 import { playerVehicle } from './damage';
 import { maxHealthOf } from './health';
-import { XP_TO_REACH } from '../data/skills';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { removeAllGoods, spareParts } from './inventory';
 import { clockOf } from './sun';
@@ -42,7 +41,7 @@ describe('resource cheats', () => {
     const w = emptyWorld();
     expect(() => setMoney(w, -1)).toThrow(CheatError);
     expect(() => setMoney(w, 1.5)).toThrow(CheatError);
-    expect(() => addSkillXp(w, 'driving', Number.NaN)).toThrow(CheatError);
+    expect(() => addXp(w, Number.NaN)).toThrow(CheatError);
     expect(() => setHealth(w, 50.5)).toThrow(CheatError);
     expect(() => setFuel(w, Number.NaN)).toThrow(CheatError);
   });
@@ -70,15 +69,14 @@ describe('resource cheats', () => {
     expect(next).not.toBe(w);
   });
 
-  it('adds skill xp through levels', () => {
-    const w = addSkillXp(emptyWorld(), 'social', 10_000);
-    expect(w.player.skills.social).toBe(10_000);
-    expect(w.events.some((e) => e.t === 'skillUp' && e.skill === 'social')).toBe(true);
-    expect(() => addSkillXp(emptyWorld(), 'social', 0)).toThrow(CheatError);
-    expect(() => addSkillXp(emptyWorld(), 'trade', 10)).toThrow(CheatError);
+  it('adds xp to the pool without buying ranks', () => {
+    const w = addXp(emptyWorld(), 10_000);
+    expect(w.player.xp).toBe(10_000);
+    expect(w.player.ranks.social).toBe(0);
+    expect(() => addXp(emptyWorld(), 0)).toThrow(CheatError);
   });
 
-  it('grants a perk below its skill level', () => {
+  it('grants a perk below its skill rank', () => {
     const w = grantPerk(emptyWorld(), 'bountyTalk');
     expect(w.player.perks).toEqual(['bountyTalk']);
   });
@@ -343,7 +341,8 @@ describe('vehicle cheats', () => {
     expect(next.vehicles.some((v) => v.id === id)).toBe(false);
     expect(next.obstacles.some((o) => o.id === `wreck-${id}`)).toBe(true);
     expect(next.player.money).toBe(w.player.money);
-    expect(next.player.skills).toEqual(w.player.skills);
+    expect(next.player.xp).toBe(w.player.xp);
+    expect(next.player.ranks).toEqual(w.player.ranks);
   });
 
   it('kills hostiles or all other vehicles', () => {
@@ -399,16 +398,16 @@ describe('vehicle cheats', () => {
 });
 
 describe('cheats and toughness', () => {
-  it('lets health reach the raised max health at toughness level 5', () => {
+  it('lets health reach the raised max health at toughness rank 5', () => {
     const w = emptyWorld();
-    w.player.skills.toughness = XP_TO_REACH[5];
+    w.player.ranks.toughness = 5;
     expect(setHealth(w, maxHealthOf(w)).player.health).toBe(maxHealthOf(w));
     expect(() => setHealth(w, maxHealthOf(w) + 1)).toThrow(new RegExp(`${maxHealthOf(w)}`));
   });
 
   it('god mode fills health to the raised max health', () => {
     const w = toggleGod(emptyWorld());
-    w.player.skills.toughness = XP_TO_REACH[5];
+    w.player.ranks.toughness = 5;
     w.player.health = 1;
     applyGodMode(w);
     expect(w.player.health).toBe(maxHealthOf(w));
