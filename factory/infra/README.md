@@ -67,7 +67,7 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 ## First-time steps
 
 1. In the laptop's BIOS, turn Secure Boot off and set the machine to power on after AC loss, if it has that option. Install Ubuntu Server 24.04 beside Windows, on free space, with OpenSSH. Make Ubuntu the GRUB default with a short timeout, so a power cut boots back into the factory. Give the laptop a fixed address on the home network. Check the GRUB default after a big Windows update.
-2. Add the domain to Cloudflare and move its nameservers there. In Zero Trust, make a tunnel and copy its token from the Docker install command. Add two public hostnames, the domain and `www.<domain>`, both to the service `http://caddy:80`. Set SSL to Full and turn on Always Use HTTPS.
+2. Add the domain to Cloudflare and move its nameservers there. In Zero Trust, make a tunnel and copy its token from the Docker install command. Add two public hostnames, the domain and `www.<domain>`, both to the service `http://caddy:80`. Turn on Always Use HTTPS under SSL/TLS, Edge Certificates.
 3. Copy `prod.env.example` to `prod.env` and fill it in. `FACTORY_HOST` is the laptop's home address.
 4. Make a classic GitHub token for the bot account with `repo` and `project`. Put it in `FACTORY_GH_TOKEN`. Deploy adds it to the server's factory env as `GH_TOKEN`, so `gh` and git pushes use it with no `gh` login.
 5. Run `claude setup-token` on any machine you are logged in to. Put the result in `CLAUDE_CODE_OAUTH_TOKEN` in the factory `.env`.
