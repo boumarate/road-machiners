@@ -12,6 +12,8 @@ if [ -f /factory/home/update-failed ]; then echo "update failed: $(cat /factory/
 # Every tick, paused or not, writes the health file. A tick waits up to 15 minutes on the repo lock and the timer runs every minute, so 20 minutes without one means ticks stopped.
 if [ -f /factory/home/health ]; then
   jq -r 'select(.freeGb < .minFreeGb) | "disk low: under \(.minFreeGb) GB free"' /factory/home/health
+  # availableGb is null where the host has no /proc/meminfo, and then no memory incident opens.
+  jq -r 'select(.availableGb != null and .availableGb < .minAvailableGb) | "memory low: under \(.minAvailableGb) GB available"' /factory/home/health
   jq -r 'select(now - (.at | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) > 1200) | "tick stalled: no tick since \(.at)"' /factory/home/health
 else
   echo "tick stalled: no health file, so no tick ran on this code"

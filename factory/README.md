@@ -47,7 +47,7 @@ Every tick, after intake, the factory deletes each folder in the web root except
 
 Every tick also cleans `$FACTORY_HOME/work`. It deletes the clone of each issue whose card is Done or off the board, each `check-issue-*`, `dev-build` and `release-main`, each `change-*` and `incident-*` that is not queued, and `release-candidate` when no release is open. A clone that stays loses its `node_modules`, since every stage that runs code installs them again. A running job or an interrupted one keeps every clone named for it, packages included. Folders with other names stay, and the tick log names them. Job logs older than `FACTORY_LOG_DAYS` go too, except `tick.log`, `update.log` and the logs that `failures` names.
 
-Every tick writes `$FACTORY_HOME/health` with its time and the free disk space, also while paused. Under `FACTORY_MIN_FREE_GB` free, the tick starts no job. Hermes's incident watch reports low disk, no tick for 20 minutes and a pause older than an hour.
+Every tick writes `$FACTORY_HOME/health` with its time, the free disk space and the available memory, also while paused. Under `FACTORY_MIN_FREE_GB` free, the tick starts no job. Memory under `FACTORY_MIN_AVAILABLE_GB` blocks nothing, since a checks run peaks near 2.6 GB. A host with no `/proc/meminfo`, like a Mac, records no memory and opens no memory incident. Hermes's incident watch reports low disk, low memory, no tick for 20 minutes and a pause older than an hour.
 
 When `dev` on GitHub moves past the commit `/dev/` serves, the next free tick rebuilds `/dev/`. So a merge made outside the factory also reaches the dev link. A failed build records its commit in `devFailed` in the state file. The tick skips that commit until `dev` moves again, and Hermes gets the incident.
 

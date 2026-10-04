@@ -108,7 +108,7 @@ Common fixes:
 
 ## Server health
 
-Every tick writes `/factory/home/health` with its time and the free disk space, also while paused. Each tick also cleans by itself. It deletes the work clones of finished work, the installed packages of idle clones and job logs older than `FACTORY_LOG_DAYS`. Under `FACTORY_MIN_FREE_GB` of free space, it starts no job. The watch adds three lines from this. Each is an incident like any other.
+Every tick writes `/factory/home/health` with its time, the free disk space and the available memory, also while paused. Each tick also cleans by itself. It deletes the work clones of finished work, the installed packages of idle clones and job logs older than `FACTORY_LOG_DAYS`. Under `FACTORY_MIN_FREE_GB` of free space, it starts no job. The watch adds four lines from this. Each is an incident like any other.
 
 - `disk low`. Free space is under the minimum, so no job starts. Fix it yourself, then respond with [SILENT].
   1. Find what grew with `du -sh /opt/factory/home/* /opt/factory/home/work/* /var/lib/docker` through `factory-host`.
@@ -116,6 +116,11 @@ Every tick writes `/factory/home/health` with its time and the free disk space, 
   3. Delete what can be rebuilt. You need not ask for: clones in `work/` of issues whose card is Done or off the board, `check-issue-*`, `dev-build`, `release-main`, `change-*` that are not queued, `node_modules` in any clone, job logs older than `FACTORY_LOG_DAYS`, dangling Docker images with `docker image prune -f` and the Docker build cache with `docker builder prune -f`.
   4. Never delete these: the clone of an issue whose card is open, since its `.factory-tasks/` holds the design, plus `sessions/`, `state/`, `recovery/`, `committee/`, `inbox/`, `media/`, `release-candidate` while a release is open, and the images in use.
   5. Remove the pause. Escalate to the committee when free space stays under the minimum after the cleanup. Name what holds the space.
+- `memory low`. Available memory is under the minimum, so jobs swap or the kernel may kill a container. No job is blocked, and the line closes by itself once memory frees.
+  1. Read what uses it with `factory-host 'free -m; docker stats --no-stream --format "{{.Name}} {{.MemUsage}} {{.Label}}"; swapon --show'`.
+  2. Wait one tick. A checks peak near 2.6 GB passes in minutes, and then you respond with [SILENT].
+  3. When it stays low for 10 minutes, find the container with the most memory and the job it belongs to in `jobs` in the state. Do not kill a job. Post to the committee with the job, its memory and the worker counts in `settings.env`, since fewer workers at once is their call.
+  4. A kernel kill shows in `factory-host 'journalctl -k --since "1 hour ago" | grep -i "out of memory"'`. The killed job fails and gets a `failed` line, so treat that line as usual and name the memory cause in your comment.
 - `tick stalled`. No tick ran for 20 minutes. Ticks run one at a time, so a hung tick blocks all of them.
   1. Find the tick process with `factory-host 'systemctl status roam-factory-tick.service'` and its log tail in `logs/tick.log`.
   2. Look at the locks in `/factory/home/locks` and `state/state.lock`. Each holds an `owner` file with a pid.

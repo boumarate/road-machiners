@@ -47,6 +47,7 @@ export type FactoryConfig = {
   verifyWorkers: number; // jobs of the verify queue that run at once
   testWorkers: number; // jobs of the test queue that run at once
   minFreeGb: number; // under this much free disk, a tick starts no job
+  minAvailableGb: number; // under this much available memory, Hermes gets a memory incident
   logDays: number; // job logs older than this go
   cpuLight: number; // share of the server's CPUs for triage, design and branch jobs
   cpuImplement: number; // share of the server's CPUs for implement and ad hoc jobs

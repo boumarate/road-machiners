@@ -23,7 +23,7 @@ async function main(args: string[]): Promise<void> {
   const codeDir = process.cwd();
   const [command, stage, issue] = args;
   if (command === 'tick') {
-    writeHealth(ctx.cfg.home, ctx.cfg.minFreeGb, ctx.now());
+    writeHealth(ctx.cfg.home, ctx.cfg.minFreeGb, ctx.cfg.minAvailableGb, ctx.now());
     if (paused(ctx)) return;
     return guardTick(ctx, async () => {
       await drainInbox(ctx);

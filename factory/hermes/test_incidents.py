@@ -36,17 +36,29 @@ def at(minutes_ago: int) -> str:
     return (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).strftime("%Y-%m-%dT%H:%M:%S.123Z")
 
 
+def health(minutes_ago: int = 1, free_gb: float = 20.5, available_gb: float | None = 6.0) -> dict:
+    return {"at": at(minutes_ago), "freeGb": free_gb, "minFreeGb": 5, "availableGb": available_gb, "minAvailableGb": 1}
+
+
 def test_fresh_health_with_room_prints_nothing(tmp_path):
-    assert run(tmp_path, {"at": at(1), "freeGb": 20.5, "minFreeGb": 5}) == []
+    assert run(tmp_path, health()) == []
 
 
 def test_low_disk_prints_a_stable_line(tmp_path):
-    assert run(tmp_path, {"at": at(1), "freeGb": 3.2, "minFreeGb": 5}) == ["disk low: under 5 GB free"]
+    assert run(tmp_path, health(free_gb=3.2)) == ["disk low: under 5 GB free"]
+
+
+def test_low_memory_prints_a_stable_line(tmp_path):
+    assert run(tmp_path, health(available_gb=0.4)) == ["memory low: under 1 GB available"]
+
+
+def test_a_host_without_a_memory_reading_opens_no_memory_incident(tmp_path):
+    assert run(tmp_path, health(available_gb=None)) == []
 
 
 def test_old_health_means_ticks_stopped(tmp_path):
-    stamp = at(30)
-    assert run(tmp_path, {"at": stamp, "freeGb": 20, "minFreeGb": 5}) == [f"tick stalled: no tick since {stamp}"]
+    stale = health(minutes_ago=30)
+    assert run(tmp_path, stale) == [f"tick stalled: no tick since {stale['at']}"]
 
 
 def test_missing_health_is_a_stall(tmp_path):
@@ -54,6 +66,6 @@ def test_missing_health_is_a_stall(tmp_path):
 
 
 def test_only_a_pause_over_an_hour_is_reported(tmp_path):
-    fresh = {"at": at(1), "freeGb": 20, "minFreeGb": 5}
+    fresh = health()
     assert run(tmp_path / "new", fresh, pause_age_minutes=10) == []
     assert run(tmp_path / "old", fresh, pause_age_minutes=90) == ["paused over an hour: Hermes fixing #5"]
