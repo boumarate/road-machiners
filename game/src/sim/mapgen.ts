@@ -429,12 +429,16 @@ export function boxDistance(box: PosedBox, p: Vec): number {
   return Math.hypot(Math.max(0, Math.abs(q.x) - box.half.x), Math.max(0, Math.abs(q.y) - box.half.y));
 }
 
-// Whether segment ab touches the box's ground outline. Clips the segment to the outline's slabs.
+// Whether segment ab touches the box's ground outline.
 export function segmentCrossesBox(box: PosedBox, a: Vec, b: Vec): boolean {
+  return stretchCrossesBox(box, a, b, 0, 1);
+}
+
+// Whether the stretch of segment ab from fraction t0 to t1 of it touches the box's ground outline. Clips the stretch
+// to the outline's slabs. An empty stretch, t0 past t1, never touches.
+export function stretchCrossesBox(box: PosedBox, a: Vec, b: Vec, t0: number, t1: number): boolean {
   const p = boxLocal(box, a);
   const q = boxLocal(box, b);
-  let t0 = 0;
-  let t1 = 1;
   for (const [from, to, half] of [[p.x, q.x, box.half.x], [p.y, q.y, box.half.y]]) {
     const d = to - from;
     if (d === 0) {
@@ -447,7 +451,7 @@ export function segmentCrossesBox(box: PosedBox, a: Vec, b: Vec): boolean {
     t1 = Math.min(t1, Math.max(ta, tb));
     if (t0 > t1) return false;
   }
-  return true;
+  return t0 <= t1;
 }
 
 // Tiles from segment ab to the box's ground outline, 0 where it crosses. Apart, the nearest points are an end of

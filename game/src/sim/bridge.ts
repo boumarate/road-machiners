@@ -16,10 +16,10 @@ import type { Obstacle } from './types';
 import { segmentDist, type Vec } from './vec';
 
 // A deck with its derived geometry. from and to are its first and last stations' points, and axis is the unit vector
-// from the from end to the to end; across is axis turned a quarter toward +y. stations holds each station's point,
-// its tiles along the deck from the from end and its rise, in order. rails holds each rail as a map segment along a
+// from the from end to the to end; across is axis turned a quarter toward +y. stations holds each station of the spec's
+// line in order, with its tiles along the deck from the from end. rails holds each rail as a map segment along a
 // deck edge, and lips each lip as a map segment across a deck end, from the end of one rail to the end of the other.
-export type Deck = DeckSpec & {
+export type Deck = Omit<DeckSpec, 'line'> & {
   from: Vec;
   to: Vec;
   axis: Vec;
@@ -72,7 +72,7 @@ function buildDeck(spec: DeckSpec): Deck {
   const rails = offs.map((off): [Vec, Vec] => [{ x: from.x + off.x, y: from.y + off.y }, { x: to.x + off.x, y: to.y + off.y }]);
   const ends = [stations[0], stations[stations.length - 1]].filter((s) => s.rise > 0).map((s) => s.at);
   const lips = ends.map((end): [Vec, Vec] => [{ x: end.x + offs[0].x, y: end.y + offs[0].y }, { x: end.x + offs[1].x, y: end.y + offs[1].y }]);
-  return { ...spec, from, to, axis, length, stations, rails, lips };
+  return { id, width: spec.width, cut: spec.cut, skirt: spec.skirt, from, to, axis, length, stations, rails, lips };
 }
 
 // The offset in tiles from a deck's axis to its rail on one side: -1 for the rail first in Deck.rails, 1 for the other.

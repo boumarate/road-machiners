@@ -1,9 +1,7 @@
-// The Fallen Sun's wing and flaps: a plate of each deck's look on each of its straight pieces, a ship_wing_deck along
-// the wing and a ship_flap on each flap, posed on the deck line like Broken Wing's deck, and a skirt strip under its
-// rails and lips down into the ground, mirroring the
-// physics skirt (addDeck() in src/phys/drive.ts). src/sim/bridge.ts owns the decks; this view only draws them. The
-// strips stand a little inside the deck edge, behind the models' own torn skirt plates and lip beams, so the two never
-// share a face.
+// The Fallen Sun's wing and flaps: a plate of each deck's look on each of its straight pieces, posed on the deck line
+// like Broken Wing's deck, and a skirt strip under its rails and lips down into the ground, mirroring the physics skirt
+// (addDeck() in src/phys/drive.ts). src/sim/bridge.ts owns the decks; this view only draws them. The strips stand a
+// little inside the deck edge, behind the models' own torn skirt plates and lip beams, so the two never share a face.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';

@@ -33,6 +33,7 @@ export type TerrainType = {
   color: number;
 };
 
+// The order is the map file's type codes (TYPE_IDS in src/sim/terrain.ts): a reorder or removal bumps its VERSION.
 export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   road: { id: "road", name: "Road", speed: 1, wear: 0.5, dust: 0.3, color: 0xa8865a },
   hardpan: { id: "hardpan", name: "Hardpan", speed: 0.9, wear: 1, dust: 1, color: 0xc8a676 },
@@ -49,20 +50,16 @@ export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   field: { id: "field", name: "Dead field", speed: 0.8, wear: 1.1, dust: 1.4, color: 0x8e6e4a },
   // Pools: shallow standing water over a mud bottom, so both drag a truck like mud and raise no dust.
   // Toxic sludge eats at parts more than plain mud. Both wears stay below scree, the roughest ground.
-  // Last, so earlier type codes keep their values.
   dirtyWater: { id: "dirtyWater", name: "Dirty water", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x55583a },
   toxic: { id: "toxic", name: "Toxic pool", speed: 0.45, wear: 1.8, dust: 0.1, color: 0x9aa83c },
   // Dirt tracks: hardpan packed pale by wheels, the farm tracks of the Old Orchard. It drives like hardpan and only
-  // looks paler than both hardpan and sand, so the tracks read from the camera. Last, so earlier type codes keep
-  // their values.
+  // looks paler than both hardpan and sand, so the tracks read from the camera.
   track: { id: "track", name: "Dirt track", speed: 0.9, wear: 1, dust: 1, color: 0xa88458 },
   // Irrigation canals: shallow water in a concrete channel, the Old Orchard's canals. A truck in one drags and wears
-  // like dirty water. Its blue-grey shows the concrete and the clear water apart from the olive dirty pools. Last, so
-  // earlier type codes keep their values.
+  // like dirty water. Its blue-grey shows the concrete and the clear water apart from the olive dirty pools.
   canal: { id: "canal", name: "Irrigation canal", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x5f6f7a },
   // Concrete pads: the poured slabs of the Old Orchard's motor pool. They drive and wear like cracked asphalt, and
-  // their pale grey shows the slab apart from the dark road, as in the concept. Last, so earlier type codes keep
-  // their values.
+  // their pale grey shows the slab apart from the dark road, as in the concept.
   concrete: { id: "concrete", name: "Cracked concrete", speed: 0.98, wear: 0.6, dust: 0.3, color: 0xa39e94 },
 };
 

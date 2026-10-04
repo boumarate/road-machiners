@@ -34,7 +34,6 @@ describe('the deck list', () => {
       from,
       to,
       width: 8,
-      line: [{ at: from, rise: 0 }, { at: to, rise: 0 }],
       cut: { abutment: 1, ramp: 1.5 },
       skirt: false,
       lips: [],

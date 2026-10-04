@@ -9,7 +9,7 @@ import { TERRAIN } from '../data/terrain';
 import { TIME } from '../data/time';
 import type { Obstacle, Vehicle, World } from './types';
 import { heightAt, type Terrain } from './terrain';
-import { boxDistance, propReach, reachableBoxes, segmentCrossesBox } from './mapgen';
+import { boxDistance, propReach, reachableBoxes, stretchCrossesBox } from './mapgen';
 import { isCheapMeeting, isHeadless } from './fidelity';
 import { propsAlong, propsAround } from './prop-index';
 import { sunAt } from './sun';
@@ -129,26 +129,24 @@ function propHides(terrain: Terrain, o: Obstacle, line: SightLine): boolean {
   if (segmentDist(o.pos, line.a, line.b) >= propReach(o)) return false;
   const { base, boxes } = reachableBoxes(o, terrain);
   return boxes.some((box) => {
-    const part = withinHeights(line, base + box.z0 / PHYSICS.metersPerTile, base + box.z1 / PHYSICS.metersPerTile);
-    return part !== null && segmentCrossesBox(box, part[0], part[1]) && boxDistance(box, line.b) > 0;
+    const lo = base + box.z0 / PHYSICS.metersPerTile;
+    const hi = base + box.z1 / PHYSICS.metersPerTile;
+    return stretchCrossesBox(box, line.a, line.b, enterHeights(line, lo, hi), leaveHeights(line, lo, hi)) && boxDistance(box, line.b) > 0;
   });
 }
 
-// The stretch of the line whose height lies from lo to hi, or null where it never does.
-function withinHeights(line: SightLine, lo: number, hi: number): [Vec, Vec] | null {
+// The fraction of the line where its height comes to lie from lo to hi, and where it leaves that band. A line that
+// never lies in the band enters after it leaves.
+function enterHeights(line: SightLine, lo: number, hi: number): number {
   const rise = line.to - line.from;
-  let [t0, t1] = [0, 1];
-  if (rise === 0) {
-    if (line.from < lo || line.from > hi) return null;
-  } else {
-    const ta = (lo - line.from) / rise;
-    const tb = (hi - line.from) / rise;
-    t0 = Math.max(0, Math.min(ta, tb));
-    t1 = Math.min(1, Math.max(ta, tb));
-    if (t0 > t1) return null;
-  }
-  const at = (t: number): Vec => ({ x: line.a.x + (line.b.x - line.a.x) * t, y: line.a.y + (line.b.y - line.a.y) * t });
-  return [at(t0), at(t1)];
+  if (rise === 0) return line.from >= lo && line.from <= hi ? 0 : 1;
+  return Math.max(0, Math.min((lo - line.from) / rise, (hi - line.from) / rise));
+}
+
+function leaveHeights(line: SightLine, lo: number, hi: number): number {
+  const rise = line.to - line.from;
+  if (rise === 0) return line.from >= lo && line.from <= hi ? 1 : 0;
+  return Math.min(1, Math.max((lo - line.from) / rise, (hi - line.from) / rise));
 }
 
 // Hills block sight: the ground between must stay under the line from the viewer's eye to the target's top.

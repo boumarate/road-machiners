@@ -77,18 +77,20 @@ const ALONG_SLACK = 1e-6;
 // A distance off the deck is a bug, since callers clamp it or test the outline first.
 export function deckHeight(t: Terrain, deck: Deck, along: number): number {
   if (along < -ALONG_SLACK || along > deck.length + ALONG_SLACK) throw new Error(`Deck ${deck.id} has no point ${along} tiles along it`);
-  const [a, b] = stationsAround(deck, along);
+  const k = pieceAt(deck, along);
+  const a = deck.stations[k];
+  const b = deck.stations[k + 1];
   const h0 = stationHeight(t, a);
   const h1 = stationHeight(t, b);
   return h0 + (h1 - h0) * ((along - a.along) / (b.along - a.along));
 }
 
-// The two neighbouring stations whose piece holds a distance along a deck.
-function stationsAround(deck: Deck, along: number): [Deck['stations'][number], Deck['stations'][number]] {
+// The index of the first of the two neighbouring stations whose piece holds a distance along a deck.
+function pieceAt(deck: Deck, along: number): number {
   const { stations } = deck;
   let k = 0;
   while (k < stations.length - 2 && along > stations[k + 1].along) k++;
-  return [stations[k], stations[k + 1]];
+  return k;
 }
 
 // A straight piece of a deck between two neighbouring stations: its end points on the axis, its tiles along the deck
@@ -115,7 +117,9 @@ export function tileSlope(t: Terrain, tile: number): Vec {
   const j = Math.floor(tile / t.size);
   const on = deckAt(i + 0.5, j + 0.5);
   if (on === null) return groundSlope(t, tile);
-  const [a, b] = stationsAround(on.deck, on.along);
+  const k = pieceAt(on.deck, on.along);
+  const a = on.deck.stations[k];
+  const b = on.deck.stations[k + 1];
   const grade = (stationHeight(t, b) - stationHeight(t, a)) / (b.along - a.along);
   return { x: grade * on.deck.axis.x, y: grade * on.deck.axis.y };
 }
