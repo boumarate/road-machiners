@@ -1,13 +1,14 @@
 // Replays every trace in tmp/progression/ through the current XP rules and prints, per archetype, the in-game day
-// each skill reaches each level, its XP per day, and each miss against the targets in src/data/skills.ts. It adds the
-// wage per turn at each gear tier, the day each tier is first held, and the fight and loss counts.
-// Days show the median over seeds and the min-max range. A level some seeds never reach shows how many seeds reached it.
+// each activity family's earned XP covers the cumulative cost of each rank, its XP per day, and each miss against the
+// targets in src/data/skills.ts. It adds the wage per turn at each gear tier, the day each tier is first held, and the
+// fight and loss counts. Days show the median over seeds and the min-max range. A rank some seeds never reach shows how
+// many seeds reached it.
 // Usage: npm run progression:report [-- <dir>], with tmp/progression as the default dir.
 // With two dirs, npm run progression:report -- <a> <b> prints only the A/B comparison: each bot's summary on both sides
 // and the change in money per day by ledger key. Record both sides on the same seeds and turns.
 import { createReadStream, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { MAX_SKILL_LEVEL, SKILL_IDS } from '../src/data/skills.ts';
+import { MAX_RANK, SKILL_IDS } from '../src/data/skills.ts';
 import { TIME } from '../src/data/time.ts';
 import { parseRun, replay, targetMisses, WORTH_KEYS } from '../src/sim/progression/replay.ts';
 import { LEDGER_KEYS } from '../src/sim/progression/orders.ts';
@@ -155,7 +156,7 @@ function printEndings(group) {
 }
 
 function printSkills(group) {
-  const levels = Array.from({ length: MAX_SKILL_LEVEL }, (_, i) => `L${i + 1}`);
+  const levels = Array.from({ length: MAX_RANK }, (_, i) => `R${i + 1}`);
   const rows = [['skill', ...levels.map((l) => `${l} day`), 'XP/day']];
   for (const skill of SKILL_IDS) {
     const curves = group.map((r) => r.curve[skill]);
@@ -218,7 +219,7 @@ function spreadOrNone(values, format) {
   return reached.length === 0 ? 'never' : `${spread(reached, format)}${reached.length === values.length ? '' : ` [${reached.length}/${values.length}]`}`;
 }
 
-// The turns to a level over seeds. Seeds that never reach it are counted, not averaged in.
+// The turns to a rank over seeds. Seeds that never reach it are counted, not averaged in.
 function levelCell(turns, seeds) {
   const reached = turns.filter((t) => t !== null);
   if (reached.length === 0) return 'never';

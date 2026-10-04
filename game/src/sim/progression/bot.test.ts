@@ -371,6 +371,7 @@ describe('botOrders', () => {
   it('has a broke stranded truck crawl on with its goal instead of waiting in town', () => {
     const w = withoutEngine(parkedAt('bowl'));
     w.player.money = 0;
+    for (const shop of Object.values(w.shops)) shop.stock = shop.stock.filter((p) => partDef(p.defId).kind !== 'engine');
 
     const turn = botOrders(w, 'hunter');
 

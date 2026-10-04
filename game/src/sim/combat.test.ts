@@ -1,6 +1,5 @@
 import { chooseOption, currentOptions } from './dialogue';
 import { describe, expect, it } from 'vitest';
-import { XP_TO_REACH } from '../data/skills';
 import { RULES } from '../data/rules';
 import { SPAWN } from '../data/npcs';
 import { REGION } from '../data/region';
@@ -131,6 +130,18 @@ describe('combat', () => {
     expect(w.vehicles.find((v) => v.id === buggy.id)).toBeUndefined();
     expect(w.obstacles.some((o) => o.kind === 'wreck' && dist(o.pos, buggy.pos) === 0)).toBe(true);
     expect(w.player.money).toBe(money);
+  });
+
+  it('a kill wreck keeps the dead truck chassis and heading as a hulk', () => {
+    const { w, me, buggy } = duel();
+    buggy.heading = 1.25;
+    getResources(w, buggy).health = 0;
+    buggy.lastHitBy = me.id;
+    const r = vehicleStats(w, buggy).radius * RULES.wreckRadiusScale;
+    resolveDestroyed(w);
+    const wreck = w.obstacles.find((o) => o.id === `wreck-${buggy.id}`);
+    expect(wreck).toEqual({ id: `wreck-${buggy.id}`, pos: buggy.pos, r, kind: 'wreck', hulk: { chassisId: buggy.chassisId, yaw: 1.25 } });
+    expect(w.salvage.some((s) => s.id === `wreck-${buggy.id}`)).toBe(true);
   });
 
   it('old kill wrecks are cleared past the cap', () => {
@@ -308,11 +319,11 @@ describe('hit odds', () => {
     const base = hitOdds(w, me, mg, buggy, 'body');
     const fast = { ...mg, def: { ...mg.def, round: { ...mg.def.round, speed: mg.def.round.speed * 2 } } };
     expect(hitOdds(w, me, fast, buggy, 'body').chance).toBeGreaterThan(base.chance);
-    w.player.skills.perception = XP_TO_REACH[3];
+    w.player.ranks.perception = 3;
     const skilled = hitOdds(w, me, mg, buggy, 'body');
     expect(skilled.causes.skill).toBeLessThan(0);
     expect(skilled.chance).toBeGreaterThan(base.chance);
-    w.player.skills.perception = 0;
+    w.player.ranks.perception = 0;
     me.speed = 6;
     const shaky = hitOdds(w, me, mg, buggy, 'body');
     expect(shaky.causes.own).toBeGreaterThan(base.causes.own);

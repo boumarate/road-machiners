@@ -1,7 +1,8 @@
 // The progression recorder. It plays a bot in the player truck through the real turn pipeline, with every truck on
 // far travel, so no physics runs and nothing crashes. Each practice event becomes a trace line, and each in-game day
-// an economy row. The player starts with no XP, so the trace holds every XP the run gives. A stall event from any
-// truck fails the run.
+// an economy row. The player starts with no XP, so the trace holds every XP the run gives. The bot buys the cheapest
+// affordable rank at the start of each turn, so it plays with the skill effects its XP pays for, like a player does.
+// A stall event from any truck fails the run.
 
 import { startKit } from '../../data/start';
 import { partDef } from '../../data/parts';
@@ -16,6 +17,7 @@ import { freeCells, goodsCount, mountedParts } from '../grid';
 import { goodValue } from '../market';
 import { getResources } from '../resources';
 import { isStranded } from '../stats';
+import { buyCheapestRanks } from '../progress';
 import { clockOf } from '../sun';
 import { isTowed } from '../tow';
 import type { GameEvent, NpcActivity, Vehicle, World, XpSource } from '../types';
@@ -61,8 +63,9 @@ export function recordTurns(seed: number, archetype: Archetype, turns: number, o
   return stepsFrom(startWorld(seed, options.kit), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
-// The player's death ends the run early, since no turn runs after it. A stall or any other error fails loud.
-function* stepsFrom(start: World, label: string, archetype: Archetype, turns: number, options: BotOptions): Generator<RecordStep> {
+// Plays the turns one at a time from a given world. The player's death ends the run early, since no turn runs after
+// it. A stall or any other error fails loud.
+export function* stepsFrom(start: World, label: string, archetype: Archetype, turns: number, options: BotOptions = {}): Generator<RecordStep> {
   if (!Number.isInteger(turns) || turns <= 0) throw new Error(`A recording needs a positive whole number of turns, got ${turns}`);
   setHeadless(true);
   clearFarRoutes();
@@ -105,8 +108,9 @@ function dayEnds(before: World, after: World, last: boolean): boolean {
 function startWorld(seed: number, kit = 'standard'): World {
   return update(newWorld(seed, startKit(kit), TEST_MAP), (w) => {
     const p = w.player;
-    for (const skill of Object.keys(p.skills) as (keyof typeof p.skills)[]) {
-      p.skills[skill] = 0;
+    p.xp = 0;
+    for (const skill of Object.keys(p.ranks) as (keyof typeof p.ranks)[]) {
+      p.ranks[skill] = 0;
       p.xpToday[skill] = 0;
     }
     for (const source of Object.keys(p.xpBySource) as XpSource[]) p.xpBySource[source] = 0;
@@ -126,7 +130,7 @@ function turnLedger(orders: BotTurn, next: World): Ledger {
 }
 
 function playTurn(world: World, archetype: Archetype, options: BotOptions): PlayedTurn {
-  const orders = botOrders(world, archetype, options);
+  const orders = botOrders(buyCheapestRanks(world), archetype, options);
   const goals = topGoals(orders.world);
   const next = endTurn(orders.world, moveAllFar);
   failOnStall(next, goals, options.tolerateStalls === true);
