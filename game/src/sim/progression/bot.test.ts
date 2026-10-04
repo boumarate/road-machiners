@@ -508,6 +508,13 @@ describe('the hunter', () => {
     expect(heldAfter('trader')).toEqual([]);
   });
 
+  it('has a hauler take the haul on the board it is parked at before it trades', () => {
+    const w = parkedAt('bowl');
+    w.shops.bowl.contracts = [{ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'scrap', units: 3, to: 'nose', reward: 600, deadline: 5000, window: 600, rush: false, tier: 2 }];
+
+    expect(botOrders(w, 'hauler').world.player.contracts.map((c) => c.id)).toEqual(['ct-haul']);
+  });
+
   it('has a bot with a hot engine stop to cool, but keep driving while a raider fights it', () => {
     const hotAt = (fight: boolean) => {
       const w = emptyWorld({ x: 30, y: 30 });

@@ -40,10 +40,11 @@ import { playerExplored, playerSees } from '../vision';
 import { mountBought, Orders, rearm, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
 
 // Every bot plays the base loop: earn money, pay upkeep, buy upgrades, and shoot back when attacked. Only the hunter
-// goes looking for fights. The fast trader wants speed and mounts no armor. The markov bot plays a random one of the
-// others for a stretch of turns, then draws again.
-export type Archetype = 'trader' | 'scavenger' | 'hunter' | 'fastTrader' | 'markov';
-export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'hunter', 'fastTrader', 'markov'];
+// goes looking for fights. The fast trader wants speed and mounts no armor. The hauler takes the best haul contract on
+// every board it reads and trades only with none. The markov bot plays a random one of the others, but the hauler, for
+// a stretch of turns, then draws again.
+export type Archetype = 'trader' | 'scavenger' | 'hunter' | 'fastTrader' | 'hauler' | 'markov';
+export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'hunter', 'fastTrader', 'hauler', 'markov'];
 type Goal = Exclude<Archetype, 'markov'>;
 const GOALS_PLAYED: readonly Goal[] = ['trader', 'scavenger', 'hunter', 'fastTrader'];
 
@@ -54,6 +55,7 @@ const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
   scavenger: CARGO_GEAR,
   hunter: { skip: [], chassis: 'value', keepRoom: false },
   fastTrader: { skip: ['armor'], chassis: 'speed', keepRoom: true },
+  hauler: CARGO_GEAR,
 };
 
 // markovTurns is how many turns the markov bot keeps one goal. It is required for that bot and ignored by the others.
@@ -406,7 +408,7 @@ function serviceHere(o: Orders): void {
 
 // ---- Goals.
 
-const GOALS: Record<Goal, (o: Orders) => void> = { trader: traderGoal, scavenger: scavengerGoal, hunter: hunterGoal, fastTrader: traderGoal };
+const GOALS: Record<Goal, (o: Orders) => void> = { trader: traderGoal, scavenger: scavengerGoal, hunter: hunterGoal, fastTrader: traderGoal, hauler: haulerGoal };
 
 // A trader with too little money for a load, and every town known, scavenges until it can buy one. Salvage never
 // grows back, so a bot with neither left waits in the nearest town.
@@ -414,6 +416,14 @@ function traderGoal(o: Orders): void {
   const held = heldHaul(o.world);
   if (held) return carryHaul(o, held);
   if (!trade(o) && !takeHaul(o) && !scavenge(o)) checkNextBoard(o);
+}
+
+// The hauler takes the best haul on the board it stands at before it looks at the market, so a contract pays the trip
+// and the market only fills the turns between boards.
+function haulerGoal(o: Orders): void {
+  const held = heldHaul(o.world);
+  if (held) return carryHaul(o, held);
+  if (!takeHaul(o) && !trade(o) && !scavenge(o)) checkNextBoard(o);
 }
 
 // ---- Haul contracts: paid work for a trader too poor for a load. The contract loads its goods free.
