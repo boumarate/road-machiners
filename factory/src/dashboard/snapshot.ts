@@ -90,7 +90,8 @@ export class PublicGitHub {
     return selectReleaseFeatures(commits, head, state.release?.removed ?? []);
   }
   private async readComparison(base: string, head: string): Promise<Commit[]> {
-    const pages = JSON.parse(await this.query(['api', `repos/${this.config.repo}/compare/${base}...${head}?per_page=100`, '--paginate', '--slurp'])) as ComparePage[];
+    const output = await this.query(['api', `repos/${this.config.repo}/compare/${base}...${head}?per_page=100`, '--paginate', '--jq', '{total_commits,commits:[.commits[]|{sha,parents:[.parents[]|{sha}],commit:{message:.commit.message}}]}']);
+    const pages = output.split('\n').filter(Boolean).map((line) => JSON.parse(line) as ComparePage);
     const commits = pages.flatMap((page) => page.commits);
     if (!pages.length || commits.length !== pages[0].total_commits) throw new Error('Incomplete GitHub comparison');
     return commits;
