@@ -320,7 +320,7 @@ export type IconEntry = {
 // differ by footprint, which the icon's stretched mount draws.
 export const ICON_WEAPON_PICKS: Record<string, WeaponLook> = {
   mg: { mount: 'wmount_ring_small', receiver: 'wrec_mg_a', barrel: 'wbar_mg_short', extra: 'wext_drum' },
-  shotgun: { mount: 'wmount_pintle', receiver: 'wrec_shotgun', barrel: 'wbar_twin', extra: 'wext_shield' },
+  shotgun: { mount: 'wmount_pintle', receiver: 'wrec_shotgun', barrel: 'wbar_shotgun', extra: 'wext_shield' },
   longRifle: { mount: 'wmount_pintle', receiver: 'wrec_mg_b', barrel: 'wbar_mg_long', extra: 'wext_scope' },
   flamer: { mount: 'wmount_ring_small', receiver: 'wrec_shotgun', barrel: 'wbar_shotgun', extra: 'wext_drum' },
   pneumobolter: { mount: 'wmount_pintle', receiver: 'wrec_autocannon', barrel: 'wbar_autocannon', extra: 'wext_drum' },

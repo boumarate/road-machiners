@@ -58,10 +58,10 @@ export const FACTION_COLORS: Record<Faction, { top: number; side: number; cab: n
 };
 
 // The top-down equipment icons' three colors: line for outlines, creases and hatching, light and dark for fills. They are
-// the hand-drawn glyph colors in src/ui/style.css: line and light are the `.icon svg` rule's stroke and fill, and dark
-// is the armor-edge grid cells' slate (`.inv-cell.c-F`), so the model icons match the cab glyph beside them in the
-// grid. Change them together.
-export const BLUEPRINT = { line: 0xe0d1b4, light: 0x6a7275, dark: 0x414c52 };
+// hand-drawn glyph colors in src/ui/style.css: line and light are the `.icon svg` rule's stroke and fill, so the model
+// icons match the cab glyph beside them in the grid, and dark is the speed dial's `.dial-face` fill. The grid cells'
+// slates (`.inv-cell`) are too close to light's neighbors for a dark fill to read on them. Change them together.
+export const BLUEPRINT = { line: 0xe0d1b4, light: 0x6a7275, dark: 0x191e22 };
 
 // Multiply a color's channels by k.
 export function shade(color: number, k: number): number {

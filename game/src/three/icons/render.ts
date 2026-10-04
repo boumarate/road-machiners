@@ -13,7 +13,7 @@ import { model, socket, type ModelName } from '../render/models';
 import { weaponHead } from '../render/weaponHead';
 
 // Bump when a change here alters how icons look, so the manifest test asks for npm run icons.
-export const ICON_STYLE_VERSION = 3;
+export const ICON_STYLE_VERSION = 4;
 
 // top: straight down, nose up, like the inventory grid. diagonal: from the right side with the nose to the image's
 // right, turned DIAGONAL_YAW_DEG toward the rear and raised DIAGONAL_PITCH_DEG, so a barrel reads lower left to upper right.
@@ -53,19 +53,20 @@ const SUPERSAMPLE = 2; // drawn at this multiple of the cell, then scaled down
 export const MARGIN = 0.1;
 export const OUTLINE_PX = 4; // silhouette outline width at cell size, about 1 px at 36 px
 const RAMP = [0.45, 0.75, 1]; // toon light steps
-const CREASE_NORMAL = 0.35; // normal change, as color distance in the normal pass, that draws a crease
-const CREASE_DEPTH = 6; // depth step, in 8-bit depth levels, that draws a crease
+const CREASE_NORMAL = 0.3; // normal change, as color distance in the normal pass, that draws a crease
+const CREASE_DEPTH = 4; // depth step, in 8-bit depth levels, that draws a crease
 const CREASE_SHADE = 0.45; // toon crease pixels keep this share of their color
 const INK = PAL.outline;
-// A blueprint material at or above this luminance (0-1, of its sRGB color) fills light, below it dark, so tires and
-// dark metal read dark and plates and frames light.
-const BLUEPRINT_LIGHT_FROM = 0.3;
+// A blueprint material at or above this luminance (0-1, of its sRGB color) fills light, below it dark. It sits in the gap
+// between the part models' `metal` (0.35) and `warhead` (0.43), so tires, rust and plain and dark metal fill dark, and
+// paint, light metal plates and rails, tarps and ceramic fill light. About 40% of a typical cell then fills light.
+const BLUEPRINT_LIGHT_FROM = 0.39;
 // Hatching per rank above 1: the gap between 45° lines and their width, as shares of the cell, and whether a second set
 // crosses them. Denser with rank.
 const HATCH: Record<number, { gap: number; width: number; cross: boolean }> = {
-  2: { gap: 0.16, width: 0.025, cross: false },
-  3: { gap: 0.1, width: 0.025, cross: false },
-  4: { gap: 0.1, width: 0.025, cross: true },
+  2: { gap: 0.26, width: 0.045, cross: false },
+  3: { gap: 0.16, width: 0.045, cross: false },
+  4: { gap: 0.16, width: 0.045, cross: true },
 };
 const LINE: Record<IconStyle, number> = { blueprint: BLUEPRINT.line, toon: INK }; // outline, crease and hatch color
 const GLASS_COLOR = 0x6a7a80; // cab windows, which the game tints by daylight

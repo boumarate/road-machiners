@@ -1,25 +1,25 @@
 Closest item pairs at 36 px by mean RGB difference (0-255) over the panel color.
 
 top:
-    1.9  pneumobolter / autocannon
-    2.3  trailerBox / enclosedFrame
-    2.6  tank / tankLong
-    2.9  panniers / enclosedFrame
-    2.9  tankMid / tankHeavy
-    3.4  shotgun / heavyMg
-    3.5  tankLong / tankMid
-    3.5  trailerBox / panniers
-    3.7  tank / tankMid
-    3.8  slugCannon / recoilless
+    2.9  pneumobolter / autocannon
+    3.0  tank / tankLong
+    3.4  tankMid / tankHeavy
+    5.3  tank / tankMid
+    5.5  tankLong / tankMid
+    5.8  slugCannon / recoilless
+    5.8  shotgun / flamer
+    6.0  trailerBox / enclosedFrame
+    6.2  amRifle / recoilless
+    6.9  trailerBox / panniers
 
 diagonal:
-    1.3  amRifle / sniperCannon
+    1.4  amRifle / sniperCannon
     1.8  slugCannon / recoilless
+    2.2  wheel / wheelMid
+    2.3  tank / tankLong
     2.4  slugCannon / tankGun
-    2.5  recoilless / tankGun
-    2.5  sniperCannon / tankGun
-    2.6  wheel / wheelMid
+    2.4  recoilless / tankGun
+    2.5  longRifle / pneumobolter
     2.6  cannon / tankGun
+    2.6  sniperCannon / tankGun
     2.7  amRifle / tankGun
-    2.7  transmission / transmissionMid
-    2.7  steelPlate / ceramicTile
