@@ -37,6 +37,7 @@ const server = createServer(async (request, response) => {
     if (path.includes('..')) throw new Error('Invalid path');
     const bytes = await readFile(new URL(path, root));
     response.setHeader('Content-Type', readContentType(path));
+    response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
     response.end(bytes);
   } catch { response.writeHead(404).end(); }
 });
@@ -113,6 +114,7 @@ try {
     const page = await browser.newPage({ viewport: size });
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
+    page.on('console', (message) => { if (message.type() === 'error' && message.text().includes('Content Security Policy')) errors.push(message.text()); });
     await page.addInitScript(() => {
       window.EventSource = class {
         constructor() { this.listeners = {}; window.fixtureStream = this; }
