@@ -4,8 +4,8 @@
 
 import type { ModelName } from '../three/render/models';
 import type { ChassisDef } from '../data/chassis';
-import type { GoodDef } from '../data/goods';
-import { PARTS, type PartDef } from '../data/parts';
+import { GOODS, type GoodDef } from '../data/goods';
+import { PARTS, type PartDef, type PartKind } from '../data/parts';
 import { hashStr } from './noise';
 import type { PartInstance } from '../sim/types';
 import { maxHp } from '../sim/wear';
@@ -37,6 +37,28 @@ export function baseModel(chassisId: string): ModelName {
 export const BODY_PARTS: ReadonlySet<string> = new Set(
   Object.values(PARTS).flatMap((p) => (p.kind === 'core' && p.role === 'cab' ? [p.id] : [])),
 );
+
+// An item's category tone: the background its icon sits on in the grid, chips, cards and atlases. itemTone() is the one
+// owner, and ITEM_TONES in palette.ts holds the colors.
+export type ItemTone = 'weapon' | 'armor' | 'cargo' | 'other';
+
+const KIND_TONES: Record<PartKind, ItemTone> = {
+  weapon: 'weapon',
+  armor: 'armor',
+  cargo: 'cargo',
+  engine: 'other',
+  core: 'other',
+  scanner: 'other',
+  store: 'other',
+};
+
+// A part takes its kind's tone, and every good is cargo.
+export function itemTone(id: string): ItemTone {
+  const part = PARTS[id];
+  if (part) return KIND_TONES[part.kind];
+  if (id in GOODS) return 'cargo';
+  throw new Error(`No item ${id}, so it has no tone`);
+}
 
 export const PART_MODELS: Record<string, ModelName> = {
   transmission: 'transmission',
