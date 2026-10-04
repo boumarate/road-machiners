@@ -55,12 +55,14 @@ export function craterReach(c: Crater): number {
   return (c.radius * (1 + CRATER.rimWidthRatio / 2)) / M;
 }
 
-// The CRATER.rimSegments corners of the rim ring in tiles, evenly spaced on the crater's radius. Physics and the
-// view build the rim between consecutive points.
+// The CRATER.rimSegments corners of the rim ring in tiles, evenly spaced in angle. Each sits up to CRATER.rimJitter
+// inside the crater's radius, by a share fixed by the crater's spot, so the ring is ragged and the same after a load.
+// It uses no world rng. Physics and the view build the rim between consecutive points.
 export function craterRimPoints(c: Crater): Vec[] {
-  const r = c.radius / M;
   return Array.from({ length: CRATER.rimSegments }, (_, k) => {
     const a = (2 * Math.PI * k) / CRATER.rimSegments;
+    const h = Math.sin(c.pos.x * 12.9898 + c.pos.y * 78.233 + k * 37.719) * 43758.5453;
+    const r = (c.radius / M) * (1 - CRATER.rimJitter * (h - Math.floor(h)));
     return { x: c.pos.x + Math.cos(a) * r, y: c.pos.y + Math.sin(a) * r };
   });
 }

@@ -224,10 +224,20 @@ describe('fadeCraters', () => {
 });
 
 describe('craterRimPoints', () => {
-  it('rings the crater with one point per rim segment at its radius', () => {
+  it('rings the crater with one point per rim segment, raggedly inside its radius and within its reach', () => {
     const c = { id: 'crater-0-0', pos: { x: 10, y: 10 }, radius: 1.2, turn: 0 };
     const pts = craterRimPoints(c);
+    const radii = pts.map((p) => dist(p, c.pos) * M);
     expect(pts).toHaveLength(CRATER.rimSegments);
-    for (const p of pts) expect(dist(p, c.pos) * M).toBeCloseTo(1.2);
+    for (const r of radii) {
+      expect(r).toBeLessThanOrEqual(1.2);
+      expect(r).toBeGreaterThanOrEqual(1.2 * (1 - CRATER.rimJitter));
+    }
+    expect(Math.max(...radii) - Math.min(...radii)).toBeGreaterThan(0.05);
+  });
+
+  it('gives the same rim to the same crater every time', () => {
+    const c = { id: 'crater-0-0', pos: { x: 31.4, y: 7.25 }, radius: 0.9, turn: 3 };
+    expect(craterRimPoints({ ...c })).toEqual(craterRimPoints(c));
   });
 });

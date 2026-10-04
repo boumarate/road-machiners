@@ -3,6 +3,7 @@ import { PERF } from '../data/perf';
 import { PHYSICS } from '../data/physics';
 import { CRATER } from '../data/rules';
 import { TERRAIN } from '../data/terrain';
+import { craterRimPoints } from '../sim/craters';
 import { editableTerrain, emptyWorld } from '../sim/testkit';
 import type { Crater, World } from '../sim/types';
 import type { Vec } from '../sim/vec';
@@ -128,9 +129,9 @@ it('a rim collider tops out rimRatio x radius above the ground', () => {
   w.craters = [crater('c1', { x: 36, y: 30 }, 1.5)];
   const d = buildDrive(w);
   const rim = d.world.getCollider(d.craters.c1[0]);
-  const mid = 1.5 * Math.cos(Math.PI / 10); // meters from the centre to the middle of the first rim piece
-  const x = 36 * S + mid * Math.cos(Math.PI / 10);
-  const z = 30 * S + mid * Math.sin(Math.PI / 10);
+  const [a, b] = craterRimPoints(w.craters[0]); // the first rim piece runs between these
+  const x = ((a.x + b.x) / 2) * S;
+  const z = ((a.y + b.y) / 2) * S;
   expect(rim.containsPoint({ x, y: 0.2, z })).toBe(true);
   expect(rim.containsPoint({ x, y: 0.25, z })).toBe(false);
   freeDrive(d);

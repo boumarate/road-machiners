@@ -178,4 +178,5 @@ export const CRATER = {
   rimRatio: 0.15, // rim height above the ground as a share of the crater radius
   rimWidthRatio: 0.3, // rim width as a share of the crater radius
   rimSegments: 10, // straight pieces in the rim ring, shared by physics and the view
+  rimJitter: 0.25, // the most a rim corner sits inside the radius, as a share of it, so the ring is ragged
 };
