@@ -296,6 +296,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => world,
   // 11 to 12: a driver's last town becomes a memory of its prices.
   withMemories_11_12,
+  // 12 to 13: the player gets the headlight switch, off as in a new game.
+  (world) => ({ ...world, player: { ...(world.player as SavedJson), headlights: false } }),
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
