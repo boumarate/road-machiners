@@ -9,8 +9,7 @@ import { TERRAIN } from '../data/terrain';
 import { TIME } from '../data/time';
 import type { Obstacle, Vehicle, World } from './types';
 import { heightAt, type Terrain } from './terrain';
-import { boxDistance, propBoxes, propReach, segmentCrossesBox, type PosedBox } from './mapgen';
-import { propBase, underDeck } from './bridge';
+import { boxDistance, propReach, reachableBoxes, segmentCrossesBox } from './mapgen';
 import { sunAt } from './sun';
 import { weatherAt } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
@@ -94,23 +93,26 @@ function dustScreens(world: World): Screen[] {
 
 // Within the close radius, rocks and hills do not hide anything.
 function inPlainView(world: World, a: Vec, b: Vec, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
-  return dist(a, b) <= TERRAIN.vision.closeRadius || (hasLineOfSight(world.terrain, a, b, props, screens) && clearOverTerrain(world.terrain, a, b));
+  if (dist(a, b) <= TERRAIN.vision.closeRadius) return true;
+  const line = sightLine(world.terrain, a, b);
+  return hasLineOfSight(world.terrain, line, props, screens) && clearOverTerrain(world.terrain, line);
 }
 
 // A straight line past rocks and over hills, with no close radius: a shot needs it even when the target is seen.
 export function hasLineOfFire(world: World, a: Vec, b: Vec): boolean {
-  return hasLineOfSight(world.terrain, a, b, propsNear(world, a, b), []) && clearOverTerrain(world.terrain, a, b);
+  const line = sightLine(world.terrain, a, b);
+  return hasLineOfSight(world.terrain, line, propsNear(world, a, b), []) && clearOverTerrain(world.terrain, line);
 }
 
 // A dust screen blocks sight only if it sits between the viewer and the target.
-function hasLineOfSight(terrain: Terrain, a: Vec, b: Vec, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
+function hasLineOfSight(terrain: Terrain, line: SightLine, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
+  const { a, b } = line;
   const targetDist = dist(a, b);
-  const line = sightLine(terrain, a, b);
   return props.every((o) => !propHides(terrain, o, line)) && screens.every((o) => dist(a, o.pos) >= targetDist || segmentDist(o.pos, a, b) >= o.r);
 }
 
 // The line from the viewer's eye to the target's top, in height units over each end's height: a deck where the end
-// stands on one, else the ground. clearOverTerrain() reads the same ends.
+// stands on one, else the ground. Props and hills both test against it.
 type SightLine = { a: Vec; b: Vec; from: number; to: number };
 
 function sightLine(terrain: Terrain, a: Vec, b: Vec): SightLine {
@@ -122,7 +124,7 @@ function sightLine(terrain: Terrain, a: Vec, b: Vec): SightLine {
 // height. A box that holds the target does not hide it, so the viewer sees the prop's own face.
 function propHides(terrain: Terrain, o: Obstacle, line: SightLine): boolean {
   if (segmentDist(o.pos, line.a, line.b) >= propReach(o)) return false;
-  const { base, boxes } = sightBoxes(terrain, o);
+  const { base, boxes } = reachableBoxes(o, terrain);
   return boxes.some((box) => {
     const part = withinHeights(line, base + box.z0 / PHYSICS.metersPerTile, base + box.z1 / PHYSICS.metersPerTile);
     return part !== null && segmentCrossesBox(box, part[0], part[1]) && boxDistance(box, line.b) > 0;
@@ -146,37 +148,14 @@ function withinHeights(line: SightLine, lo: number, hi: number): [Vec, Vec] | nu
   return [at(t0), at(t1)];
 }
 
-// A prop's boxes that can hide anything, and the height it stands on. A box out of reach under a deck hides nothing,
-// by the rule that keeps it from blocking trucks (underDeck() in bridge.ts). World clones share posed boxes and their
-// terrain, so each list is filtered once per terrain.
-const SIGHT_BOXES = new WeakMap<Terrain, WeakMap<readonly PosedBox[], { base: number; boxes: readonly PosedBox[] }>>();
-
-function sightBoxes(terrain: Terrain, o: Obstacle): { base: number; boxes: readonly PosedBox[] } {
-  const all = propBoxes(o);
-  let byBoxes = SIGHT_BOXES.get(terrain);
-  if (!byBoxes) {
-    byBoxes = new WeakMap();
-    SIGHT_BOXES.set(terrain, byBoxes);
-  }
-  let found = byBoxes.get(all);
-  if (!found) {
-    const base = propBase(terrain, o);
-    found = { base, boxes: all.filter((box) => !underDeck(box, base, terrain)) };
-    byBoxes.set(all, found);
-  }
-  return found;
-}
-
 // Hills block sight: the ground between must stay under the line from the viewer's eye to the target's top.
-function clearOverTerrain(terrain: Terrain, a: Vec, b: Vec): boolean {
-  const V = TERRAIN.vision;
-  const eyeA = heightAt(terrain, a.x, a.y) + V.eyeHeight;
-  const eyeB = heightAt(terrain, b.x, b.y) + V.eyeHeight;
-  const n = Math.ceil(dist(a, b) * V.samplesPerTile);
+function clearOverTerrain(terrain: Terrain, line: SightLine): boolean {
+  const { a, b, from, to } = line;
+  const n = Math.ceil(dist(a, b) * TERRAIN.vision.samplesPerTile);
   for (let i = 1; i < n; i++) {
     const t = i / n;
     const ground = heightAt(terrain, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
-    if (ground > eyeA + (eyeB - eyeA) * t) return false;
+    if (ground > from + (to - from) * t) return false;
   }
   return true;
 }

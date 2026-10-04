@@ -320,25 +320,38 @@ export function propBoxes(o: Obstacle): readonly PosedBox[] {
   return posedShape(o).boxes;
 }
 
-// Blocking boxes per terrain and posed box list. World clones share posed boxes and their terrain, so each list is
-// filtered once per terrain.
-const BLOCKING_BOXES = new WeakMap<Terrain, WeakMap<readonly PosedBox[], readonly PosedBox[]>>();
+// A prop's boxes in reach, with the height it stands on, per terrain and posed box list. World clones share posed
+// boxes and their terrain, so each list is filtered once per terrain.
+const REACHABLE_BOXES = new WeakMap<Terrain, WeakMap<readonly PosedBox[], ReachableBoxes>>();
+const BLOCKING_BOXES = new WeakMap<ReachableBoxes, readonly PosedBox[]>();
+export type ReachableBoxes = { base: number; boxes: readonly PosedBox[] };
 
-// The boxes of a prop that block a truck: those that start below truck roofs and are not out of reach under a deck
-// (underDeck() in bridge.ts). Higher boxes, like a canopy or the ship wing, leave trucks to pass under. The prop
-// stands where its colliders and its view stand it: at propBase() in bridge.ts.
-export function blockingBoxes(o: Obstacle, t: Terrain): readonly PosedBox[] {
-  const boxes = propBoxes(o);
-  let byBoxes = BLOCKING_BOXES.get(t);
+// The boxes of a prop that are not out of reach under a deck (underDeck() in bridge.ts), and the height it stands on:
+// propBase() in bridge.ts, where its colliders and its view stand it. Blocking and sight both start from these.
+export function reachableBoxes(o: Obstacle, t: Terrain): ReachableBoxes {
+  const all = propBoxes(o);
+  let byBoxes = REACHABLE_BOXES.get(t);
   if (!byBoxes) {
     byBoxes = new WeakMap();
-    BLOCKING_BOXES.set(t, byBoxes);
+    REACHABLE_BOXES.set(t, byBoxes);
   }
-  let low = byBoxes.get(boxes);
-  if (!low) {
+  let found = byBoxes.get(all);
+  if (!found) {
     const base = propBase(t, o);
-    low = boxes.filter((b) => b.z0 < PHYSICS.truckClearance && !underDeck(b, base, t));
-    byBoxes.set(boxes, low);
+    found = { base, boxes: all.filter((b) => !underDeck(b, base, t)) };
+    byBoxes.set(all, found);
+  }
+  return found;
+}
+
+// The boxes of a prop that block a truck: those in reach that start below truck roofs. Higher boxes, like a canopy or
+// the ship wing, leave trucks to pass under.
+export function blockingBoxes(o: Obstacle, t: Terrain): readonly PosedBox[] {
+  const reachable = reachableBoxes(o, t);
+  let low = BLOCKING_BOXES.get(reachable);
+  if (!low) {
+    low = reachable.boxes.filter((b) => b.z0 < PHYSICS.truckClearance);
+    BLOCKING_BOXES.set(reachable, low);
   }
   return low;
 }
