@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAPGEN } from '../data/terrain';
 import { newDraft, typeCode, type MapDraft } from '../mapgen/bake';
-import { decodeMap, encodeMap, PROP_CODES, PROP_KINDS, TYPE_IDS, type BakedProp } from './terrain';
+import { decodeMap, encodeMap, PROP_KINDS, TYPE_IDS, type BakedProp } from './terrain';
 
 const PROP_BYTES = 1 + 4 * 4 + 2 * 2;
 
@@ -36,9 +36,9 @@ describe('map file', () => {
     expect(decodeMap(encodeMap(d, 1)).props).toEqual(d.props);
   });
 
-  it('keeps the stored code of every older prop kind and ground type', () => {
-    expect(PROP_CODES).toEqual(['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'hullRib', 'shipCache', 'coreWreck', 'reactor', 'hullWall', 'deckBay', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock']);
-    expect(TYPE_IDS).toEqual(['road', 'hardpan', 'sand', 'scrub', 'scree', 'mud', 'gravel', 'saltCrust', 'asphalt', 'ash', 'field', 'dirtyWater', 'toxic', 'hull', 'track', 'canal', 'concrete']);
+  it('stores prop kinds and ground types in this order, which only a new file version may change', () => {
+    expect(PROP_KINDS).toEqual(['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'shipCache', 'reactor', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock']);
+    expect(TYPE_IDS).toEqual(['road', 'hardpan', 'sand', 'scrub', 'scree', 'mud', 'gravel', 'saltCrust', 'asphalt', 'ash', 'field', 'dirtyWater', 'toxic', 'track', 'canal', 'concrete']);
   });
 
   it('round-trips pool ground types', () => {
@@ -65,19 +65,9 @@ describe('map file', () => {
   it('refuses a file with an unknown prop kind', () => {
     const d = smallDraft();
     const bytes = encodeMap(d, 1);
-    bytes[bytes.length - PROP_BYTES] = PROP_CODES.length;
+    bytes[bytes.length - PROP_BYTES] = PROP_KINDS.length;
 
     expect(() => decodeMap(bytes)).toThrow(/prop kind/i);
-  });
-
-  it('refuses a file with a retired prop kind or ground type', () => {
-    const props = encodeMap(smallDraft(), 1);
-    props[props.length - PROP_BYTES] = PROP_CODES.indexOf('deckBay');
-    const ground = encodeMap(smallDraft(), 1);
-    ground[ground.length - 4 - smallDraft().props.length * PROP_BYTES - 1] = TYPE_IDS.indexOf('hull');
-
-    expect(() => decodeMap(props)).toThrow(/prop kind/i);
-    expect(() => decodeMap(ground)).toThrow(/ground type/i);
   });
 
   it('refuses a version 1 file, which stored only rocks', () => {
@@ -85,6 +75,13 @@ describe('map file', () => {
     new DataView(bytes.buffer).setUint32(4, 1, true);
 
     expect(() => decodeMap(bytes)).toThrow(/version 1\b/i);
+  });
+
+  it('refuses a version 2 file, whose prop and ground codes still held the old Fallen Sun hull', () => {
+    const bytes = encodeMap(smallDraft(), 1);
+    new DataView(bytes.buffer).setUint32(4, 2, true);
+
+    expect(() => decodeMap(bytes)).toThrow(/version 2\b/i);
   });
 
   it('rounds heights to the stored step', () => {
