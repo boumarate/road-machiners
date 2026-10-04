@@ -42,7 +42,7 @@ export type Recording = { lines: TraceLine[]; rows: DayRow[]; death: RunEnd | nu
 const STALL_TILES = 1;
 
 export function record(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Recording {
-  return recordFrom(startWorld(seed), `seed ${seed} ${archetype}`, archetype, turns, options);
+  return recordFrom(startWorld(seed, options.kit), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
 // Records from a given world. label names the run in errors.
@@ -58,7 +58,7 @@ export function recordFrom(start: World, label: string, archetype: Archetype, tu
 
 // Plays the turns one at a time and yields each turn's world and trace lines, so a caller can write as it goes.
 export function recordTurns(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Generator<RecordStep> {
-  return stepsFrom(startWorld(seed), `seed ${seed} ${archetype}`, archetype, turns, options);
+  return stepsFrom(startWorld(seed, options.kit), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
 // The player's death ends the run early, since no turn runs after it. A stall or any other error fails loud.
@@ -102,8 +102,8 @@ function dayEnds(before: World, after: World, last: boolean): boolean {
   return last || clockOf(after.turn).day > clockOf(before.turn).day;
 }
 
-function startWorld(seed: number): World {
-  return update(newWorld(seed, startKit('standard'), TEST_MAP), (w) => {
+function startWorld(seed: number, kit = 'standard'): World {
+  return update(newWorld(seed, startKit(kit), TEST_MAP), (w) => {
     const p = w.player;
     for (const skill of Object.keys(p.skills) as (keyof typeof p.skills)[]) {
       p.skills[skill] = 0;

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { CHASSIS, chassisDef } from '../../data/chassis';
 import { REGION } from '../../data/region';
 import { partDef } from '../../data/parts';
+import { SHOPS } from '../../data/market';
 import { CONDITION } from '../../data/wear';
 import { playerVehicle } from '../damage';
 import { makePart } from '../factory';
@@ -118,7 +119,7 @@ describe('botOrders', () => {
     expect(Object.keys(goodsCount(playerVehicle(turn.world)))).toEqual(['salt']);
   });
 
-  it('has a scavenger with no salvage left, every site found and no load it can afford wait in the nearest town', () => {
+  it('has a scavenger with no salvage left, every site found and no load it can afford read the next board', () => {
     const w = emptyWorld({ x: 60, y: 60 });
     const me = playerVehicle(w);
     removeAllGoods(me);
@@ -128,8 +129,8 @@ describe('botOrders', () => {
 
     const turn = botOrders(w, 'scavenger');
 
-    const home = nearestTown(w);
-    expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: nearestPad(home, me.pos) });
+    const nearestShop = Object.keys(SHOPS).map(siteOf).sort((a, b) => dist(me.pos, a.pos) - dist(me.pos, b.pos))[0];
+    expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: nearestPad(nearestShop, me.pos) });
   });
 
   // A knockout strips the engine, and the stranded truck is stuck until it gets one.
@@ -481,6 +482,48 @@ describe('the hunter', () => {
 
     expect(turn.world.player.autoFire).toBe(false);
     expect(turn.ledger.repairs).toBeLessThan(0);
+  });
+
+  it('has a bot at a town gate drop the aim it set while auto fire was on', () => {
+    const w = parkedAt('bowl');
+    const me = playerVehicle(w);
+    const merc = addVehicle(w, 'mercs', 'van', ['mg', 'stockEngine'], { x: me.pos.x + 8, y: me.pos.y });
+    merc.brain = npcBrain('merc', merc.pos, NPCS.merc.traits);
+    startCombat(w, merc, me);
+    for (const mw of vehicleStats(w, me).weapons) me.weaponOrders[mw.part.id] = { targetId: merc.id, aim: 'body' };
+
+    const turn = botOrders(w, 'trader');
+
+    expect(playerVehicle(turn.world).weaponOrders).toEqual({});
+  });
+
+  it('has a hunter take the bounty on the board it is parked at, and a trader leave it', () => {
+    const heldAfter = (archetype: 'hunter' | 'trader') => {
+      const w = parkedAt('bowl');
+      w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 700, deadline: 5000, window: 600, tier: 1 }];
+      return botOrders(w, archetype).world.player.contracts.map((c) => c.id);
+    };
+
+    expect(heldAfter('hunter')).toEqual(['ct-bounty']);
+    expect(heldAfter('trader')).toEqual([]);
+  });
+
+  it('has a bot with a hot engine stop to cool, but keep driving while a raider fights it', () => {
+    const hotAt = (fight: boolean) => {
+      const w = emptyWorld({ x: 30, y: 30 });
+      const me = playerVehicle(w);
+      me.order = { kind: 'stopAt', dest: { x: 200, y: 30 } };
+      w.player.engineHeat = 0.8;
+      if (fight) {
+        const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 60, y: 30 });
+        raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+        startCombat(w, raider, me);
+      }
+      return playerVehicle(botOrders(w, 'trader').world).order;
+    };
+
+    expect(hotAt(false)).toBeNull();
+    expect(hotAt(true)).not.toBeNull();
   });
 
   // A raider demands the cargo. A trader too slow to get away hands it to a stronger raider and refuses a weaker one.

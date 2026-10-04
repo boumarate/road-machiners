@@ -13,7 +13,7 @@ import { ENGINE_HEAT } from '../../data/wear';
 import { TOPICS, type TopicId } from '../../data/dialogue';
 import { maxHp, partValue } from '../wear';
 import { inCombat, isHostile } from '../combat';
-import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder } from '../world';
+import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder, setWeaponOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
 import { isKnockedOut } from '../defeat';
 import { isTownGuarded } from '../guards';
@@ -24,7 +24,7 @@ import { affordableBuyCount, basicsRepairCost, buyGood, buyStockPart, buySupply,
 import { corePart, findSpot, freeCells, goodsCount, gridOf, isMounted, itemCells, MOUNT_CELLS, mountedItems, mountedParts, type Spot } from '../grid';
 import { getLayoutError, stowSpot, storePart } from '../inventory';
 import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
-import { shopDef, SHOPS } from '../../data/market';
+import { CONTRACTS, shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
 import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
 import { firepower, getUpkeepReserve, isWeak, ownDanger, perceiveDanger } from '../npc-decisions';
@@ -57,8 +57,9 @@ const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
 };
 
 // markovTurns is how many turns the markov bot keeps one goal. It is required for that bot and ignored by the others.
-// tolerateStalls is for the recorder: NPC stalls count in the rows instead of failing the run.
-export type BotOptions = { markovTurns?: number; tolerateStalls?: boolean };
+// tolerateStalls is for the recorder: NPC stalls count in the rows instead of failing the run. kit names the start kit
+// the recorder begins from, standard when absent.
+export type BotOptions = { markovTurns?: number; tolerateStalls?: boolean; kit?: string };
 
 // The markov draws come from their own hash of the run seed, so they never shift the world's randomness.
 const MARKOV_SALT = 0x6d61726b;
@@ -142,8 +143,10 @@ function underFire(world: World, me: Vehicle): boolean {
   return inCombat(world, me) && !isTownGuarded(me.pos);
 }
 
+// Holding fire also drops the aim: an order set while auto fire was on keeps the guns shooting after the switch is off.
 function setFire(o: Orders, on: boolean): void {
   if (o.world.player.autoFire !== on) o.run((w) => setAutoFire(w, on));
+  if (!on) for (const id of Object.keys(o.me.weaponOrders)) o.run((w) => setWeaponOrder(w, id, null));
 }
 
 // ---- Holding still: jobs, a hot engine and patch deals.
@@ -151,8 +154,9 @@ function setFire(o: Orders, on: boolean): void {
 // True when the truck must not drive this turn, after any command the hold needs.
 function holds(o: Orders): boolean {
   if (o.me.job) return true;
-  // A hot engine cools while parked. The bot stops at the warning, as the warning tells the player to.
-  if (o.world.player.engineHeat >= ENGINE_HEAT.warnAt) {
+  // A hot engine cools while parked. The bot stops at the warning, as the warning tells the player to. In combat it
+  // drives on: an overheated engine loses 2 HP a turn, and a parked truck loses its engine to the foe's guns.
+  if (o.world.player.engineHeat >= ENGINE_HEAT.warnAt && !inCombat(o.world, o.me)) {
     if (o.me.order) o.run((w) => setMoveOrder(w, null));
     return true;
   }
@@ -449,9 +453,12 @@ function checkNextBoard(o: Orders): void {
   driveToSite(o, next);
 }
 
-// A scavenger with no stock left to search and no salvage site left to find trades instead, or waits in town.
+// A scavenger with no stock left to search and no salvage site left to find trades instead. Too poor to trade, it
+// takes a haul and otherwise reads the next board, like a trader: salvage never grows back, so waiting earns nothing.
 function scavengerGoal(o: Orders): void {
-  if (!scavenge(o) && !trade(o)) driveToSite(o, nearestTown(o.world));
+  const held = heldHaul(o.world);
+  if (held) return carryHaul(o, held);
+  if (!scavenge(o) && !trade(o) && !takeHaul(o)) checkNextBoard(o);
 }
 
 type Purchase = { town: TownDef; good: string; count: number; profit: number };
@@ -541,9 +548,24 @@ function hunterGoal(o: Orders): void {
   // Without a working gun it scavenges, which needs no money, until a town sells it one it can pay for.
   if (firepower(o.world, o.me) === 0) return scavengerGoal(o);
   if (townAt(o.world) && hasCargo(o.world, o.me)) sellCargo(o);
+  takeBounties(o);
   if (stripDowned(o) || engageFoe(o)) return;
   lootHere(o);
   collectOrHunt(o);
+}
+
+// A raider kill pays its bounty besides the wreck's loot, so the hunter takes each bounty on the board it is parked
+// at, one per raider template, up to the contract limit.
+function takeBounties(o: Orders): void {
+  const shop = shopAt(o.world);
+  if (!shop) return;
+  for (const c of shopState(o.world, shop).contracts) if (wantsBounty(o.world, c)) o.run((w) => acceptContract(w, c.id));
+}
+
+function wantsBounty(world: World, c: Contract): boolean {
+  const held = world.player.contracts;
+  if (c.kind !== 'bounty' || c.deadline <= world.turn || held.length >= CONTRACTS.maxActive) return false;
+  return !held.some((h) => h.kind === 'bounty' && h.template === c.template);
 }
 
 // Demands the weakest foe in sight stand down when it is broken, or else drives at it, or at the nearest one heard. A

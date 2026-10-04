@@ -24,7 +24,7 @@ const { isArchetype } = await import('../src/sim/progression/bot.ts');
 const { recordTurns } = await import('../src/sim/progression/record.ts');
 const { turnLine, worldLine } = await import('../src/sim/progression/turn-log.ts');
 
-const USAGE = 'Usage: npm run progression:record -- --archetypes <a,b> --seeds <1,2> --turns <n> [--markov-turns <k>] [--tolerate-stalls true] [--out <dir>] [--patch <file>]';
+const USAGE = 'Usage: npm run progression:record -- --archetypes <a,b> --seeds <1,2> --turns <n> [--markov-turns <k>] [--tolerate-stalls true] [--kit <id>] [--out <dir>] [--patch <file>]';
 
 const args = parseArgs(argv);
 if (args.job) recordOne(args.job, args.turns, args.options, args.place);
@@ -43,7 +43,12 @@ function parseArgs(argv) {
 
 // The markov bot keeps a goal for --markov-turns turns. Every other bot ignores it.
 function parseOptions(flags) {
-  return { ...parseMarkov(flags), ...parseTolerance(flags) };
+  return { ...parseMarkov(flags), ...parseTolerance(flags), ...parseKit(flags) };
+}
+
+// --kit <id> starts every run from that start kit, such as combat, instead of standard.
+function parseKit(flags) {
+  return flags.kit === undefined ? {} : { kit: flags.kit };
 }
 
 function parseMarkov(flags) {
@@ -114,8 +119,9 @@ function runChild({ archetype, seed }, turns, options, place) {
   const script = fileURLToPath(import.meta.url);
   const markov = options.markovTurns === undefined ? [] : ['--markov-turns', String(options.markovTurns)];
   const tolerate = options.tolerateStalls ? ['--tolerate-stalls', 'true'] : [];
+  const kit = options.kit === undefined ? [] : ['--kit', options.kit];
   const patch = place.patch === null ? [] : ['--patch', place.patch];
-  const child = spawn(viteNode, [script, '--', '--job', `${archetype}:${seed}`, '--turns', String(turns), '--out', place.out, ...patch, ...markov, ...tolerate], { stdio: 'inherit' });
+  const child = spawn(viteNode, [script, '--', '--job', `${archetype}:${seed}`, '--turns', String(turns), '--out', place.out, ...patch, ...markov, ...tolerate, ...kit], { stdio: 'inherit' });
   return new Promise((resolve, reject) => {
     child.on('error', reject);
     child.on('exit', (code) => resolve(code));
