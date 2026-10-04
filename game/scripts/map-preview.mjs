@@ -55,7 +55,7 @@ const PROP_LOOKS = {
   woodpile: { color: 0xa07040, shape: 'box' },
 };
 const DRAW_ORDER = Object.keys(PROP_LOOKS);
-const COLORS = TYPE_IDS.map((id) => TERRAIN_TYPES[id]?.color ?? 0); // a retired type has no color, and no tile holds it
+const COLORS = TYPE_IDS.map((id) => TERRAIN_TYPES[id].color);
 
 export function paintMap(d, area, pxPerTile) {
   const pic = { width: Math.round(area.w * pxPerTile), height: Math.round(area.h * pxPerTile), rgba: new Uint8Array(0) };

@@ -17,7 +17,11 @@ export const ROAD_DETAIL_SIDE = 256; // detail pixels per side of the tiling ima
 export const ROAD_TONE_SIDE = 64; // tone pixels per side of its tiling image
 export const ROAD_TONE_PIXELS = 12; // detail pixels per tone pixel
 const SITES = [...REGION.towns, ...REGION.locations];
-const WRECKS = REGION.locations.filter(isTerritory).filter((t) => TERRITORIES[t.id].wreck !== null);
+// Each territory with a wreck, paired with its wreck's rules.
+const WRECKS: { territory: TerritoryDef; wreck: WreckRules }[] = REGION.locations.filter(isTerritory).flatMap((territory) => {
+  const wreck = TERRITORIES[territory.id].wreck;
+  return wreck === null ? [] : [{ territory, wreck }];
+});
 const WIDTH = REGION.roadWidth * 0.9; // tiles across the painted road, before its edge wanders
 const BLUR = 2.4; // tiles of mask blur, so the tone can move the edge
 // Tiles of blur on each dirt road stroke. Dirt roads are narrower than BLUR, which would spread one into a wide soft
@@ -53,9 +57,9 @@ export function paintRoadMask(c: PaintCanvas): void {
   ctx.filter = `blur(${DIRT_BLUR * c.res}px)`;
   ctx.globalCompositeOperation = "lighten";
   ctx.strokeStyle = DIRT_ROAD_STYLE;
-  for (const territory of WRECKS) {
+  for (const { territory, wreck } of WRECKS) {
     const { roads, spurs } = territoryRoads(territory);
-    const fade = wreckRules(territory).spurFade;
+    const fade = wreck.spurFade;
     for (const road of roads) strokeRuns(c, runsWhere(evenPoints(road.points), offDeck), road.width * 0.9);
     for (const spur of spurs) strokeSpur(c, spur, fade);
   }
@@ -101,12 +105,6 @@ function tilesToEnd(points: readonly Vec[]): number[] {
   const out = new Array<number>(points.length).fill(0);
   for (let i = points.length - 2; i >= 0; i--) out[i] = out[i + 1] + dist(points[i], points[i + 1]);
   return out;
-}
-
-function wreckRules(territory: TerritoryDef): WreckRules {
-  const wreck = TERRITORIES[territory.id].wreck;
-  if (!wreck) throw new Error(`Territory ${territory.id} has no wreck`);
-  return wreck;
 }
 
 // Stretches of points that pass `keep`.
