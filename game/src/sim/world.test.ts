@@ -7,7 +7,7 @@ import { playerVehicle } from './damage';
 import { townAt } from './sites';
 import { vehicleStats } from './stats';
 import { sunAt } from './sun';
-import { emptyWorld, testDrive } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import type { World } from './types';
 import { dist } from './vec';
 import { endTurn, newWorld, setHeadlights, startPose, townStart, update } from './world';
@@ -68,14 +68,38 @@ describe('the headlight switch', () => {
     expect(lit.map((w) => w.player.headlights)).toEqual(lit.map(() => true));
   });
 
-  it('changes no sight, detection, fuel or heat rule', () => {
+  it('keeps the events and removed vehicles of the turn being shown', () => {
     const world = emptyWorld();
-    const dark = endTurn(world, testDrive);
-    const lit = endTurn(setHeadlights(world, true), testDrive);
+    const gone = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 60, y: 30 });
+    world.vehicles = world.vehicles.filter((v) => v !== gone);
+    world.removed = [gone];
+    world.events = [{ t: 'destroyed', vehicle: gone.id, by: world.player.vehicleId }];
 
-    expect(lit.player.visible).toEqual(dark.player.visible);
-    expect(lit.player.contacts).toEqual(dark.player.contacts);
-    expect(lit.player.fuel).toBe(dark.player.fuel);
-    expect(lit.player.engineHeat).toBe(dark.player.engineHeat);
+    const next = setHeadlights(world, true);
+
+    expect(next.events).toEqual(world.events);
+    expect(next.removed).toEqual(world.removed);
+  });
+
+  it('changes no turn result at night with NPCs about', () => {
+    const night = update(emptyWorld({ x: 100, y: 100 }), (w) => {
+      w.turn = duskTurn + 2;
+      const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 125, y: 100 });
+      raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+      const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 100, y: 130 });
+      trader.brain = npcBrain('trader', trader.pos, ['trader']);
+    });
+    expect(sunAt(night.turn)).toBeNull();
+    const play = (world: World): World[] => {
+      const seen = [world];
+      for (let k = 0; k < 4; k++) seen.push(endTurn(seen.at(-1)!, testDrive));
+      return seen.slice(1);
+    };
+
+    const dark = play(night);
+    const lit = play(setHeadlights(night, true));
+
+    expect(dark.at(-1)!.player.contacts.length).toBeGreaterThan(0);
+    expect(lit.map((w) => ({ ...w, player: { ...w.player, headlights: false } }))).toEqual(dark);
   });
 });

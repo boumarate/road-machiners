@@ -369,10 +369,10 @@ export function setOverdrive(world: World, on: boolean): World {
   });
 }
 
+// The one switch that flips while a turn plays, so it skips update(): that would empty the events and removed
+// vehicles the turn is still showing. No rule reads the lamps, so nothing else needs settling.
 export function setHeadlights(world: World, on: boolean): World {
-  return update(world, (w) => {
-    w.player.headlights = on;
-  });
+  return { ...world, player: { ...world.player, headlights: on } };
 }
 
 export function setAutoFire(world: World, on: boolean): World {
