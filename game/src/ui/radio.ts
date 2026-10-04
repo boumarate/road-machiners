@@ -9,7 +9,7 @@ import { REGION } from '../data/region';
 import { TIME } from '../data/time';
 import type { Contract } from '../sim/market';
 import { siteOf } from '../sim/market';
-import { stateOf } from '../sim/states';
+import { robbing } from '../sim/states';
 import { clockOf } from '../sim/sun';
 import type { GameEvent, Vehicle, WeatherEvent, World } from '../sim/types';
 import { dist, type Vec } from '../sim/vec';
@@ -180,12 +180,6 @@ function raidPlace(world: World, attackerId: string, victimId: string): string |
   const victim = vehicleIn(world, victimId);
   if (!victim || vehicleIn(world, attackerId)?.faction !== 'raiders') return null;
   return placeWord(world, victim.pos);
-}
-
-// A hostile event starts a robbery only when its feud says so. Drivers fighting back raise hostile events too.
-function robbing(world: World, robberId: string, targetId: string): boolean {
-  const feud = stateOf(world, 'feud', robberId, targetId)?.data;
-  return feud?.kind === 'feud' && feud.robbery;
 }
 
 // The queued broadcast to drop when full: the oldest of the lowest rank.
