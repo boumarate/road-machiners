@@ -363,8 +363,9 @@ export const CASING = {
   max: 400, // casings alive at once, both sizes together; a new one past it replaces the oldest
   lifeTurns: TIME.turnsPerDay,
   fadeShare: 0.1, // the last share of the life over which a casing shrinks away
-  small: { length: 0.12, radius: 0.03 }, // meters
-  large: { length: 0.3, radius: 0.07 },
+  small: { length: 0.24, radius: 0.05 }, // meters
+  large: { length: 0.45, radius: 0.1 },
+  glint: 0x4a3810, // brass glows this much, so a casing reads against dark ground and in shade
   back: 0.6, // meters behind the muzzle along the barrel where the casing leaves the breech
   eject: { side: 2.4, up: 2.2, spread: 0.8, spin: 18 }, // m/s out to the right and up, ± m/s of spread, rad/s of tumble
   gravity: 9.8, // m/s^2
@@ -395,7 +396,7 @@ export class Casings {
   private quat = new THREE.Quaternion();
   private tumble = new THREE.Quaternion();
   private scale = new THREE.Vector3();
-  private material = new THREE.MeshLambertMaterial({ color: PAL.brass, flatShading: true });
+  private material = new THREE.MeshLambertMaterial({ color: PAL.brass, emissive: CASING.glint, flatShading: true });
 
   constructor(private scene: THREE.Scene) {
     this.meshes = { small: casingMesh(CASING.small, this.material), large: casingMesh(CASING.large, this.material) };

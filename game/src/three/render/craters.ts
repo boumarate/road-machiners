@@ -26,6 +26,8 @@ const SCORCH = [
   { at: 0.85, alpha: 0.6 },
   { at: 1.3, alpha: 0 },
 ];
+// The soot's outer edge reaches out by its ring's at times 1 ± SPLASH / 2, per sector, so the blast mark is ragged.
+const SPLASH = 0.6;
 const RIM_SIDES = 6; // sides around each rim piece
 
 // Whether a crater's view shows. A crater from before the latest synced turn always shows. One of that turn shows
@@ -121,8 +123,9 @@ function scorchGeometry(t: Terrain, c: Crater): THREE.BufferGeometry {
     const sectors = ring.at === 0 ? 1 : SECTORS;
     for (let k = 0; k < sectors; k++) {
       const a = (2 * Math.PI * k) / SECTORS;
-      const x = c.pos.x + Math.cos(a) * r * ring.at;
-      const y = c.pos.y + Math.sin(a) * r * ring.at;
+      const at = ring.alpha === 0 ? ring.at * (1 + SPLASH * (splashOf(c, k) - 0.5)) : ring.at;
+      const x = c.pos.x + Math.cos(a) * r * at;
+      const y = c.pos.y + Math.sin(a) * r * at;
       positions.push(x * S, markHeightAt(t, c.pos, x, y) * S + LIFT, y * S);
       colors.push(1, 1, 1, ring.alpha);
     }
@@ -133,6 +136,12 @@ function scorchGeometry(t: Terrain, c: Crater): THREE.BufferGeometry {
   geo.setIndex(discIndices(SCORCH.length - 1));
   geo.computeVertexNormals();
   return geo;
+}
+
+// A share in 0..1 fixed by the crater's spot and the sector, so a crater keeps its splash across loads.
+function splashOf(c: Crater, k: number): number {
+  const h = Math.sin(c.pos.x * 12.9898 + c.pos.y * 78.233 + k * 37.719) * 43758.5453;
+  return h - Math.floor(h);
 }
 
 // Vertex 0 is the centre, then SECTORS vertices per ring. Faces wind so their normals point up.
