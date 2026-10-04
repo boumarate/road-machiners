@@ -86,7 +86,7 @@ const hulks = new Map<string, readonly ShapeBox[]>();
 export function hulkBoxes(chassisId: string): readonly ShapeBox[] {
   const cached = hulks.get(chassisId);
   if (cached) return cached;
-  const bottom = -PHYSICS.bodies[chassisDef(chassisId).look].halfHeight;
+  const bottom = -bodyOf(chassisId).half.y;
   const boxes = truckShape(chassisId).boxes.map((b) => {
     const z0 = Math.max(b.z0, bottom);
     if (!(b.z1 > z0)) throw new Error(`A ${chassisId} hulk box has no height above the chassis bottom`);

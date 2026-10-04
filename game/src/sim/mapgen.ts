@@ -211,14 +211,13 @@ export function propPose(o: Obstacle): PropPose {
   const pos = { ...o.pos };
   if (o.kind === 'landmark') return landmarkPose(o);
   if (o.kind === 'rock') return { model: 'rock', pos, yaw: -idHash(o.id) * TURN, scale: even(o.r * M) };
-  if (o.kind === 'wreck') return wreckPose(o);
+  if (o.kind === 'wreck') return wreckPose(o, pos);
   if (o.kind === 'building') return { model: 'building', pos, yaw: idHash(o.id) * Math.PI, scale: buildingScale(o) };
   throw new Error(`Obstacle ${o.id} of kind ${o.kind} has no prop model`);
 }
 
 // A kill wreck with a hulk lies as its dead truck did. Any other wreck is the generic model, turned by its id.
-function wreckPose(o: Exclude<Obstacle, Landmark>): PropPose {
-  const pos = { ...o.pos };
+function wreckPose(o: Exclude<Obstacle, Landmark>, pos: Vec): PropPose {
   if (o.hulk) return { model: 'hulk', chassisId: o.hulk.chassisId, pos, yaw: o.hulk.yaw, scale: even(1) };
   return { model: 'wreck', pos, yaw: idHash(o.id) * TURN, scale: even(o.r / WRECK_RADIUS) };
 }
