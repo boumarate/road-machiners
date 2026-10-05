@@ -22,8 +22,8 @@ function createSummary(days) {
 const fixture = {
   generatedAt: now, repoUrl: 'https://github.com/example/factory', playUrl: 'https://example.com/',
   operations: createSource({ jobs, queues: Object.fromEntries(['branch', 'triage', 'design', 'implement', 'verify', 'test'].map((queue) => [queue, { total: 20, busy: 15 }])), releaseKey: 'release', release: { issue: 99 }, candidateUrl: null }),
-  github: createSource({ releaseKey: 'release', features: [{ title: 'Long release '.repeat(40) }], cards: jobs.map((job) => ({ issue: job.issue, title: `Task ${job.issue} ${'unbroken'.repeat(60)}` })) }),
-  live: createSource({ workers: jobs.map((job) => ({ key: job.key, activity: 'tests', phase: 'running', status: 'ok', source: 'runner', progressAt: now })), manager: { activity: 'command', intent: 'investigate', phase: 'running', status: 'ok', since: now }, scheduler: { status: 'ready', freshness: 'ok', at: now, counts: { Triage: 12345678, Design: 200, Implementation: 31, Testing: 20, Approval: 10, Done: 99 }, decisions: [{ stage: 'design', queue: 'design', issue: 42, reasons: ['needs-info'] }], release: { reason: 'release-tasks', issues: [42] } } }),
+  github: createSource({ releaseKey: 'release', features: Array.from({ length: 34 }, (_, index) => ({ issue: index + 1, title: `Feature ${index + 1} ${'long'.repeat(60)}` })), cards: jobs.map((job) => ({ issue: job.issue, title: `Task ${job.issue} ${'unbroken'.repeat(60)}` })) }),
+  live: createSource({ workers: jobs.map((job) => ({ key: job.key, activity: 'tests', phase: 'running', status: 'ok', source: 'runner', progressAt: now })), manager: { activity: 'command', intent: 'investigate', phase: 'running', status: 'ok', at: now, since: now }, scheduler: { status: 'ready', freshness: 'ok', at: now, counts: { Triage: 12345678, Design: 200, Implementation: 31, Testing: 20, Approval: 10, Done: 99 }, decisions: [{ stage: 'design', queue: 'design', issue: 42, reasons: ['needs-info'] }], release: { reason: 'release-tasks', issues: [42] } } }),
   host: createSource({ cpu: createSource(85), ram: createSource({ used: 10000000000, total: 16000000000 }), gpu: createSource([{ utilization: 90 }]), ssd: createSource({ free: 20000000000 }), containers: createSource(jobs.map((job) => ({ jobId: job.key, service: 'worker', cpu: 2, memory: 1000000000 }))) }),
   analytics: createSource({ ranges: [1, 7, 30].map(createSummary) }),
 };
@@ -60,7 +60,26 @@ async function checkLayout(page, size) {
     console.log(size, tab, 'fits without scrolling');
   }
 }
+async function checkReleaseAndManager(page) {
+  await page.locator('#overview-tab').click();
+  assert.equal(await page.locator('#release-count').textContent(), '34 changes');
+  assert.equal(await page.locator('#release-items li').count(), 3);
+  assert.equal(await page.locator('#release-items a').first().getAttribute('href'), 'https://github.com/example/factory/issues/1');
+  await page.getByRole('button', { name: 'Next release', exact: true }).click();
+  await waitForRender(page);
+  assert.equal(await page.locator('#release-items a').first().getAttribute('href'), 'https://github.com/example/factory/issues/4');
+  await sendSnapshot(page, fixture);
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.key), 'release-Next');
+  const idle = structuredClone(fixture);
+  idle.live.value.manager = { activity: 'finished', phase: 'completed', status: 'ok', at: now, since: new Date(Date.now() - 12 * 3600000).toISOString() };
+  await sendSnapshot(page, idle);
+  assert.match(await page.locator('#manager-action').textContent(), /Idle for 12h/);
+  assert.match(await page.locator('#manager-age').textContent(), /Reported/);
+  await sendSnapshot(page, fixture);
+}
 async function checkCounters(page) {
+  await page.locator('#analytics-tab').click();
+  await waitForRender(page);
   await page.locator('#usage-tokens').focus();
   await page.keyboard.press('Enter');
   assert.equal(await page.locator('#full-text').textContent(), '1600000');
@@ -105,6 +124,17 @@ async function checkPause(page) {
   assert.ok(!(await page.locator('#source-status').textContent()).includes('Paused'));
   await page.locator('#overview-tab').click();
 }
+async function checkNarrow(page) {
+  await sendSnapshot(page, fixture);
+  await page.setViewportSize({ width: 683, height: 768 });
+  await page.locator('#overview-tab').click();
+  await waitForRender(page);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  assert.equal(await page.locator('#release-items a').count(), 3);
+  assert.equal(await page.getByRole('button', { name: 'Next release', exact: true }).isVisible(), true);
+  assert.equal(await page.locator('#server-rows tr').count() > 0, true);
+  await page.screenshot({ path: `${evidence}/overview-narrow.png`, fullPage: true });
+}
 async function checkUntrustedAndMissingData(page) {
   const malicious = structuredClone(fixture);
   malicious.github.value.cards[0].title = '<img src=x onerror="window.injected=true">';
@@ -142,10 +172,12 @@ try {
     await page.evaluate(() => document.fonts.ready);
     await sendSnapshot(page, fixture);
     await checkLayout(page, size);
+    await checkReleaseAndManager(page);
     await checkCounters(page);
     await checkPagination(page);
     await checkPause(page);
     await checkUntrustedAndMissingData(page);
+    await checkNarrow(page);
     assert.deepEqual(errors, []);
     await page.close();
   }

@@ -153,6 +153,7 @@ def env(tmp_path):
     return {
         "FACTORY_INBOX": "/in", "FACTORY_STATE_DIR": str(tmp_path / "state"), "FACTORY_COMMITTEE_CHAT": "-100",
         "FACTORY_OBSERVATION_HEARTBEAT_MS": "10000",
+        "FACTORY_PUBLIC_URL": "https://example.org", "FACTORY_STATUS_TIMEOUT_MS": "10000",
         "FACTORY_COMMITTEE_DIR": str(tmp_path / "committee"),
         "FACTORY_COMMITTEE_BOOTSTRAP": "1", "FACTORY_COMMITTEE_BOOTSTRAP_GITHUB": "boss",
     }
@@ -458,4 +459,5 @@ def test_register_adds_queue_tool(tmp_path, monkeypatch):
     assert calls[0]["schema"]["parameters"]["required"] == ["request"]
     assert calls[1]["name"] == "factory_queue_change" and calls[1]["toolset"] == "factory"
     assert calls[2]["name"] == "factory_route_reply" and calls[2]["toolset"] == "factory"
+    assert calls[3]["name"] == "factory_status" and calls[3]["toolset"] == "factory"
     assert calls[2]["schema"]["parameters"]["required"] == ["post", "route", "text"]

@@ -20,17 +20,31 @@ function readOwner(container: Container | undefined): Pick<ContainerResource, 'j
   if (!container) return { jobId: null, service: 'Unattributed container' };
   const label = container.Labels.split(',').find((value) => value.startsWith('factory-job='));
   if (label) return { jobId: label.slice('factory-job='.length), service: 'Factory job' };
-  return { jobId: null, service: container.Names === 'factory-hermes' ? 'Hermes' : 'Other container' };
+  const services: Record<string, string> = { 'factory-hermes': 'Hermes', 'factory-caddy': 'Web server', 'factory-tunnel': 'Public tunnel', 'roam-factory-proxy': 'Agent network proxy' };
+  return { jobId: null, service: Object.hasOwn(services, container.Names) ? services[container.Names] : 'Other container' };
 }
 export function parseContainerResources(containersText: string, statsText: string, cores: number): ContainerResource[] {
   if (!Number.isInteger(cores) || cores <= 0) throw new Error('Invalid host CPU count');
   const containers = containersText.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Container);
   const stats = statsText.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Stats);
-  return stats.map((sample) => {
+  const rows = stats.map((sample) => {
     const owner = readOwner(containers.find((container) => container.ID === sample.ID));
     const [read, written] = sample.BlockIO.split('/');
     return { ...owner, cpu: parseCpu(sample.CPUPerc, cores), memory: parseBytes(sample.MemUsage.split('/')[0]), readBytes: parseBytes(read), writtenBytes: parseBytes(written) };
   });
+  return groupUnattributedContainers(rows);
+}
+function groupUnattributedContainers(rows: ContainerResource[]): ContainerResource[] {
+  const unknown = rows.filter((row) => ['Other container', 'Unattributed container'].includes(row.service));
+  if (unknown.length < 2) return rows;
+  const group: ContainerResource = { jobId: null, service: `Other containers (${unknown.length})`, cpu: 0, memory: 0, readBytes: 0, writtenBytes: 0 };
+  for (const row of unknown) {
+    group.cpu += row.cpu;
+    group.memory += row.memory;
+    group.readBytes += row.readBytes;
+    group.writtenBytes += row.writtenBytes;
+  }
+  return [...rows.filter((row) => !unknown.includes(row)), group];
 }
 export async function readContainerResources(timeoutMs: number): Promise<ContainerResource[]> {
   const containers = await runFile('docker', ['ps', '--format', '{{json .}}'], { timeout: timeoutMs });

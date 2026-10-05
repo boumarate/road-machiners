@@ -1,6 +1,6 @@
 # Factory dashboard
 
-The read-only dashboard explains factory work at `/factory/`. Overview shows activity, scheduling waits, release gates and server load. Analytics shows measured usage and time. Visitors cannot start jobs or change state.
+The read-only dashboard explains factory work at `/factory/`. Overview shows activity, scheduling waits, release gates and server load. Analytics shows measured usage and time. Hermes's `factory_status` tool reads the exact JSON from `/factory/api/snapshot` that feeds both tabs. It has no separate status calculation. Visitors cannot start jobs or change state.
 
 ## Local use
 
@@ -20,7 +20,7 @@ From `factory/`, run `npm ci`, copy `dashboard/.env.example` to `dashboard/.env`
 
 A pause appears in an amber banner on both tabs, directly from the pause file rather than the last scheduler tick. The recognized Hermes Claude weekly-limit note becomes a fixed public reason with its next decision. Other pause notes show an operator pause with no public reason recorded. Raw notes never leave the server. Free slots show that starts are paused instead of claiming no eligible work.
 
-Overview fits 1440×900 and 1366×768 at normal zoom. Growing lists use counted pagination. Narrow screens scroll instead of hiding panels. Focus truncated text to read it, then press Enter to focus its full-text view and Escape to return. Tabs support arrow keys. Analytics counters expose exact values on focus.
+Overview fits 1440×900 and 1366×768 at normal zoom. The release panel shows the number of changes and three linked issues per page instead of one clipped title list. Server readings name known services and group unnamed containers. Growing lists use counted pagination. Narrow screens scroll instead of hiding panels. Focus truncated text to read it, then press Enter to focus its full-text view and Escape to return. Tabs support arrow keys. Analytics counters expose exact values on focus.
 
 `FACTORY_OBSERVATION_HEARTBEAT_MS` and `FACTORY_OBSERVATION_MAX_EVENT_BYTES` in `settings.env` control liveness sampling and structured-event bounds. `factory-status <activity>` lets workers report a phase change without free text. Native Hermes hooks supply manager activity. The standard updater rebuilds both images when their source changes. Existing workers continue on their original release, so their new readings can remain unavailable until later jobs start.
 

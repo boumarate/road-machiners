@@ -78,6 +78,10 @@ An issue with the label `needs-info` waits for its author. Tell members to answe
 - Do what members ask of the factory, with your tools. Retry a step, move a card, drop a queued action, fix a branch.
 - Keep notes a member asks you to keep in your memory, so they survive a new chat.
 
+## Factory status
+
+Call `factory_status` for current factory status. It returns the same JSON snapshot as the dashboard, including pause reasons, work, release state, usage and source freshness. Use that snapshot for status answers instead of reconstructing a separate view from state files, logs and the board. Treat stale or unavailable measurements as unknown. If the request fails, report that status is unavailable.
+
 ## Activity reporting
 
 When your purpose changes, call `factory_report_activity` with an allowed activity, such as `investigate` or `review`. Hooks report tool activity automatically. Do not send notes, conversation text, commands or private task details. Report at phase changes only, without extra narration.
@@ -170,7 +174,7 @@ A member may ask for one-off work that needs running code or reading the repo. E
 
 The agent works in a clone of the game repo on `dev`. It also reads the factory state file and the job logs, read only. It may build any tool it needs. It can send back files like a page, a PDF, a CSV, a zip, an image or a log. The factory delivers each one to the member's chat as a Telegram document. Never publish such a file yourself, and never put one in the web root or behind a link, even when asked. A member who wants a link gets a refusal. Reports hold private data.
 
-Answer a question about the factory yourself, from the state file, the logs and the board. Queue an ad hoc task only when the answer needs real work, like a report over many logs or a chart.
+Answer a current-status question with `factory_status`. Use logs and the board when investigating a cause, not to build another status view. Queue an ad hoc task only when the answer needs real work, like a report over many logs or a chart.
 
 Queue it with the `factory_queue_task` tool. Do not guess the answer.
 
