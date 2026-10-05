@@ -162,22 +162,35 @@ function getRelease() {
   return github.releaseKey === operations.releaseKey ? github : null;
 }
 function formatReleaseGate(gate) {
-  if (!gate) return 'Readiness unavailable';
+  if (readOperations()?.release === null) return 'Release not cut';
+  if (!gate) return 'Readiness not checked';
   if (gate.reason === 'release-tasks') return `${gate.issues.length} release tasks remain: ${gate.issues.map((issue) => `#${issue}`).join(', ')}`;
   const labels = { uncut: 'Release not cut', 'tracking-missing': 'Tracking issue unavailable', failed: 'Release job failed', candidate: 'Candidate build pending', 'ship-approval': 'Needs committee ship approval' };
   return labels[gate.reason];
 }
 function renderRelease() {
   const release = getRelease();
-  const summary = release ? release.features.map((feature) => feature.title).join(', ') : 'Contents unavailable';
-  setText('release-summary', summary || 'No changes');
+  renderReleaseItems(release);
   setText('release-gate', formatReleaseGate(readLive()?.scheduler?.release));
   renderReleaseLinks(release);
+}
+function createReleaseItem(feature) {
+  const item = createNode('li');
+  item.append(createLink(`#${feature.issue} ${feature.title}`, getIssueUrl(feature.issue)));
+  return item;
+}
+function renderReleaseItems(release) {
+  const features = release?.features ?? [];
+  setText('release-count', release ? `${features.length} changes` : '');
+  const visible = selectPage('release', features, 3);
+  const empty = release ? 'No changes on dev' : 'Contents unavailable';
+  replaceContents('release-items', visible.length ? visible.map(createReleaseItem) : [createNode('li', empty, 'muted')]);
 }
 function renderReleaseLinks(release) {
   const operations = readOperations();
   const tracking = operations?.release;
   getElement('release-link').hidden = release === null;
+  setText('release-link', tracking ? 'Tracking issue ↗' : 'Compare ↗');
   getElement('release-link').href = tracking ? getIssueUrl(tracking.issue) : `${snapshot.repoUrl}/compare/main...dev`;
   const candidateUrl = operations?.candidateUrl;
   getElement('candidate-link').hidden = !candidateUrl;
@@ -190,16 +203,14 @@ function readSchedulerStatus(status) {
 function readManagerAction(manager) {
   if (!manager) return 'Activity unavailable';
   if (manager.status !== 'ok') return 'Activity stale';
-  if (manager.phase === 'completed') return 'Idle';
+  if (manager.phase === 'completed') return `Idle for ${formatAge(manager.since)}`;
   return manager.intent ? `${actions[manager.intent]}: ${actions[manager.activity].toLowerCase()}` : actions[manager.activity];
 }
 function renderManager() {
   const live = readLive();
   const manager = live?.manager;
   setText('manager-action', readManagerAction(manager));
-  setText('manager-age', manager ? formatAge(manager.since) : '');
-  const scheduler = live?.scheduler;
-  setText('scheduler-action', scheduler ? `${readSchedulerStatus(scheduler.status)}, ${formatAge(scheduler.at)} ago` : 'Scheduler unavailable');
+  setText('manager-age', manager ? `Reported ${formatAge(manager.at)} ago` : '');
 }
 function createReading(label, value) { const node = createNode('div'); node.append(createNode('span', label), createNode('strong', value)); return node; }
 function readRam(host) { const ram = host.ram.value; return ram ? `${(ram.used / 1073741824).toFixed(1)} / ${formatBytes(ram.total)}` : '—'; }
@@ -208,13 +219,18 @@ function createResourceRow(resource) {
   const job = readOperations()?.jobs.find((item) => item.key === resource.jobId);
   const title = job ? readResourceTitle(job) : resource.service;
   const row = createNode('tr');
-  row.append(createNode('td', title), createNode('td', `${resource.cpu.toFixed(1)}%`, 'numeric'), createNode('td', formatBytes(resource.memory), 'numeric'));
+  row.append(createNode('td', title), createNode('td', `${resource.cpu.toFixed(1)}%`, 'numeric'), createNode('td', formatMemory(resource.memory), 'numeric'));
   return row;
+}
+function formatMemory(value) {
+  if (value == null) return '—';
+  if (value > 0 && value < 1048576) return '<1 MiB';
+  return value < 1073741824 ? `${Math.round(value / 1048576)} MiB` : formatBytes(value);
 }
 function readResourceTitle(job) { return job.issue === null ? stages[job.stage] : `#${job.issue}`; }
 function renderServer() {
   const host = snapshot.host.value;
-  setText('server-age', formatAge(snapshot.host.at));
+  setText('server-age', `Sampled ${formatAge(snapshot.host.at)} ago`);
   replaceContents('server-totals', createServerTotals(host));
   renderTable('server', host?.containers?.value ?? [], createResourceRow, 'Container readings unavailable', 3);
   setText('server-note', readStorageNote(host));
@@ -224,7 +240,7 @@ function createServerTotals(host) {
   const cpu = host.cpu.value === null ? '—' : `${host.cpu.value.toFixed(1)}%`;
   return [createReading('CPU', cpu), createReading('RAM', readRam(host)), createReading('GPU', readGpu(host))];
 }
-function readStorageNote(host) { return host?.ssd.value ? `Disk free ${formatBytes(host.ssd.value.free)}. Host processes and GPU ownership unattributed.` : 'Disk reading unavailable'; }
+function readStorageNote(host) { return host?.ssd.value ? `Disk free ${formatBytes(host.ssd.value.free)}. Container usage only.` : 'Disk reading unavailable'; }
 function readSummary() { return snapshot.analytics.value?.ranges.find((range) => range.days === selectedDays) ?? null; }
 function createEvent(event) {
   const node = createNode('div', '', 'event');
@@ -347,7 +363,7 @@ function renderSnapshot() {
   updateOverflow();
 }
 function updateOverflow() {
-  for (const node of document.querySelectorAll('td,th,.event,.capacity-row span,.clamp,.clipped,.counter strong,.funnel strong,.server-totals strong,.source-status')) {
+  for (const node of document.querySelectorAll('td,th,.event,.capacity-row span,.clamp,.clipped,.counter strong,.funnel strong,.server-totals strong,.source-status,.release-items li')) {
     if (!node.getClientRects().length) continue;
     if (node.dataset.exact) { node.dataset.detail = node.dataset.exact; node.tabIndex = 0; continue; }
     const truncated = node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight;
